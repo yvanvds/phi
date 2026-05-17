@@ -7,6 +7,10 @@ import 'package:flutter/painting.dart';
 /// tokens (`hot`, `warm`, `cool`, `live`) have fixed meaning and never get
 /// reassigned to a voice.
 abstract final class PhiColors {
+  // region: generated-from-css
+  // Auto-generated from `design system/colors_and_type.css`.
+  // Run `dart run tool/gen_tokens.dart` to refresh; `--check` to verify drift.
+
   // ── Substrate ──────────────────────────────────────────────────────────
   static const Color voidField = Color(0xFF06080A);
   static const Color bg0 = Color(0xFF0A0D10);
@@ -53,4 +57,5 @@ abstract final class PhiColors {
   // ── Grid ───────────────────────────────────────────────────────────────
   static const Color grid = Color(0x06FFFFFF);
   static const Color gridStrong = Color(0x0FFFFFFF);
+  // endregion: generated-from-css
 }

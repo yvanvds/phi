@@ -1,5 +1,9 @@
 /// Phi spacing scale (4px base; see `design system/colors_and_type.css`).
 abstract final class PhiSpacing {
+  // region: generated-from-css
+  // Auto-generated from `design system/colors_and_type.css`.
+  // Run `dart run tool/gen_tokens.dart` to refresh; `--check` to verify drift.
+
   static const double s0 = 2;
   static const double s1 = 4;
   static const double s2 = 8;
@@ -13,6 +17,7 @@ abstract final class PhiSpacing {
 
   /// 16px backdrop grid cell, used in 3D viewport / patcher / state graph.
   static const double gridCell = 16;
+  // endregion: generated-from-css
 
   /// Chrome region sizes (from `design system/ui_kits/phi-workstation/`).
   static const double topToolbarHeight = 36;
