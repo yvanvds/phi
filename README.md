@@ -61,6 +61,21 @@ flutter test
 dart format --output=none --set-exit-if-changed lib test integration_test
 ```
 
+### Design tokens
+
+`design system/colors_and_type.css` is the source of truth for the Dart token
+files under `lib/design/tokens/`. After editing the CSS, regenerate:
+
+```powershell
+dart run tool/gen_tokens.dart           # rewrites the generated regions
+dart run tool/gen_tokens.dart --check   # CI / pre-commit drift check
+```
+
+Each token file has a `// region: generated-from-css` block; the generator
+only touches that block, leaving hand-maintained helpers (chrome heights,
+BorderRadius shortcuts, font factory wrappers) intact. The `flutter test`
+suite includes a drift guard that runs `--check`.
+
 ## Contributing
 
 Everything is issue-driven — see [CLAUDE.md](CLAUDE.md) for the workflow rules.

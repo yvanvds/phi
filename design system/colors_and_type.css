@@ -138,7 +138,7 @@
   font-family: var(--font-glitch);
   font-weight: 400;
   font-size: var(--t-display-xl);
-  line-height: 1.05;
+  line-height: var(--lh-display-xl);
   letter-spacing: 0.01em;
   color: var(--fg-0);
 }
@@ -165,7 +165,7 @@
   font-family: var(--font-glitch);
   font-weight: 400;
   font-size: var(--t-h1);
-  line-height: 1.15;
+  line-height: var(--lh-h1);
   letter-spacing: 0.01em;
   color: var(--fg-0);
 }
@@ -227,6 +227,14 @@
   font-size: var(--t-mono-l);
   letter-spacing: 0;
   color: var(--fg-0);
+}
+
+.phi-mono-s {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: var(--t-mono-s);
+  letter-spacing: var(--tracking-mono);
+  color: var(--fg-1);
 }
 
 .phi-code {
