@@ -47,20 +47,11 @@ class PeakMeter extends StatelessWidget {
                 gradient: const LinearGradient(
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
-                  colors: [
-                    PhiColors.voice4,
-                    PhiColors.voice3,
-                    PhiColors.hot,
-                  ],
+                  colors: [PhiColors.voice4, PhiColors.voice3, PhiColors.hot],
                   stops: [0.0, 0.7, 1.0],
                 ),
                 boxShadow: clamped > 0.05
-                    ? [
-                        BoxShadow(
-                          color: _glowColor(clamped),
-                          blurRadius: 6,
-                        ),
-                      ]
+                    ? [BoxShadow(color: _glowColor(clamped), blurRadius: 6)]
                     : null,
               ),
             ),

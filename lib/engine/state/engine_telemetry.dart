@@ -4,10 +4,7 @@
 /// and (Phase 1) the Mix surface can show live values without each widget
 /// polling the engine itself.
 class EngineTelemetry {
-  const EngineTelemetry({
-    required this.cpuLoad,
-    required this.missedCallbacks,
-  });
+  const EngineTelemetry({required this.cpuLoad, required this.missedCallbacks});
 
   /// Audio thread CPU load as a fraction of the callback budget, `[0, 1]`.
   final double cpuLoad;
@@ -15,6 +12,8 @@ class EngineTelemetry {
   /// Cumulative count of audio callbacks that missed their deadline.
   final int missedCallbacks;
 
-  static const EngineTelemetry zero =
-      EngineTelemetry(cpuLoad: 0, missedCallbacks: 0);
+  static const EngineTelemetry zero = EngineTelemetry(
+    cpuLoad: 0,
+    missedCallbacks: 0,
+  );
 }

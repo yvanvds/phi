@@ -8,11 +8,7 @@ import 'surface_id.dart';
 /// Left rail — 48px wide column of icon-only surface buttons. In Phase 1
 /// only [SurfaceId.mix] is enabled; the other surfaces ship as stubs later.
 class LeftRail extends StatelessWidget {
-  const LeftRail({
-    required this.selected,
-    required this.onSelect,
-    super.key,
-  });
+  const LeftRail({required this.selected, required this.onSelect, super.key});
 
   final SurfaceId selected;
   final ValueChanged<SurfaceId> onSelect;

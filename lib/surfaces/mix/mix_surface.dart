@@ -44,8 +44,7 @@ class MixSurface extends Surface {
                       builder: (context, armed, _) => PrimaryButton(
                         label: armed ? 'stop sine' : 'play sine',
                         isArmed: armed,
-                        onPressed: () =>
-                            engine.setTestSignal(on: !armed),
+                        onPressed: () => engine.setTestSignal(on: !armed),
                       ),
                     ),
                   ),

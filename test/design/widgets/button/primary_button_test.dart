@@ -5,11 +5,11 @@ import 'package:phi/design/widgets/button/primary_button.dart';
 
 void main() {
   Widget host(Widget child) => MaterialApp(
-        home: Scaffold(
-          backgroundColor: PhiColors.bg0,
-          body: Center(child: child),
-        ),
-      );
+    home: Scaffold(
+      backgroundColor: PhiColors.bg0,
+      body: Center(child: child),
+    ),
+  );
 
   testWidgets('renders uppercased label', (tester) async {
     await tester.pumpWidget(
@@ -33,13 +33,7 @@ void main() {
 
   testWidgets('armed state paints fuchsia border', (tester) async {
     await tester.pumpWidget(
-      host(
-        PrimaryButton(
-          label: 'stop sine',
-          isArmed: true,
-          onPressed: () {},
-        ),
-      ),
+      host(PrimaryButton(label: 'stop sine', isArmed: true, onPressed: () {})),
     );
 
     final container = tester.widget<AnimatedContainer>(
@@ -54,7 +48,9 @@ void main() {
   });
 
   testWidgets('disabled when onPressed is null', (tester) async {
-    await tester.pumpWidget(host(const PrimaryButton(label: 'idle', onPressed: null)));
+    await tester.pumpWidget(
+      host(const PrimaryButton(label: 'idle', onPressed: null)),
+    );
 
     await tester.tap(find.byType(PrimaryButton));
     await tester.pumpAndSettle();

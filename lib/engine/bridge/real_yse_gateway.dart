@@ -19,7 +19,9 @@ class RealYseGateway implements YseGateway {
   void close() => _system.close();
 
   @override
-  void startUpdateTimer([Duration interval = const Duration(milliseconds: 16)]) {
+  void startUpdateTimer([
+    Duration interval = const Duration(milliseconds: 16),
+  ]) {
     _system.startUpdateTimer(interval);
   }
 

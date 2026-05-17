@@ -24,7 +24,9 @@ class FakeYseGateway implements YseGateway {
   }
 
   @override
-  void startUpdateTimer([Duration interval = const Duration(milliseconds: 16)]) {
+  void startUpdateTimer([
+    Duration interval = const Duration(milliseconds: 16),
+  ]) {
     calls.add('startUpdateTimer:${interval.inMilliseconds}');
   }
 

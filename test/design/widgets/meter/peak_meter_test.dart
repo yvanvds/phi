@@ -4,8 +4,8 @@ import 'package:phi/design/widgets/meter/peak_meter.dart';
 
 void main() {
   Widget host(Widget child) => MaterialApp(
-        home: Scaffold(body: Center(child: child)),
-      );
+    home: Scaffold(body: Center(child: child)),
+  );
 
   testWidgets('clamps negative input to zero fill', (tester) async {
     await tester.pumpWidget(host(const PeakMeter(level: -0.5)));

@@ -10,8 +10,9 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('hello world: tap play sine, engine arms, meter responds',
-      (tester) async {
+  testWidgets('hello world: tap play sine, engine arms, meter responds', (
+    tester,
+  ) async {
     final gateway = FakeYseGateway();
     final engine = PhiEngine(
       gateway,
