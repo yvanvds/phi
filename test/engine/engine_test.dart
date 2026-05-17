@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/engine/state/engine_telemetry.dart';
 
+import 'test_doubles/fake_scene_renderer.dart';
 import 'test_doubles/fake_yse_gateway.dart';
 
 void main() {
@@ -113,6 +114,49 @@ void main() {
 
       expect(first.cpuLoad, closeTo(0.42, 1e-9));
       expect(first.missedCallbacks, 3);
+    });
+
+    test('sceneRenderer getter is null when none is injected', () {
+      expect(engine.sceneRenderer, isNull);
+    });
+  });
+
+  group('PhiEngine with sceneRenderer', () {
+    late FakeYseGateway gateway;
+    late FakeSceneRenderer renderer;
+    late PhiEngine engine;
+
+    setUp(() {
+      gateway = FakeYseGateway();
+      renderer = FakeSceneRenderer();
+      engine = PhiEngine(
+        gateway,
+        sceneRenderer: renderer,
+        telemetryInterval: const Duration(milliseconds: 20),
+      );
+    });
+
+    tearDown(() async {
+      await engine.dispose();
+    });
+
+    test('sceneRenderer getter returns the injected renderer', () {
+      expect(engine.sceneRenderer, same(renderer));
+    });
+
+    test('start() initialises the renderer', () {
+      engine.start();
+
+      expect(renderer.initialised, isTrue);
+      expect(renderer.calls, contains('init'));
+    });
+
+    test('stop() disposes the renderer', () {
+      engine.start();
+      engine.stop();
+
+      expect(renderer.initialised, isFalse);
+      expect(renderer.calls, containsAllInOrder(<String>['init', 'dispose']));
     });
   });
 }

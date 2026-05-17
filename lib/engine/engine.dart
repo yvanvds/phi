@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'bridge/real_yse_gateway.dart';
+import 'bridge/scene_renderer.dart';
 import 'bridge/yse_gateway.dart';
 import 'state/engine_telemetry.dart';
 
@@ -14,14 +15,22 @@ import 'state/engine_telemetry.dart';
 class PhiEngine {
   PhiEngine(
     this._gateway, {
+    SceneRenderer? sceneRenderer,
     Duration telemetryInterval = const Duration(milliseconds: 50),
-  }) : _telemetryInterval = telemetryInterval;
+  }) : _sceneRenderer = sceneRenderer,
+       _telemetryInterval = telemetryInterval;
 
   /// Production constructor — wires the real `package:yse` gateway.
-  factory PhiEngine.production() => PhiEngine(RealYseGateway());
+  factory PhiEngine.production({SceneRenderer? sceneRenderer}) =>
+      PhiEngine(RealYseGateway(), sceneRenderer: sceneRenderer);
 
   final YseGateway _gateway;
+  final SceneRenderer? _sceneRenderer;
   final Duration _telemetryInterval;
+
+  /// The Scene renderer, if one was wired in. `null` in test setups that
+  /// don't exercise the Scene surface.
+  SceneRenderer? get sceneRenderer => _sceneRenderer;
 
   Timer? _telemetryTimer;
   final StreamController<EngineTelemetry> _telemetry =
@@ -50,6 +59,7 @@ class PhiEngine {
     if (_started) return;
     _gateway.init();
     _gateway.startUpdateTimer();
+    _sceneRenderer?.init();
     _telemetryTimer = Timer.periodic(_telemetryInterval, _emit);
     _started = true;
     _masterVolume.value = _gateway.masterVolume;
@@ -61,6 +71,7 @@ class PhiEngine {
     _telemetryTimer = null;
     if (_started) {
       _gateway.close();
+      _sceneRenderer?.dispose();
       _started = false;
     }
     _testSignal.value = false;
