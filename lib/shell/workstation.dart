@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../design/tokens/phi_colors.dart';
+import '../domain/session/session_state.dart';
 import '../engine/engine.dart';
 import '../surfaces/mix/mix_surface.dart';
 import 'bottom_status/bottom_status.dart';
@@ -13,9 +14,10 @@ import 'top_toolbar/top_toolbar.dart';
 /// left rail, right inspector, bottom status) around the active surface in
 /// the centre.
 class Workstation extends StatefulWidget {
-  const Workstation({required this.engine, super.key});
+  const Workstation({required this.engine, required this.session, super.key});
 
   final PhiEngine engine;
+  final SessionState session;
 
   @override
   State<Workstation> createState() => _WorkstationState();
@@ -30,7 +32,7 @@ class _WorkstationState extends State<Workstation> {
       color: PhiColors.bg0,
       child: Column(
         children: [
-          const TopToolbar(),
+          TopToolbar(session: widget.session),
           Expanded(
             child: Row(
               children: [
@@ -43,7 +45,7 @@ class _WorkstationState extends State<Workstation> {
               ],
             ),
           ),
-          BottomStatus(engine: widget.engine),
+          BottomStatus(engine: widget.engine, session: widget.session),
         ],
       ),
     );
