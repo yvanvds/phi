@@ -41,4 +41,15 @@ class FakeYseGateway implements YseGateway {
     calls.add('audioTest:$on');
     audioTestOn = on;
   }
+
+  double masterVolumeValue = 1.0;
+
+  @override
+  double get masterVolume => masterVolumeValue;
+
+  @override
+  set masterVolume(double value) {
+    calls.add('masterVolume:${value.toStringAsFixed(3)}');
+    masterVolumeValue = value;
+  }
 }

@@ -72,6 +72,36 @@ void main() {
       expect(engine.testSignal.value, isFalse);
     });
 
+    test('start() seeds masterVolume listenable from gateway', () {
+      gateway.masterVolumeValue = 0.7;
+      engine.start();
+
+      expect(engine.masterVolume.value, closeTo(0.7, 1e-9));
+    });
+
+    test('setMasterVolume clamps to [0, 1] and updates listenable', () {
+      engine.start();
+
+      engine.setMasterVolume(0.42);
+      expect(gateway.masterVolumeValue, closeTo(0.42, 1e-9));
+      expect(engine.masterVolume.value, closeTo(0.42, 1e-9));
+
+      engine.setMasterVolume(1.7);
+      expect(gateway.masterVolumeValue, closeTo(1.0, 1e-9));
+      expect(engine.masterVolume.value, closeTo(1.0, 1e-9));
+
+      engine.setMasterVolume(-0.3);
+      expect(gateway.masterVolumeValue, closeTo(0.0, 1e-9));
+      expect(engine.masterVolume.value, closeTo(0.0, 1e-9));
+    });
+
+    test('setMasterVolume is a no-op before start()', () {
+      engine.setMasterVolume(0.5);
+
+      expect(gateway.calls.any((c) => c.startsWith('masterVolume')), isFalse);
+      expect(engine.masterVolume.value, closeTo(1.0, 1e-9));
+    });
+
     test('telemetry stream emits gateway snapshots while running', () async {
       gateway.cpuLoadValue = 0.42;
       gateway.missedCallbacksValue = 3;
