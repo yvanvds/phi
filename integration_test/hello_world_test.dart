@@ -3,6 +3,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
 import 'package:phi/design/widgets/button/primary_button.dart';
 import 'package:phi/design/widgets/meter/peak_meter.dart';
+import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/engine.dart';
 
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
@@ -18,8 +19,9 @@ void main() {
       gateway,
       telemetryInterval: const Duration(milliseconds: 20),
     );
+    final session = SessionState();
 
-    await tester.pumpWidget(PhiApp(engine: engine));
+    await tester.pumpWidget(PhiApp(engine: engine, session: session));
     await tester.pumpAndSettle();
 
     expect(find.byType(PrimaryButton), findsOneWidget);
@@ -42,6 +44,7 @@ void main() {
     expect(gateway.audioTestOn, isFalse);
     expect(find.text('PLAY SINE'), findsOneWidget);
 
+    session.dispose();
     await engine.dispose();
   });
 }

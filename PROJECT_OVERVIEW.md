@@ -34,27 +34,35 @@ main + app          (orchestration)
 ├── surfaces        (Scene · Patcher · Code · State · MIDI · Mix)
 ├── engine          (PhiEngine façade + bridge over package:yse)
 ├── design          (tokens + reusable widgets — no domain knowledge)
-├── domain          (pure-Dart models — Phase ≥ 2 will fill this)
+├── domain          (pure-Dart models — session/ wired; more arrives later)
 ├── platform        (windows-specific bits — empty for now)
 └── core            (cross-cutting helpers — empty for now)
 ```
 
 ## Current phase
 
-**Phase 1 — Audio hello-world.** Implemented:
+**Phase 1 — Audio hello-world + workstation chrome.** Implemented:
 - Design tokens (colors, type, spacing, motion, radii) in `lib/design/tokens/`
 - Theme in `lib/design/theme.dart`
-- `PrimaryButton` and `PeakMeter` widgets
+- Widget library: `PrimaryButton`, `PeakMeter`, `Capsule`, `PhiToggle`,
+  `InlineEditableText`, `TransportButton`, `RailButton`, `StatusChip`
 - `PhiEngine` façade over a `YseGateway` interface (`RealYseGateway` for
   production, `FakeYseGateway` for tests)
-- Workstation chrome: top toolbar, left rail (6 buttons, only Mix enabled),
-  bottom status (CPU + drops), right inspector (collapsed strip)
+- `SessionState` in `lib/domain/session/` — pure-Dart cross-cutting state
+  (transport intent, projection, scene name)
+- Workstation chrome: top toolbar (wordmark, inline-editable scene name,
+  play/stop transport, time-domain placeholder, projection toggle), left
+  rail (6 buttons, only Mix enabled), bottom status (LIVE dot, CPU + drops),
+  right inspector (collapsed strip)
 - Mix surface stub: one play/stop button bound to `System.audioTest`, one
   peak meter currently fed by `cpuLoad` as a stand-in
-- Unit, widget, and integration tests; CI on GitHub Actions; SonarCloud
+- Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
+  workflow (waiting on SONAR_TOKEN)
 
-Pending the real channel-peak metering on dart-yse — see the dart-yse issue
-tracker.
+Pending the real channel-peak metering on dart-yse — see [phi#1] / [dart-yse#1].
+
+[phi#1]: https://github.com/yvanvds/phi/issues/1
+[dart-yse#1]: https://github.com/yvanvds/dart-yse/issues/1
 
 ## Surfaces
 
