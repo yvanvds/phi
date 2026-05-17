@@ -7,6 +7,9 @@
 .buildlog/
 .history
 
+# Phi is an application — commit pubspec.lock for reproducible builds.
+!pubspec.lock
+
 
 
 # Flutter repo-specific
@@ -106,9 +109,24 @@ unlinked_spec.ds
 
 # Coverage
 coverage/
+lcov.info
 
 # Symbols
 app.*.symbols
+
+# IDE / editor
+.idea/
+*.iml
+.vscode/
+*.code-workspace
+
+# Claude Code local state
+.claude/
+
+# SonarCloud / SonarQube
+.scannerwork/
+.sonarlint/
+sonar.token
 
 # Exceptions to above rules.
 !**/ios/**/default.mode1v3

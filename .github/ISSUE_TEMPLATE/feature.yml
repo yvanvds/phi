@@ -1,0 +1,29 @@
+name: Feature
+description: A new capability not yet in the app.
+labels: ["type:feature", "status:triaged"]
+body:
+  - type: textarea
+    id: performer-story
+    attributes:
+      label: Performer story
+      description: How does this read from the performer's seat? What does it enable?
+      placeholder: As the performer mid-set, I want to ... so that ...
+    validations:
+      required: true
+  - type: textarea
+    id: surface
+    attributes:
+      label: Which surface(s) does this touch?
+      placeholder: Scene / Patcher / Code / State / MIDI / Mix / shell / engine
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance — how do we know it's done?
+      placeholder: A short checklist.
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: Non-goals
+      description: Anything explicitly out of scope for this issue.

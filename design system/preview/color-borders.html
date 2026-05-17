@@ -1,0 +1,25 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Color — Borders &amp; lines</title>
+<link rel="stylesheet" href="_card.css"></head>
+<body><div class="card">
+  <div class="label">borders · lines · dividers</div>
+  <div class="row" style="gap: 10px;">
+    <div style="flex:1; background: var(--bg-1); border:1px solid var(--line-0); border-radius:6px; padding:14px; height:120px; display:flex; flex-direction:column; justify-content:space-between;">
+      <div style="height: 1px; background: var(--line-0);"></div>
+      <div><div class="label">line-0 · hairline</div><div class="value">rgba(255,255,255,0.04)</div></div>
+    </div>
+    <div style="flex:1; background: var(--bg-1); border:1px solid var(--line-1); border-radius:6px; padding:14px; height:120px; display:flex; flex-direction:column; justify-content:space-between;">
+      <div style="height: 1px; background: var(--line-1);"></div>
+      <div><div class="label">line-1 · default</div><div class="value">rgba(255,255,255,0.08)</div></div>
+    </div>
+    <div style="flex:1; background: var(--bg-1); border:1px solid var(--line-2); border-radius:6px; padding:14px; height:120px; display:flex; flex-direction:column; justify-content:space-between;">
+      <div style="height: 1px; background: var(--line-2);"></div>
+      <div><div class="label">line-2 · strong</div><div class="value">rgba(255,255,255,0.14)</div></div>
+    </div>
+    <div style="flex:1; background: var(--bg-1); border:1px solid var(--line-hot); border-radius:6px; padding:14px; height:120px; display:flex; flex-direction:column; justify-content:space-between; box-shadow: 0 0 16px var(--voice-1-soft);">
+      <div style="height: 1px; background: var(--line-hot); box-shadow: 0 0 6px var(--voice-1-soft);"></div>
+      <div><div class="label">line-hot · armed</div><div class="value">voice-1 @ 0.45</div></div>
+    </div>
+  </div>
+  <div class="value">hairlines partition the chrome. line-hot is the selected / armed border with built-in glow.</div>
+</div></body></html>

@@ -1,0 +1,34 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Spacing — Radii</title>
+<link rel="stylesheet" href="_card.css"></head>
+<body><div class="card">
+  <div class="label">radii · rectilinear by default</div>
+  <div class="row" style="gap: 14px; align-items:flex-end;">
+    <div class="col" style="gap:8px; align-items:center;">
+      <div style="width:90px; height:60px; background: var(--bg-2); border:1px solid var(--line-1); border-radius: 0;"></div>
+      <span class="label">r-0 · 0</span>
+      <span class="value">panel boundaries</span>
+    </div>
+    <div class="col" style="gap:8px; align-items:center;">
+      <div style="width:90px; height:60px; background: var(--bg-2); border:1px solid var(--line-1); border-radius: 2px;"></div>
+      <span class="label">r-1 · 2</span>
+      <span class="value">inputs, ticks</span>
+    </div>
+    <div class="col" style="gap:8px; align-items:center;">
+      <div style="width:90px; height:60px; background: var(--bg-2); border:1px solid var(--line-1); border-radius: 4px;"></div>
+      <span class="label">r-2 · 4</span>
+      <span class="value">cards, buttons</span>
+    </div>
+    <div class="col" style="gap:8px; align-items:center;">
+      <div style="width:90px; height:60px; background: var(--bg-2); border:1px solid var(--line-1); border-radius: 6px;"></div>
+      <span class="label">r-3 · 6</span>
+      <span class="value">floating overlays</span>
+    </div>
+    <div class="col" style="gap:8px; align-items:center;">
+      <div style="width:90px; height:30px; background: var(--bg-2); border:1px solid var(--line-1); border-radius: 999px; display:flex; align-items:center; justify-content:center; font-family: var(--font-mono); font-size:11px; color: var(--fg-2); letter-spacing:0.06em; text-transform:uppercase;">live</div>
+      <span class="label">pill</span>
+      <span class="value">status capsules</span>
+    </div>
+  </div>
+  <div class="value">never larger than 6px on any structural element. pillowy corners are anti-phi.</div>
+</div></body></html>

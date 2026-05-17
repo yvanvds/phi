@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Vision
+    url: https://github.com/yvanvds/phi/blob/main/phi-vision.md
+    about: The vision document for Phi.

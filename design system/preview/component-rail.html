@@ -1,0 +1,36 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Components — Surface rail</title>
+<link rel="stylesheet" href="_card.css"></head>
+<body><div class="card">
+  <div class="label">left rail · 44px · surface switcher</div>
+  <style>
+    .rail { width: 44px; background: var(--bg-1); border: 1px solid var(--line-1); border-radius: 4px; padding: 6px 0; display:flex; flex-direction:column; gap: 4px; align-items: center; }
+    .rail .item { width: 32px; height: 32px; border-radius: 3px; display:flex; align-items:center; justify-content:center; color: var(--fg-2); cursor: pointer; position: relative; }
+    .rail .item:hover { background: var(--bg-2); color: var(--fg-1); }
+    .rail .item.active { color: var(--voice-1); background: var(--bg-2); border: 1px solid var(--line-hot); box-shadow: 0 0 14px var(--voice-1-soft); }
+    .rail .item.active::before { content:""; position: absolute; left: -7px; top: 50%; transform: translateY(-50%); width: 2px; height: 16px; background: var(--voice-1); box-shadow: 0 0 6px var(--voice-1-soft); }
+    .rail .lbl { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-3); margin-top: 2px; }
+  </style>
+  <div class="row" style="gap: 24px; align-items: stretch;">
+    <div class="rail">
+      <div class="item active" title="scene">⟁</div>
+      <div class="item" title="patcher">▦</div>
+      <div class="item" title="code">{}</div>
+      <div class="item" title="state">◇</div>
+      <div class="item" title="midi">♪</div>
+      <div class="item" title="mix">≡</div>
+      <div style="flex:1;"></div>
+      <div class="item" title="settings">⚙</div>
+    </div>
+    <div class="col" style="gap: 10px; padding-top: 8px;">
+      <span class="label">six surfaces · one rail</span>
+      <span class="value">scene · 3d viewport, the spatial layer</span>
+      <span class="value">patcher · node-and-cable signal flow</span>
+      <span class="value">code · python live coding</span>
+      <span class="value">state · the performance graph</span>
+      <span class="value">midi · clip editor + transforms</span>
+      <span class="value">mix · channel strips + routing</span>
+    </div>
+  </div>
+  <div class="value">active surface: glow + 2px left tick. icons are placeholders — phi will need bespoke marks for agents/swarms/domains.</div>
+</div></body></html>

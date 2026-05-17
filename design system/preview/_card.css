@@ -1,0 +1,73 @@
+/* Shared card styles for design-system preview cards.
+   Each card is rendered into a 700px-wide frame; content fills it
+   with minimal framing (no titles inside the card — title is shown
+   outside by the Design System tab). */
+
+@import url("../colors_and_type.css");
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-0);
+  color: var(--fg-0);
+  font-family: var(--font-ui);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+.card {
+  width: 100%;
+  min-height: 100vh;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(168,252,92,0.04), transparent 60%),
+    var(--bg-0);
+  position: relative;
+}
+
+/* faint dot grid texture — quintessential phi backdrop */
+.card.gridded::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 1px 1px, var(--grid-color) 1px, transparent 0);
+  background-size: 16px 16px;
+  pointer-events: none;
+  mask-image: linear-gradient(to bottom, black, black);
+}
+
+.row { display: flex; gap: 16px; align-items: stretch; }
+.col { display: flex; flex-direction: column; gap: 8px; }
+.grow { flex: 1; }
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-2);
+}
+
+.value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--fg-2);
+}
+
+.hairline {
+  border-top: 1px solid var(--line-1);
+}
+
+.swatch {
+  border-radius: var(--r-2);
+  border: 1px solid var(--line-1);
+  position: relative;
+  overflow: hidden;
+}

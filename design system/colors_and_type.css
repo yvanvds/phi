@@ -1,0 +1,257 @@
+/* =============================================================
+   Phi — colors_and_type.css
+   The visual foundations for Phi: a workstation for live electronic
+   music performance. Dark, gritty, glowing. Fuchsia on black.
+   ============================================================= */
+
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=JetBrains+Mono:ital,wght@0,400..800;1,400..800&family=Rubik+Glitch&display=swap");
+
+:root {
+  /* ---------- Type families ---------------------------------- */
+  --font-display: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-ui:      "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  /* Rubik Glitch is a Google Fonts display face with chromatic-shift /
+  /* glitch character baked into the glyphs themselves. Used for the  */
+  /* largest brand registers (display-xl, h1, wordmark). Single weight.*/
+  /* Falls back to JetBrains Mono if not yet loaded.                  */
+  --font-glitch:  "Rubik Glitch", "JetBrains Mono", monospace;
+
+  /* Tracking presets — display sets are tight, mono runs loose at small sizes */
+  --tracking-tight:  -0.02em;
+  --tracking-normal:  0;
+  --tracking-wide:   0.04em;
+  --tracking-mono:   0.01em;
+
+  /* ---------- Type scale (px / line-height) ----------------- */
+  --t-display-xl: 88px;  --lh-display-xl: 0.92;
+  --t-display-l:  56px;  --lh-display-l:  0.96;
+  --t-display-m:  40px;  --lh-display-m:  1.0;
+  --t-h1:         32px;  --lh-h1:         1.08;
+  --t-h2:         24px;  --lh-h2:         1.15;
+  --t-h3:         18px;  --lh-h3:         1.25;
+  --t-body:       15px;  --lh-body:       1.5;
+  --t-small:      13px;  --lh-small:      1.45;
+  --t-caption:    11px;  --lh-caption:    1.35;
+  --t-mono-l:     16px;
+  --t-mono:       13px;
+  --t-mono-s:     11px;
+
+  /* ---------- Color: dark substrate ------------------------- */
+  /* Slight cool cast, like a powered-on scope. Never pure black. */
+  --void:    #06080a;   /* deepest field — fullscreen / projected */
+  --bg-0:    #0a0d10;   /* canvas */
+  --bg-1:    #10141a;   /* panel */
+  --bg-2:    #181d23;   /* raised */
+  --bg-3:    #21272e;   /* hover */
+  --bg-4:    #2b3138;   /* active / pressed */
+
+  /* ---------- Color: foreground ----------------------------- */
+  --fg-0:    #f2f4f6;   /* primary text */
+  --fg-1:    #c1c7cd;   /* secondary text */
+  --fg-2:    #7a838d;   /* muted, hints */
+  --fg-3:    #4a5159;   /* faint, disabled */
+  --fg-4:    #2e343a;   /* whispers, grid */
+
+  /* ---------- Color: borders -------------------------------- */
+  --line-0:  rgba(255, 255, 255, 0.04);   /* hairline */
+  --line-1:  rgba(255, 255, 255, 0.08);   /* default */
+  --line-2:  rgba(255, 255, 255, 0.14);   /* strong */
+  --line-hot: rgba(255,  61, 203, 0.55);   /* selected / live */
+
+  /* ---------- Color: signal accents ------------------------- */
+  /* "Voices" — six emissive hues used to color time domains,    */
+  /* swarms, code blocks, state nodes. Numbered, not named, so   */
+  /* the performer can claim them.                               */
+  --voice-1: #ff3dcb;   /* fuchsia — the canonical brand + default "live" */
+  --voice-2: #6fd5ff;   /* cyan */
+  --voice-3: #ffb454;   /* amber */
+  --voice-4: #a8fc5c;   /* phosphor green */
+  --voice-5: #b58dff;   /* violet */
+  --voice-6: #ffe066;   /* signal yellow */
+
+  /* Glow shells — drop these into box-shadow / filter to bloom */
+  --voice-1-soft: rgba(255,  61, 203, 0.32);
+  --voice-2-soft: rgba(111, 213, 255, 0.28);
+  --voice-3-soft: rgba(255, 180,  84, 0.28);
+  --voice-4-soft: rgba(168, 252,  92, 0.28);
+  --voice-5-soft: rgba(181, 141, 255, 0.28);
+  --voice-6-soft: rgba(255, 224, 102, 0.28);
+
+  /* ---------- Color: semantic / status ---------------------- */
+  --hot:     #ff4d4d;   /* clipping, error, kill */
+  --warm:    #ffb454;   /* attention, hold */
+  --cool:    #6fd5ff;   /* info, monitor */
+  --live:    #ff3dcb;   /* armed, transmitting */
+
+  /* ---------- Spacing scale --------------------------------- */
+  --s-0:  2px;
+  --s-1:  4px;
+  --s-2:  8px;
+  --s-3:  12px;
+  --s-4:  16px;
+  --s-5:  24px;
+  --s-6:  32px;
+  --s-7:  48px;
+  --s-8:  64px;
+  --s-9:  96px;
+
+  /* ---------- Radius ---------------------------------------- */
+  /* Phi is rectilinear. Radii are small or zero; never pillowy. */
+  --r-0: 0;
+  --r-1: 2px;
+  --r-2: 4px;
+  --r-3: 6px;
+  --r-pill: 999px;
+
+  /* ---------- Shadows + glow -------------------------------- */
+  /* Real shadows are minimal; the system uses GLOW instead.     */
+  --elev-1: 0 1px 0 rgba(255,255,255,0.04) inset, 0 1px 2px rgba(0,0,0,0.4);
+  --elev-2: 0 1px 0 rgba(255,255,255,0.05) inset, 0 4px 16px rgba(0,0,0,0.5);
+  --elev-3: 0 1px 0 rgba(255,255,255,0.06) inset, 0 12px 40px rgba(0,0,0,0.6);
+
+  --glow-1: 0 0 0 1px var(--line-hot), 0 0 12px var(--voice-1-soft);
+  --glow-2: 0 0 0 1px var(--line-hot), 0 0 24px var(--voice-1-soft), 0 0 60px var(--voice-1-soft);
+
+  /* ---------- Grid + texture -------------------------------- */
+  --grid-cell: 16px;
+  --grid-color: rgba(255, 255, 255, 0.025);
+  --grid-strong: rgba(255, 255, 255, 0.06);
+
+  /* ---------- Motion ---------------------------------------- */
+  /* Phi prefers physical, signal-like motion: fast attacks,    */
+  /* exponential decays. Never bouncy.                          */
+  --ease-out:   cubic-bezier(0.16, 1.0, 0.3, 1.0);   /* attack/decay */
+  --ease-in:    cubic-bezier(0.7, 0.0, 0.84, 0.0);
+  --ease-inout: cubic-bezier(0.65, 0.0, 0.35, 1.0);
+  --dur-1: 90ms;
+  --dur-2: 160ms;
+  --dur-3: 280ms;
+  --dur-4: 480ms;
+}
+
+/* =============================================================
+   Semantic element styles
+   ============================================================= */
+
+.phi-display-xl {
+  font-family: var(--font-glitch);
+  font-weight: 400;
+  font-size: var(--t-display-xl);
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+  color: var(--fg-0);
+}
+
+.phi-display-l {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: var(--t-display-l);
+  line-height: var(--lh-display-l);
+  letter-spacing: var(--tracking-tight);
+  color: var(--fg-0);
+}
+
+.phi-display-m {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: var(--t-display-m);
+  line-height: var(--lh-display-m);
+  letter-spacing: var(--tracking-tight);
+  color: var(--fg-0);
+}
+
+.phi-h1 {
+  font-family: var(--font-glitch);
+  font-weight: 400;
+  font-size: var(--t-h1);
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  color: var(--fg-0);
+}
+
+.phi-h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--t-h2);
+  line-height: var(--lh-h2);
+  letter-spacing: var(--tracking-tight);
+  color: var(--fg-0);
+}
+
+.phi-h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--t-h3);
+  line-height: var(--lh-h3);
+  color: var(--fg-0);
+}
+
+.phi-body {
+  font-family: var(--font-ui);
+  font-weight: 400;
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  color: var(--fg-1);
+}
+
+.phi-small {
+  font-family: var(--font-ui);
+  font-weight: 400;
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  color: var(--fg-2);
+}
+
+.phi-caption {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: var(--t-caption);
+  line-height: var(--lh-caption);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--fg-2);
+}
+
+.phi-mono   {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: var(--t-mono);
+  letter-spacing: var(--tracking-mono);
+  color: var(--fg-1);
+}
+
+.phi-mono-l {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: var(--t-mono-l);
+  letter-spacing: 0;
+  color: var(--fg-0);
+}
+
+.phi-code {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: var(--t-mono);
+  letter-spacing: var(--tracking-mono);
+  color: var(--fg-0);
+  background: var(--bg-2);
+  border: 1px solid var(--line-1);
+  padding: 1px 5px;
+  border-radius: var(--r-1);
+}
+
+.phi-readout {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: var(--t-mono);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--voice-1);
+  text-shadow: 0 0 8px var(--voice-1-soft);
+}
+
+.phi-glitch {
+  font-family: var(--font-glitch);
+  font-weight: 400;
+}

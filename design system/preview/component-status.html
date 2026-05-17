@@ -1,0 +1,30 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Components — Status strip</title>
+<link rel="stylesheet" href="_card.css"></head>
+<body><div class="card">
+  <div class="label">status strip · 24px · fixed bottom</div>
+  <div style="background: var(--bg-1); border: 1px solid var(--line-1); border-radius: 3px; display:flex; align-items:center; height: 26px; padding: 0 10px; gap: 14px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em;">
+    <span style="display:flex; align-items:center; gap: 6px; color: var(--fg-2);"><span style="color: var(--voice-1); text-shadow: 0 0 6px var(--voice-1-soft);">●</span>audio</span>
+    <span style="color: var(--fg-1);">cpu <span style="color: var(--fg-0);">14%</span></span>
+    <span style="color: var(--fg-1);">buf <span style="color: var(--fg-0);">128 / 48k</span></span>
+    <span style="color: var(--fg-1);">latency <span style="color: var(--fg-0);">5.3 ms</span></span>
+    <div style="flex:1;"></div>
+    <span style="color: var(--fg-1);">midi <span style="color: var(--voice-3);">▲ in</span> <span style="color: var(--fg-3);">▼ out</span></span>
+    <span style="color: var(--fg-1);">link <span style="color: var(--voice-2);">●</span> <span style="color: var(--fg-2);">2 peers</span></span>
+    <span style="color: var(--fg-1);">scene <span style="color: var(--fg-0);">047 / 128 obj</span></span>
+  </div>
+  <div class="value">all numbers tabular, mono. activity uses voices: midi-in = voice-3, link = voice-2, audio = voice-1. dim when idle.</div>
+
+  <div class="label" style="margin-top: 12px;">peak meter — channel strip · green / amber / red audio convention</div>
+  <div style="display:flex; gap: 14px; align-items:center; padding-top: 4px;">
+    <div style="font-family: var(--font-mono); font-size: 11px; color: var(--fg-2); width: 60px;">drum bus</div>
+    <div style="flex:1; height: 12px; background: var(--bg-1); border:1px solid var(--line-1); border-radius: 2px; position: relative; overflow:hidden;">
+      <!-- peak = 0.72: green to 0.60/0.72 = 83.3% of fill, then amber to end -->
+      <div style="position:absolute; left:0; top:0; bottom:0; width: 72%; background: linear-gradient(to right, var(--voice-4) 0%, var(--voice-4) 83.3%, var(--voice-3) 83.3%, var(--voice-3) 100%); box-shadow: 0 0 6px var(--voice-3-soft);"></div>
+      <!-- clip threshold marker -->
+      <div style="position:absolute; left: 85%; top:0; bottom:0; width: 1px; background: var(--hot); opacity: 0.6;"></div>
+    </div>
+    <div style="font-family: var(--font-mono); font-size: 11px; color: var(--voice-3); width: 50px; text-align: right; text-shadow: 0 0 8px var(--voice-3-soft);">−5.6</div>
+  </div>
+  <div class="value">stops calibrated to the FULL meter (0 = silence, 1 = clip). green &lt; −12 dB · amber −12 to −6 · red −6 to 0. the channel's voice color is intentionally NOT used here — audio levels are universal.</div>
+</div></body></html>

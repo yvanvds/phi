@@ -1,0 +1,36 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Components — Toolbar</title>
+<link rel="stylesheet" href="_card.css"></head>
+<body><div class="card">
+  <div class="label">toolbar · 32px · fixed top</div>
+  <div style="background: var(--bg-1); border: 1px solid var(--line-1); border-radius: 4px; display: flex; align-items: center; height: 36px; padding: 0 10px; gap: 10px;">
+    <!-- mark -->
+    <svg width="16" height="16" viewBox="0 0 64 64" fill="none">
+      <g stroke="#ff3dcb" stroke-width="3.5" stroke-linecap="round" fill="none">
+        <line x1="32" y1="4" x2="32" y2="60"/>
+        <ellipse cx="32" cy="32" rx="13" ry="10"/>
+      </g>
+    </svg>
+    <span style="font-family: var(--font-mono); font-size: 11px; color: var(--fg-1);">untitled performance</span>
+    <span style="font-family: var(--font-mono); font-size: 11px; color: var(--fg-3);">·</span>
+    <span style="font-family: var(--font-mono); font-size: 11px; color: var(--fg-2); letter-spacing: 0.06em; text-transform: uppercase;">scene</span>
+    <div style="flex: 1;"></div>
+
+    <!-- transport -->
+    <div style="display: flex; align-items: center; gap: 4px;">
+      <button style="width: 26px; height: 22px; background: var(--bg-2); border: 1px solid var(--line-1); border-radius: 2px; color: var(--fg-1); cursor: pointer;">⏮</button>
+      <button style="width: 26px; height: 22px; background: var(--bg-2); border: 1px solid var(--line-hot); border-radius: 2px; color: var(--voice-1); box-shadow: 0 0 12px var(--voice-1-soft); cursor: pointer;">▶</button>
+      <button style="width: 26px; height: 22px; background: var(--bg-2); border: 1px solid var(--line-1); border-radius: 2px; color: var(--fg-1); cursor: pointer;">●</button>
+    </div>
+    <div style="width:1px; height:18px; background: var(--line-1);"></div>
+
+    <span style="font-family: var(--font-mono); font-size: 11px; color: var(--voice-1); text-shadow: 0 0 8px var(--voice-1-soft);">124.0</span>
+    <span style="font-family: var(--font-mono); font-size: 10px; color: var(--fg-3);">bpm</span>
+    <span style="font-family: var(--font-mono); font-size: 11px; color: var(--voice-2); margin-left: 8px;">7/8</span>
+    <span style="font-family: var(--font-mono); font-size: 10px; color: var(--fg-3);">pad</span>
+
+    <div style="flex: 0.2;"></div>
+    <span style="display:inline-flex; align-items:center; gap:6px; height: 22px; padding: 0 10px; border-radius: 999px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; background: var(--bg-2); border: 1px solid var(--line-hot); color: var(--voice-1); box-shadow: 0 0 12px var(--voice-1-soft);"><span style="width:6px;height:6px;border-radius:50%;background:var(--voice-1);"></span>project</span>
+  </div>
+  <div class="value">always 32–36px tall. mark at far left, transport center, projection-toggle far right.</div>
+</div></body></html>

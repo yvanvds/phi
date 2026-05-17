@@ -1,0 +1,33 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Components — Status capsules</title>
+<link rel="stylesheet" href="_card.css"></head>
+<body><div class="card">
+  <div class="label">capsules · status &amp; tags</div>
+  <style>
+    .cap { display:inline-flex; align-items:center; gap:6px; height: 22px; padding: 0 10px; border-radius: 999px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 500; background: var(--bg-1); border: 1px solid var(--line-1); color: var(--fg-1); }
+    .cap .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
+    .cap.live { color: var(--voice-1); border-color: var(--line-hot); }
+    .cap.hold { color: var(--voice-3); border-color: rgba(255,180,84,0.4); }
+    .cap.cool { color: var(--voice-2); border-color: rgba(111,213,255,0.4); }
+    .cap.hot  { color: var(--hot);    border-color: rgba(255,77,77,0.4); }
+    .cap.muted { color: var(--fg-3); }
+    .cap.voice { background: transparent; }
+  </style>
+  <div class="row" style="gap: 8px; flex-wrap: wrap;">
+    <span class="cap live"><span class="dot"></span>live</span>
+    <span class="cap hold"><span class="dot"></span>armed</span>
+    <span class="cap cool"><span class="dot"></span>monitor</span>
+    <span class="cap hot"><span class="dot"></span>clip</span>
+    <span class="cap muted">muted</span>
+    <span class="cap">∅ unsubscribed</span>
+  </div>
+  <div class="row" style="gap: 8px; flex-wrap: wrap;">
+    <span class="cap voice" style="color: var(--voice-1); border-color: rgba(255, 61, 203,0.4);">v1 · drum</span>
+    <span class="cap voice" style="color: var(--voice-2); border-color: rgba(111,213,255,0.4);">v2 · pad</span>
+    <span class="cap voice" style="color: var(--voice-3); border-color: rgba(255,180,84,0.4);">v3 · sparks</span>
+    <span class="cap voice" style="color: var(--voice-4); border-color: rgba(255,95,156,0.4);">v4 · break</span>
+    <span class="cap voice" style="color: var(--voice-5); border-color: rgba(181,141,255,0.4);">v5 · drone</span>
+    <span class="cap voice" style="color: var(--voice-6); border-color: rgba(255,224,102,0.4);">v6 · grain</span>
+  </div>
+  <div class="value">capsules are pill — the only place pill radius appears. 10px caps in mono.</div>
+</div></body></html>

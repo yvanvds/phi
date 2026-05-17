@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-and-test:
+    name: analyze + test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout phi
+        uses: actions/checkout@v4
+        with:
+          path: phi
+          fetch-depth: 0
+
+      - name: Checkout dart-yse (path dep sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: yvanvds/dart-yse
+          path: dart-yse
+          ref: main
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.3'
+          channel: stable
+          cache: true
+
+      - name: Resolve dart-yse deps
+        working-directory: dart-yse
+        run: dart pub get
+
+      - name: Resolve phi deps
+        working-directory: phi
+        run: flutter pub get
+
+      - name: Format check
+        working-directory: phi
+        run: dart format --output=none --set-exit-if-changed lib test integration_test
+
+      - name: Analyze
+        working-directory: phi
+        run: flutter analyze
+
+      - name: Test (with coverage)
+        working-directory: phi
+        run: flutter test --coverage
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: phi/coverage/lcov.info
+          if-no-files-found: warn
+          retention-days: 7

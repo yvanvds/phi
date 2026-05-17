@@ -1,0 +1,38 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Components — Panel</title>
+<link rel="stylesheet" href="_card.css"></head>
+<body><div class="card">
+  <div class="label">panel · the workstation building block</div>
+  <div style="background: var(--bg-1); border: 1px solid var(--line-1); border-radius: 4px; box-shadow: var(--elev-1); overflow: hidden;">
+    <div style="display:flex; align-items:center; height: 28px; padding: 0 10px; border-bottom: 1px solid var(--line-1); background: var(--bg-2); gap: 10px;">
+      <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-1);">domains</span>
+      <span style="font-family: var(--font-mono); font-size: 10px; color: var(--fg-3);">3 active · 2 paused</span>
+      <div style="flex: 1;"></div>
+      <span style="font-family: var(--font-mono); font-size: 11px; color: var(--fg-2); cursor: pointer;">+</span>
+      <span style="font-family: var(--font-mono); font-size: 11px; color: var(--fg-2); cursor: pointer;">⋯</span>
+    </div>
+    <div style="padding: 8px 10px; display: flex; flex-direction: column; gap: 4px;">
+      <div style="display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 2px; background: var(--bg-2); border: 1px solid var(--line-hot); box-shadow: 0 0 12px var(--voice-1-soft);">
+        <span style="width:8px; height:8px; background: var(--voice-1); box-shadow: 0 0 8px var(--voice-1-soft);"></span>
+        <span style="font-family: var(--font-mono); font-size: 12px; color: var(--fg-0);">drum</span>
+        <span style="font-family: var(--font-mono); font-size: 11px; color: var(--voice-1); margin-left:auto;">124.0 bpm</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 2px;">
+        <span style="width:8px; height:8px; background: var(--voice-2); box-shadow: 0 0 8px var(--voice-2-soft);"></span>
+        <span style="font-family: var(--font-mono); font-size: 12px; color: var(--fg-1);">pad</span>
+        <span style="font-family: var(--font-mono); font-size: 11px; color: var(--voice-2); margin-left:auto;">7/8 cycle</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 2px;">
+        <span style="width:8px; height:8px; background: var(--voice-3); box-shadow: 0 0 8px var(--voice-3-soft);"></span>
+        <span style="font-family: var(--font-mono); font-size: 12px; color: var(--fg-1);">grain</span>
+        <span style="font-family: var(--font-mono); font-size: 11px; color: var(--voice-3); margin-left:auto;">event</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 2px; opacity: 0.5;">
+        <span style="width:8px; height:8px; background: var(--fg-3);"></span>
+        <span style="font-family: var(--font-mono); font-size: 12px; color: var(--fg-2);">slow</span>
+        <span style="font-family: var(--font-mono); font-size: 11px; color: var(--fg-3); margin-left:auto;">paused</span>
+      </div>
+    </div>
+  </div>
+  <div class="value">28px header in mono. body padded 8/10. selected row gets line-hot + glow, never a fill.</div>
+</div></body></html>

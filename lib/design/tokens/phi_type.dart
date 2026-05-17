@@ -1,0 +1,96 @@
+import 'package:flutter/painting.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+import 'phi_colors.dart';
+
+/// Phi type tokens. Source of truth: `design system/colors_and_type.css`.
+///
+/// Three families: Rubik Glitch (display only — ≥14px), Instrument Sans
+/// (body UI, headings), JetBrains Mono (code, readouts, numbers).
+abstract final class PhiType {
+  static const double _trackingTight = -0.02;
+  static const double _trackingWide = 0.04;
+  static const double _trackingMono = 0.01;
+
+  static TextStyle _glitch({required double size, required double height}) =>
+      GoogleFonts.rubikGlitch(
+        fontSize: size,
+        height: height,
+        color: PhiColors.fg0,
+        letterSpacing: 0.01 * size,
+      );
+
+  static TextStyle _sans({
+    required double size,
+    required double height,
+    FontWeight weight = FontWeight.w400,
+    Color color = PhiColors.fg0,
+    double trackingEm = 0,
+  }) =>
+      GoogleFonts.instrumentSans(
+        fontSize: size,
+        height: height,
+        fontWeight: weight,
+        color: color,
+        letterSpacing: trackingEm * size,
+      );
+
+  static TextStyle _mono({
+    required double size,
+    FontWeight weight = FontWeight.w400,
+    Color color = PhiColors.fg1,
+    double trackingEm = _trackingMono,
+    double height = 1.2,
+  }) =>
+      GoogleFonts.jetBrainsMono(
+        fontSize: size,
+        height: height,
+        fontWeight: weight,
+        color: color,
+        letterSpacing: trackingEm * size,
+      );
+
+  static TextStyle displayXl() => _glitch(size: 88, height: 0.92);
+  static TextStyle displayL() =>
+      _sans(size: 56, height: 0.96, weight: FontWeight.w500, trackingEm: _trackingTight);
+  static TextStyle displayM() =>
+      _sans(size: 40, height: 1.0, weight: FontWeight.w500, trackingEm: _trackingTight);
+
+  static TextStyle h1() => _glitch(size: 32, height: 1.08);
+  static TextStyle h2() => _sans(
+        size: 24,
+        height: 1.15,
+        weight: FontWeight.w600,
+        trackingEm: _trackingTight,
+      );
+  static TextStyle h3() => _sans(size: 18, height: 1.25, weight: FontWeight.w600);
+
+  static TextStyle body() => _sans(size: 15, height: 1.5, color: PhiColors.fg1);
+  static TextStyle small() =>
+      _sans(size: 13, height: 1.45, color: PhiColors.fg2);
+
+  /// Section headers, panel titles. Mono, uppercase, widened tracking.
+  static TextStyle caption() => _mono(
+        size: 11,
+        weight: FontWeight.w500,
+        color: PhiColors.fg2,
+        trackingEm: _trackingWide,
+        height: 1.35,
+      );
+
+  static TextStyle mono() => _mono(size: 13);
+  static TextStyle monoL() =>
+      _mono(size: 16, weight: FontWeight.w500, color: PhiColors.fg0, trackingEm: 0);
+  static TextStyle monoS() => _mono(size: 11);
+
+  /// Glowing fuchsia readouts for live values. Apply the glow as a
+  /// `Shadow` in `Text` widgets — this style only provides the colour.
+  static TextStyle readout() => _mono(
+        size: 13,
+        weight: FontWeight.w500,
+        color: PhiColors.voice1,
+        trackingEm: _trackingWide,
+      ).copyWith(
+        shadows: const [Shadow(color: PhiColors.voice1Soft, blurRadius: 8)],
+      );
+}

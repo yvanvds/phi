@@ -1,0 +1,66 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Components — Fader &amp; knob</title>
+<link rel="stylesheet" href="_card.css"></head>
+<body><div class="card">
+  <div class="label">controls · fader / knob / toggle</div>
+  <div class="row" style="gap: 28px; align-items:flex-end;">
+    <!-- fader -->
+    <div class="col" style="gap:8px; align-items:center;">
+      <span class="value" style="color: var(--voice-1); text-shadow: 0 0 8px var(--voice-1-soft);">−12.4</span>
+      <div style="width: 24px; height: 160px; background: var(--bg-1); border:1px solid var(--line-1); border-radius: 2px; position: relative;">
+        <div style="position:absolute; left:50%; top:0; bottom:0; width:1px; background: var(--line-1); transform: translateX(-0.5px);"></div>
+        <div style="position:absolute; left:0; right:0; bottom: 38%; height: 8px; background: var(--voice-1); box-shadow: 0 0 10px var(--voice-1-soft);"></div>
+        <div style="position:absolute; left:-5px; right:-5px; bottom: calc(38% - 8px); height: 24px; background: var(--bg-3); border: 1px solid var(--line-hot); border-radius: 2px; box-shadow: 0 0 12px var(--voice-1-soft);"></div>
+      </div>
+      <span class="label">fader · master</span>
+    </div>
+
+    <!-- knob -->
+    <div class="col" style="gap:8px; align-items:center;">
+      <span class="value" style="color: var(--voice-2); text-shadow: 0 0 8px var(--voice-2-soft);">0.62</span>
+      <div style="width: 84px; height: 84px; position: relative;">
+        <svg viewBox="0 0 84 84" width="84" height="84">
+          <circle cx="42" cy="42" r="36" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3"/>
+          <path d="M 16 60 A 36 36 0 1 1 68 60" fill="none" stroke="var(--voice-2)" stroke-width="3" stroke-linecap="round" stroke-dasharray="160" stroke-dashoffset="55" filter="drop-shadow(0 0 6px rgba(111,213,255,0.6))"/>
+          <line x1="42" y1="42" x2="42" y2="16" stroke="var(--voice-2)" stroke-width="2" stroke-linecap="round" transform="rotate(40 42 42)" filter="drop-shadow(0 0 4px rgba(111,213,255,0.6))"/>
+          <circle cx="42" cy="42" r="3" fill="var(--fg-0)"/>
+        </svg>
+      </div>
+      <span class="label">knob · cutoff</span>
+    </div>
+
+    <!-- toggle -->
+    <div class="col" style="gap: 14px; align-items:flex-start; padding-bottom: 16px;">
+      <div style="display:flex; align-items:center; gap: 12px;">
+        <div style="width: 38px; height: 18px; background: var(--bg-1); border: 1px solid var(--line-hot); border-radius: 999px; position: relative; box-shadow: 0 0 10px var(--voice-1-soft);">
+          <div style="position:absolute; right: 1px; top: 1px; bottom: 1px; width: 14px; background: var(--voice-1); border-radius: 999px; box-shadow: 0 0 8px var(--voice-1-soft);"></div>
+        </div>
+        <span class="label" style="color: var(--voice-1);">arm</span>
+      </div>
+      <div style="display:flex; align-items:center; gap: 12px;">
+        <div style="width: 38px; height: 18px; background: var(--bg-1); border: 1px solid var(--line-1); border-radius: 999px; position: relative;">
+          <div style="position:absolute; left: 1px; top: 1px; bottom: 1px; width: 14px; background: var(--fg-3); border-radius: 999px;"></div>
+        </div>
+        <span class="label">monitor</span>
+      </div>
+      <div style="display:flex; align-items:center; gap: 12px;">
+        <div style="width: 38px; height: 18px; background: var(--bg-2); border: 1px solid var(--line-0); border-radius: 999px; position: relative; opacity: 0.4;">
+          <div style="position:absolute; left: 1px; top: 1px; bottom: 1px; width: 14px; background: var(--fg-4); border-radius: 999px;"></div>
+        </div>
+        <span class="label" style="color: var(--fg-3);">midi clk</span>
+      </div>
+    </div>
+
+    <!-- segmented -->
+    <div class="col" style="gap: 8px;">
+      <span class="label">segmented</span>
+      <div style="display:flex; background: var(--bg-1); border: 1px solid var(--line-1); border-radius: 4px; overflow: hidden;">
+        <div style="padding: 6px 12px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--voice-1); background: var(--bg-2); border-right: 1px solid var(--line-hot); box-shadow: inset 0 0 14px var(--voice-1-soft);">metric</div>
+        <div style="padding: 6px 12px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-2); border-right: 1px solid var(--line-1);">phase</div>
+        <div style="padding: 6px 12px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-2); border-right: 1px solid var(--line-1);">event</div>
+        <div style="padding: 6px 12px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-2);">cont</div>
+      </div>
+      <span class="value">domain kind selector</span>
+    </div>
+  </div>
+</div></body></html>

@@ -1,0 +1,26 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Components — Buttons</title>
+<link rel="stylesheet" href="_card.css"></head>
+<body><div class="card">
+  <div class="label">buttons · all states · 28px height</div>
+  <style>
+    .btn { display:inline-flex; align-items:center; gap:6px; height:28px; padding: 0 12px; border-radius: 4px; font-family: var(--font-ui); font-size: 13px; font-weight: 500; cursor: pointer; user-select:none; transition: background var(--dur-1) var(--ease-out); }
+    .btn.primary { background: var(--bg-1); border:1px solid var(--line-hot); color: var(--voice-1); box-shadow: 0 0 12px var(--voice-1-soft) inset, 0 0 18px var(--voice-1-soft); }
+    .btn.secondary { background: var(--bg-2); border:1px solid var(--line-1); color: var(--fg-0); }
+    .btn.ghost { background: transparent; border:1px solid var(--line-1); color: var(--fg-1); }
+    .btn.hot { background: var(--bg-1); border:1px solid rgba(255,77,77,0.45); color: var(--hot); box-shadow: 0 0 14px rgba(255,77,77,0.2); }
+    .btn .dot { width:6px; height:6px; border-radius:50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
+  </style>
+  <div class="row" style="gap: 10px; flex-wrap: wrap;">
+    <button class="btn primary"><span class="dot"></span>arm transition</button>
+    <button class="btn secondary">load scene</button>
+    <button class="btn ghost">cancel</button>
+    <button class="btn hot">kill audio</button>
+  </div>
+  <div class="row" style="gap: 10px; flex-wrap: wrap;">
+    <button class="btn primary" style="background: var(--bg-2);">primary · hover</button>
+    <button class="btn primary" style="background: var(--bg-3); transform: translateY(1px); box-shadow: 0 0 8px var(--voice-1-soft) inset;">primary · press</button>
+    <button class="btn secondary" style="opacity:0.4; cursor: not-allowed;">disabled</button>
+  </div>
+  <div class="value">primary uses voice-1 glow shell, not a fill. press offsets +1px down. hover steps bg up one.</div>
+</div></body></html>

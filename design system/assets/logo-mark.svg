@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-label="Phi mark">
+  
+  <defs>
+    <filter id="phi-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="0.9"></feGaussianBlur>
+    </filter>
+  </defs>
+  <g stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none" color="#ff3dcb">
+    
+    <line x1="32" y1="4" x2="32" y2="60"></line>
+    
+    <ellipse cx="32" cy="32" rx="14" ry="11"></ellipse>
+    
+    <line x1="32" y1="4" x2="29" y2="4" opacity="0.55"></line>
+    <line x1="32" y1="4" x2="35" y2="4" opacity="0.55"></line>
+    <line x1="32" y1="60" x2="29" y2="60" opacity="0.55"></line>
+    <line x1="32" y1="60" x2="35" y2="60" opacity="0.55"></line>
+  </g>
+  
+  <g stroke="#ff3dcb" stroke-width="2.6" stroke-linecap="round" fill="none" opacity="0.5" filter="url(#phi-glow)">
+    <line x1="32" y1="4" x2="32" y2="60"></line>
+    <ellipse cx="32" cy="32" rx="14" ry="11"></ellipse>
+  </g>
+</svg>

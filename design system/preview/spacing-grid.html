@@ -1,0 +1,19 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Spacing — Grid texture</title>
+<link rel="stylesheet" href="_card.css"></head>
+<body><div class="card">
+  <div class="label">grid · the 16px scope backdrop</div>
+  <div style="height: 200px; background: var(--bg-0); border:1px solid var(--line-1); border-radius:4px; position:relative; overflow:hidden;">
+    <div style="position:absolute; inset:0; background-image: radial-gradient(circle at 1px 1px, var(--grid-color) 1px, transparent 0); background-size: 16px 16px;"></div>
+    <div style="position:absolute; inset:0; background-image:
+      linear-gradient(to right, var(--grid-strong) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-strong) 1px, transparent 1px);
+      background-size: 64px 64px; opacity: 0.7;"></div>
+    <div style="position:absolute; left:50%; top:50%; transform: translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:6px;">
+      <div style="font-family:var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform:uppercase; color: var(--fg-2);">scene · 3d viewport</div>
+      <div style="font-family:var(--font-mono); font-size: 22px; color: var(--voice-1); text-shadow: 0 0 12px var(--voice-1-soft);">+0.000   +0.000   +0.000</div>
+    </div>
+    <div style="position:absolute; bottom:8px; left:10px; font-family:var(--font-mono); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color: var(--fg-3);">16 px cells · major @ 64</div>
+  </div>
+  <div class="value">grids live behind 3d viewport, patcher canvas, state graph. cells = 16px. major = 64px. opacity scales with zoom.</div>
+</div></body></html>

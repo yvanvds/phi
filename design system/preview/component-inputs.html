@@ -1,0 +1,47 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Components — Inputs</title>
+<link rel="stylesheet" href="_card.css"></head>
+<body><div class="card">
+  <div class="label">inputs · fields · 26px height · mono</div>
+  <style>
+    .field { display:flex; align-items:center; height: 26px; padding: 0 8px; background: var(--bg-1); border:1px solid var(--line-1); border-radius: 2px; font-family: var(--font-mono); font-size: 12px; color: var(--fg-0); min-width: 0; }
+    .field.focus { border-color: var(--line-hot); box-shadow: 0 0 0 1px var(--line-hot), 0 0 14px var(--voice-1-soft); }
+    .field.disabled { color: var(--fg-3); }
+    .field .prefix { color: var(--fg-2); margin-right: 6px; }
+    .field .caret { display:inline-block; width:6px; height:13px; background: var(--voice-1); margin-left: 1px; box-shadow: 0 0 6px var(--voice-1-soft); }
+    .stack { display:flex; flex-direction:column; gap:6px; flex:1; }
+  </style>
+  <div class="row" style="gap: 16px;">
+    <div class="stack">
+      <span class="label">default</span>
+      <div class="field"><span class="prefix">name</span>drum</div>
+    </div>
+    <div class="stack">
+      <span class="label">focus</span>
+      <div class="field focus"><span class="prefix">tempo</span>124.0<span class="caret"></span></div>
+    </div>
+    <div class="stack">
+      <span class="label">disabled</span>
+      <div class="field disabled"><span class="prefix">meter</span>4/4</div>
+    </div>
+  </div>
+  <div class="row" style="gap: 16px;">
+    <div class="stack">
+      <span class="label">numeric scrubber</span>
+      <div class="field" style="font-variant-numeric: tabular-nums;">
+        <span style="color: var(--fg-2); margin-right:6px;">cohesion</span>
+        <span style="color: var(--voice-1); text-shadow: 0 0 8px var(--voice-1-soft);">0.382</span>
+        <div style="flex: 1; margin: 0 8px; height: 4px; background: var(--bg-2); border-radius: 999px; position: relative; overflow: hidden;">
+          <div style="position:absolute; left:0; top:0; bottom:0; width: 38%; background: var(--voice-1); box-shadow: 0 0 10px var(--voice-1-soft);"></div>
+        </div>
+      </div>
+    </div>
+    <div class="stack">
+      <span class="label">error</span>
+      <div class="field" style="border-color: rgba(255,77,77,0.6); box-shadow: 0 0 0 1px rgba(255,77,77,0.4);">
+        <span class="prefix">port</span><span style="color: var(--hot);">in use</span>
+      </div>
+    </div>
+  </div>
+  <div class="value">all numeric input is mono. prefix in fg-2; value in fg-0 or voice on focus.</div>
+</div></body></html>

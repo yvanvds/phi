@@ -1,0 +1,49 @@
+name: Bug
+description: Something is broken or behaves contrary to the vision.
+labels: ["type:bug", "status:triaged"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A short description of the observed behaviour.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Launch the app
+        2. ...
+        3. Observe
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: Flutter version, Windows build, dart-yse commit if relevant.
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Layer
+      description: Pick the layer most likely affected. Maintainers may add more labels.
+      options:
+        - mix
+        - shell
+        - design
+        - engine-bridge
+        - scene
+        - dsp
+        - spatial
+        - time-domains
+        - patcher
+        - live-coding
+        - midi
+        - state-machine
+        - infra

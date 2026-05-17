@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>phi · workstation</title>
+  <link rel="stylesheet" href="../../colors_and_type.css" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body, #root { margin: 0; padding: 0; height: 100%; background: var(--void); color: var(--fg-0); font-family: var(--font-ui); -webkit-font-smoothing: antialiased; }
+    body { overflow: hidden; }
+    .shell {
+      display: grid;
+      grid-template-rows: 36px 1fr 26px;
+      height: 100vh;
+      background: var(--bg-0);
+    }
+    .stage { display: flex; min-height: 0; }
+    .surface { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg-0); }
+    .inspector {
+      width: 300px; flex-shrink: 0;
+      background: var(--bg-1);
+      border-left: 1px solid var(--line-1);
+      display: flex; flex-direction: column;
+      min-height: 0;
+    }
+    button { font-family: inherit; }
+    /* hide native button focus that fights the glow language */
+    button:focus { outline: none; }
+    button:focus-visible { outline: 1px solid var(--voice-1); outline-offset: 2px; }
+    .pulse-anim {
+      animation: phi-pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes phi-pulse {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root" data-screen-label="Phi Workstation"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="shared.jsx"></script>
+  <script type="text/babel" src="chrome.jsx"></script>
+  <script type="text/babel" src="surface-scene.jsx"></script>
+  <script type="text/babel" src="surface-patcher.jsx"></script>
+  <script type="text/babel" src="surface-code.jsx"></script>
+  <script type="text/babel" src="surface-state.jsx"></script>
+  <script type="text/babel" src="surface-midi.jsx"></script>
+  <script type="text/babel" src="surface-mix.jsx"></script>
+
+  <script type="text/babel">
+    function App() {
+      const [surface, setSurface] = React.useState("scene");
+      const [playing, setPlaying] = React.useState(true);
+      const [tempo, setTempo] = React.useState(124.0);
+      const [meter, setMeter] = React.useState("7/8");
+      const [cpu, setCpu] = React.useState(14);
+      const [latency, setLatency] = React.useState(5.3);
+      const [midiActivity, setMidiActivity] = React.useState(false);
+      const [activeState, setActiveState] = React.useState("verse");
+      const [projection, setProjection] = React.useState(false);
+      const [selected, setSelected] = React.useState({
+        name: "drum",   voice: 1, kind: "swarm · 22 agents", status: "live",
+        position: [0.30, 0.45, 0.0],
+        props: [
+          { k: "cohesion",  v: "0.600", voice: 1 },
+          { k: "alignment", v: "0.420", voice: 1 },
+          { k: "separation",v: "0.180" },
+        ],
+        subscriptions: [{ name: "domain · drum", voice: 1, weight: 1.0 }],
+      });
+
+      // ambient liveness — small drifts to feel alive
+      React.useEffect(() => {
+        const iv = setInterval(() => {
+          if (playing) {
+            setTempo((t) => Math.max(60, Math.min(180, t + (Math.random() - 0.5) * 0.4)));
+          }
+          setCpu((c) => Math.max(5, Math.min(40, c + (Math.random() - 0.5) * 1.4)));
+          setLatency((l) => Math.max(3, Math.min(12, l + (Math.random() - 0.5) * 0.3)));
+          setMidiActivity(Math.random() < 0.35);
+        }, 600);
+        return () => clearInterval(iv);
+      }, [playing]);
+
+      const sceneName = "drift · phrygian";
+
+      return (
+        <div className="shell">
+          <Toolbar
+            tempo={tempo} meter={meter} playing={playing}
+            onPlay={() => setPlaying(!playing)}
+            onArm={() => setPlaying(false)}
+            projection={projection}
+            onProjection={() => setProjection(!projection)}
+            sceneName={sceneName}
+          />
+          <div className="stage">
+            <Rail surface={surface} onSurface={setSurface} />
+            <div className="surface" data-screen-label={`Surface: ${surface}`}>
+              {surface === "scene"   && <SurfaceScene  projection={projection} onSelect={setSelected} selected={selected} />}
+              {surface === "patcher" && <SurfacePatcher />}
+              {surface === "code"    && <SurfaceCode projection={projection} />}
+              {surface === "state"   && <SurfaceState activeState={activeState} onActivate={setActiveState} />}
+              {surface === "midi"    && <SurfaceMidi />}
+              {surface === "mix"     && <SurfaceMix  />}
+            </div>
+            <div className="inspector">
+              <div style={{
+                padding: "0 12px", height: 28,
+                display: "flex", alignItems: "center", gap: 8,
+                background: "var(--bg-2)", borderBottom: "1px solid var(--line-1)",
+              }}>
+                <span style={{
+                  fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 500,
+                  letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--fg-1)",
+                }}>inspector</span>
+                <div style={{ flex: 1 }} />
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-3)", cursor: "pointer" }}>⋯</span>
+              </div>
+              <Inspector selected={selected} />
+            </div>
+          </div>
+          <StatusStrip
+            cpu={cpu} latency={latency} midiActivity={midiActivity}
+            objCount={54} peers={2}
+          />
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

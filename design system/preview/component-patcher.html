@@ -1,0 +1,49 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Components — Patcher node</title>
+<link rel="stylesheet" href="_card.css"></head>
+<body><div class="card gridded">
+  <div class="label">patcher · nodes &amp; cables</div>
+  <div style="position: relative; flex: 1; min-height: 220px;">
+    <!-- cables behind nodes -->
+    <svg width="100%" height="220" style="position:absolute; inset: 0;" preserveAspectRatio="none" viewBox="0 0 660 220">
+      <defs>
+        <filter id="cg" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>
+      </defs>
+      <path d="M 140 80 C 200 80, 220 130, 280 130" stroke="rgba(255, 61, 203,0.5)" stroke-width="1.6" fill="none" filter="url(#cg)"/>
+      <path d="M 140 80 C 200 80, 220 130, 280 130" stroke="#ff3dcb" stroke-width="1.2" fill="none"/>
+      <path d="M 420 130 C 480 130, 480 70, 540 70" stroke="rgba(111,213,255,0.5)" stroke-width="1.6" fill="none" filter="url(#cg)"/>
+      <path d="M 420 130 C 480 130, 480 70, 540 70" stroke="#6fd5ff" stroke-width="1.2" fill="none"/>
+      <path d="M 140 110 C 200 110, 230 170, 280 170" stroke="rgba(255,180,84,0.4)" stroke-width="1.6" fill="none" filter="url(#cg)"/>
+      <path d="M 140 110 C 200 110, 230 170, 280 170" stroke="#ffb454" stroke-width="1.2" fill="none" stroke-dasharray="3 3"/>
+    </svg>
+    <!-- nodes -->
+    <div style="position:absolute; left:30px; top: 50px; width: 110px; background: var(--bg-1); border:1px solid var(--line-1); border-radius: 4px; box-shadow: var(--elev-1);">
+      <div style="height: 20px; padding: 0 8px; display:flex; align-items:center; background: var(--bg-2); border-bottom: 1px solid var(--line-1); font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-2);">osc.saw</div>
+      <div style="padding: 8px; display: flex; flex-direction: column; gap: 4px; font-family: var(--font-mono); font-size: 11px;">
+        <div style="display:flex; justify-content: space-between; color: var(--fg-1);">freq <span style="color:var(--fg-0);">220</span></div>
+        <div style="display:flex; justify-content: space-between; color: var(--fg-1);">det <span style="color:var(--fg-0);">0.02</span></div>
+      </div>
+      <div style="position:absolute; right:-5px; top: 30px; width: 8px; height: 8px; background: var(--voice-1); border-radius: 50%; box-shadow: 0 0 6px var(--voice-1-soft);"></div>
+      <div style="position:absolute; right:-5px; top: 60px; width: 8px; height: 8px; background: var(--voice-3); border-radius: 50%; box-shadow: 0 0 6px var(--voice-3-soft);"></div>
+    </div>
+
+    <div style="position:absolute; left:280px; top: 100px; width: 140px; background: var(--bg-1); border:1px solid var(--line-hot); border-radius: 4px; box-shadow: var(--glow-1);">
+      <div style="height: 20px; padding: 0 8px; display:flex; align-items:center; background: var(--bg-2); border-bottom: 1px solid var(--line-1); font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--voice-1);">filter.lp</div>
+      <div style="padding: 8px; display: flex; flex-direction: column; gap: 4px; font-family: var(--font-mono); font-size: 11px;">
+        <div style="display:flex; justify-content: space-between; color: var(--fg-1);">cutoff <span style="color: var(--voice-1);">1.2 kHz</span></div>
+        <div style="display:flex; justify-content: space-between; color: var(--fg-1);">q <span style="color:var(--fg-0);">0.62</span></div>
+        <div style="display:flex; justify-content: space-between; color: var(--fg-3);">← swarm.coh</div>
+      </div>
+      <div style="position:absolute; left:-5px; top: 30px; width: 8px; height: 8px; background: var(--voice-1); border-radius: 50%; box-shadow: 0 0 8px var(--voice-1-soft);"></div>
+      <div style="position:absolute; left:-5px; top: 60px; width: 8px; height: 8px; background: var(--voice-3); border-radius: 50%; box-shadow: 0 0 6px var(--voice-3-soft);"></div>
+      <div style="position:absolute; right:-5px; top: 30px; width: 8px; height: 8px; background: var(--voice-2); border-radius: 50%; box-shadow: 0 0 8px var(--voice-2-soft);"></div>
+    </div>
+
+    <div style="position:absolute; left:540px; top: 40px; width: 100px; background: var(--bg-1); border:1px solid var(--line-1); border-radius: 4px;">
+      <div style="height: 20px; padding: 0 8px; display:flex; align-items:center; background: var(--bg-2); border-bottom: 1px solid var(--line-1); font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-2);">out · L/R</div>
+      <div style="padding: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--fg-1);">−6.2 dB</div>
+      <div style="position:absolute; left:-5px; top: 30px; width: 8px; height: 8px; background: var(--voice-2); border-radius: 50%; box-shadow: 0 0 6px var(--voice-2-soft);"></div>
+    </div>
+  </div>
+  <div class="value">nodes: 20px header in mono. ports = voiced dots. cables = thin solid + blurred glow trail. control-rate = dashed.</div>
+</div></body></html>
