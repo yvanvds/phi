@@ -45,7 +45,8 @@ main + app          (orchestration)
 - Design tokens (colors, type, spacing, motion, radii) in `lib/design/tokens/`
 - Theme in `lib/design/theme.dart`
 - Widget library: `PrimaryButton`, `PeakMeter`, `Capsule`, `PhiToggle`,
-  `InlineEditableText`, `TransportButton`, `RailButton`, `StatusChip`
+  `InlineEditableText`, `TransportButton`, `RailButton`, `StatusChip`,
+  `PhiFader`
 - `PhiEngine` façade over a `YseGateway` interface (`RealYseGateway` for
   production, `FakeYseGateway` for tests)
 - `SessionState` in `lib/domain/session/` — pure-Dart cross-cutting state
@@ -53,7 +54,7 @@ main + app          (orchestration)
 - Workstation chrome: top toolbar (wordmark, inline-editable scene name,
   play/stop transport, time-domain placeholder, projection toggle), left
   rail (6 buttons, only Mix enabled), bottom status (LIVE dot, CPU + drops),
-  right inspector (collapsed strip)
+  right inspector (tap to expand 28→320px, hosts a master-volume fader)
 - Mix surface stub: one play/stop button bound to `System.audioTest`, one
   peak meter currently fed by `cpuLoad` as a stand-in
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud

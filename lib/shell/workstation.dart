@@ -41,7 +41,7 @@ class _WorkstationState extends State<Workstation> {
                   onSelect: (id) => setState(() => _selected = id),
                 ),
                 Expanded(child: _buildCentre()),
-                const RightInspector(),
+                RightInspector(engine: widget.engine),
               ],
             ),
           ),

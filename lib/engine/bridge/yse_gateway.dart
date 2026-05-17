@@ -22,4 +22,8 @@ abstract interface class YseGateway {
 
   /// Toggle the engine's built-in audio test signal.
   set audioTest(bool on);
+
+  /// Master-channel volume, in `[0.0, 1.0]`.
+  double get masterVolume;
+  set masterVolume(double value);
 }

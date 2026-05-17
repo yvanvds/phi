@@ -33,4 +33,10 @@ class RealYseGateway implements YseGateway {
 
   @override
   set audioTest(bool on) => _system.audioTest = on;
+
+  @override
+  double get masterVolume => Channel.master.volume;
+
+  @override
+  set masterVolume(double value) => Channel.master.volume = value;
 }

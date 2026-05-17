@@ -27,6 +27,7 @@ class PhiEngine {
   final StreamController<EngineTelemetry> _telemetry =
       StreamController<EngineTelemetry>.broadcast();
   final ValueNotifier<bool> _testSignal = ValueNotifier<bool>(false);
+  final ValueNotifier<double> _masterVolume = ValueNotifier<double>(1);
 
   bool _started = false;
 
@@ -40,6 +41,10 @@ class PhiEngine {
   /// Test-signal toggle. Observable so widgets can reflect the armed state.
   ValueListenable<bool> get testSignal => _testSignal;
 
+  /// Master-channel volume in `[0.0, 1.0]`. Observable so faders can bind
+  /// directly. Drives the engine's master channel via [setMasterVolume].
+  ValueListenable<double> get masterVolume => _masterVolume;
+
   /// Initialise the engine, start the update loop, begin emitting telemetry.
   void start() {
     if (_started) return;
@@ -47,6 +52,7 @@ class PhiEngine {
     _gateway.startUpdateTimer();
     _telemetryTimer = Timer.periodic(_telemetryInterval, _emit);
     _started = true;
+    _masterVolume.value = _gateway.masterVolume;
   }
 
   /// Stop telemetry, close the engine.
@@ -67,6 +73,15 @@ class PhiEngine {
     _testSignal.value = on;
   }
 
+  /// Set the master-channel volume. Clamped to `[0.0, 1.0]`. No-op before
+  /// [start].
+  void setMasterVolume(double value) {
+    if (!_started) return;
+    final clamped = value.clamp(0.0, 1.0);
+    _gateway.masterVolume = clamped;
+    _masterVolume.value = clamped;
+  }
+
   void _emit(Timer _) {
     if (!_started) return;
     _telemetry.add(
@@ -82,6 +97,7 @@ class PhiEngine {
   Future<void> dispose() async {
     stop();
     _testSignal.dispose();
+    _masterVolume.dispose();
     await _telemetry.close();
   }
 }
