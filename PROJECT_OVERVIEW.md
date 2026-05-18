@@ -56,18 +56,13 @@ main + app          (orchestration)
   rail (6 buttons, only Mix enabled), bottom status (LIVE dot, CPU + drops),
   right inspector (tap to expand 28→320px, hosts a master-volume fader)
 - Mix surface stub: one play/stop button bound to `System.audioTest`, one
-  peak meter currently fed by `cpuLoad` as a stand-in
+  peak meter driven by the master channel's post-volume peak level
 - Scene surface stub: renderer-agnostic `SceneRenderer` bridge in
   `lib/engine/bridge/`, backed in production by `MacbearSceneRenderer`
   (forked `macbear_3d` on ANGLE). Renders one placeholder agent as a
   voice-coloured sphere; orbit/pan/zoom via macbear's built-in controller.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
-
-Pending the real channel-peak metering on dart-yse — see [phi#1] / [dart-yse#1].
-
-[phi#1]: https://github.com/yvanvds/phi/issues/1
-[dart-yse#1]: https://github.com/yvanvds/dart-yse/issues/1
 
 ## Surfaces
 

@@ -39,4 +39,7 @@ class RealYseGateway implements YseGateway {
 
   @override
   set masterVolume(double value) => Channel.master.volume = value;
+
+  @override
+  double get masterPeak => Channel.master.peakLinearPost();
 }

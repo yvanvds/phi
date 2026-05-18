@@ -11,7 +11,7 @@ import '../surface.dart';
 
 /// Phase 1 Mix surface: a single panel with one play/stop button bound to
 /// the engine's built-in audio test signal, and one peak meter driven by
-/// engine CPU load as a stand-in until dart-yse exposes channel peak level.
+/// the master channel's post-volume peak level.
 class MixSurface extends Surface {
   const MixSurface({required this.engine, super.key});
 
@@ -54,7 +54,7 @@ class MixSurface extends Surface {
                     initialData: EngineTelemetry.zero,
                     builder: (context, snapshot) {
                       final t = snapshot.data ?? EngineTelemetry.zero;
-                      return PeakMeter(level: t.cpuLoad);
+                      return PeakMeter(level: t.masterPeak);
                     },
                   ),
                 ],

@@ -104,6 +104,7 @@ class PhiEngine {
       EngineTelemetry(
         cpuLoad: _gateway.cpuLoad,
         missedCallbacks: _gateway.missedCallbacks,
+        masterPeak: _gateway.masterPeak,
       ),
     );
   }
