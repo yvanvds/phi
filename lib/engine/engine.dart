@@ -52,6 +52,10 @@ class PhiEngine {
   /// every [_telemetryInterval] while the engine is running.
   Stream<EngineTelemetry> get telemetry => _telemetry.stream;
 
+  /// Tick stream that fires on every MIDI input event the engine sees.
+  /// Bottom status uses this to flash the MIDI activity dot.
+  Stream<void> get midiActivity => _gateway.midiActivity;
+
   /// Test-signal toggle. Observable so widgets can reflect the armed state.
   ValueListenable<bool> get testSignal => _testSignal;
 
@@ -100,11 +104,18 @@ class PhiEngine {
 
   void _emit(Timer _) {
     if (!_started) return;
+    final sampleRate = _gateway.activeSampleRate;
+    final latencyMs = sampleRate > 0
+        ? (_gateway.activeOutputLatency / sampleRate) * 1000
+        : 0.0;
     _telemetry.add(
       EngineTelemetry(
         cpuLoad: _gateway.cpuLoad,
         missedCallbacks: _gateway.missedCallbacks,
         masterPeak: _gateway.masterPeak,
+        sampleRate: sampleRate,
+        bufferSize: _gateway.activeBufferSize,
+        latencyMs: latencyMs,
       ),
     );
   }

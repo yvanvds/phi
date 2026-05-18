@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:yse/yse.dart';
 
 import 'yse_gateway.dart';
@@ -9,14 +11,24 @@ import 'yse_gateway.dart';
 /// README.md for the Windows setup.
 class RealYseGateway implements YseGateway {
   System? _sys;
+  final List<MidiIn> _midiInputs = [];
+  final List<StreamSubscription<MidiInParsedMessage>> _midiSubs = [];
+  final StreamController<void> _midiActivity =
+      StreamController<void>.broadcast();
 
   System get _system => _sys ??= System.instance;
 
   @override
-  void init() => _system.init();
+  void init() {
+    _system.init();
+    _openMidiInputs();
+  }
 
   @override
-  void close() => _system.close();
+  void close() {
+    _closeMidiInputs();
+    _system.close();
+  }
 
   @override
   void startUpdateTimer([
@@ -42,4 +54,44 @@ class RealYseGateway implements YseGateway {
 
   @override
   double get masterPeak => Channel.master.peakLinearPost();
+
+  @override
+  double get activeSampleRate => _system.activeSampleRate;
+
+  @override
+  int get activeBufferSize => _system.activeBufferSize;
+
+  @override
+  int get activeOutputLatency => _system.activeOutputLatency;
+
+  @override
+  Stream<void> get midiActivity => _midiActivity.stream;
+
+  /// Opens every visible MIDI input and pipes parsed messages into the
+  /// shared activity stream. Bottom status only needs an "any activity"
+  /// pulse, so individual ports aren't tracked separately yet.
+  void _openMidiInputs() {
+    for (var i = 0; i < _system.midiInDeviceCount; i++) {
+      try {
+        final input = MidiIn.open(i);
+        _midiInputs.add(input);
+        _midiSubs.add(
+          input.parsedMessages.listen((_) => _midiActivity.add(null)),
+        );
+      } on YseException {
+        // Some ports may be claimed by other applications — skip them.
+      }
+    }
+  }
+
+  void _closeMidiInputs() {
+    for (final sub in _midiSubs) {
+      sub.cancel();
+    }
+    _midiSubs.clear();
+    for (final input in _midiInputs) {
+      input.dispose();
+    }
+    _midiInputs.clear();
+  }
 }

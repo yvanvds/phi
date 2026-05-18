@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:phi/engine/bridge/yse_gateway.dart';
 
 /// In-memory [YseGateway] used in unit and widget tests.
@@ -10,6 +12,19 @@ class FakeYseGateway implements YseGateway {
   bool audioTestOn = false;
   double cpuLoadValue = 0;
   int missedCallbacksValue = 0;
+  double activeSampleRateValue = 0;
+  int activeBufferSizeValue = 0;
+  int activeOutputLatencyValue = 0;
+
+  final StreamController<void> _midiActivity =
+      StreamController<void>.broadcast();
+
+  /// Push a synthetic MIDI tick — drives listeners as if a hardware port
+  /// had delivered an event.
+  void emitMidiActivity() => _midiActivity.add(null);
+
+  @override
+  Stream<void> get midiActivity => _midiActivity.stream;
 
   @override
   void init() {
@@ -57,4 +72,17 @@ class FakeYseGateway implements YseGateway {
 
   @override
   double get masterPeak => masterPeakValue;
+
+  @override
+  double get activeSampleRate => activeSampleRateValue;
+
+  @override
+  int get activeBufferSize => activeBufferSizeValue;
+
+  @override
+  int get activeOutputLatency => activeOutputLatencyValue;
+
+  /// Close the internal stream controller. Call from test teardown to keep
+  /// `flutter test --reporter expanded` from leaking pending subscriptions.
+  Future<void> dispose() => _midiActivity.close();
 }
