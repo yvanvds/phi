@@ -5,14 +5,15 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened]
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  analyze-and-test:
-    name: analyze + test
+  analyze-test-scan:
+    name: analyze + test + SonarCloud
     runs-on: ubuntu-latest
     steps:
       - name: Checkout phi
@@ -62,3 +63,11 @@ jobs:
           path: phi/coverage/lcov.info
           if-no-files-found: warn
           retention-days: 7
+
+      - name: SonarCloud scan
+        uses: SonarSource/sonarcloud-github-action@v3
+        with:
+          projectBaseDir: phi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
