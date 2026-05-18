@@ -57,6 +57,16 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# flutter_angle bundles its own libc++.dll alongside the MSVC runtime DLLs
+# that ANGLE actually depends on. Because Windows resolves DLL imports from
+# the application directory before any path set via SetDllDirectoryW, that
+# stray libc++.dll wins the loader race and breaks `package:yse`/libyse.dll,
+# which is linked against the MSYS2 Clang64 libc++ shipped next to libyse.dll
+# (LoadLibrary error 127). ANGLE itself does not require it — libEGL.dll /
+# libGLESv2.dll resolve cleanly against msvcp140d.dll & friends. Drop the
+# offending file from the install list.
+list(FILTER PLUGIN_BUNDLED_LIBRARIES EXCLUDE REGEX "flutter_angle.+libc[+][+]\\.dll$")
+
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can

@@ -5,8 +5,9 @@ import '../../design/tokens/phi_spacing.dart';
 import 'rail_button.dart';
 import 'surface_id.dart';
 
-/// Left rail — 48px wide column of icon-only surface buttons. In Phase 1
-/// only [SurfaceId.mix] is enabled; the other surfaces ship as stubs later.
+/// Left rail — 48px wide column of icon-only surface buttons. Only the
+/// surfaces that ship with a working stub are enabled; the rest stay
+/// dimmed until their respective issues land.
 class LeftRail extends StatelessWidget {
   const LeftRail({required this.selected, required this.onSelect, super.key});
 
@@ -22,7 +23,7 @@ class LeftRail extends StatelessWidget {
     SurfaceId.mix: '≡',
   };
 
-  static const Set<SurfaceId> _enabled = {SurfaceId.mix};
+  static const Set<SurfaceId> _enabled = {SurfaceId.scene, SurfaceId.mix};
 
   @override
   Widget build(BuildContext context) {

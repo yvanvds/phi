@@ -4,6 +4,7 @@ import '../design/tokens/phi_colors.dart';
 import '../domain/session/session_state.dart';
 import '../engine/engine.dart';
 import '../surfaces/mix/mix_surface.dart';
+import '../surfaces/scene/scene_surface.dart';
 import 'bottom_status/bottom_status.dart';
 import 'left_rail/left_rail.dart';
 import 'left_rail/surface_id.dart';
@@ -52,10 +53,23 @@ class _WorkstationState extends State<Workstation> {
   }
 
   Widget _buildCentre() {
-    switch (_selected) {
+    // All surfaces stay in the element tree; IndexedStack only paints the
+    // selected one. macbear's `M3AppEngine` is a process-wide singleton
+    // that `M3View.dispose` tears down irreversibly, so unmounting the
+    // Scene surface crashes any subsequent re-entry.
+    return IndexedStack(
+      index: SurfaceId.values.indexOf(_selected),
+      sizing: StackFit.expand,
+      children: [for (final id in SurfaceId.values) _surfaceFor(id)],
+    );
+  }
+
+  Widget _surfaceFor(SurfaceId id) {
+    switch (id) {
+      case SurfaceId.scene:
+        return SceneSurface(engine: widget.engine);
       case SurfaceId.mix:
         return MixSurface(engine: widget.engine);
-      case SurfaceId.scene:
       case SurfaceId.patcher:
       case SurfaceId.code:
       case SurfaceId.state:
