@@ -26,4 +26,9 @@ abstract interface class YseGateway {
   /// Master-channel volume, in `[0.0, 1.0]`.
   double get masterVolume;
   set masterVolume(double value);
+
+  /// Peak amplitude on the master channel, measured post-volume — the level
+  /// listeners actually hear. Linear, `[0.0, 1.0+]`; values above 1.0 mean
+  /// clipping. Sampled once per telemetry tick.
+  double get masterPeak;
 }

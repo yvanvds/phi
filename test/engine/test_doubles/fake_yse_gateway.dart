@@ -52,4 +52,9 @@ class FakeYseGateway implements YseGateway {
     calls.add('masterVolume:${value.toStringAsFixed(3)}');
     masterVolumeValue = value;
   }
+
+  double masterPeakValue = 0;
+
+  @override
+  double get masterPeak => masterPeakValue;
 }

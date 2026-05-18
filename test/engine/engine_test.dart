@@ -106,6 +106,7 @@ void main() {
     test('telemetry stream emits gateway snapshots while running', () async {
       gateway.cpuLoadValue = 0.42;
       gateway.missedCallbacksValue = 3;
+      gateway.masterPeakValue = 0.6;
       engine.start();
 
       final EngineTelemetry first = await engine.telemetry.first.timeout(
@@ -114,6 +115,7 @@ void main() {
 
       expect(first.cpuLoad, closeTo(0.42, 1e-9));
       expect(first.missedCallbacks, 3);
+      expect(first.masterPeak, closeTo(0.6, 1e-9));
     });
 
     test('sceneRenderer getter is null when none is injected', () {
