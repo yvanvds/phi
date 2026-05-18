@@ -14,6 +14,10 @@ dependencies:
     path: ../dart-yse
   google_fonts: ^6.2.1
   vector_math: ^2.1.4
+  macbear_3d:
+    git:
+      url: https://github.com/yvanvds/macbear_3d.git
+      ref: 66b07310b4c135e1d8b842fc046f4a49fd9c3018
 
 dev_dependencies:
   flutter_test:

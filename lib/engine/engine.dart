@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'bridge/macbear_scene_renderer.dart';
 import 'bridge/real_yse_gateway.dart';
 import 'bridge/scene_renderer.dart';
 import 'bridge/yse_gateway.dart';
@@ -20,9 +21,13 @@ class PhiEngine {
   }) : _sceneRenderer = sceneRenderer,
        _telemetryInterval = telemetryInterval;
 
-  /// Production constructor — wires the real `package:yse` gateway.
-  factory PhiEngine.production({SceneRenderer? sceneRenderer}) =>
-      PhiEngine(RealYseGateway(), sceneRenderer: sceneRenderer);
+  /// Production constructor — wires the real `package:yse` gateway and,
+  /// by default, the macbear-backed Scene renderer. Tests can inject a
+  /// different renderer (or `null`) via [sceneRenderer].
+  factory PhiEngine.production({SceneRenderer? sceneRenderer}) => PhiEngine(
+    RealYseGateway(),
+    sceneRenderer: sceneRenderer ?? MacbearSceneRenderer(),
+  );
 
   final YseGateway _gateway;
   final SceneRenderer? _sceneRenderer;

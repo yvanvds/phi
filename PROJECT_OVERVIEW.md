@@ -18,7 +18,7 @@ project, Windows desktop only.
 | FFI bridge   | `dart-yse` — Dart wrapper, package name `yse`         |
 | UI shell     | Flutter ≥ 3.38, Windows desktop                       |
 | Design       | Dart tokens derived from `design system/colors_and_type.css` |
-| 3D viewport  | bgfx (Phase ≥ 2 — not yet)                            |
+| 3D viewport  | macbear_3d (ANGLE / OpenGL ES 3), fork yvanvds/macbear_3d |
 | Scripting    | Python with DSL (Phase ≥ 2 — not yet)                 |
 
 `dart-yse` lives at `d:\dart-yse` as a sibling on disk and is consumed via
@@ -57,6 +57,10 @@ main + app          (orchestration)
   right inspector (tap to expand 28→320px, hosts a master-volume fader)
 - Mix surface stub: one play/stop button bound to `System.audioTest`, one
   peak meter currently fed by `cpuLoad` as a stand-in
+- Scene surface stub: renderer-agnostic `SceneRenderer` bridge in
+  `lib/engine/bridge/`, backed in production by `MacbearSceneRenderer`
+  (forked `macbear_3d` on ANGLE). Renders one placeholder agent as a
+  voice-coloured sphere; orbit/pan/zoom via macbear's built-in controller.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
@@ -69,7 +73,7 @@ Pending the real channel-peak metering on dart-yse — see [phi#1] / [dart-yse#1
 
 | Surface  | Status   | Folder                          |
 |----------|----------|---------------------------------|
-| Scene    | not impl | `lib/surfaces/scene/`           |
+| Scene    | stub     | `lib/surfaces/scene/`           |
 | Patcher  | not impl | `lib/surfaces/patcher/`         |
 | Code     | not impl | `lib/surfaces/code/`            |
 | State    | not impl | `lib/surfaces/state/`           |
