@@ -67,10 +67,7 @@ class _MidiActivityDotState extends State<MidiActivityDot> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            'MIDI',
-            style: PhiType.caption().copyWith(color: PhiColors.fg3),
-          ),
+          Text('MIDI', style: PhiType.caption().copyWith(color: PhiColors.fg3)),
           const SizedBox(width: PhiSpacing.s2),
           Container(
             width: 8,

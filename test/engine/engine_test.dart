@@ -156,6 +156,161 @@ void main() {
     test('sceneRenderer getter is null when none is injected', () {
       expect(engine.sceneRenderer, isNull);
     });
+
+    test('masterChannel is present and never destroyed', () {
+      expect(engine.masterChannel.isMaster, isTrue);
+      expect(engine.masterChannel.name, 'master');
+    });
+
+    test('addChannel before start() throws StateError', () {
+      expect(engine.addChannel, throwsStateError);
+    });
+
+    test('addChannel creates a gateway channel and appends to channels', () {
+      engine.start();
+
+      final ch1 = engine.addChannel(name: 'drum');
+      final ch2 = engine.addChannel(name: 'pad');
+
+      expect(engine.channels.value, [ch1, ch2]);
+      expect(gateway.channels[ch1.id]?.name, 'drum');
+      expect(gateway.channels[ch2.id]?.name, 'pad');
+      expect(ch1.voice, 1);
+      expect(ch2.voice, 2);
+    });
+
+    test('addChannel cycles voice indices 1..6 then wraps', () {
+      engine.start();
+
+      final voices = <int>[
+        for (var i = 0; i < 7; i++) engine.addChannel().voice,
+      ];
+
+      expect(voices, [1, 2, 3, 4, 5, 6, 1]);
+    });
+
+    test('removeChannel destroys the gateway channel and removes it', () {
+      engine.start();
+      final ch = engine.addChannel(name: 'drum');
+
+      engine.removeChannel(ch);
+
+      expect(engine.channels.value, isEmpty);
+      expect(gateway.channels, isEmpty);
+      expect(gateway.calls, contains('destroyChannel:${ch.id}'));
+    });
+
+    test('removeChannel on master is a no-op', () {
+      engine.start();
+      engine.removeChannel(engine.masterChannel);
+
+      expect(gateway.calls.any((c) => c.startsWith('destroyChannel')), isFalse);
+    });
+
+    test('setChannelVolume clamps and forwards the effective value', () {
+      engine.start();
+      final ch = engine.addChannel();
+
+      engine.setChannelVolume(ch, 0.4);
+      expect(ch.volume, closeTo(0.4, 1e-9));
+      expect(gateway.channels[ch.id]!.volume, closeTo(0.4, 1e-9));
+
+      engine.setChannelVolume(ch, 1.7);
+      expect(ch.volume, closeTo(1.0, 1e-9));
+      expect(gateway.channels[ch.id]!.volume, closeTo(1.0, 1e-9));
+    });
+
+    test('setChannelVolume on master routes through setMasterVolume', () {
+      engine.start();
+
+      engine.setChannelVolume(engine.masterChannel, 0.3);
+
+      expect(gateway.masterVolumeValue, closeTo(0.3, 1e-9));
+      expect(engine.masterVolume.value, closeTo(0.3, 1e-9));
+      expect(engine.masterChannel.volume, closeTo(0.3, 1e-9));
+    });
+
+    test('setChannelMuted silences the gateway but preserves user volume', () {
+      engine.start();
+      final ch = engine.addChannel();
+      engine.setChannelVolume(ch, 0.7);
+
+      engine.setChannelMuted(ch, muted: true);
+      expect(ch.muted, isTrue);
+      expect(ch.volume, closeTo(0.7, 1e-9));
+      expect(gateway.channels[ch.id]!.volume, 0.0);
+
+      engine.setChannelMuted(ch, muted: false);
+      expect(gateway.channels[ch.id]!.volume, closeTo(0.7, 1e-9));
+    });
+
+    test('soloing one channel silences the others; clearing restores them', () {
+      engine.start();
+      final drum = engine.addChannel();
+      final pad = engine.addChannel();
+      engine.setChannelVolume(drum, 0.8);
+      engine.setChannelVolume(pad, 0.5);
+
+      engine.setChannelSoloed(drum, soloed: true);
+
+      expect(gateway.channels[drum.id]!.volume, closeTo(0.8, 1e-9));
+      expect(gateway.channels[pad.id]!.volume, 0.0);
+
+      engine.setChannelSoloed(drum, soloed: false);
+
+      expect(gateway.channels[drum.id]!.volume, closeTo(0.8, 1e-9));
+      expect(gateway.channels[pad.id]!.volume, closeTo(0.5, 1e-9));
+    });
+
+    test('mute on a soloed channel still silences it', () {
+      engine.start();
+      final drum = engine.addChannel();
+      final pad = engine.addChannel();
+      engine.setChannelVolume(drum, 0.8);
+      engine.setChannelVolume(pad, 0.5);
+
+      engine.setChannelSoloed(drum, soloed: true);
+      engine.setChannelMuted(drum, muted: true);
+
+      expect(gateway.channels[drum.id]!.volume, 0.0);
+      expect(gateway.channels[pad.id]!.volume, 0.0);
+    });
+
+    test('telemetry tick updates each channel\'s peak', () async {
+      engine.start();
+      final ch = engine.addChannel();
+      gateway.masterPeakValue = 0.42;
+      gateway.channels[ch.id]!.peak = 0.6;
+
+      await engine.telemetry.first.timeout(const Duration(seconds: 1));
+
+      expect(engine.masterChannel.peak, closeTo(0.42, 1e-9));
+      expect(ch.peak, closeTo(0.6, 1e-9));
+    });
+
+    test('stop() disposes user channels and clears the list', () {
+      engine.start();
+      engine.addChannel();
+      engine.addChannel();
+      expect(engine.channels.value, hasLength(2));
+
+      engine.stop();
+
+      expect(engine.channels.value, isEmpty);
+    });
+
+    test('MixerChannel ChangeNotifier fires when its state changes', () {
+      engine.start();
+      final ch = engine.addChannel();
+      var ticks = 0;
+      ch.addListener(() => ticks++);
+
+      engine.setChannelVolume(ch, 0.4);
+      engine.setChannelMuted(ch, muted: true);
+      engine.setChannelSoloed(ch, soloed: true);
+
+      expect(ticks, greaterThanOrEqualTo(3));
+    });
   });
 
   group('PhiEngine with sceneRenderer', () {

@@ -82,7 +82,49 @@ class FakeYseGateway implements YseGateway {
   @override
   int get activeOutputLatency => activeOutputLatencyValue;
 
+  /// Public mirror of the per-channel state the engine writes into us.
+  /// Tests can read this to assert the gateway received the right values,
+  /// or seed `peak` to drive telemetry updates.
+  final Map<int, FakeChannel> channels = {};
+  int _nextChannelId = 1;
+
+  @override
+  int createChannel(String name) {
+    final id = _nextChannelId++;
+    calls.add('createChannel:$id:$name');
+    channels[id] = FakeChannel(name);
+    return id;
+  }
+
+  @override
+  void destroyChannel(int channelId) {
+    calls.add('destroyChannel:$channelId');
+    channels.remove(channelId);
+  }
+
+  @override
+  double channelVolume(int channelId) => channels[channelId]?.volume ?? 0;
+
+  @override
+  void setChannelVolume(int channelId, double value) {
+    calls.add('setChannelVolume:$channelId:${value.toStringAsFixed(3)}');
+    final ch = channels[channelId];
+    if (ch != null) ch.volume = value;
+  }
+
+  @override
+  double channelPeak(int channelId) => channels[channelId]?.peak ?? 0;
+
   /// Close the internal stream controller. Call from test teardown to keep
   /// `flutter test --reporter expanded` from leaking pending subscriptions.
   Future<void> dispose() => _midiActivity.close();
+}
+
+/// Per-channel state the fake records and the engine writes to.
+class FakeChannel {
+  FakeChannel(this.name);
+
+  final String name;
+  double volume = 1.0;
+  double peak = 0.0;
 }

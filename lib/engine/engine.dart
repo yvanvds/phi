@@ -7,6 +7,7 @@ import 'bridge/real_yse_gateway.dart';
 import 'bridge/scene_renderer.dart';
 import 'bridge/yse_gateway.dart';
 import 'state/engine_telemetry.dart';
+import 'state/mixer_channel.dart';
 
 /// High-level façade over the YSE audio engine.
 ///
@@ -43,6 +44,12 @@ class PhiEngine {
   final ValueNotifier<bool> _testSignal = ValueNotifier<bool>(false);
   final ValueNotifier<double> _masterVolume = ValueNotifier<double>(1);
 
+  final MixerChannel _masterChannel = MixerChannel.master();
+  final List<MixerChannel> _userChannels = [];
+  final ValueNotifier<List<MixerChannel>> _channels =
+      ValueNotifier<List<MixerChannel>>(const []);
+  int _voiceCursor = 1;
+
   bool _started = false;
 
   /// Whether [start] has been called and [stop] has not.
@@ -63,6 +70,16 @@ class PhiEngine {
   /// directly. Drives the engine's master channel via [setMasterVolume].
   ValueListenable<double> get masterVolume => _masterVolume;
 
+  /// The master mixer channel. Always present, never destroyed. Mute and
+  /// solo on the master are no-ops by design — there is nothing to mix
+  /// against it.
+  MixerChannel get masterChannel => _masterChannel;
+
+  /// Live list of user channels (master excluded). Fires when channels are
+  /// added or removed; per-channel state changes (volume, mute, solo, peak)
+  /// fire on the individual [MixerChannel] instead.
+  ValueListenable<List<MixerChannel>> get channels => _channels;
+
   /// Initialise the engine, start the update loop, begin emitting telemetry.
   void start() {
     if (_started) return;
@@ -79,11 +96,20 @@ class PhiEngine {
     _telemetryTimer?.cancel();
     _telemetryTimer = null;
     if (_started) {
+      _disposeUserChannels();
       _gateway.close();
       _sceneRenderer?.dispose();
       _started = false;
     }
     _testSignal.value = false;
+  }
+
+  void _disposeUserChannels() {
+    for (final ch in _userChannels) {
+      ch.dispose();
+    }
+    _userChannels.clear();
+    _channels.value = const [];
   }
 
   /// Turn the engine's built-in audio test signal on or off.
@@ -100,6 +126,83 @@ class PhiEngine {
     final clamped = value.clamp(0.0, 1.0);
     _gateway.masterVolume = clamped;
     _masterVolume.value = clamped;
+    _masterChannel.applyVolume(clamped);
+  }
+
+  /// Append a new user channel. Picks the next voice slot in `[1, 6]`,
+  /// wrapping. No-op before [start]. Returns the created [MixerChannel].
+  MixerChannel addChannel({String? name}) {
+    if (!_started) {
+      throw StateError('PhiEngine.addChannel called before start()');
+    }
+    final voice = _voiceCursor;
+    _voiceCursor = (_voiceCursor % 6) + 1;
+    final resolvedName = name ?? 'ch ${_userChannels.length + 1}';
+    final id = _gateway.createChannel(resolvedName);
+    final ch = MixerChannel.user(id: id, name: resolvedName, voice: voice);
+    _userChannels.add(ch);
+    _channels.value = List<MixerChannel>.unmodifiable(_userChannels);
+    return ch;
+  }
+
+  /// Remove a user channel. No-op for the master channel or an unknown
+  /// instance. Disposes the [MixerChannel]'s listeners.
+  void removeChannel(MixerChannel channel) {
+    if (channel.isMaster) return;
+    if (!_userChannels.remove(channel)) return;
+    _gateway.destroyChannel(channel.id);
+    _channels.value = List<MixerChannel>.unmodifiable(_userChannels);
+    channel.dispose();
+  }
+
+  /// Set a channel's user-facing volume. Clamped to `[0.0, 1.0]`. Routes
+  /// through [setMasterVolume] for the master channel; for user channels
+  /// the effective gateway volume also respects mute and solo.
+  void setChannelVolume(MixerChannel channel, double value) {
+    if (!_started) return;
+    final clamped = value.clamp(0.0, 1.0);
+    if (channel.isMaster) {
+      setMasterVolume(clamped);
+      return;
+    }
+    if (!_userChannels.contains(channel)) return;
+    channel.applyVolume(clamped);
+    _pushEffectiveVolume(channel);
+  }
+
+  /// Mute or unmute a user channel. Master mute is intentionally unsupported
+  /// (use volume instead). Triggers a solo-aware re-evaluation across all
+  /// user channels.
+  void setChannelMuted(MixerChannel channel, {required bool muted}) {
+    if (!_started || channel.isMaster) return;
+    if (!_userChannels.contains(channel)) return;
+    channel.applyMuted(muted);
+    _pushEffectiveVolume(channel);
+  }
+
+  /// Toggle a channel's solo flag. When at least one user channel is
+  /// soloed, every non-soloed user channel is silenced at the gateway
+  /// until solo is cleared.
+  void setChannelSoloed(MixerChannel channel, {required bool soloed}) {
+    if (!_started || channel.isMaster) return;
+    if (!_userChannels.contains(channel)) return;
+    final wasAnySoloed = _userChannels.any((c) => c.soloed);
+    channel.applySoloed(soloed);
+    final isAnySoloed = _userChannels.any((c) => c.soloed);
+    if (wasAnySoloed != isAnySoloed) {
+      for (final c in _userChannels) {
+        _pushEffectiveVolume(c);
+      }
+    } else {
+      _pushEffectiveVolume(channel);
+    }
+  }
+
+  void _pushEffectiveVolume(MixerChannel channel) {
+    final anySoloed = _userChannels.any((c) => c.soloed);
+    final silenced = channel.muted || (anySoloed && !channel.soloed);
+    final effective = silenced ? 0.0 : channel.volume;
+    _gateway.setChannelVolume(channel.id, effective);
   }
 
   void _emit(Timer _) {
@@ -108,11 +211,16 @@ class PhiEngine {
     final latencyMs = sampleRate > 0
         ? (_gateway.activeOutputLatency / sampleRate) * 1000
         : 0.0;
+    final masterPeak = _gateway.masterPeak;
+    _masterChannel.applyPeak(masterPeak);
+    for (final ch in _userChannels) {
+      ch.applyPeak(_gateway.channelPeak(ch.id));
+    }
     _telemetry.add(
       EngineTelemetry(
         cpuLoad: _gateway.cpuLoad,
         missedCallbacks: _gateway.missedCallbacks,
-        masterPeak: _gateway.masterPeak,
+        masterPeak: masterPeak,
         sampleRate: sampleRate,
         bufferSize: _gateway.activeBufferSize,
         latencyMs: latencyMs,
@@ -126,6 +234,8 @@ class PhiEngine {
     stop();
     _testSignal.dispose();
     _masterVolume.dispose();
+    _masterChannel.dispose();
+    _channels.dispose();
     await _telemetry.close();
   }
 }
