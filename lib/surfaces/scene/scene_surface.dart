@@ -55,9 +55,7 @@ class _SceneViewportState extends State<_SceneViewport> {
     renderer.setCamera(
       Camera(position: Vector3(6, 6, 4), target: Vector3.zero()),
     );
-    renderer.setAgents([
-      SceneAgent(position: Vector3.zero(), voiceIndex: 0),
-    ]);
+    renderer.setAgents([SceneAgent(position: Vector3.zero(), voiceIndex: 0)]);
   }
 
   @override

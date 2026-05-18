@@ -88,8 +88,7 @@ class PhiMacbearScene extends m3.M3Scene {
     }
   }
 
-  static vm32.Vector3 _toVm32(vm64.Vector3 v) =>
-      vm32.Vector3(v.x, v.y, v.z);
+  static vm32.Vector3 _toVm32(vm64.Vector3 v) => vm32.Vector3(v.x, v.y, v.z);
 
   static vm32.Vector3 _vec3From(Color c) => vm32.Vector3(c.r, c.g, c.b);
 

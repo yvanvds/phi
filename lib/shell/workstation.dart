@@ -60,9 +60,7 @@ class _WorkstationState extends State<Workstation> {
     return IndexedStack(
       index: SurfaceId.values.indexOf(_selected),
       sizing: StackFit.expand,
-      children: [
-        for (final id in SurfaceId.values) _surfaceFor(id),
-      ],
+      children: [for (final id in SurfaceId.values) _surfaceFor(id)],
     );
   }
 

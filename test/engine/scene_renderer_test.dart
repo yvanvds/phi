@@ -18,10 +18,7 @@ void main() {
 
   test('setCamera records the most recent value', () {
     final r = FakeSceneRenderer();
-    final cam = Camera(
-      position: Vector3(0, 0, 5),
-      target: Vector3.zero(),
-    );
+    final cam = Camera(position: Vector3(0, 0, 5), target: Vector3.zero());
     r.setCamera(cam);
     expect(r.lastCamera, same(cam));
     expect(r.calls, ['setCamera']);
