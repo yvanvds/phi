@@ -31,4 +31,23 @@ abstract interface class YseGateway {
   /// listeners actually hear. Linear, `[0.0, 1.0+]`; values above 1.0 mean
   /// clipping. Sampled once per telemetry tick.
   double get masterPeak;
+
+  /// Sample rate of the currently open audio device, in Hz. `0` when no
+  /// device is open.
+  double get activeSampleRate;
+
+  /// Frames-per-callback of the currently open audio device. `0` when no
+  /// device is open.
+  int get activeBufferSize;
+
+  /// Output latency of the currently open audio device, in samples. `0` when
+  /// no device is open. Convert to ms with
+  /// `(activeOutputLatency / activeSampleRate) * 1000`.
+  int get activeOutputLatency;
+
+  /// Broadcast stream that emits a tick on every MIDI input message the
+  /// engine receives. UI uses this to flash an activity indicator; the
+  /// payload is intentionally empty (a single in/out distinction is not
+  /// yet exposed).
+  Stream<void> get midiActivity;
 }

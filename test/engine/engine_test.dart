@@ -20,6 +20,7 @@ void main() {
 
     tearDown(() async {
       await engine.dispose();
+      await gateway.dispose();
     });
 
     test('start() initialises gateway and begins update loop', () {
@@ -107,6 +108,9 @@ void main() {
       gateway.cpuLoadValue = 0.42;
       gateway.missedCallbacksValue = 3;
       gateway.masterPeakValue = 0.6;
+      gateway.activeSampleRateValue = 48000;
+      gateway.activeBufferSizeValue = 128;
+      gateway.activeOutputLatencyValue = 256;
       engine.start();
 
       final EngineTelemetry first = await engine.telemetry.first.timeout(
@@ -116,6 +120,37 @@ void main() {
       expect(first.cpuLoad, closeTo(0.42, 1e-9));
       expect(first.missedCallbacks, 3);
       expect(first.masterPeak, closeTo(0.6, 1e-9));
+      expect(first.sampleRate, closeTo(48000, 1e-9));
+      expect(first.bufferSize, 128);
+      // 256 samples / 48000 Hz * 1000 = 5.333... ms
+      expect(first.latencyMs, closeTo(5.333, 1e-3));
+    });
+
+    test('telemetry latencyMs is zero when no device is open', () async {
+      gateway.activeSampleRateValue = 0;
+      gateway.activeOutputLatencyValue = 0;
+      engine.start();
+
+      final EngineTelemetry first = await engine.telemetry.first.timeout(
+        const Duration(seconds: 1),
+      );
+
+      expect(first.latencyMs, 0);
+      expect(first.sampleRate, 0);
+      expect(first.bufferSize, 0);
+    });
+
+    test('midiActivity stream forwards gateway ticks', () async {
+      engine.start();
+      final received = <void>[];
+      final sub = engine.midiActivity.listen(received.add);
+
+      gateway.emitMidiActivity();
+      gateway.emitMidiActivity();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(received, hasLength(2));
+      await sub.cancel();
     });
 
     test('sceneRenderer getter is null when none is injected', () {
@@ -140,6 +175,7 @@ void main() {
 
     tearDown(() async {
       await engine.dispose();
+      await gateway.dispose();
     });
 
     test('sceneRenderer getter returns the injected renderer', () {
