@@ -66,6 +66,13 @@ main + app          (orchestration)
   `lib/engine/bridge/`, backed in production by `MacbearSceneRenderer`
   (forked `macbear_3d` on ANGLE). Renders one placeholder agent as a
   voice-coloured sphere; orbit/pan/zoom via macbear's built-in controller.
+- Code surface scaffold: `re_editor`-backed Python editor with custom
+  Phi-flavoured highlight theme, projected view (full-line comments
+  stripped, blank-line runs collapsed) driven by
+  `SessionState.projection`, and Ctrl+Enter dispatching the block under
+  the cursor to a `CodeEvaluator` abstraction. The shell wires in
+  `NoOpCodeEvaluator` by default — real Python execution
+  (embedded-C++ vs. subprocess vs. Dart-FFI) is the next layer's call.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
@@ -74,8 +81,8 @@ main + app          (orchestration)
 | Surface  | Status   | Folder                          |
 |----------|----------|---------------------------------|
 | Scene    | stub     | `lib/surfaces/scene/`           |
-| Patcher  | not impl | `lib/surfaces/patcher/`         |
-| Code     | not impl | `lib/surfaces/code/`            |
+| Patcher  | skeleton | `lib/surfaces/patcher/`         |
+| Code     | scaffold | `lib/surfaces/code/`            |
 | State    | not impl | `lib/surfaces/state/`           |
 | MIDI     | not impl | `lib/surfaces/midi/`            |
 | Mix      | impl     | `lib/surfaces/mix/`             |

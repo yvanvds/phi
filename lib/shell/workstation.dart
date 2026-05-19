@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../design/tokens/phi_colors.dart';
 import '../domain/session/session_state.dart';
+import '../engine/bridge/no_op_code_evaluator.dart';
 import '../engine/engine.dart';
+import '../surfaces/code/code_surface.dart';
 import '../surfaces/mix/mix_surface.dart';
 import '../surfaces/patcher/patcher_surface.dart';
 import '../surfaces/scene/scene_surface.dart';
@@ -27,6 +29,13 @@ class Workstation extends StatefulWidget {
 
 class _WorkstationState extends State<Workstation> {
   SurfaceId _selected = SurfaceId.mix;
+  final NoOpCodeEvaluator _codeEvaluator = NoOpCodeEvaluator();
+
+  @override
+  void dispose() {
+    _codeEvaluator.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,6 +83,11 @@ class _WorkstationState extends State<Workstation> {
       case SurfaceId.patcher:
         return PatcherSurface(engine: widget.engine);
       case SurfaceId.code:
+        return CodeSurface(
+          engine: widget.engine,
+          session: widget.session,
+          evaluator: _codeEvaluator,
+        );
       case SurfaceId.state:
       case SurfaceId.midi:
         return Container(color: PhiColors.bg0);
