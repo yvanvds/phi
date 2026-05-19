@@ -15,6 +15,8 @@ class RealYseGateway implements YseGateway {
   final List<StreamSubscription<MidiInParsedMessage>> _midiSubs = [];
   final StreamController<void> _midiActivity =
       StreamController<void>.broadcast();
+  final Map<int, Channel> _channels = {};
+  int _nextChannelId = 1;
 
   System get _system => _sys ??= System.instance;
 
@@ -27,6 +29,7 @@ class RealYseGateway implements YseGateway {
   @override
   void close() {
     _closeMidiInputs();
+    _destroyAllChannels();
     _system.close();
   }
 
@@ -66,6 +69,39 @@ class RealYseGateway implements YseGateway {
 
   @override
   Stream<void> get midiActivity => _midiActivity.stream;
+
+  @override
+  int createChannel(String name) {
+    final id = _nextChannelId++;
+    _channels[id] = Channel.create(name, parent: Channel.master);
+    return id;
+  }
+
+  @override
+  void destroyChannel(int channelId) {
+    final ch = _channels.remove(channelId);
+    ch?.dispose();
+  }
+
+  @override
+  double channelVolume(int channelId) => _channels[channelId]?.volume ?? 0;
+
+  @override
+  void setChannelVolume(int channelId, double value) {
+    final ch = _channels[channelId];
+    if (ch != null) ch.volume = value;
+  }
+
+  @override
+  double channelPeak(int channelId) =>
+      _channels[channelId]?.peakLinearPost() ?? 0;
+
+  void _destroyAllChannels() {
+    for (final ch in _channels.values) {
+      ch.dispose();
+    }
+    _channels.clear();
+  }
 
   /// Opens every visible MIDI input and pipes parsed messages into the
   /// shared activity stream. Bottom status only needs an "any activity"

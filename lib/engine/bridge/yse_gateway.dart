@@ -50,4 +50,20 @@ abstract interface class YseGateway {
   /// payload is intentionally empty (a single in/out distinction is not
   /// yet exposed).
   Stream<void> get midiActivity;
+
+  /// Create a new YSE channel parented to the master channel and return an
+  /// opaque integer id. Subsequent per-channel calls take the same id.
+  int createChannel(String name);
+
+  /// Destroy a channel previously returned by [createChannel]. No-op for an
+  /// unknown id (already destroyed, or never existed).
+  void destroyChannel(int channelId);
+
+  /// Volume of a non-master channel in `[0.0, 1.0]`.
+  double channelVolume(int channelId);
+  void setChannelVolume(int channelId, double value);
+
+  /// Post-volume peak amplitude of a non-master channel — linear `[0.0, 1.0+]`.
+  /// Sampled once per telemetry tick. Mirrors [masterPeak] for user channels.
+  double channelPeak(int channelId);
 }

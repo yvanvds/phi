@@ -46,17 +46,22 @@ main + app          (orchestration)
 - Theme in `lib/design/theme.dart`
 - Widget library: `PrimaryButton`, `PeakMeter`, `Capsule`, `PhiToggle`,
   `InlineEditableText`, `TransportButton`, `RailButton`, `StatusChip`,
-  `PhiFader`
+  `PhiFader`, `ChannelStrip`
 - `PhiEngine` façade over a `YseGateway` interface (`RealYseGateway` for
-  production, `FakeYseGateway` for tests)
+  production, `FakeYseGateway` for tests). Owns the master + N user
+  `MixerChannel` instances and exposes add/remove/volume/mute/solo;
+  mute/solo are collapsed to an effective gateway volume since YSE has no
+  native notion of them.
 - `SessionState` in `lib/domain/session/` — pure-Dart cross-cutting state
   (transport intent, projection, scene name)
 - Workstation chrome: top toolbar (wordmark, inline-editable scene name,
   play/stop transport, time-domain placeholder, projection toggle), left
   rail (6 buttons, only Mix enabled), bottom status (LIVE dot, CPU + drops),
   right inspector (tap to expand 28→320px, hosts a master-volume fader)
-- Mix surface stub: one play/stop button bound to `System.audioTest`, one
-  peak meter driven by the master channel's post-volume peak level
+- Mix surface: horizontal rack of `ChannelStrip` widgets (master pinned
+  right, user strips left). Header has a `+` to add channels and the
+  `System.audioTest` toggle. Each strip carries voice-swatch + name + fader
+  with overlaid peak meter + mute/solo buttons.
 - Scene surface stub: renderer-agnostic `SceneRenderer` bridge in
   `lib/engine/bridge/`, backed in production by `MacbearSceneRenderer`
   (forked `macbear_3d` on ANGLE). Renders one placeholder agent as a
@@ -73,7 +78,7 @@ main + app          (orchestration)
 | Code     | not impl | `lib/surfaces/code/`            |
 | State    | not impl | `lib/surfaces/state/`           |
 | MIDI     | not impl | `lib/surfaces/midi/`            |
-| Mix      | stub     | `lib/surfaces/mix/`             |
+| Mix      | impl     | `lib/surfaces/mix/`             |
 
 ## Where things live
 
