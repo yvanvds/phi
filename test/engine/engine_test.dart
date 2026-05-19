@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/engine/state/engine_telemetry.dart';
 
+import 'test_doubles/fake_patcher_gateway.dart';
 import 'test_doubles/fake_scene_renderer.dart';
 import 'test_doubles/fake_yse_gateway.dart';
 
@@ -310,6 +311,66 @@ void main() {
       engine.setChannelSoloed(ch, soloed: true);
 
       expect(ticks, greaterThanOrEqualTo(3));
+    });
+  });
+
+  group('PhiEngine with patcher', () {
+    late FakeYseGateway gateway;
+    late FakePatcherGateway patcherGateway;
+    late PhiEngine engine;
+
+    setUp(() {
+      gateway = FakeYseGateway();
+      patcherGateway = FakePatcherGateway();
+      engine = PhiEngine(
+        gateway,
+        patcherGateway: patcherGateway,
+        telemetryInterval: const Duration(milliseconds: 20),
+      );
+    });
+
+    tearDown(() async {
+      await engine.dispose();
+      await gateway.dispose();
+    });
+
+    test('patcher getter throws before start()', () {
+      expect(() => engine.patcher, throwsStateError);
+    });
+
+    test('start() initialises the patcher gateway but does not mount', () {
+      engine.start();
+
+      expect(patcherGateway.initialised, isTrue);
+      // Mounting on an empty patcher crashes the audio thread; the
+      // surface mounts after seeding a `~dac`.
+      expect(patcherGateway.mounted, isFalse);
+      expect(patcherGateway.calls.any((c) => c.startsWith('init')), isTrue);
+      expect(
+        patcherGateway.calls.any((c) => c.startsWith('mountAsSound')),
+        isFalse,
+      );
+    });
+
+    test('controller.mountAudio is idempotent', () {
+      engine.start();
+
+      engine.patcher.mountAudio();
+      engine.patcher.mountAudio();
+
+      final mounts = patcherGateway.calls.where(
+        (c) => c.startsWith('mountAsSound'),
+      );
+      expect(mounts, hasLength(1));
+    });
+
+    test('stop() disposes the patcher gateway and resets the getter', () {
+      engine.start();
+      engine.stop();
+
+      expect(patcherGateway.initialised, isFalse);
+      expect(() => engine.patcher, throwsStateError);
+      expect(patcherGateway.calls, contains('dispose'));
     });
   });
 

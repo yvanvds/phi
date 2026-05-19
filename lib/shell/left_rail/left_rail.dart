@@ -23,7 +23,11 @@ class LeftRail extends StatelessWidget {
     SurfaceId.mix: '≡',
   };
 
-  static const Set<SurfaceId> _enabled = {SurfaceId.scene, SurfaceId.mix};
+  static const Set<SurfaceId> _enabled = {
+    SurfaceId.scene,
+    SurfaceId.patcher,
+    SurfaceId.mix,
+  };
 
   @override
   Widget build(BuildContext context) {

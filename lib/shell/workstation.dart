@@ -4,6 +4,7 @@ import '../design/tokens/phi_colors.dart';
 import '../domain/session/session_state.dart';
 import '../engine/engine.dart';
 import '../surfaces/mix/mix_surface.dart';
+import '../surfaces/patcher/patcher_surface.dart';
 import '../surfaces/scene/scene_surface.dart';
 import 'bottom_status/bottom_status.dart';
 import 'left_rail/left_rail.dart';
@@ -71,6 +72,7 @@ class _WorkstationState extends State<Workstation> {
       case SurfaceId.mix:
         return MixSurface(engine: widget.engine);
       case SurfaceId.patcher:
+        return PatcherSurface(engine: widget.engine);
       case SurfaceId.code:
       case SurfaceId.state:
       case SurfaceId.midi:
