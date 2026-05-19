@@ -27,6 +27,7 @@ class LeftRail extends StatelessWidget {
     SurfaceId.scene,
     SurfaceId.patcher,
     SurfaceId.code,
+    SurfaceId.midi,
     SurfaceId.mix,
   };
 
