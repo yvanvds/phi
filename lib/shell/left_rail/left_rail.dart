@@ -26,6 +26,7 @@ class LeftRail extends StatelessWidget {
   static const Set<SurfaceId> _enabled = {
     SurfaceId.scene,
     SurfaceId.patcher,
+    SurfaceId.code,
     SurfaceId.mix,
   };
 
