@@ -5,6 +5,7 @@ import '../domain/session/session_state.dart';
 import '../engine/bridge/no_op_code_evaluator.dart';
 import '../engine/engine.dart';
 import '../surfaces/code/code_surface.dart';
+import '../surfaces/midi/midi_surface.dart';
 import '../surfaces/mix/mix_surface.dart';
 import '../surfaces/patcher/patcher_surface.dart';
 import '../surfaces/scene/scene_surface.dart';
@@ -88,8 +89,9 @@ class _WorkstationState extends State<Workstation> {
           session: widget.session,
           evaluator: _codeEvaluator,
         );
-      case SurfaceId.state:
       case SurfaceId.midi:
+        return MidiSurface(engine: widget.engine);
+      case SurfaceId.state:
         return Container(color: PhiColors.bg0);
     }
   }

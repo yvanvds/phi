@@ -73,6 +73,17 @@ main + app          (orchestration)
   the cursor to a `CodeEvaluator` abstraction. The shell wires in
   `NoOpCodeEvaluator` by default — real Python execution
   (embedded-C++ vs. subprocess vs. Dart-FFI) is the next layer's call.
+- MIDI surface scaffold: read-only piano-roll viewer (`CustomPaint` —
+  magenta glowing notes, pitch lanes, beat grid) plus a 250px
+  transformation-chain sidebar of eight chips. Domain in
+  `lib/domain/midi/`: pure-Dart `MidiNote` / `MidiClip` /
+  `MidiTransform` + `MidiTransformChain` (ChangeNotifier). Two
+  transforms work end-to-end — `TransposeTransform` and
+  `ScaleConformanceTransform` (snaps to a diatonic mode, tie-break
+  upward); the other six chips are `StubTransform`s pending follow-ups.
+  No engine wiring yet — `MidiOut` playback, note editing, file
+  import/export, and the remaining transforms are tracked as separate
+  issues.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
@@ -84,7 +95,7 @@ main + app          (orchestration)
 | Patcher  | skeleton | `lib/surfaces/patcher/`         |
 | Code     | scaffold | `lib/surfaces/code/`            |
 | State    | not impl | `lib/surfaces/state/`           |
-| MIDI     | not impl | `lib/surfaces/midi/`            |
+| MIDI     | scaffold | `lib/surfaces/midi/`            |
 | Mix      | impl     | `lib/surfaces/mix/`             |
 
 ## Where things live
