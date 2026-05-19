@@ -24,20 +24,24 @@ class PhiEngine {
     PatcherGateway? patcherGateway,
     Duration telemetryInterval = const Duration(milliseconds: 50),
   }) : _sceneRenderer = sceneRenderer,
-       _patcherGateway = patcherGateway ?? RealPatcherGateway(),
+       _patcherGateway = patcherGateway,
        _telemetryInterval = telemetryInterval;
 
   /// Production constructor — wires the real `package:yse` gateway and,
-  /// by default, the macbear-backed Scene renderer. Tests can inject a
-  /// different renderer (or `null`) via [sceneRenderer].
-  factory PhiEngine.production({SceneRenderer? sceneRenderer}) => PhiEngine(
+  /// by default, the macbear-backed Scene renderer + the real patcher
+  /// gateway. Tests can inject alternates via the named parameters.
+  factory PhiEngine.production({
+    SceneRenderer? sceneRenderer,
+    PatcherGateway? patcherGateway,
+  }) => PhiEngine(
     RealYseGateway(),
     sceneRenderer: sceneRenderer ?? MacbearSceneRenderer(),
+    patcherGateway: patcherGateway ?? RealPatcherGateway(),
   );
 
   final YseGateway _gateway;
   final SceneRenderer? _sceneRenderer;
-  final PatcherGateway _patcherGateway;
+  final PatcherGateway? _patcherGateway;
   final Duration _telemetryInterval;
 
   /// The Scene renderer, if one was wired in. `null` in test setups that
@@ -108,12 +112,18 @@ class PhiEngine {
   void start() {
     if (_started) return;
     _gateway.init();
-    // Patcher must be created *before* `startUpdateTimer` — otherwise the
-    // audio thread can race the constructor. `mainOutputs: 1` matches
-    // dart-yse's demo13_patcher.dart and is the only value we've
-    // verified end-to-end on the loaded libyse.dll.
-    _patcherGateway.init(mainOutputs: 1);
-    _patcher = PatcherController(_patcherGateway);
+    // Patcher subsystem is optional — tests that don't inject a
+    // PatcherGateway get an engine without a patcher (engine.patcher
+    // throws). When wired, the patcher must be created *before*
+    // `startUpdateTimer` — otherwise the audio thread can race the
+    // constructor. `mainOutputs: 1` matches dart-yse's
+    // demo13_patcher.dart and is the only value we've verified
+    // end-to-end on the loaded libyse.dll.
+    final pg = _patcherGateway;
+    if (pg != null) {
+      pg.init(mainOutputs: 1);
+      _patcher = PatcherController(pg);
+    }
     _gateway.startUpdateTimer();
     _sceneRenderer?.init();
     // Note: `mountAsSound` is *not* called here. The patcher is empty at
@@ -132,7 +142,7 @@ class PhiEngine {
     if (_started) {
       _patcher?.dispose();
       _patcher = null;
-      _patcherGateway.dispose();
+      _patcherGateway?.dispose();
       _disposeUserChannels();
       _gateway.close();
       _sceneRenderer?.dispose();
