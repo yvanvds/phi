@@ -3,11 +3,14 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'bridge/macbear_scene_renderer.dart';
+import 'bridge/patcher_gateway.dart';
+import 'bridge/real_patcher_gateway.dart';
 import 'bridge/real_yse_gateway.dart';
 import 'bridge/scene_renderer.dart';
 import 'bridge/yse_gateway.dart';
 import 'state/engine_telemetry.dart';
 import 'state/mixer_channel.dart';
+import 'state/patcher_controller.dart';
 
 /// High-level façade over the YSE audio engine.
 ///
@@ -18,8 +21,10 @@ class PhiEngine {
   PhiEngine(
     this._gateway, {
     SceneRenderer? sceneRenderer,
+    PatcherGateway? patcherGateway,
     Duration telemetryInterval = const Duration(milliseconds: 50),
   }) : _sceneRenderer = sceneRenderer,
+       _patcherGateway = patcherGateway ?? RealPatcherGateway(),
        _telemetryInterval = telemetryInterval;
 
   /// Production constructor — wires the real `package:yse` gateway and,
@@ -32,11 +37,30 @@ class PhiEngine {
 
   final YseGateway _gateway;
   final SceneRenderer? _sceneRenderer;
+  final PatcherGateway _patcherGateway;
   final Duration _telemetryInterval;
 
   /// The Scene renderer, if one was wired in. `null` in test setups that
   /// don't exercise the Scene surface.
   SceneRenderer? get sceneRenderer => _sceneRenderer;
+
+  PatcherController? _patcher;
+
+  /// The patcher subsystem. Created lazily on [start]; throws before that
+  /// or if `package:yse`'s `Patcher` constructor failed at start (e.g. an
+  /// `libyse.dll` without the patcher ABI). Use [patcherOrNull] when the
+  /// caller needs to render a fallback.
+  PatcherController get patcher {
+    final p = _patcher;
+    if (p == null) {
+      throw StateError('PhiEngine.patcher used before start()');
+    }
+    return p;
+  }
+
+  /// Nullable variant of [patcher] — `null` before [start] *or* when the
+  /// patcher subsystem failed to initialise.
+  PatcherController? get patcherOrNull => _patcher;
 
   Timer? _telemetryTimer;
   final StreamController<EngineTelemetry> _telemetry =
@@ -84,8 +108,18 @@ class PhiEngine {
   void start() {
     if (_started) return;
     _gateway.init();
+    // Patcher must be created *before* `startUpdateTimer` — otherwise the
+    // audio thread can race the constructor. `mainOutputs: 1` matches
+    // dart-yse's demo13_patcher.dart and is the only value we've
+    // verified end-to-end on the loaded libyse.dll.
+    _patcherGateway.init(mainOutputs: 1);
+    _patcher = PatcherController(_patcherGateway);
     _gateway.startUpdateTimer();
     _sceneRenderer?.init();
+    // Note: `mountAsSound` is *not* called here. The patcher is empty at
+    // start, and `Sound.fromPatcher` on an empty patcher crashes the audio
+    // thread (it reads `~dac` on every callback). The surface mounts after
+    // it has seeded a `~dac`.
     _telemetryTimer = Timer.periodic(_telemetryInterval, _emit);
     _started = true;
     _masterVolume.value = _gateway.masterVolume;
@@ -96,6 +130,9 @@ class PhiEngine {
     _telemetryTimer?.cancel();
     _telemetryTimer = null;
     if (_started) {
+      _patcher?.dispose();
+      _patcher = null;
+      _patcherGateway.dispose();
       _disposeUserChannels();
       _gateway.close();
       _sceneRenderer?.dispose();
