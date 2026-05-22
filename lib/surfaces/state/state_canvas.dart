@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../design/widgets/patcher/patch_grid_painter.dart';
 import '../../design/widgets/state_machine/state_canvas_constants.dart';
+import '../../domain/session/session_state.dart';
 import '../../domain/state_machine/performance_state_id.dart';
 import '../../domain/state_machine/state_transition.dart';
 import '../../engine/state/state_machine_controller.dart';
@@ -14,9 +15,14 @@ import 'state_transition_layer.dart';
 /// every state node, and the in-flight ghost transition. Tracks the
 /// cursor's canvas-local position so the ghost can follow it.
 class StateCanvas extends StatefulWidget {
-  const StateCanvas({required this.controller, super.key});
+  const StateCanvas({
+    required this.controller,
+    required this.session,
+    super.key,
+  });
 
   final StateMachineController controller;
+  final SessionState session;
 
   @override
   State<StateCanvas> createState() => _StateCanvasState();
@@ -42,9 +48,16 @@ class _StateCanvasState extends State<StateCanvas> {
           width: StateCanvasConstants.canvasSize,
           height: StateCanvasConstants.canvasSize,
           child: ListenableBuilder(
-            listenable: controller.graph,
+            // Rebuild on graph changes *and* on selection changes —
+            // selection drives the outer ring on whichever node carries
+            // it, so the canvas needs to react to both.
+            listenable: Listenable.merge([
+              controller.graph,
+              widget.session.selection,
+            ]),
             builder: (context, _) {
               final graph = controller.graph;
+              final selection = widget.session.selection.value;
               final rects = <PerformanceStateId, Rect>{
                 for (final s in graph.states) s.id: rectFor(s),
               };
@@ -84,8 +97,10 @@ class _StateCanvasState extends State<StateCanvas> {
                         state: s,
                         controller: controller,
                         onPinDown: _onPinDown,
+                        onSelect: () => widget.session.select(s),
                         isLive: graph.activeStateId == s.id,
                         armedTransition: armedByTarget[s.id],
+                        selected: identical(selection, s),
                       ),
                     ),
                   if (graph.dragSourceStateId != null)

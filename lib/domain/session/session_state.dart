@@ -21,6 +21,12 @@ class SessionState {
 
   final ValueNotifier<String> sceneName;
 
+  /// Cross-surface selection. Whichever surface publishes here, every
+  /// other chrome region (notably the right inspector) can watch and
+  /// react. Holds anything — a [PerformanceState], a `PatchNode`, a
+  /// `MidiClip`, etc. — keyed by reference.
+  final ValueNotifier<Object?> selection = ValueNotifier<Object?>(null);
+
   bool get isPlaying => transport.value == TransportState.playing;
 
   void play() => transport.value = TransportState.playing;
@@ -35,9 +41,17 @@ class SessionState {
     sceneName.value = trimmed;
   }
 
+  /// Publish a selection. Pass `null` (or call [clearSelection]) to
+  /// unset.
+  void select(Object? value) => selection.value = value;
+
+  /// Clear the cross-surface selection.
+  void clearSelection() => selection.value = null;
+
   void dispose() {
     transport.dispose();
     projection.dispose();
     sceneName.dispose();
+    selection.dispose();
   }
 }

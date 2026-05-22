@@ -54,7 +54,7 @@ class _WorkstationState extends State<Workstation> {
                   onSelect: (id) => setState(() => _selected = id),
                 ),
                 Expanded(child: _buildCentre()),
-                RightInspector(engine: widget.engine),
+                RightInspector(engine: widget.engine, session: widget.session),
               ],
             ),
           ),
@@ -93,7 +93,7 @@ class _WorkstationState extends State<Workstation> {
       case SurfaceId.midi:
         return MidiSurface(engine: widget.engine);
       case SurfaceId.state:
-        return StateSurface(engine: widget.engine);
+        return StateSurface(engine: widget.engine, session: widget.session);
     }
   }
 }
