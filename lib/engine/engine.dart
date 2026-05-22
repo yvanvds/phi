@@ -11,6 +11,7 @@ import 'bridge/yse_gateway.dart';
 import 'state/engine_telemetry.dart';
 import 'state/mixer_channel.dart';
 import 'state/patcher_controller.dart';
+import 'state/state_machine_controller.dart';
 
 /// High-level façade over the YSE audio engine.
 ///
@@ -65,6 +66,22 @@ class PhiEngine {
   /// Nullable variant of [patcher] — `null` before [start] *or* when the
   /// patcher subsystem failed to initialise.
   PatcherController? get patcherOrNull => _patcher;
+
+  StateMachineController? _stateMachine;
+
+  /// The state-machine subsystem. Pure Dart — no gateway, no native
+  /// counterpart. Created on [start], disposed on [stop]. Throws before
+  /// [start]; use [stateMachineOrNull] for the nullable variant.
+  StateMachineController get stateMachine {
+    final s = _stateMachine;
+    if (s == null) {
+      throw StateError('PhiEngine.stateMachine used before start()');
+    }
+    return s;
+  }
+
+  /// Nullable variant of [stateMachine] — `null` before [start].
+  StateMachineController? get stateMachineOrNull => _stateMachine;
 
   Timer? _telemetryTimer;
   final StreamController<EngineTelemetry> _telemetry =
@@ -124,6 +141,7 @@ class PhiEngine {
       pg.init(mainOutputs: 1);
       _patcher = PatcherController(pg);
     }
+    _stateMachine = StateMachineController();
     _gateway.startUpdateTimer();
     _sceneRenderer?.init();
     // Note: `mountAsSound` is *not* called here. The patcher is empty at
@@ -143,6 +161,8 @@ class PhiEngine {
       _patcher?.dispose();
       _patcher = null;
       _patcherGateway?.dispose();
+      _stateMachine?.dispose();
+      _stateMachine = null;
       _disposeUserChannels();
       _gateway.close();
       _sceneRenderer?.dispose();
