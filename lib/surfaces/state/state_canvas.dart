@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../../design/widgets/patcher/patch_grid_painter.dart';
 import '../../design/widgets/state_machine/state_canvas_constants.dart';
 import '../../domain/state_machine/performance_state_id.dart';
+import '../../domain/state_machine/state_transition.dart';
 import '../../engine/state/state_machine_controller.dart';
 import 'state_ghost_transition.dart';
 import 'state_node_view.dart';
@@ -47,6 +48,16 @@ class _StateCanvasState extends State<StateCanvas> {
               final rects = <PerformanceStateId, Rect>{
                 for (final s in graph.states) s.id: rectFor(s),
               };
+              // Index armed transitions by target node so each node can
+              // look up its capsule label in O(1). At most one armed
+              // capsule per node — duplicates are unlikely in practice
+              // and the first wins.
+              final armedByTarget = <PerformanceStateId, StateTransition>{};
+              for (final t in graph.transitions) {
+                if (t.armed) {
+                  armedByTarget.putIfAbsent(t.targetId, () => t);
+                }
+              }
               return Stack(
                 clipBehavior: Clip.none,
                 children: [
@@ -60,6 +71,7 @@ class _StateCanvasState extends State<StateCanvas> {
                       transitions: graph.transitions,
                       nodeRects: rects,
                       version: graph.version,
+                      onTransitionTap: controller.toggleArmed,
                     ),
                   ),
                   for (final s in graph.states)
@@ -72,6 +84,8 @@ class _StateCanvasState extends State<StateCanvas> {
                         state: s,
                         controller: controller,
                         onPinDown: _onPinDown,
+                        isLive: graph.activeStateId == s.id,
+                        armedTransition: armedByTarget[s.id],
                       ),
                     ),
                   if (graph.dragSourceStateId != null)

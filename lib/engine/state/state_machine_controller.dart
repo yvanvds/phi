@@ -73,6 +73,20 @@ class StateMachineController {
     graph.removeTransition(StateTransition(sourceId: source, targetId: target));
   }
 
+  // ─── arming + firing ───────────────────────────────────────────────────
+
+  /// Toggle the `armed` flag on the existing in-graph transition equal
+  /// to [transition]. No-op if no matching transition exists.
+  void toggleArmed(StateTransition transition) => graph.toggleArmed(transition);
+
+  /// Fire [transition]: flip [StateGraph.activeStateId] to its target
+  /// and clear every arm on the graph. No-op if [transition] is unknown.
+  void fire(StateTransition transition) => graph.fire(transition);
+
+  /// Mark [id] as the live state, or clear (pass `null`). No-op if [id]
+  /// is unknown to the graph.
+  void setActive(PerformanceStateId? id) => graph.setActive(id);
+
   void dispose() {
     transform.dispose();
     graph.dispose();

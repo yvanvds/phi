@@ -6,6 +6,7 @@ import '../../../domain/state_machine/performance_state_id.dart';
 import '../../../domain/state_machine/state_transition.dart';
 import '../../tokens/phi_colors.dart';
 import 'state_canvas_constants.dart';
+import 'state_transition_geometry.dart';
 
 /// Painter for the directed transition arrows between state nodes.
 ///
@@ -13,7 +14,9 @@ import 'state_canvas_constants.dart';
 /// horizontal midpoints of the source and target node rects, with an
 /// arrowhead at the target. Endpoints are clipped onto the source/target
 /// node's right/left edge respectively so the arrow doesn't disappear
-/// inside the node. Skips any transition whose endpoints are missing.
+/// inside the node. Armed transitions render in the hot fuchsia palette
+/// to match the design-system preview; everything else uses the muted
+/// foreground. Skips any transition whose endpoints are missing.
 class StateTransitionPainter extends CustomPainter {
   StateTransitionPainter({
     required this.transitions,
@@ -34,18 +37,27 @@ class StateTransitionPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final stroke = Paint()
+    final mutedStroke = Paint()
       ..color = PhiColors.fg2
       ..style = PaintingStyle.stroke
       ..strokeWidth = StateCanvasConstants.transitionStroke;
-    final fill = Paint()
+    final mutedFill = Paint()
       ..color = PhiColors.fg2
+      ..style = PaintingStyle.fill;
+    final hotStroke = Paint()
+      ..color = PhiColors.live
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = StateCanvasConstants.transitionStroke;
+    final hotFill = Paint()
+      ..color = PhiColors.live
       ..style = PaintingStyle.fill;
 
     for (final t in transitions) {
       final src = nodeRects[t.sourceId];
       final dst = nodeRects[t.targetId];
       if (src == null || dst == null) continue;
+      final stroke = t.armed ? hotStroke : mutedStroke;
+      final fill = t.armed ? hotFill : mutedFill;
       _drawTransition(canvas, src, dst, stroke, fill);
     }
   }
@@ -57,28 +69,19 @@ class StateTransitionPainter extends CustomPainter {
     Paint stroke,
     Paint fill,
   ) {
-    // Endpoints picked on whichever side of the source faces the target.
-    // Keeps arrows from running through their source node when the
-    // performer drags a target above or below.
-    final (a, b) = _pickEdges(src, dst);
-    const cx = StateCanvasConstants.transitionControlOffset;
-    final goingRight = b.dx >= a.dx;
-    final c1 = Offset(a.dx + (goingRight ? cx : -cx), a.dy);
-    final c2 = Offset(b.dx + (goingRight ? -cx : cx), b.dy);
+    final curve = StateTransitionGeometry.curveBetween(src, dst);
     final path = Path()
-      ..moveTo(a.dx, a.dy)
-      ..cubicTo(c1.dx, c1.dy, c2.dx, c2.dy, b.dx, b.dy);
+      ..moveTo(curve.a.dx, curve.a.dy)
+      ..cubicTo(
+        curve.c1.dx,
+        curve.c1.dy,
+        curve.c2.dx,
+        curve.c2.dy,
+        curve.b.dx,
+        curve.b.dy,
+      );
     canvas.drawPath(path, stroke);
-    _drawArrowHead(canvas, b, c2, fill);
-  }
-
-  static (Offset, Offset) _pickEdges(Rect src, Rect dst) {
-    final srcMid = src.center;
-    final dstMid = dst.center;
-    final dstToTheRight = dstMid.dx >= srcMid.dx;
-    final a = Offset(dstToTheRight ? src.right : src.left, srcMid.dy);
-    final b = Offset(dstToTheRight ? dst.left : dst.right, dstMid.dy);
-    return (a, b);
+    _drawArrowHead(canvas, curve.b, curve.c2, fill);
   }
 
   static void _drawArrowHead(

@@ -93,10 +93,13 @@ main + app          (orchestration)
   (ChangeNotifier). `StateMachineController` (pure Dart, no gateway)
   in `lib/engine/state/` snaps every node move to 16px and rejects
   self-loops + duplicate transitions. Drag any corner pin onto
-  another node to author a transition; seeds two states + one
-  transition on first open. Arming + active state and right-inspector
-  wiring for the per-state snapshot are tracked as #41 (#10b) and
-  #42 (#10c).
+  another node to author a transition; click a transition arrow to
+  arm it (the target node renders the amber `▲ ARMED · {fireOn}`
+  capsule and the arrow turns fuchsia); tap the armed capsule to
+  fire — active flips to the target and every arm clears. Exactly
+  one state at a time is "live" (fuchsia `● LIVE` capsule). Seeds
+  `intro` (live) → `verse` on first open. Right-inspector wiring
+  for the per-state snapshot is tracked as #42 (#10c).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

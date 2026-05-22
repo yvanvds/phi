@@ -51,6 +51,17 @@ void main() {
       expect(g.transitions, isEmpty);
     });
 
+    test('removeState clears activeStateId if it matched', () {
+      final g = StateGraph();
+      g.addState(_state('a'));
+      g.setActive(const PerformanceStateId('a'));
+      expect(g.activeStateId, const PerformanceStateId('a'));
+
+      g.removeState(const PerformanceStateId('a'));
+
+      expect(g.activeStateId, isNull);
+    });
+
     test('removeState on a missing id is a no-op and does not notify', () {
       final g = StateGraph();
       g.addState(_state('a'));
@@ -115,6 +126,132 @@ void main() {
       g.endTransitionDrag();
       expect(g.dragSourceStateId, isNull);
     });
+
+    group('active state', () {
+      test('setActive sets the live id and notifies', () {
+        final g = StateGraph();
+        g.addState(_state('a'));
+        var ticks = 0;
+        g.addListener(() => ticks++);
+
+        g.setActive(const PerformanceStateId('a'));
+
+        expect(g.activeStateId, const PerformanceStateId('a'));
+        expect(ticks, 1);
+      });
+
+      test('setActive rejects unknown ids', () {
+        final g = StateGraph();
+        g.addState(_state('a'));
+        var ticks = 0;
+        g.addListener(() => ticks++);
+
+        g.setActive(const PerformanceStateId('missing'));
+
+        expect(g.activeStateId, isNull);
+        expect(ticks, 0);
+      });
+
+      test('setActive is idempotent — same id does not notify', () {
+        final g = StateGraph();
+        g.addState(_state('a'));
+        g.setActive(const PerformanceStateId('a'));
+        var ticks = 0;
+        g.addListener(() => ticks++);
+
+        g.setActive(const PerformanceStateId('a'));
+
+        expect(ticks, 0);
+      });
+
+      test('setActive(null) clears the live id', () {
+        final g = StateGraph();
+        g.addState(_state('a'));
+        g.setActive(const PerformanceStateId('a'));
+
+        g.setActive(null);
+
+        expect(g.activeStateId, isNull);
+      });
+    });
+
+    group('arming + firing', () {
+      test('toggleArmed flips the in-graph instance and notifies', () {
+        final g = StateGraph();
+        const t = StateTransition(
+          sourceId: PerformanceStateId('a'),
+          targetId: PerformanceStateId('b'),
+        );
+        g.addTransition(t);
+        var ticks = 0;
+        g.addListener(() => ticks++);
+
+        expect(g.toggleArmed(t), isTrue);
+        expect(g.transitions.single.armed, isTrue);
+        expect(ticks, 1);
+
+        expect(g.toggleArmed(t), isTrue);
+        expect(g.transitions.single.armed, isFalse);
+        expect(ticks, 2);
+      });
+
+      test('toggleArmed on an unknown transition is a no-op', () {
+        final g = StateGraph();
+        var ticks = 0;
+        g.addListener(() => ticks++);
+
+        final ok = g.toggleArmed(
+          const StateTransition(
+            sourceId: PerformanceStateId('a'),
+            targetId: PerformanceStateId('b'),
+          ),
+        );
+
+        expect(ok, isFalse);
+        expect(ticks, 0);
+      });
+
+      test('fire flips active to the target and clears every arm', () {
+        final g = StateGraph();
+        g.addState(_state('a'));
+        g.addState(_state('b'));
+        g.addState(_state('c'));
+        const ab = StateTransition(
+          sourceId: PerformanceStateId('a'),
+          targetId: PerformanceStateId('b'),
+        );
+        const ac = StateTransition(
+          sourceId: PerformanceStateId('a'),
+          targetId: PerformanceStateId('c'),
+        );
+        g.addTransition(ab);
+        g.addTransition(ac);
+        g.toggleArmed(ab);
+        g.toggleArmed(ac);
+        g.setActive(const PerformanceStateId('a'));
+
+        expect(g.fire(ab), isTrue);
+
+        expect(g.activeStateId, const PerformanceStateId('b'));
+        expect(g.transitions.every((t) => !t.armed), isTrue);
+      });
+
+      test('fire on an unknown transition is a no-op', () {
+        final g = StateGraph();
+        g.addState(_state('a'));
+        g.setActive(const PerformanceStateId('a'));
+
+        final ok = g.fire(
+          const StateTransition(
+            sourceId: PerformanceStateId('a'),
+            targetId: PerformanceStateId('b'),
+          ),
+        );
+
+        expect(ok, isFalse);
+        expect(g.activeStateId, const PerformanceStateId('a'));
+      });
+    });
   });
 
   group('PerformanceStateId', () {
@@ -155,6 +292,22 @@ void main() {
       expect(a, b);
       expect(a.hashCode, b.hashCode);
       expect(a, isNot(flipped));
+    });
+
+    test('armed / fireOn do not affect equality', () {
+      const idle = StateTransition(
+        sourceId: PerformanceStateId('a'),
+        targetId: PerformanceStateId('b'),
+      );
+      const armed = StateTransition(
+        sourceId: PerformanceStateId('a'),
+        targetId: PerformanceStateId('b'),
+        armed: true,
+        fireOn: '4 bars',
+      );
+
+      expect(idle, armed);
+      expect(idle.hashCode, armed.hashCode);
     });
   });
 }

@@ -74,5 +74,19 @@ void main() {
       expect(engine.stateMachine.graph.states, hasLength(2));
       expect(engine.stateMachine.graph.transitions, hasLength(1));
     });
+
+    testWidgets('seed marks the first state as the live one', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: StateSurface(engine: engine)),
+        ),
+      );
+      await tester.pump();
+
+      final activeId = engine.stateMachine.graph.activeStateId;
+      expect(activeId, isNotNull);
+      expect(engine.stateMachine.graph.stateById(activeId!)?.name, 'intro');
+      expect(find.text('● LIVE'), findsOneWidget);
+    });
   });
 }

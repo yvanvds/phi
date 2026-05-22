@@ -41,4 +41,16 @@ abstract final class StateCanvasConstants {
   /// along the source/target horizontal axis. Matches the design
   /// preview's `cx1 = a.x + 80` feel.
   static const double transitionControlOffset = 80;
+
+  /// Click-distance threshold for hit-testing a transition arrow. The
+  /// canvas samples the cubic Bézier at [transitionHitSamples] points
+  /// and treats the closest one as a hit if it's within this many
+  /// canvas-local pixels of the click.
+  static const double transitionHitThreshold = 12;
+
+  /// Number of sample points along the cubic Bézier the click hit-test
+  /// walks. 24 gives sub-2px gaps along the longest transitions on the
+  /// 4000px canvas — fine enough for a 12px threshold without measuring
+  /// path length.
+  static const int transitionHitSamples = 24;
 }
