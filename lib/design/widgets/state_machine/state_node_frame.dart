@@ -23,6 +23,7 @@ class StateNodeFrame extends StatelessWidget {
     required this.voice,
     this.display = StateNodeDisplay.idle,
     this.armedLabel,
+    this.selected = false,
     super.key,
   });
 
@@ -41,11 +42,31 @@ class StateNodeFrame extends StatelessWidget {
   /// rendered uppercase per the design preview.
   final String? armedLabel;
 
+  /// Whether this node carries the cross-surface selection. Drawn as a
+  /// fuchsia ring 4px outside the node frame so it composes cleanly with
+  /// the inner `idle` / `live` / `armed` border modes.
+  final bool selected;
+
   @override
   Widget build(BuildContext context) {
     return Stack(
       clipBehavior: Clip.none,
       children: [
+        if (selected)
+          Positioned(
+            left: -4,
+            right: -4,
+            top: -4,
+            bottom: -4,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border.all(color: PhiColors.lineHot, width: 1.5),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+              ),
+            ),
+          ),
         DecoratedBox(
           decoration: BoxDecoration(
             color: PhiColors.bg1,

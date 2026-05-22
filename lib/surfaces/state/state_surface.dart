@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../design/tokens/phi_colors.dart';
 import '../../design/tokens/phi_type.dart';
+import '../../domain/session/session_state.dart';
 import '../../engine/engine.dart';
 import '../../engine/state/state_machine_controller.dart';
 import '../surface.dart';
@@ -14,16 +15,17 @@ import 'state_canvas.dart';
 /// created in [PhiEngine.start] and torn down in `stop`. Before start the
 /// surface renders a low-key placeholder.
 class StateSurface extends Surface {
-  const StateSurface({required this.engine, super.key});
+  const StateSurface({required this.engine, required this.session, super.key});
 
   final PhiEngine engine;
+  final SessionState session;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       color: PhiColors.bg0,
       child: engine.stateMachineOrNull != null
-          ? _StateViewport(engine: engine)
+          ? _StateViewport(engine: engine, session: session)
           : const _Offline(),
     );
   }
@@ -34,9 +36,10 @@ class StateSurface extends Surface {
 /// Kept separate so the seed runs once on first mount, not on every
 /// Flutter rebuild of the surrounding chrome.
 class _StateViewport extends StatefulWidget {
-  const _StateViewport({required this.engine});
+  const _StateViewport({required this.engine, required this.session});
 
   final PhiEngine engine;
+  final SessionState session;
 
   @override
   State<_StateViewport> createState() => _StateViewportState();
@@ -69,8 +72,10 @@ class _StateViewportState extends State<_StateViewport> {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      StateCanvas(controller: widget.engine.stateMachine);
+  Widget build(BuildContext context) => StateCanvas(
+    controller: widget.engine.stateMachine,
+    session: widget.session,
+  );
 }
 
 class _Offline extends StatelessWidget {

@@ -89,17 +89,24 @@ main + app          (orchestration)
   four voice-coloured corner pins, plus directed `StateTransition`
   arrows drawn as cubic Béziers between the closest source/target
   edges with arrowheads. Domain in `lib/domain/state_machine/`:
-  pure-Dart `PerformanceState` / `StateTransition` / `StateGraph`
-  (ChangeNotifier). `StateMachineController` (pure Dart, no gateway)
-  in `lib/engine/state/` snaps every node move to 16px and rejects
-  self-loops + duplicate transitions. Drag any corner pin onto
-  another node to author a transition; click a transition arrow to
-  arm it (the target node renders the amber `▲ ARMED · {fireOn}`
-  capsule and the arrow turns fuchsia); tap the armed capsule to
-  fire — active flips to the target and every arm clears. Exactly
-  one state at a time is "live" (fuchsia `● LIVE` capsule). Seeds
-  `intro` (live) → `verse` on first open. Right-inspector wiring
-  for the per-state snapshot is tracked as #42 (#10c).
+  pure-Dart `PerformanceState` / `StateTransition` / `StateGraph` /
+  `StateSnapshot` (ChangeNotifier where mutable, immutable value
+  type for `StateSnapshot`). `StateMachineController` (pure Dart,
+  no gateway) in `lib/engine/state/` snaps every node move to 16px
+  and rejects self-loops + duplicate transitions. Drag any corner
+  pin onto another node to author a transition; click a transition
+  arrow to arm it (the target node renders the amber
+  `▲ ARMED · {fireOn}` capsule and the arrow turns fuchsia); tap
+  the armed capsule to fire — active flips to the target and every
+  arm clears. Exactly one state at a time is "live" (fuchsia
+  `● LIVE` capsule). Seeds `intro` (live) → `verse` on first open.
+  Tapping any node also publishes it as the cross-surface selection
+  (`SessionState.selection`, a `ValueNotifier<Object?>` any surface
+  can write into); the selected node renders an outer fuchsia ring,
+  and the right inspector swaps its placeholder for an inline-editable
+  name plus a read-only three-section snapshot view (DOMAINS · CODE
+  BLOCKS · SCENE REF — all empty until the time-domain / scripting /
+  scene-pose layers ship).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

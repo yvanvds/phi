@@ -66,5 +66,32 @@ void main() {
       expect(projectionTicks, 1);
       expect(nameTicks, 1);
     });
+
+    test('selection defaults to null and accepts any object', () {
+      expect(session.selection.value, isNull);
+
+      final marker = Object();
+      session.select(marker);
+      expect(identical(session.selection.value, marker), isTrue);
+
+      session.clearSelection();
+      expect(session.selection.value, isNull);
+    });
+
+    test('selection notifies once per distinct value', () {
+      var ticks = 0;
+      session.selection.addListener(() => ticks++);
+
+      final a = Object();
+      final b = Object();
+      session.select(a);
+      session.select(a);
+      session.select(b);
+      session.clearSelection();
+
+      // ValueNotifier deduplicates identical values, so the second
+      // select(a) is a no-op.
+      expect(ticks, 3);
+    });
   });
 }
