@@ -9,6 +9,7 @@ import '../surfaces/midi/midi_surface.dart';
 import '../surfaces/mix/mix_surface.dart';
 import '../surfaces/patcher/patcher_surface.dart';
 import '../surfaces/scene/scene_surface.dart';
+import '../surfaces/state/state_surface.dart';
 import 'bottom_status/bottom_status.dart';
 import 'left_rail/left_rail.dart';
 import 'left_rail/surface_id.dart';
@@ -92,7 +93,7 @@ class _WorkstationState extends State<Workstation> {
       case SurfaceId.midi:
         return MidiSurface(engine: widget.engine);
       case SurfaceId.state:
-        return Container(color: PhiColors.bg0);
+        return StateSurface(engine: widget.engine);
     }
   }
 }

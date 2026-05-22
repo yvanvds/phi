@@ -84,6 +84,19 @@ main + app          (orchestration)
   No engine wiring yet — `MidiOut` playback, note editing, file
   import/export, and the remaining transforms are tracked as separate
   issues.
+- State surface scaffold: pan/zoom canvas (reuses the patcher's 16px
+  dot grid backdrop) of rounded-square `PerformanceState` nodes with
+  four voice-coloured corner pins, plus directed `StateTransition`
+  arrows drawn as cubic Béziers between the closest source/target
+  edges with arrowheads. Domain in `lib/domain/state_machine/`:
+  pure-Dart `PerformanceState` / `StateTransition` / `StateGraph`
+  (ChangeNotifier). `StateMachineController` (pure Dart, no gateway)
+  in `lib/engine/state/` snaps every node move to 16px and rejects
+  self-loops + duplicate transitions. Drag any corner pin onto
+  another node to author a transition; seeds two states + one
+  transition on first open. Arming + active state and right-inspector
+  wiring for the per-state snapshot are tracked as #41 (#10b) and
+  #42 (#10c).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
@@ -94,7 +107,7 @@ main + app          (orchestration)
 | Scene    | stub     | `lib/surfaces/scene/`           |
 | Patcher  | skeleton | `lib/surfaces/patcher/`         |
 | Code     | scaffold | `lib/surfaces/code/`            |
-| State    | not impl | `lib/surfaces/state/`           |
+| State    | scaffold | `lib/surfaces/state/`           |
 | MIDI     | scaffold | `lib/surfaces/midi/`            |
 | Mix      | impl     | `lib/surfaces/mix/`             |
 
