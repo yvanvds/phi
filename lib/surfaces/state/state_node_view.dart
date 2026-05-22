@@ -4,17 +4,27 @@ import '../../design/widgets/state_machine/state_canvas_constants.dart';
 import '../../design/widgets/state_machine/state_node_frame.dart';
 import '../../domain/state_machine/performance_state.dart';
 import '../../domain/state_machine/performance_state_id.dart';
+import '../../domain/state_machine/state_transition.dart';
 import '../../engine/state/state_machine_controller.dart';
 
 /// Binds one [PerformanceState] to a [StateNodeFrame] and routes pointer
 /// drags into `controller.moveState`. Each of the four corner pins claims
 /// pointer-downs ahead of the body's pan gesture so the user can
 /// drag-author a transition without competing with the node-move gesture.
+///
+/// When [armedTransition] is non-null the node renders the amber
+/// "armed" capsule and a tap on the frame's body fires that transition.
+/// When [isLive] is true the node renders the fuchsia "● LIVE" capsule.
+/// Pan still wins over tap if the pointer moves — pan recognisers beat
+/// tap recognisers in Flutter's gesture arena once the slop threshold
+/// is crossed.
 class StateNodeView extends StatelessWidget {
   const StateNodeView({
     required this.state,
     required this.controller,
     required this.onPinDown,
+    this.isLive = false,
+    this.armedTransition,
     super.key,
   });
 
@@ -25,6 +35,19 @@ class StateNodeView extends StatelessWidget {
   /// canvas uses this to start a drag-to-create-transition gesture.
   final void Function(PerformanceStateId from, Offset globalPosition) onPinDown;
 
+  /// Whether this node is the graph's current active state.
+  final bool isLive;
+
+  /// The armed transition targeting this node, if any. Drives the
+  /// `▲ ARMED · {fireOn}` capsule and the tap-to-fire gesture.
+  final StateTransition? armedTransition;
+
+  StateNodeDisplay get _display {
+    if (isLive) return StateNodeDisplay.live;
+    if (armedTransition != null) return StateNodeDisplay.armed;
+    return StateNodeDisplay.idle;
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -33,10 +56,18 @@ class StateNodeView extends StatelessWidget {
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onPanUpdate: (d) => controller.moveState(state.id, d.delta),
+          onTap: armedTransition == null
+              ? null
+              : () => controller.fire(armedTransition!),
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              StateNodeFrame(name: state.name, voice: state.voice),
+              StateNodeFrame(
+                name: state.name,
+                voice: state.voice,
+                display: _display,
+                armedLabel: armedTransition?.fireOn,
+              ),
               for (final corner in _PinCorner.values)
                 Positioned(
                   left: corner.isLeft

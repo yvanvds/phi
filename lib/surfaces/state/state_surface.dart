@@ -62,6 +62,10 @@ class _StateViewportState extends State<_StateViewport> {
       voice: 2,
     );
     controller.connect(intro.id, verse.id);
+    // Seed an active state so first-open shows the LIVE chrome — without
+    // this the demo graph looks identical to the pre-#41 scaffold and
+    // the new arming UX has nothing to react against.
+    controller.setActive(intro.id);
   }
 
   @override

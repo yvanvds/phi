@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/domain/state_machine/state_transition.dart';
 import 'package:phi/engine/state/state_machine_controller.dart';
 
 void main() {
@@ -84,6 +85,43 @@ void main() {
 
       controller.endTransitionDrag();
       expect(controller.graph.dragSourceStateId, isNull);
+    });
+
+    test('setActive forwards to the graph', () {
+      final a = controller.addState(name: 'a', position: Offset.zero);
+
+      controller.setActive(a.id);
+      expect(controller.graph.activeStateId, a.id);
+
+      controller.setActive(null);
+      expect(controller.graph.activeStateId, isNull);
+    });
+
+    test('toggleArmed flips the in-graph transition', () {
+      final a = controller.addState(name: 'a', position: Offset.zero);
+      final b = controller.addState(name: 'b', position: const Offset(160, 0));
+      controller.connect(a.id, b.id);
+      final t = StateTransition(sourceId: a.id, targetId: b.id);
+
+      controller.toggleArmed(t);
+      expect(controller.graph.transitions.single.armed, isTrue);
+
+      controller.toggleArmed(t);
+      expect(controller.graph.transitions.single.armed, isFalse);
+    });
+
+    test('fire flips active to target and clears all arms', () {
+      final a = controller.addState(name: 'a', position: Offset.zero);
+      final b = controller.addState(name: 'b', position: const Offset(160, 0));
+      controller.connect(a.id, b.id);
+      final t = StateTransition(sourceId: a.id, targetId: b.id);
+      controller.toggleArmed(t);
+      controller.setActive(a.id);
+
+      controller.fire(t);
+
+      expect(controller.graph.activeStateId, b.id);
+      expect(controller.graph.transitions.single.armed, isFalse);
     });
   });
 }
