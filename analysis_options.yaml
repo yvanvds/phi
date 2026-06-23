@@ -15,7 +15,6 @@ linter:
     - avoid_empty_else
     - avoid_print
     - avoid_relative_lib_imports
-    - avoid_returning_null_for_future
     - avoid_unused_constructor_parameters
     - cancel_subscriptions
     - close_sinks
