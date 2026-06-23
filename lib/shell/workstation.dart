@@ -34,9 +34,29 @@ class _WorkstationState extends State<Workstation> {
   final NoOpCodeEvaluator _codeEvaluator = NoOpCodeEvaluator();
 
   @override
+  void initState() {
+    super.initState();
+    // The app boots on Mix, so the Scene surface starts offstage — tell the
+    // renderer to keep its ticker paused until Scene is first selected.
+    _syncSceneVisibility();
+  }
+
+  @override
   void dispose() {
     _codeEvaluator.dispose();
     super.dispose();
+  }
+
+  void _onSelect(SurfaceId id) {
+    setState(() => _selected = id);
+    _syncSceneVisibility();
+  }
+
+  /// Pause macbear's render ticker whenever Scene is offstage; resume it when
+  /// Scene is the selected surface. Keeps the shell renderer-agnostic — the
+  /// macbear specifics stay inside `MacbearSceneRenderer`.
+  void _syncSceneVisibility() {
+    widget.engine.sceneRenderer?.setVisible(_selected == SurfaceId.scene);
   }
 
   @override
@@ -49,10 +69,7 @@ class _WorkstationState extends State<Workstation> {
           Expanded(
             child: Row(
               children: [
-                LeftRail(
-                  selected: _selected,
-                  onSelect: (id) => setState(() => _selected = id),
-                ),
+                LeftRail(selected: _selected, onSelect: _onSelect),
                 Expanded(child: _buildCentre()),
                 RightInspector(engine: widget.engine, session: widget.session),
               ],

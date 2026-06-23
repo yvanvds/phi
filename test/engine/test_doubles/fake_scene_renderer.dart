@@ -12,6 +12,7 @@ class FakeSceneRenderer implements SceneRenderer {
   bool initialised = false;
   Camera? lastCamera;
   List<SceneAgent> lastAgents = const [];
+  bool? lastVisible;
 
   @override
   void init() {
@@ -35,6 +36,12 @@ class FakeSceneRenderer implements SceneRenderer {
   void setAgents(List<SceneAgent> agents) {
     calls.add('setAgents:${agents.length}');
     lastAgents = agents;
+  }
+
+  @override
+  void setVisible(bool visible) {
+    calls.add('setVisible:$visible');
+    lastVisible = visible;
   }
 
   @override
