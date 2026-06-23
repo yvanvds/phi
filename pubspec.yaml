@@ -14,10 +14,10 @@ dependencies:
     path: ../dart-yse
   google_fonts: ^6.2.1
   vector_math: ^2.1.4
-  macbear_3d:
-    git:
-      url: https://github.com/yvanvds/macbear_3d.git
-      ref: 66b07310b4c135e1d8b842fc046f4a49fd9c3018
+  # Pinned to 0.9.0: it carries the merged Windows-build fix yet stays on
+  # the Flutter >= 3.38 floor. 0.9.1 pulls image -> xml ^7.0.1, which needs
+  # Dart 3.11 (Flutter 3.44+); revisit when the project raises that floor.
+  macbear_3d: 0.9.0
   re_editor: ^0.9.0
   re_highlight: ^0.0.3
 

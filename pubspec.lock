@@ -146,10 +146,10 @@ packages:
     dependency: transitive
     description:
       name: flutter_angle
-      sha256: "2990d71e9cd36c9e181112392f2224c64d1dc5afb6a32afb3fafee27565d16a4"
+      sha256: ac8031752d4018ec2bfe699f70eee44f0c868762faf20d5e08bf07ca48f551d7
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.9"
+    version: "0.4.0"
   flutter_driver:
     dependency: transitive
     description: flutter
@@ -314,12 +314,11 @@ packages:
   macbear_3d:
     dependency: "direct main"
     description:
-      path: "."
-      ref: "66b07310b4c135e1d8b842fc046f4a49fd9c3018"
-      resolved-ref: "66b07310b4c135e1d8b842fc046f4a49fd9c3018"
-      url: "https://github.com/yvanvds/macbear_3d.git"
-    source: git
-    version: "0.8.1"
+      name: macbear_3d
+      sha256: "9e5a1a36d85daf09c97dd19bf681367abc5ce1c433e7556b8318df50e51f256d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.9.0"
   matcher:
     dependency: transitive
     description:
@@ -352,14 +351,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "9.4.1"
-  oimo_physics:
-    dependency: transitive
-    description:
-      name: oimo_physics
-      sha256: "0b2094414a2048a8e7fd3a3262592e26a17d7cac4e1b3ab1fa492cfd6657efeb"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.0.5"
   package_config:
     dependency: transitive
     description:

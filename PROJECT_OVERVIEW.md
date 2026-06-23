@@ -18,7 +18,7 @@ project, Windows desktop only.
 | FFI bridge   | `dart-yse` — Dart wrapper, package name `yse`         |
 | UI shell     | Flutter ≥ 3.38, Windows desktop                       |
 | Design       | Dart tokens derived from `design system/colors_and_type.css` |
-| 3D viewport  | macbear_3d (ANGLE / OpenGL ES 3), fork yvanvds/macbear_3d |
+| 3D viewport  | macbear_3d (ANGLE / OpenGL ES 3), pub.dev 0.9.0       |
 | Scripting    | Python with DSL (Phase ≥ 2 — not yet)                 |
 
 `dart-yse` lives at `d:\dart-yse` as a sibling on disk and is consumed via
@@ -64,7 +64,7 @@ main + app          (orchestration)
   with overlaid peak meter + mute/solo buttons.
 - Scene surface stub: renderer-agnostic `SceneRenderer` bridge in
   `lib/engine/bridge/`, backed in production by `MacbearSceneRenderer`
-  (forked `macbear_3d` on ANGLE). Renders one placeholder agent as a
+  (`macbear_3d` on ANGLE). Renders one placeholder agent as a
   voice-coloured sphere; orbit/pan/zoom via macbear's built-in controller.
 - Code surface scaffold: `re_editor`-backed Python editor with custom
   Phi-flavoured highlight theme, projected view (full-line comments
