@@ -22,9 +22,8 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  Finder railFor(SurfaceId id) => find.byWidgetPredicate(
-    (w) => w is RailButton && w.label == id.label,
-  );
+  Finder railFor(SurfaceId id) =>
+      find.byWidgetPredicate((w) => w is RailButton && w.label == id.label);
 
   testWidgets('workstation: mix surface, rail switching, state preserved', (
     tester,
