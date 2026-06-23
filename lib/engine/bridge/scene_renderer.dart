@@ -22,6 +22,13 @@ abstract interface class SceneRenderer {
   /// Set the current agents. Reflected on the next frame.
   void setAgents(List<SceneAgent> agents);
 
+  /// Mark the surface on- or off-stage. When the Scene surface is offstage
+  /// the renderer may stop its render loop to save GPU/power; it must resume
+  /// and reflect any agent updates that arrived while offstage when called
+  /// with `true` again. Safe to call before [init] — the request is honoured
+  /// once the renderer's context comes up.
+  void setVisible(bool visible);
+
   /// Widget that mounts the renderer into the Flutter tree. `SceneSurface`
   /// calls this from its `build` and inserts the result into its subtree.
   Widget buildView();

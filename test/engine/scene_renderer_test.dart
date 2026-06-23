@@ -34,4 +34,13 @@ void main() {
     expect(r.lastAgents[1].voiceIndex, 1);
     expect(r.calls, ['setAgents:2']);
   });
+
+  test('setVisible records the most recent value with a tag', () {
+    final r = FakeSceneRenderer();
+    r.setVisible(false);
+    expect(r.lastVisible, isFalse);
+    r.setVisible(true);
+    expect(r.lastVisible, isTrue);
+    expect(r.calls, ['setVisible:false', 'setVisible:true']);
+  });
 }

@@ -7,6 +7,7 @@ import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
 import 'package:phi/surfaces/midi/midi_viewport.dart';
 
+import '../test/engine/test_doubles/fake_scene_renderer.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
 
 /// End-to-end smoke test for the workstation shell.
@@ -74,6 +75,50 @@ void main() {
     expect(find.text('MIX · 2 CHANNELS'), findsOneWidget);
     expect(find.text('STOP SINE'), findsOneWidget);
     expect(engine.testSignal.value, isTrue);
+
+    session.dispose();
+    await engine.dispose();
+  });
+
+  testWidgets('scene ticker pauses offstage, resumes when Scene selected', (
+    tester,
+  ) async {
+    // Inject a fake renderer so the real left rail → workstation → renderer
+    // visibility wiring (issue #18) is driven through the real app, without a
+    // native 3D context. The macbear ticker itself can only run against a live
+    // GL context, so this asserts the *signal*, which is what the shell owns.
+    final renderer = FakeSceneRenderer();
+    final engine = PhiEngine(
+      FakeYseGateway(),
+      sceneRenderer: renderer,
+      telemetryInterval: const Duration(milliseconds: 20),
+    );
+    final session = SessionState();
+
+    await tester.pumpWidget(PhiApp(engine: engine, session: session));
+    await tester.pumpAndSettle();
+
+    List<String> visibility() =>
+        renderer.calls.where((c) => c.startsWith('setVisible')).toList();
+
+    // App opens on Mix → Scene is offstage from the start.
+    expect(renderer.lastVisible, isFalse);
+    expect(visibility(), ['setVisible:false']);
+
+    // Select Scene → resume; leave for Mix → pause again.
+    await tester.tap(railFor(SurfaceId.scene));
+    await tester.pumpAndSettle();
+    expect(renderer.lastVisible, isTrue);
+
+    await tester.tap(railFor(SurfaceId.mix));
+    await tester.pumpAndSettle();
+    expect(renderer.lastVisible, isFalse);
+
+    expect(visibility(), [
+      'setVisible:false',
+      'setVisible:true',
+      'setVisible:false',
+    ]);
 
     session.dispose();
     await engine.dispose();
