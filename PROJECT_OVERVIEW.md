@@ -18,7 +18,7 @@ project, Windows desktop only.
 | FFI bridge   | `dart-yse` — Dart wrapper, package name `yse`         |
 | UI shell     | Flutter ≥ 3.38, Windows desktop                       |
 | Design       | Dart tokens derived from `design system/colors_and_type.css` |
-| 3D viewport  | macbear_3d (ANGLE / OpenGL ES 3), pub.dev ^0.9.1      |
+| 3D viewport  | macbear_3d (ANGLE / OpenGL ES 3), pub.dev 0.9.0       |
 | Scripting    | Python with DSL (Phase ≥ 2 — not yet)                 |
 
 `dart-yse` lives at `d:\dart-yse` as a sibling on disk and is consumed via

@@ -17,14 +17,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "13.0.0"
-  archive:
-    dependency: transitive
-    description:
-      name: archive
-      sha256: a96e8b390886ee8abb49b7bd3ac8df6f451c621619f52a26e815fdcf568959ff
-      url: "https://pub.dev"
-    source: hosted
-    version: "4.0.9"
   args:
     dependency: transitive
     description:
@@ -234,14 +226,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.2"
-  image:
-    dependency: transitive
-    description:
-      name: image
-      sha256: "6300175e00616bbc832e2fc91bfa4d776af5402c81c7151bee6905bb08473c52"
-      url: "https://pub.dev"
-    source: hosted
-    version: "4.9.1"
   integration_test:
     dependency: "direct dev"
     description: flutter
@@ -331,10 +315,10 @@ packages:
     dependency: "direct main"
     description:
       name: macbear_3d
-      sha256: "5720fb9d5bf0550c3f92fcd46978bd3f0019bf838bcc4e2313491e5e9f48d97b"
+      sha256: "9e5a1a36d85daf09c97dd19bf681367abc5ce1c433e7556b8318df50e51f256d"
       url: "https://pub.dev"
     source: hosted
-    version: "0.9.1"
+    version: "0.9.0"
   matcher:
     dependency: transitive
     description:
@@ -431,14 +415,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.0"
-  petitparser:
-    dependency: transitive
-    description:
-      name: petitparser
-      sha256: "91bd59303e9f769f108f8df05e371341b15d59e995e6806aefab827b58336675"
-      url: "https://pub.dev"
-    source: hosted
-    version: "7.0.2"
   platform:
     dependency: transitive
     description:
@@ -455,14 +431,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.8"
-  posix:
-    dependency: transitive
-    description:
-      name: posix
-      sha256: "185ef7606574f789b40f289c233efa52e96dead518aed988e040a10737febb07"
-      url: "https://pub.dev"
-    source: hosted
-    version: "6.5.0"
   process:
     dependency: transitive
     description:
@@ -660,14 +628,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.0"
-  xml:
-    dependency: transitive
-    description:
-      name: xml
-      sha256: "67f0aff7be013d107995e9b75bf4e7f2c3ef2dfdb2c8e68024bba0a7fd5756a4"
-      url: "https://pub.dev"
-    source: hosted
-    version: "7.0.1"
   yaml:
     dependency: transitive
     description:
