@@ -2,58 +2,77 @@ import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/midi/midi_clip_seed.dart';
+import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/surfaces/midi/piano_roll_painter.dart';
+
+PianoRollPainter _painter({
+  List<MidiNote> source = const [],
+  List<MidiNote> ghost = const [],
+  Set<int> selection = const {},
+  int revision = 0,
+  Rect? marquee,
+  bool showGhost = true,
+}) => PianoRollPainter(
+  sourceNotes: source,
+  ghostNotes: ghost,
+  selection: selection,
+  bars: 4,
+  beatsPerBar: 4,
+  revision: revision,
+  marquee: marquee,
+  showGhost: showGhost,
+);
 
 void main() {
   group('PianoRollPainter', () {
-    test('shouldRepaint compares the version counter', () {
-      final a = PianoRollPainter(
-        notes: const [],
-        bars: 4,
-        beatsPerBar: 4,
-        version: 1,
+    test('shouldRepaint tracks the revision counter', () {
+      expect(
+        _painter(revision: 1).shouldRepaint(_painter(revision: 1)),
+        isFalse,
       );
-      final b = PianoRollPainter(
-        notes: const [],
-        bars: 4,
-        beatsPerBar: 4,
-        version: 1,
+      expect(
+        _painter(revision: 2).shouldRepaint(_painter(revision: 1)),
+        isTrue,
       );
-      final c = PianoRollPainter(
-        notes: const [],
-        bars: 4,
-        beatsPerBar: 4,
-        version: 2,
-      );
-
-      expect(a.shouldRepaint(b), isFalse);
-      expect(a.shouldRepaint(c), isTrue);
     });
 
-    test('paints the seeded phrase without throwing', () {
+    test('shouldRepaint reacts to selection and source changes', () {
+      const note = MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1);
+      final base = _painter(source: const [note]);
+      expect(base.shouldRepaint(_painter(source: const [note])), isFalse);
+      expect(
+        base.shouldRepaint(_painter(source: const [note], selection: {0})),
+        isTrue,
+      );
+      expect(base.shouldRepaint(_painter(source: const [])), isTrue);
+    });
+
+    test('shouldRepaint reacts to the marquee rectangle', () {
+      final base = _painter();
+      expect(
+        base.shouldRepaint(
+          _painter(marquee: const Rect.fromLTWH(0, 0, 10, 10)),
+        ),
+        isTrue,
+      );
+    });
+
+    test('paints the seeded phrase with a ghost layer without throwing', () {
       final clip = phraseA();
-      final painter = PianoRollPainter(
-        notes: clip.notes,
-        bars: clip.bars,
-        beatsPerBar: clip.beatsPerBar,
-        version: 0,
+      final painter = _painter(
+        source: clip.notes,
+        ghost: clip.notes,
+        selection: {0, 2},
+        marquee: const Rect.fromLTWH(10, 10, 40, 40),
       );
       final recorder = PictureRecorder();
-      final canvas = Canvas(recorder);
-      painter.paint(canvas, const Size(660, 200));
+      painter.paint(Canvas(recorder), const Size(660, 200));
       recorder.endRecording().dispose();
     });
 
     test('paints empty input without throwing', () {
-      final painter = PianoRollPainter(
-        notes: const [],
-        bars: 1,
-        beatsPerBar: 4,
-        version: 0,
-      );
       final recorder = PictureRecorder();
-      final canvas = Canvas(recorder);
-      painter.paint(canvas, const Size(100, 60));
+      _painter().paint(Canvas(recorder), const Size(100, 60));
       recorder.endRecording().dispose();
     });
   });

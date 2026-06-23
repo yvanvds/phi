@@ -73,17 +73,24 @@ main + app          (orchestration)
   the cursor to a `CodeEvaluator` abstraction. The shell wires in
   `NoOpCodeEvaluator` by default — real Python execution
   (embedded-C++ vs. subprocess vs. Dart-FFI) is the next layer's call.
-- MIDI surface scaffold: read-only piano-roll viewer (`CustomPaint` —
-  magenta glowing notes, pitch lanes, beat grid) plus a 250px
-  transformation-chain sidebar of eight chips. Domain in
-  `lib/domain/midi/`: pure-Dart `MidiNote` / `MidiClip` /
-  `MidiTransform` + `MidiTransformChain` (ChangeNotifier). Two
-  transforms work end-to-end — `TransposeTransform` and
-  `ScaleConformanceTransform` (snaps to a diatonic mode, tie-break
-  upward); the other six chips are `StubTransform`s pending follow-ups.
-  No engine wiring yet — `MidiOut` playback, note editing, file
-  import/export, and the remaining transforms are tracked as separate
-  issues.
+- MIDI surface — editable piano roll plus a 250px transformation-chain
+  sidebar of eight chips. Domain in `lib/domain/midi/`: pure-Dart
+  `MidiNote` / `MidiClip` (now **mutable**) / `MidiTransform` +
+  `MidiTransformChain` (ChangeNotifier). Two transforms work end-to-end —
+  `TransposeTransform` and `ScaleConformanceTransform` (snaps to a diatonic
+  mode, tie-break upward); the other six chips are `StubTransform`s.
+  Editing (issue #28) is a command layer: `ClipEditor` (ChangeNotifier)
+  owns the clip, the selection, and an undo/redo stack of `ClipEditCommand`s
+  (`lib/domain/midi/edit/` — add / delete / in-place edit). Gestures author
+  the **source** clip while the chain's transformed output paints dim behind
+  as a "ghost"; `PianoRollGeometry` is the shared pixel↔(pitch,beat) mapping
+  so the painter and hit-test never drift. `PianoRollEditor` handles
+  click-to-add, drag body/edges (move · resize · move-start), shift-drag
+  marquee, arrow-key nudge, Delete, and Ctrl+Z/Y; a `VelocityLane` below the
+  roll (shared time axis) does click/drag-to-paint velocity. The shell owns
+  the chain + editor so edits and chip toggles survive surface switches. No
+  engine wiring yet — `MidiOut` playback, file import/export, and the
+  remaining transforms are tracked as separate issues.
 - State surface scaffold: pan/zoom canvas (reuses the patcher's 16px
   dot grid backdrop) of rounded-square `PerformanceState` nodes with
   four voice-coloured corner pins, plus directed `StateTransition`
@@ -118,7 +125,7 @@ main + app          (orchestration)
 | Patcher  | skeleton | `lib/surfaces/patcher/`         |
 | Code     | scaffold | `lib/surfaces/code/`            |
 | State    | scaffold | `lib/surfaces/state/`           |
-| MIDI     | scaffold | `lib/surfaces/midi/`            |
+| MIDI     | editor   | `lib/surfaces/midi/`            |
 | Mix      | impl     | `lib/surfaces/mix/`             |
 
 ## Where things live

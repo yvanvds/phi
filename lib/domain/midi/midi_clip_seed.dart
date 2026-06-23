@@ -12,10 +12,10 @@ import 'transforms/transpose_transform.dart';
 /// surface-midi.jsx mockup note-for-note — pitch classes include scale
 /// degrees both inside and outside D-dorian so scale-conformance has
 /// something visible to do when the user toggles it.
-MidiClip phraseA() => const MidiClip(
+MidiClip phraseA() => MidiClip(
   name: 'phrase A',
   bars: 4,
-  notes: [
+  notes: const [
     MidiNote(pitch: 60, start: 0.00, duration: 0.25, velocity: 0.7),
     MidiNote(pitch: 63, start: 0.25, duration: 0.25, velocity: 0.6),
     MidiNote(pitch: 67, start: 0.50, duration: 0.50, velocity: 0.8),
