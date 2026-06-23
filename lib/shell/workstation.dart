@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../design/tokens/phi_colors.dart';
+import '../domain/midi/clip_editor.dart';
+import '../domain/midi/midi_clip_seed.dart';
+import '../domain/midi/midi_transform_chain.dart';
 import '../domain/session/session_state.dart';
 import '../engine/bridge/no_op_code_evaluator.dart';
 import '../engine/engine.dart';
@@ -33,6 +36,12 @@ class _WorkstationState extends State<Workstation> {
   SurfaceId _selected = SurfaceId.mix;
   final NoOpCodeEvaluator _codeEvaluator = NoOpCodeEvaluator();
 
+  // MIDI surface state lives here, not in the surface widget, so the clip
+  // edits (undo history, selection) and chip toggles survive rail switches —
+  // the IndexedStack keeps the surface mounted but its widget is rebuilt.
+  final MidiTransformChain _midiChain = defaultDemoChain();
+  late final ClipEditor _midiEditor = ClipEditor(_midiChain.source);
+
   @override
   void initState() {
     super.initState();
@@ -44,6 +53,8 @@ class _WorkstationState extends State<Workstation> {
   @override
   void dispose() {
     _codeEvaluator.dispose();
+    _midiEditor.dispose();
+    _midiChain.dispose();
     super.dispose();
   }
 
@@ -108,7 +119,11 @@ class _WorkstationState extends State<Workstation> {
           evaluator: _codeEvaluator,
         );
       case SurfaceId.midi:
-        return MidiSurface(engine: widget.engine);
+        return MidiSurface(
+          engine: widget.engine,
+          chain: _midiChain,
+          editor: _midiEditor,
+        );
       case SurfaceId.state:
         return StateSurface(engine: widget.engine, session: widget.session);
     }

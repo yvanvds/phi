@@ -68,9 +68,9 @@ void main() {
     tester,
   ) async {
     final chain = MidiTransformChain(
-      source: const MidiClip(
+      source: MidiClip(
         name: 't',
-        notes: [MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1)],
+        notes: const [MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1)],
         bars: 1,
       ),
       transforms: const [
