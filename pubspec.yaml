@@ -18,7 +18,7 @@ dependencies:
     git:
       url: https://github.com/yvanvds/macbear_3d.git
       ref: 66b07310b4c135e1d8b842fc046f4a49fd9c3018
-  re_editor: ^0.8.0
+  re_editor: ^0.9.0
   re_highlight: ^0.0.3
 
 dev_dependencies:
