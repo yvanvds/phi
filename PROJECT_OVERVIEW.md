@@ -87,10 +87,17 @@ main + app          (orchestration)
   so the painter and hit-test never drift. `PianoRollEditor` handles
   click-to-add, drag body/edges (move · resize · move-start), shift-drag
   marquee, arrow-key nudge, Delete, and Ctrl+Z/Y; a `VelocityLane` below the
-  roll (shared time axis) does click/drag-to-paint velocity. The shell owns
-  the chain + editor so edits and chip toggles survive surface switches. No
-  engine wiring yet — `MidiOut` playback, file import/export, and the
-  remaining transforms are tracked as separate issues.
+  roll (shared time axis) does click/drag-to-paint velocity. Playback is
+  wired (issue #29): `EngineMidiController` (`lib/engine/state/`) owns the
+  chain + editor and drives a looping playhead off a periodic timer,
+  forwarding `noteOn`/`noteOff` through a `MidiGateway` (Real over
+  `package:yse`'s `MidiOut`, Fake recording calls in tests — the same
+  split as `YseGateway`). `PhiEngine.midi` exposes it; the top-toolbar
+  transport drives `play`/`stop` at `SessionState.tempo`, the piano-roll
+  painter animates a non-zero playhead, and stop sends `allNotesOff`. The
+  shell sources the chain/editor from `engine.midi` when present (falling
+  back to its own pair when no MIDI gateway is wired). Still tracked
+  separately: SMF file import/export and the remaining transforms.
 - State surface scaffold: pan/zoom canvas (reuses the patcher's 16px
   dot grid backdrop) of rounded-square `PerformanceState` nodes with
   four voice-coloured corner pins, plus directed `StateTransition`

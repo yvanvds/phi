@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -25,6 +26,7 @@ class PianoRollEditor extends StatefulWidget {
     required this.beatsPerBar,
     this.minPitch = 55,
     this.maxPitch = 76,
+    this.playhead,
     super.key,
   });
 
@@ -35,6 +37,10 @@ class PianoRollEditor extends StatefulWidget {
   final int beatsPerBar;
   final int minPitch;
   final int maxPitch;
+
+  /// The engine player's beat position (issue #29). When `null` the roll
+  /// paints no playhead; otherwise it animates as the player advances.
+  final ValueListenable<double>? playhead;
 
   @override
   State<PianoRollEditor> createState() => _PianoRollEditorState();
@@ -252,6 +258,37 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
     }
   }
 
+  /// The painted roll. When a [PianoRollEditor.playhead] is supplied, the
+  /// `CustomPaint` is wrapped in a [ValueListenableBuilder] so the player's
+  /// per-tick beat updates repaint only the painter (not the gesture layer or
+  /// the surrounding chrome). `_displayNotes()` is read inside the builder so
+  /// an in-flight drag still tracks the pointer while the playhead animates.
+  Widget _buildRoll() {
+    final playhead = widget.playhead;
+    if (playhead == null) return _painter(0);
+    return ValueListenableBuilder<double>(
+      valueListenable: playhead,
+      builder: (context, beat, _) => _painter(beat),
+    );
+  }
+
+  Widget _painter(double playhead) => CustomPaint(
+    size: Size.infinite,
+    painter: PianoRollPainter(
+      sourceNotes: _displayNotes(),
+      ghostNotes: widget.ghostNotes,
+      selection: _editor.selection,
+      bars: widget.bars,
+      beatsPerBar: widget.beatsPerBar,
+      revision: _editor.revision,
+      marquee: _marquee,
+      showGhost: widget.showGhost,
+      minPitch: widget.minPitch,
+      maxPitch: widget.maxPitch,
+      playhead: playhead,
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     return Focus(
@@ -276,21 +313,7 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
                     onPanStart: _onPanStart,
                     onPanUpdate: _onPanUpdate,
                     onPanEnd: _onPanEnd,
-                    child: CustomPaint(
-                      size: Size.infinite,
-                      painter: PianoRollPainter(
-                        sourceNotes: _displayNotes(),
-                        ghostNotes: widget.ghostNotes,
-                        selection: _editor.selection,
-                        bars: widget.bars,
-                        beatsPerBar: widget.beatsPerBar,
-                        revision: _editor.revision,
-                        marquee: _marquee,
-                        showGhost: widget.showGhost,
-                        minPitch: widget.minPitch,
-                        maxPitch: widget.maxPitch,
-                      ),
-                    ),
+                    child: _buildRoll(),
                   ),
                 ),
                 Positioned(

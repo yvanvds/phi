@@ -36,27 +36,60 @@ class _WorkstationState extends State<Workstation> {
   SurfaceId _selected = SurfaceId.mix;
   final NoOpCodeEvaluator _codeEvaluator = NoOpCodeEvaluator();
 
-  // MIDI surface state lives here, not in the surface widget, so the clip
-  // edits (undo history, selection) and chip toggles survive rail switches —
-  // the IndexedStack keeps the surface mounted but its widget is rebuilt.
-  final MidiTransformChain _midiChain = defaultDemoChain();
-  late final ClipEditor _midiEditor = ClipEditor(_midiChain.source);
+  // The MIDI chain + editor are owned by the engine's player when one is
+  // wired (production, and tests that exercise playback), so playback and the
+  // piano-roll editor share one source clip. When the engine has no MIDI
+  // gateway (widget tests without playback) the shell owns a fallback pair so
+  // the surface still renders. Either way the state lives above the surface
+  // widget, so undo history + chip toggles survive rail switches — the
+  // IndexedStack keeps the surface mounted but its widget is rebuilt.
+  late final MidiTransformChain _midiChain;
+  late final ClipEditor _midiEditor;
+  late final bool _ownsMidiState;
 
   @override
   void initState() {
     super.initState();
+    final midi = widget.engine.midiOrNull;
+    _ownsMidiState = midi == null;
+    _midiChain = midi?.chain ?? defaultDemoChain();
+    _midiEditor = midi?.editor ?? ClipEditor(_midiChain.source);
+
     // The app boots on Mix, so the Scene surface starts offstage — tell the
     // renderer to keep its ticker paused until Scene is first selected.
     _syncSceneVisibility();
+
+    // Transport play/stop drives the MIDI player at the session tempo; tempo
+    // changes mid-play take effect on the next tick.
+    widget.session.transport.addListener(_onTransport);
+    widget.session.tempo.addListener(_onTempo);
   }
 
   @override
   void dispose() {
+    widget.session.transport.removeListener(_onTransport);
+    widget.session.tempo.removeListener(_onTempo);
     _codeEvaluator.dispose();
-    _midiEditor.dispose();
-    _midiChain.dispose();
+    // Only dispose the MIDI state the shell owns; the engine disposes its own.
+    if (_ownsMidiState) {
+      _midiEditor.dispose();
+      _midiChain.dispose();
+    }
     super.dispose();
   }
+
+  void _onTransport() {
+    final midi = widget.engine.midiOrNull;
+    if (midi == null) return;
+    if (widget.session.isPlaying) {
+      midi.bpm = widget.session.tempo.value;
+      midi.play();
+    } else {
+      midi.stop();
+    }
+  }
+
+  void _onTempo() => widget.engine.midiOrNull?.bpm = widget.session.tempo.value;
 
   void _onSelect(SurfaceId id) {
     setState(() => _selected = id);
@@ -123,6 +156,7 @@ class _WorkstationState extends State<Workstation> {
           engine: widget.engine,
           chain: _midiChain,
           editor: _midiEditor,
+          playhead: widget.engine.midiOrNull?.playhead,
         );
       case SurfaceId.state:
         return StateSurface(engine: widget.engine, session: widget.session);

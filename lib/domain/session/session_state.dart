@@ -19,6 +19,10 @@ class SessionState {
 
   final ValueNotifier<bool> projection = ValueNotifier<bool>(false);
 
+  /// Session tempo in beats-per-minute. Drives MIDI playback (issue #29);
+  /// no toolbar control yet — the time-domain layer owns tempo UI later.
+  final ValueNotifier<double> tempo = ValueNotifier<double>(120);
+
   final ValueNotifier<String> sceneName;
 
   /// Cross-surface selection. Whichever surface publishes here, every
@@ -34,6 +38,12 @@ class SessionState {
   void stop() => transport.value = TransportState.idle;
 
   void toggleProjection() => projection.value = !projection.value;
+
+  /// Set the session tempo. Ignores non-positive values.
+  void setTempo(double bpm) {
+    if (bpm <= 0) return;
+    tempo.value = bpm;
+  }
 
   void renameScene(String name) {
     final trimmed = name.trim();
@@ -51,6 +61,7 @@ class SessionState {
   void dispose() {
     transport.dispose();
     projection.dispose();
+    tempo.dispose();
     sceneName.dispose();
     selection.dispose();
   }

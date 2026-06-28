@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/engine/state/engine_telemetry.dart';
 
+import 'test_doubles/fake_midi_gateway.dart';
 import 'test_doubles/fake_patcher_gateway.dart';
 import 'test_doubles/fake_scene_renderer.dart';
 import 'test_doubles/fake_yse_gateway.dart';
@@ -411,6 +412,66 @@ void main() {
 
       expect(renderer.initialised, isFalse);
       expect(renderer.calls, containsAllInOrder(<String>['init', 'dispose']));
+    });
+  });
+
+  group('PhiEngine with midiGateway', () {
+    late FakeYseGateway gateway;
+    late FakeMidiGateway midiGateway;
+    late PhiEngine engine;
+
+    setUp(() {
+      gateway = FakeYseGateway();
+      midiGateway = FakeMidiGateway();
+      engine = PhiEngine(
+        gateway,
+        midiGateway: midiGateway,
+        telemetryInterval: const Duration(milliseconds: 20),
+      );
+    });
+
+    tearDown(() async {
+      await engine.dispose();
+      await gateway.dispose();
+    });
+
+    test('midi is null before start, present after', () {
+      expect(engine.midiOrNull, isNull);
+      expect(() => engine.midi, throwsStateError);
+
+      engine.start();
+
+      expect(engine.midiOrNull, isNotNull);
+      expect(engine.midi.chain.source.name, 'phrase A');
+    });
+
+    test('midi player shares one source clip with its editor', () {
+      engine.start();
+      expect(engine.midi.editor.clip, same(engine.midi.chain.source));
+    });
+
+    test('stop() disposes the player back to null', () {
+      engine.start();
+      engine.stop();
+      expect(engine.midiOrNull, isNull);
+    });
+  });
+
+  group('PhiEngine without midiGateway', () {
+    test('midi stays null after start', () {
+      final gateway = FakeYseGateway();
+      final engine = PhiEngine(
+        gateway,
+        telemetryInterval: const Duration(milliseconds: 20),
+      );
+      addTearDown(() async {
+        await engine.dispose();
+        await gateway.dispose();
+      });
+
+      engine.start();
+      expect(engine.midiOrNull, isNull);
+      expect(() => engine.midi, throwsStateError);
     });
   });
 }

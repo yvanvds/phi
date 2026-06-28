@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../design/tokens/phi_colors.dart';
@@ -16,10 +17,19 @@ import 'velocity_lane.dart';
 /// survive surface switches; when none is supplied (widget tests) the viewport
 /// owns one built from the chain's source clip.
 class MidiViewport extends StatefulWidget {
-  const MidiViewport({required this.chain, this.editor, super.key});
+  const MidiViewport({
+    required this.chain,
+    this.editor,
+    this.playhead,
+    super.key,
+  });
 
   final MidiTransformChain chain;
   final ClipEditor? editor;
+
+  /// The engine player's beat position (issue #29). `null` in setups without
+  /// a wired MIDI player; the editor then parks the playhead at the origin.
+  final ValueListenable<double>? playhead;
 
   @override
   State<MidiViewport> createState() => _MidiViewportState();
@@ -78,6 +88,7 @@ class _MidiViewportState extends State<MidiViewport> {
                               showGhost: showGhost,
                               bars: clip.bars,
                               beatsPerBar: clip.beatsPerBar,
+                              playhead: widget.playhead,
                             ),
                           ),
                           const SizedBox(height: 8),
