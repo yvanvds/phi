@@ -2,12 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../domain/midi/midi_clip_seed.dart';
 import 'bridge/macbear_scene_renderer.dart';
+import 'bridge/midi_gateway.dart';
 import 'bridge/patcher_gateway.dart';
+import 'bridge/real_midi_gateway.dart';
 import 'bridge/real_patcher_gateway.dart';
 import 'bridge/real_yse_gateway.dart';
 import 'bridge/scene_renderer.dart';
 import 'bridge/yse_gateway.dart';
+import 'state/engine_midi_controller.dart';
 import 'state/engine_telemetry.dart';
 import 'state/mixer_channel.dart';
 import 'state/patcher_controller.dart';
@@ -23,26 +27,32 @@ class PhiEngine {
     this._gateway, {
     SceneRenderer? sceneRenderer,
     PatcherGateway? patcherGateway,
+    MidiGateway? midiGateway,
     Duration telemetryInterval = const Duration(milliseconds: 50),
   }) : _sceneRenderer = sceneRenderer,
        _patcherGateway = patcherGateway,
+       _midiGateway = midiGateway,
        _telemetryInterval = telemetryInterval;
 
   /// Production constructor — wires the real `package:yse` gateway and,
-  /// by default, the macbear-backed Scene renderer + the real patcher
-  /// gateway. Tests can inject alternates via the named parameters.
+  /// by default, the macbear-backed Scene renderer + the real patcher and
+  /// MIDI-output gateways. Tests can inject alternates via the named
+  /// parameters.
   factory PhiEngine.production({
     SceneRenderer? sceneRenderer,
     PatcherGateway? patcherGateway,
+    MidiGateway? midiGateway,
   }) => PhiEngine(
     RealYseGateway(),
     sceneRenderer: sceneRenderer ?? MacbearSceneRenderer(),
     patcherGateway: patcherGateway ?? RealPatcherGateway(),
+    midiGateway: midiGateway ?? RealMidiGateway(),
   );
 
   final YseGateway _gateway;
   final SceneRenderer? _sceneRenderer;
   final PatcherGateway? _patcherGateway;
+  final MidiGateway? _midiGateway;
   final Duration _telemetryInterval;
 
   /// The Scene renderer, if one was wired in. `null` in test setups that
@@ -82,6 +92,27 @@ class PhiEngine {
 
   /// Nullable variant of [stateMachine] — `null` before [start].
   StateMachineController? get stateMachineOrNull => _stateMachine;
+
+  EngineMidiController? _midi;
+
+  /// The MIDI subsystem — owns the transform chain, its editor, and the
+  /// playback playhead. Created on [start] when a [MidiGateway] was injected;
+  /// throws before [start] or when no gateway was wired (tests that don't
+  /// exercise MIDI playback). Use [midiOrNull] when the caller needs a
+  /// fallback.
+  EngineMidiController get midi {
+    final m = _midi;
+    if (m == null) {
+      throw StateError(
+        'PhiEngine.midi used before start() or without a gateway',
+      );
+    }
+    return m;
+  }
+
+  /// Nullable variant of [midi] — `null` before [start] *or* when no
+  /// [MidiGateway] was injected.
+  EngineMidiController? get midiOrNull => _midi;
 
   Timer? _telemetryTimer;
   final StreamController<EngineTelemetry> _telemetry =
@@ -142,6 +173,14 @@ class PhiEngine {
       _patcher = PatcherController(pg);
     }
     _stateMachine = StateMachineController();
+    // MIDI subsystem is optional — tests that don't inject a MidiGateway get
+    // an engine without a player (engine.midi throws). When wired, it owns
+    // the demo chain + its editor so playback and the piano-roll editor
+    // share one source clip.
+    final mg = _midiGateway;
+    if (mg != null) {
+      _midi = EngineMidiController(chain: defaultDemoChain(), gateway: mg);
+    }
     _gateway.startUpdateTimer();
     _sceneRenderer?.init();
     // Note: `mountAsSound` is *not* called here. The patcher is empty at
@@ -163,6 +202,8 @@ class PhiEngine {
       _patcherGateway?.dispose();
       _stateMachine?.dispose();
       _stateMachine = null;
+      _midi?.dispose();
+      _midi = null;
       _disposeUserChannels();
       _gateway.close();
       _sceneRenderer?.dispose();

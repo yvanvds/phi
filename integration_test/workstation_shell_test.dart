@@ -9,8 +9,10 @@ import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
 import 'package:phi/surfaces/midi/midi_viewport.dart';
 import 'package:phi/surfaces/midi/piano_roll_editor.dart';
+import 'package:phi/surfaces/midi/piano_roll_painter.dart';
 import 'package:phi/surfaces/midi/velocity_lane.dart';
 
+import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_scene_renderer.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
 
@@ -123,6 +125,62 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
     expect(find.textContaining('10 notes'), findsOneWidget);
+
+    session.dispose();
+    await engine.dispose();
+  });
+
+  testWidgets('midi: transport play animates the playhead and emits notes', (
+    tester,
+  ) async {
+    // A wired MIDI gateway means PhiEngine builds its player, so the shell
+    // sources the chain from engine.midi and binds the playhead.
+    final midiGateway = FakeMidiGateway();
+    final engine = PhiEngine(
+      FakeYseGateway(),
+      midiGateway: midiGateway,
+      telemetryInterval: const Duration(milliseconds: 20),
+    );
+    final session = SessionState();
+
+    await tester.pumpWidget(PhiApp(engine: engine, session: session));
+    await tester.pumpAndSettle();
+
+    // Open the MIDI surface; the roll comes up with a parked playhead.
+    await tester.tap(railFor(SurfaceId.midi));
+    await tester.pumpAndSettle();
+    expect(find.byType(PianoRollEditor), findsOneWidget);
+    expect(engine.midi.playhead.value, 0);
+
+    // Hit the toolbar play button. A periodic player timer now runs, so drive
+    // it with explicit pumps — pumpAndSettle would spin on the per-tick frames.
+    await tester.tap(find.byTooltip('play'));
+    await tester.pump(); // process the tap → transport.play()
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // The playhead advanced and the painter received it (non-zero line).
+    expect(engine.midi.playhead.value, greaterThan(0));
+    final painter = tester
+        .widgetList<CustomPaint>(
+          find.descendant(
+            of: find.byType(PianoRollEditor),
+            matching: find.byType(CustomPaint),
+          ),
+        )
+        .map((w) => w.painter)
+        .whereType<PianoRollPainter>()
+        .last;
+    expect(painter.playhead, greaterThan(0));
+
+    // Notes reached the gateway — the port opened and at least one note fired.
+    expect(midiGateway.calls, contains('open:0'));
+    expect(midiGateway.calls.any((c) => c.startsWith('noteOn:')), isTrue);
+
+    // Stop rewinds the playhead and silences any held note.
+    await tester.tap(find.byTooltip('stop'));
+    await tester.pump();
+    expect(engine.midi.playhead.value, 0);
+    expect(midiGateway.calls, contains('allNotesOff:all'));
 
     session.dispose();
     await engine.dispose();
