@@ -147,6 +147,39 @@ void main() {
       });
     });
 
+    test('reflects clip edits made while playing on the next loop window', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final controller = EngineMidiController(
+          chain: _twoBarChain(),
+          gateway: gateway,
+        );
+
+        controller.play();
+        // 1.5 s = 3 beats — past notes at beats 0 and 2, before beat 4.
+        async.elapse(const Duration(milliseconds: 1500));
+        expect(
+          gateway.calls.any((c) => c == 'noteOn:0:72:127'),
+          isFalse,
+          reason: 'note 72 does not exist yet',
+        );
+
+        // Author a new note at beat 5 through the *same* editor the surface
+        // uses — the player reads it live, no restart.
+        controller.editor.addNote(
+          const MidiNote(pitch: 72, start: 5.0, duration: 0.5, velocity: 1.0),
+        );
+
+        // 3.0 s total = 6 beats — crosses the new note's onset at beat 5.
+        async.elapse(const Duration(milliseconds: 1500));
+        controller.stop();
+
+        expect(gateway.calls, contains('noteOn:0:72:127'));
+
+        controller.dispose();
+      });
+    });
+
     test('bpm setter ignores non-positive values', () {
       final gateway = FakeMidiGateway();
       final controller = EngineMidiController(

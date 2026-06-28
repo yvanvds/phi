@@ -17,7 +17,9 @@ import '../bridge/midi_gateway.dart';
 ///
 /// Per Phi's vision (§3.7) clips are "interpreted, not played": the player
 /// reads the chain's **transformed** [MidiTransformChain.output], not the raw
-/// source, so toggling a transform changes what is heard on the next play.
+/// source. Output is read live each tick, so editing a note or toggling a
+/// transform while the clip loops is heard immediately — the representation
+/// and the MIDI output are one thing, not two copies.
 class EngineMidiController {
   EngineMidiController({
     required MidiTransformChain chain,
@@ -71,10 +73,6 @@ class EngineMidiController {
   double _absBeat = 0;
   double _prevAbsBeat = 0;
 
-  /// Snapshot of the transformed notes taken at [play]. Playback is
-  /// deterministic for the duration of a run; edits apply on the next play.
-  List<MidiNote> _scheduled = const [];
-
   /// Notes currently sounding, by `(channel, pitch)` — so the player can
   /// release exactly what it pressed if a transform overlaps voices.
   final Set<int> _sounding = <int>{};
@@ -86,7 +84,6 @@ class EngineMidiController {
     if (!_gateway.isOpen && _gateway.outputDeviceCount > _outputPort) {
       _gateway.open(_outputPort);
     }
-    _scheduled = _chain.output;
     _absBeat = 0;
     _prevAbsBeat = 0;
     _playhead.value = 0;
@@ -120,15 +117,21 @@ class EngineMidiController {
   /// Fire every note event whose absolute beat falls in `[from, to)`. Note
   /// events repeat every `totalBeats` (the clip loops), so the same source
   /// event is mapped into each loop iteration the window spans.
+  ///
+  /// Reads the chain's transformed [MidiTransformChain.output] *live* each
+  /// tick, so editing the clip or toggling a transform while it loops is
+  /// heard on the next window — the played notes and the edited clip are one
+  /// and the same.
   void _dispatchWindow(double from, double to) {
     final total = _chain.source.totalBeats;
-    if (total <= 0 || _scheduled.isEmpty) return;
+    final notes = _chain.output;
+    if (total <= 0 || notes.isEmpty) return;
 
     final firstLoop = (from / total).floor();
     final lastLoop = (to / total).floor();
     for (var loop = firstLoop; loop <= lastLoop; loop++) {
       final base = loop * total;
-      for (final note in _scheduled) {
+      for (final note in notes) {
         final onAt = base + note.start;
         if (onAt >= from && onAt < to) _noteOn(note);
         final offAt = base + note.start + note.duration;

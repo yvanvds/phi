@@ -90,6 +90,8 @@ main + app          (orchestration)
   roll (shared time axis) does click/drag-to-paint velocity. Playback is
   wired (issue #29): `EngineMidiController` (`lib/engine/state/`) owns the
   chain + editor and drives a looping playhead off a periodic timer,
+  reading the chain's transformed `output` **live** each tick (so edits and
+  chip toggles are heard immediately, not on the next play) and
   forwarding `noteOn`/`noteOff` through a `MidiGateway` (Real over
   `package:yse`'s `MidiOut`, Fake recording calls in tests — the same
   split as `YseGateway`). `PhiEngine.midi` exposes it; the top-toolbar
