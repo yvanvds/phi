@@ -98,8 +98,18 @@ main + app          (orchestration)
   transport drives `play`/`stop` at `SessionState.tempo`, the piano-roll
   painter animates a non-zero playhead, and stop sends `allNotesOff`. The
   shell sources the chain/editor from `engine.midi` when present (falling
-  back to its own pair when no MIDI gateway is wired). Still tracked
-  separately: SMF file import/export and the remaining transforms.
+  back to its own pair when no MIDI gateway is wired). SMF import/export
+  (issue #30) round-trips Standard MIDI Files through a pure-Dart codec in
+  `lib/domain/midi/smf/` (`SmfReader` / `SmfWriter`, timing in quarter-note
+  beats, velocity normalised): drop a `.mid` onto the surface (or use the
+  header IMPORT button) to rewrite the shared clip in place — via
+  `MidiClip.replaceWith` + `ClipEditor.reset` + `chain.notifySourceChanged`,
+  keeping every reference intact — and the header EXPORT button encodes the
+  chain's transformed `output` back to a file. The native open/save dialogs
+  live behind a `MidiFileIo` seam (`FileSelectorMidiFileIo` in production,
+  faked in tests) so the flow is driveable end-to-end; `desktop_drop` +
+  `file_selector` own the OS shell only. Still tracked separately: the
+  remaining transforms.
 - State surface scaffold: pan/zoom canvas (reuses the patcher's 16px
   dot grid backdrop) of rounded-square `PerformanceState` nodes with
   four voice-coloured corner pins, plus directed `StateTransition`

@@ -67,6 +67,11 @@ class MidiTransformChain extends ChangeNotifier {
     _bump();
   }
 
+  /// Signals that the source clip's contents changed underneath the chain
+  /// (e.g. a file import mutated it via [MidiClip.replaceWith]). Bumps
+  /// [version] and notifies so bound painters recompute [output] and repaint.
+  void notifySourceChanged() => _bump();
+
   void setActiveAt(int index, bool active) {
     final current = _transforms[index];
     if (current.active == active) return;
