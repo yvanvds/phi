@@ -76,9 +76,11 @@ main + app          (orchestration)
 - MIDI surface — editable piano roll plus a 250px transformation-chain
   sidebar of eight chips. Domain in `lib/domain/midi/`: pure-Dart
   `MidiNote` / `MidiClip` (now **mutable**) / `MidiTransform` +
-  `MidiTransformChain` (ChangeNotifier). Two transforms work end-to-end —
-  `TransposeTransform` and `ScaleConformanceTransform` (snaps to a diatonic
-  mode, tie-break upward); the other six chips are `StubTransform`s.
+  `MidiTransformChain` (ChangeNotifier). Four pitch transforms work
+  end-to-end — `TransposeTransform`, `ScaleConformanceTransform` (snaps to a
+  diatonic mode, tie-break upward), `InversionTransform` (mirrors pitch
+  around a fractional axis), and `SpectralMappingTransform` (arbitrary
+  pitch→pitch lookup table); the remaining chips are `StubTransform`s.
   Editing (issue #28) is a command layer: `ClipEditor` (ChangeNotifier)
   owns the clip, the selection, and an undo/redo stack of `ClipEditCommand`s
   (`lib/domain/midi/edit/` — add / delete / in-place edit). Gestures author
