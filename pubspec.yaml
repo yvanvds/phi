@@ -20,6 +20,12 @@ dependencies:
   macbear_3d: 0.9.0
   re_editor: ^0.9.0
   re_highlight: ^0.0.3
+  # SMF import/export (#30): drag a `.mid` onto the MIDI surface
+  # (desktop_drop) and open/save native file dialogs (file_selector, a
+  # first-party Flutter plugin). The byte↔clip codec is pure Dart in
+  # lib/domain/midi/smf/; these packages only own the file-IO shell.
+  desktop_drop: ^0.7.1
+  file_selector: ^1.1.0
 
 dev_dependencies:
   flutter_test:

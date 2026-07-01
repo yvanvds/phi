@@ -4,9 +4,10 @@ import 'design/theme.dart';
 import 'domain/session/session_state.dart';
 import 'engine/engine.dart';
 import 'shell/workstation.dart';
+import 'surfaces/midi/midi_file_io.dart';
 
 class PhiApp extends StatefulWidget {
-  const PhiApp({super.key, this.engine, this.session});
+  const PhiApp({super.key, this.engine, this.session, this.midiFileIo});
 
   /// Optional engine override — tests inject a fake-backed engine here so
   /// the production `PhiEngine.production()` (and its libyse.dll load)
@@ -15,6 +16,11 @@ class PhiApp extends StatefulWidget {
 
   /// Optional session override. Tests can inject a pre-seeded state.
   final SessionState? session;
+
+  /// Optional file-dialog backend for the MIDI surface's SMF import/export.
+  /// `null` in production (the surface uses the real `file_selector` backend);
+  /// tests inject a fake to drive the flow without native dialogs.
+  final MidiFileIo? midiFileIo;
 
   @override
   State<PhiApp> createState() => _PhiAppState();
@@ -66,7 +72,11 @@ class _PhiAppState extends State<PhiApp> {
       title: 'Phi',
       debugShowCheckedModeBanner: false,
       theme: buildPhiTheme(),
-      home: Workstation(engine: _engine, session: _session),
+      home: Workstation(
+        engine: _engine,
+        session: _session,
+        midiFileIo: widget.midiFileIo,
+      ),
     );
   }
 }

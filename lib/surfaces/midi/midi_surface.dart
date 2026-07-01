@@ -6,6 +6,7 @@ import '../../domain/midi/midi_clip_seed.dart';
 import '../../domain/midi/midi_transform_chain.dart';
 import '../../engine/engine.dart';
 import '../surface.dart';
+import 'midi_file_io.dart';
 import 'midi_viewport.dart';
 
 /// MIDI surface — piano-roll editor for a single seeded clip plus the
@@ -23,19 +24,26 @@ class MidiSurface extends Surface {
     MidiTransformChain? chain,
     ClipEditor? editor,
     ValueListenable<double>? playhead,
+    MidiFileIo? fileIo,
     super.key,
   }) : _engine = engine,
        _chain = chain ?? defaultDemoChain(),
        _editor = editor,
-       _playhead = playhead;
+       _playhead = playhead,
+       _fileIo = fileIo;
 
   // ignore: unused_field
   final PhiEngine _engine;
   final MidiTransformChain _chain;
   final ClipEditor? _editor;
   final ValueListenable<double>? _playhead;
+  final MidiFileIo? _fileIo;
 
   @override
-  Widget build(BuildContext context) =>
-      MidiViewport(chain: _chain, editor: _editor, playhead: _playhead);
+  Widget build(BuildContext context) => MidiViewport(
+    chain: _chain,
+    editor: _editor,
+    playhead: _playhead,
+    fileIo: _fileIo,
+  );
 }

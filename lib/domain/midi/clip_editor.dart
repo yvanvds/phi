@@ -122,6 +122,18 @@ class ClipEditor extends ChangeNotifier {
     _commit(before, after);
   }
 
+  /// Drops the undo/redo history and clears the selection, then notifies.
+  ///
+  /// Called after the underlying [clip] is rewritten out from under the editor
+  /// (e.g. a file import via [MidiClip.replaceWith]): the old commands index
+  /// into note positions that no longer exist, so they can't be replayed.
+  void reset() {
+    _undo.clear();
+    _redo.clear();
+    _selection = const {};
+    _bump();
+  }
+
   void undo() {
     if (_undo.isEmpty) return;
     final cmd = _undo.removeLast();

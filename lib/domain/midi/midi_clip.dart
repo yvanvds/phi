@@ -30,4 +30,20 @@ class MidiClip {
   int beatsPerBar;
 
   double get totalBeats => bars * beatsPerBar.toDouble();
+
+  /// Replaces this clip's contents with [other]'s, in place.
+  ///
+  /// The clip instance is shared by the transform chain and the clip editor
+  /// (both hold the same reference), so importing a file mutates *this* clip
+  /// rather than swapping the reference — keeping those wiring points intact.
+  /// Callers must reset any index-based state (undo stack, selection) after,
+  /// since the note list is rebuilt from scratch.
+  void replaceWith(MidiClip other) {
+    name = other.name;
+    bars = other.bars;
+    beatsPerBar = other.beatsPerBar;
+    notes
+      ..clear()
+      ..addAll(other.notes);
+  }
 }

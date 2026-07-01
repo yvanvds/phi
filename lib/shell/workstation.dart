@@ -8,6 +8,7 @@ import '../domain/session/session_state.dart';
 import '../engine/bridge/no_op_code_evaluator.dart';
 import '../engine/engine.dart';
 import '../surfaces/code/code_surface.dart';
+import '../surfaces/midi/midi_file_io.dart';
 import '../surfaces/midi/midi_surface.dart';
 import '../surfaces/mix/mix_surface.dart';
 import '../surfaces/patcher/patcher_surface.dart';
@@ -23,10 +24,20 @@ import 'top_toolbar/top_toolbar.dart';
 /// left rail, right inspector, bottom status) around the active surface in
 /// the centre.
 class Workstation extends StatefulWidget {
-  const Workstation({required this.engine, required this.session, super.key});
+  const Workstation({
+    required this.engine,
+    required this.session,
+    this.midiFileIo,
+    super.key,
+  });
 
   final PhiEngine engine;
   final SessionState session;
+
+  /// File-dialog backend for the MIDI surface's SMF import/export. `null` in
+  /// production (the surface falls back to the real `file_selector` backend);
+  /// tests inject a fake to drive the flow without native dialogs.
+  final MidiFileIo? midiFileIo;
 
   @override
   State<Workstation> createState() => _WorkstationState();
@@ -157,6 +168,7 @@ class _WorkstationState extends State<Workstation> {
           chain: _midiChain,
           editor: _midiEditor,
           playhead: widget.engine.midiOrNull?.playhead,
+          fileIo: widget.midiFileIo,
         );
       case SurfaceId.state:
         return StateSurface(engine: widget.engine, session: widget.session);
