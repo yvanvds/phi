@@ -4,7 +4,9 @@ import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/midi_transform_chain.dart';
 import 'package:phi/domain/midi/midi_transform_kind.dart';
 import 'package:phi/domain/midi/music_scale.dart';
+import 'package:phi/domain/midi/transforms/inversion_transform.dart';
 import 'package:phi/domain/midi/transforms/scale_conformance_transform.dart';
+import 'package:phi/domain/midi/transforms/spectral_mapping_transform.dart';
 import 'package:phi/domain/midi/transforms/stub_transform.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
 
@@ -117,6 +119,31 @@ void main() {
       chain.reorder(0, 2);
       expect(chain.transforms.map((t) => t.label), ['c', 'b']);
       expect(notifications, 3);
+    });
+
+    test('inversion + spectral mapping slot into the chain and compose', () {
+      // A source note at C4, mirrored around C4 (identity for that note),
+      // then remapped 60→72 by the spectral table. Confirms both new pitch
+      // transforms honour list order alongside the existing ones.
+      final chain = MidiTransformChain(
+        source: _clip(const [
+          MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1),
+          MidiNote(pitch: 64, start: 1, duration: 1, velocity: 1),
+        ]),
+        transforms: const [
+          InversionTransform(axis: 60, label: 'mirror · C4'),
+          SpectralMappingTransform(table: {60: 72}, label: 'spectral'),
+        ],
+      );
+
+      // Note 1: invert(60)=60, then table 60→72.
+      // Note 2: invert(64)=56, absent from table → passes through.
+      expect(chain.output.map((n) => n.pitch), [72, 56]);
+
+      // Toggling inversion off leaves only the spectral mapping.
+      chain.setActiveAt(0, false);
+      // Note 1: 60 → 72. Note 2: 64 untouched.
+      expect(chain.output.map((n) => n.pitch), [72, 64]);
     });
 
     test('reorder is a no-op when from == to', () {
