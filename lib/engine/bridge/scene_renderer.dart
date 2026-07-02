@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../domain/scene/scene_agent.dart';
 import 'camera.dart';
+import 'scene_agent_sink.dart';
 
 /// Abstract renderer for the 3D Scene surface.
 ///
@@ -9,7 +10,10 @@ import 'camera.dart';
 /// so tests can swap in a fake and the production code is the only place a
 /// real renderer's API is touched. The current production implementation
 /// uses `package:macbear_3d`; see `macbear_scene_renderer.dart`.
-abstract interface class SceneRenderer {
+///
+/// Extends [SceneAgentSink] so the MIDI player can push live spawns straight
+/// at a renderer without knowing about cameras or lifecycle.
+abstract interface class SceneRenderer implements SceneAgentSink {
   /// Allocate internal state. Called from `PhiEngine.start()`.
   void init();
 
@@ -20,6 +24,7 @@ abstract interface class SceneRenderer {
   void setCamera(Camera camera);
 
   /// Set the current agents. Reflected on the next frame.
+  @override
   void setAgents(List<SceneAgent> agents);
 
   /// Mark the surface on- or off-stage. When the Scene surface is offstage

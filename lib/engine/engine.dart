@@ -179,7 +179,14 @@ class PhiEngine {
     // share one source clip.
     final mg = _midiGateway;
     if (mg != null) {
-      _midi = EngineMidiController(chain: defaultDemoChain(), gateway: mg);
+      _midi = EngineMidiController(
+        chain: defaultDemoChain(),
+        gateway: mg,
+        // The Scene renderer doubles as the agent sink (issue #37): playing a
+        // clip whose chain has an active AgentSpawnTransform populates the 3D
+        // Scene. `null` when no renderer is wired — spawning just no-ops.
+        agentSink: _sceneRenderer,
+      );
     }
     _gateway.startUpdateTimer();
     _sceneRenderer?.init();

@@ -5,7 +5,10 @@ import 'package:flutter/foundation.dart';
 import '../../domain/midi/clip_editor.dart';
 import '../../domain/midi/midi_note.dart';
 import '../../domain/midi/midi_transform_chain.dart';
+import '../../domain/midi/transforms/agent_spawn_transform.dart';
+import '../../domain/scene/scene_agent.dart';
 import '../bridge/midi_gateway.dart';
+import '../bridge/scene_agent_sink.dart';
 
 /// Engine-side player for the MIDI surface.
 ///
@@ -25,12 +28,14 @@ class EngineMidiController {
     required MidiTransformChain chain,
     required MidiGateway gateway,
     ClipEditor? editor,
+    SceneAgentSink? agentSink,
     double bpm = 120,
     int outputPort = 0,
     this.microtonal = false,
     Duration tickInterval = const Duration(milliseconds: 16),
   }) : _chain = chain,
        _gateway = gateway,
+       _agentSink = agentSink,
        editor = editor ?? ClipEditor(chain.source),
        _bpm = bpm,
        _outputPort = outputPort,
@@ -38,6 +43,11 @@ class EngineMidiController {
 
   final MidiTransformChain _chain;
   final MidiGateway _gateway;
+
+  /// Optional Scene sink. When wired and the chain carries an active
+  /// [AgentSpawnTransform], each note-on spawns a live `SceneAgent` and its
+  /// note-off despawns it (issue #37). `null` in setups without a Scene.
+  final SceneAgentSink? _agentSink;
   final int _outputPort;
   final Duration _tickInterval;
 
@@ -90,6 +100,12 @@ class EngineMidiController {
   /// release exactly what it pressed if a transform overlaps voices.
   final Set<int> _sounding = <int>{};
 
+  /// Live scene agents, keyed by the same `(channel, pitch)` voice key as
+  /// [_sounding], so a note-off despawns exactly the agent its note-on
+  /// spawned. Only populated when an [SceneAgentSink] is wired *and* the chain
+  /// carries an active [AgentSpawnTransform].
+  final Map<int, SceneAgent> _agents = <int, SceneAgent>{};
+
   /// Start (or restart) playback from the top of the clip. Opens the output
   /// port lazily on first play. No-op if already playing.
   void play() {
@@ -112,9 +128,18 @@ class EngineMidiController {
     _playing = false;
     _gateway.allNotesOff();
     _sounding.clear();
+    _clearAgents();
     _absBeat = 0;
     _prevAbsBeat = 0;
     _playhead.value = 0;
+  }
+
+  /// Drop every live agent and push the empty set to the sink, so the Scene
+  /// clears when the transport stops. No-op when nothing is spawned.
+  void _clearAgents() {
+    if (_agents.isEmpty) return;
+    _agents.clear();
+    _agentSink?.setAgents(const []);
   }
 
   void _onTick(Timer _) {
@@ -164,6 +189,7 @@ class EngineMidiController {
     }
     _gateway.noteOn(channel: note.channel, pitch: semitone, velocity: velocity);
     _sounding.add(_voiceKey(note.channel, semitone));
+    _spawnAgent(note, semitone);
   }
 
   void _noteOff(MidiNote note) {
@@ -171,6 +197,39 @@ class EngineMidiController {
     final key = _voiceKey(note.channel, semitone);
     if (!_sounding.remove(key)) return;
     _gateway.noteOff(channel: note.channel, pitch: semitone);
+    _despawnAgent(key);
+  }
+
+  /// Spawn a live scene agent for [note] when a Scene sink is wired and an
+  /// active [AgentSpawnTransform] is in the chain. The agent lives until the
+  /// matching note-off ([_despawnAgent]).
+  void _spawnAgent(MidiNote note, int semitone) {
+    final sink = _agentSink;
+    if (sink == null) return;
+    final transform = _activeSpawnTransform;
+    if (transform == null) return;
+    final spawn = transform.spawnFor(note);
+    _agents[_voiceKey(note.channel, semitone)] = SceneAgent(
+      position: spawn.position,
+      voiceIndex: spawn.voiceIndex,
+    );
+    sink.setAgents(_agents.values.toList(growable: false));
+  }
+
+  /// Despawn the agent a note-on left under [key], if any, and push the
+  /// updated set to the sink.
+  void _despawnAgent(int key) {
+    if (_agents.remove(key) == null) return;
+    _agentSink?.setAgents(_agents.values.toList(growable: false));
+  }
+
+  /// The first active [AgentSpawnTransform] in the chain, or `null` if none —
+  /// so toggling the spawn chip off (or removing it) stops driving the Scene.
+  AgentSpawnTransform? get _activeSpawnTransform {
+    for (final t in _chain.transforms) {
+      if (t is AgentSpawnTransform && t.active) return t;
+    }
+    return null;
   }
 
   /// The integer MIDI pitch a note is voiced on — the semitone it rounds to.
@@ -198,6 +257,7 @@ class EngineMidiController {
       _gateway.allNotesOff();
       _playing = false;
     }
+    _clearAgents();
     _gateway.close();
     _playhead.dispose();
     editor.dispose();
