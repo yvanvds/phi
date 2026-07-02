@@ -5,6 +5,7 @@ import 'package:phi/domain/midi/transforms/quantization_transform.dart';
 import 'package:phi/domain/midi/transforms/scale_conformance_transform.dart';
 import 'package:phi/domain/midi/transforms/stub_transform.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
+import 'package:phi/domain/midi/transforms/voice_routing_transform.dart';
 
 void main() {
   group('phraseA', () {
@@ -46,6 +47,23 @@ void main() {
       expect(chain.transforms[2].label, 'domain · drum @ 124');
       expect(chain.transforms[3], isA<QuantizationTransform>());
       expect(chain.transforms[3].label, 'quantize · gravity 0.6');
+    });
+
+    test('the route slot is a real transform; agent-spawn stays a stub', () {
+      final chain = defaultDemoChain();
+      // Voice routing is real as of issue #33; the agent-spawn chip waits on
+      // its own split-out issue.
+      expect(chain.transforms[4], isA<VoiceRoutingTransform>());
+      expect(chain.transforms[4].label, 'route · osc.saw');
+      expect(chain.transforms[5], isA<StubTransform>());
+      expect(chain.transforms[5].label, 'spawn · agent @ p,v');
+    });
+
+    test('the route chip sends every demo note to channel 1', () {
+      final chain = defaultDemoChain();
+      for (final note in chain.output) {
+        expect(note.channel, 1);
+      }
     });
 
     test('six are active, two structural ones are inactive', () {
