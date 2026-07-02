@@ -4,6 +4,7 @@ import 'midi_transform.dart';
 import 'midi_transform_chain.dart';
 import 'midi_transform_kind.dart';
 import 'music_scale.dart';
+import 'transforms/loop_transform.dart';
 import 'transforms/quantization_transform.dart';
 import 'transforms/scale_conformance_transform.dart';
 import 'transforms/stub_transform.dart';
@@ -32,10 +33,10 @@ MidiClip phraseA() => MidiClip(
   ],
 );
 
-/// The eight-chip default sidebar from the design mockup — four working
-/// transforms (scale-conform, transpose, quantize, route) and four stubs
-/// covering slots whose implementations are still open issues. The last two
-/// structural chips ship `active: false` to mirror the mockup state.
+/// The eight-chip default sidebar from the design mockup — five working
+/// transforms (scale-conform, transpose, quantize, route, loop) and three
+/// stubs covering slots whose implementations are still open issues. The
+/// last two structural chips ship `active: false` to mirror the mockup state.
 MidiTransformChain defaultDemoChain() => MidiTransformChain(
   source: phraseA(),
   transforms: <MidiTransform>[
@@ -58,8 +59,9 @@ MidiTransformChain defaultDemoChain() => MidiTransformChain(
       kind: MidiTransformKind.voice,
       label: 'spawn · agent @ p,v',
     ),
-    const StubTransform(
-      kind: MidiTransformKind.struct,
+    const LoopTransform(
+      loopLengthBeats: 16,
+      repeatCount: 2,
       label: 'loop · 4 bars',
       active: false,
     ),
