@@ -4,6 +4,7 @@ import 'midi_transform.dart';
 import 'midi_transform_chain.dart';
 import 'midi_transform_kind.dart';
 import 'music_scale.dart';
+import 'transforms/quantization_transform.dart';
 import 'transforms/scale_conformance_transform.dart';
 import 'transforms/stub_transform.dart';
 import 'transforms/transpose_transform.dart';
@@ -46,10 +47,7 @@ MidiTransformChain defaultDemoChain() => MidiTransformChain(
       kind: MidiTransformKind.time,
       label: 'domain · drum @ 124',
     ),
-    const StubTransform(
-      kind: MidiTransformKind.time,
-      label: 'quantize · gravity 0.6',
-    ),
+    const QuantizationTransform(gravity: 0.6, label: 'quantize · gravity 0.6'),
     const StubTransform(
       kind: MidiTransformKind.voice,
       label: 'route · osc.saw',

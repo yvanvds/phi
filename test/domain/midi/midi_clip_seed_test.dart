@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/midi/midi_clip_seed.dart';
 import 'package:phi/domain/midi/midi_transform_kind.dart';
+import 'package:phi/domain/midi/transforms/quantization_transform.dart';
 import 'package:phi/domain/midi/transforms/scale_conformance_transform.dart';
+import 'package:phi/domain/midi/transforms/stub_transform.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
 
 void main() {
@@ -34,6 +36,16 @@ void main() {
       expect(chain.transforms, hasLength(8));
       expect(chain.transforms[0], isA<ScaleConformanceTransform>());
       expect(chain.transforms[1], isA<TransposeTransform>());
+    });
+
+    test('the quantize slot is a real transform; domain stays a stub', () {
+      final chain = defaultDemoChain();
+      // The domain time-family chip is still a stub (issue #61); the quantize
+      // chip is now the real QuantizationTransform (this issue, #32).
+      expect(chain.transforms[2], isA<StubTransform>());
+      expect(chain.transforms[2].label, 'domain · drum @ 124');
+      expect(chain.transforms[3], isA<QuantizationTransform>());
+      expect(chain.transforms[3].label, 'quantize · gravity 0.6');
     });
 
     test('six are active, two structural ones are inactive', () {

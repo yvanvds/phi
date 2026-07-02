@@ -80,7 +80,14 @@ main + app          (orchestration)
   end-to-end — `TransposeTransform`, `ScaleConformanceTransform` (snaps to a
   diatonic mode, tie-break upward), `InversionTransform` (mirrors pitch
   around a fractional axis), and `SpectralMappingTransform` (arbitrary
-  pitch→pitch lookup table); the remaining chips are `StubTransform`s.
+  pitch→pitch lookup table). Four time transforms follow (issue #32):
+  `QuantizationTransform` (gravity-weighted snap to a beat grid — wired into
+  the default chain), `StretchTransform` (scale start+duration by a factor),
+  and the seedable/reproducible `HumanizationTransform` (±jitter on start and
+  velocity) and `ProbabilisticSkipRepeatTransform` (per-note skip / echo
+  draws) as library code awaiting UI. The `domain · drum @ 124` chip stays a
+  `StubTransform` pending time-domain infrastructure (issues #60/#61); the
+  remaining chips are `StubTransform`s.
   Editing (issue #28) is a command layer: `ClipEditor` (ChangeNotifier)
   owns the clip, the selection, and an undo/redo stack of `ClipEditCommand`s
   (`lib/domain/midi/edit/` — add / delete / in-place edit). Gestures author
