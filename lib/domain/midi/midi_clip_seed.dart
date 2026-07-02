@@ -8,6 +8,8 @@ import 'transforms/quantization_transform.dart';
 import 'transforms/scale_conformance_transform.dart';
 import 'transforms/stub_transform.dart';
 import 'transforms/transpose_transform.dart';
+import 'transforms/voice_routing_rule.dart';
+import 'transforms/voice_routing_transform.dart';
 
 /// The ten-note "phrase A" used as the on-load demo clip. Matches the
 /// surface-midi.jsx mockup note-for-note — pitch classes include scale
@@ -30,10 +32,10 @@ MidiClip phraseA() => MidiClip(
   ],
 );
 
-/// The eight-chip default sidebar from the design mockup — two working
-/// transforms (transpose, scale-conform) and six stubs covering the rest
-/// of the families. The last two structural chips ship `active: false` to
-/// mirror the mockup state.
+/// The eight-chip default sidebar from the design mockup — four working
+/// transforms (scale-conform, transpose, quantize, route) and four stubs
+/// covering slots whose implementations are still open issues. The last two
+/// structural chips ship `active: false` to mirror the mockup state.
 MidiTransformChain defaultDemoChain() => MidiTransformChain(
   source: phraseA(),
   transforms: <MidiTransform>[
@@ -48,8 +50,8 @@ MidiTransformChain defaultDemoChain() => MidiTransformChain(
       label: 'domain · drum @ 124',
     ),
     const QuantizationTransform(gravity: 0.6, label: 'quantize · gravity 0.6'),
-    const StubTransform(
-      kind: MidiTransformKind.voice,
+    const VoiceRoutingTransform(
+      rules: [PitchRangeRule(minPitch: 0, maxPitch: 127, channel: 1)],
       label: 'route · osc.saw',
     ),
     const StubTransform(

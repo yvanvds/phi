@@ -85,8 +85,17 @@ main + app          (orchestration)
   the default chain), `StretchTransform` (scale start+duration by a factor),
   and the seedable/reproducible `HumanizationTransform` (±jitter on start and
   velocity) and `ProbabilisticSkipRepeatTransform` (per-note skip / echo
-  draws) as library code awaiting UI. The `domain · drum @ 124` chip stays a
-  `StubTransform` pending time-domain infrastructure (issues #60/#61); the
+  draws) as library code awaiting UI. Three voice transforms (issue #33):
+  `VoiceRoutingTransform` (ordered first-match `VoiceRoutingRule`s — pitch
+  range, velocity range, or 1-based scale degree — assign `MidiNote.channel`;
+  wired into the default chain as `route · osc.saw`),
+  `VelocityToParameterTransform` (velocity → engine-parameter
+  `ParameterEvent`s via a pure `VelocityCurve` callback — the
+  `CodeEvaluator`-friendly seam; notes pass through untouched), and
+  `SplittingTransform` (each note copied once per `SplitVoice` —
+  channel/pitch-offset/velocity-scale layers). The `domain · drum @ 124` chip
+  stays a `StubTransform` pending time-domain infrastructure (issues
+  #60/#61), and `spawn · agent @ p,v` waits on its own split-out issue; the
   remaining chips are `StubTransform`s.
   Editing (issue #28) is a command layer: `ClipEditor` (ChangeNotifier)
   owns the clip, the selection, and an undo/redo stack of `ClipEditCommand`s
