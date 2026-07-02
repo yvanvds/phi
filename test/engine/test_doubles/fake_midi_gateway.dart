@@ -44,6 +44,10 @@ class FakeMidiGateway implements MidiGateway {
       calls.add('noteOff:$channel:$pitch');
 
   @override
+  void pitchBend({required int channel, required int value}) =>
+      calls.add('pitchBend:$channel:$value');
+
+  @override
   void raw3(int a, int b, int c) => calls.add('raw3:$a:$b:$c');
 
   @override

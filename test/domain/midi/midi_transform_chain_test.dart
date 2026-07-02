@@ -40,20 +40,20 @@ void main() {
         const source = MidiNote(pitch: 61, start: 0, duration: 1, velocity: 1);
         final snapThenTranspose = MidiTransformChain(
           source: _clip(const [source]),
-          transforms: const [
-            ScaleConformanceTransform(
+          transforms: [
+            ScaleConformanceTransform.diatonic(
               scale: MusicScale.dorian,
               tonic: 60,
               label: 'snap',
             ),
-            TransposeTransform(semitones: 1, label: '+1'),
+            const TransposeTransform(semitones: 1, label: '+1'),
           ],
         );
         final transposeThenSnap = MidiTransformChain(
           source: _clip(const [source]),
-          transforms: const [
-            TransposeTransform(semitones: 1, label: '+1'),
-            ScaleConformanceTransform(
+          transforms: [
+            const TransposeTransform(semitones: 1, label: '+1'),
+            ScaleConformanceTransform.diatonic(
               scale: MusicScale.dorian,
               tonic: 60,
               label: 'snap',

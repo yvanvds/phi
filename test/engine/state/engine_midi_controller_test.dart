@@ -180,6 +180,80 @@ void main() {
       });
     });
 
+    test('microtonal mode voices a fractional pitch as bend + rounded note', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final controller = EngineMidiController(
+          chain: MidiTransformChain(
+            source: MidiClip(
+              name: 'micro',
+              bars: 1,
+              notes: const [
+                // 60.25 = a quarter-of-a-semitone (25 cents) above C4.
+                MidiNote(
+                  pitch: 60.25,
+                  start: 0.0,
+                  duration: 1.0,
+                  velocity: 1.0,
+                ),
+              ],
+            ),
+          ),
+          gateway: gateway,
+          microtonal: true,
+        );
+
+        controller.play();
+        // 0.6 s = 1.2 beats — crosses the note's on (beat 0) and off (beat 1).
+        async.elapse(const Duration(milliseconds: 600));
+        controller.stop();
+
+        // 25 cents / 200 (±2-semitone range) × 8192 = +1024 → 9216. The note
+        // plays on its rounded semitone (60), the cents live in the bend.
+        expect(gateway.calls, [
+          'open:0',
+          'pitchBend:0:9216',
+          'noteOn:0:60:127',
+          'noteOff:0:60',
+          'allNotesOff:all',
+        ]);
+
+        controller.dispose();
+      });
+    });
+
+    test('without microtonal mode a fractional pitch rounds, no bend', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final controller = EngineMidiController(
+          chain: MidiTransformChain(
+            source: MidiClip(
+              name: 'micro',
+              bars: 1,
+              notes: const [
+                MidiNote(
+                  pitch: 60.25,
+                  start: 0.0,
+                  duration: 1.0,
+                  velocity: 1.0,
+                ),
+              ],
+            ),
+          ),
+          gateway: gateway, // microtonal defaults to false
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 600));
+        controller.stop();
+
+        expect(gateway.calls.any((c) => c.startsWith('pitchBend')), isFalse);
+        expect(gateway.calls, contains('noteOn:0:60:127'));
+
+        controller.dispose();
+      });
+    });
+
     test('bpm setter ignores non-positive values', () {
       final gateway = FakeMidiGateway();
       final controller = EngineMidiController(

@@ -40,7 +40,7 @@ MidiClip phraseA() => MidiClip(
 MidiTransformChain defaultDemoChain() => MidiTransformChain(
   source: phraseA(),
   transforms: <MidiTransform>[
-    const ScaleConformanceTransform(
+    ScaleConformanceTransform.diatonic(
       scale: MusicScale.dorian,
       tonic: 62,
       label: 'scale · dorian D',

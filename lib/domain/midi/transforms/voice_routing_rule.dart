@@ -74,7 +74,9 @@ final class ScaleDegreeRule extends VoiceRoutingRule {
 
   @override
   bool matches(MidiNote note) {
-    final pc = ((note.pitch - tonic) % 12 + 12) % 12;
+    // Scale-degree membership is a 12-TET notion; a microtonal note routes by
+    // its nearest semitone.
+    final pc = ((note.pitch.round() - tonic) % 12 + 12) % 12;
     final index = scale.intervals.indexOf(pc);
     return index >= 0 && degrees.contains(index + 1);
   }

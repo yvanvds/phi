@@ -181,7 +181,7 @@ class SmfReader {
     final on = list.removeAt(0);
     notes.add(
       MidiNote(
-        pitch: pitch,
+        pitch: pitch.toDouble(),
         start: on.tick / division,
         duration: (offTick - on.tick) / division,
         velocity: on.velocity / 127.0,
@@ -192,7 +192,7 @@ class SmfReader {
 
   static MidiNote _noteFrom(_PendingNote on, int offTick, int division) =>
       MidiNote(
-        pitch: on.pitch,
+        pitch: on.pitch.toDouble(),
         start: on.tick / division,
         duration: (offTick - on.tick) / division,
         velocity: on.velocity / 127.0,

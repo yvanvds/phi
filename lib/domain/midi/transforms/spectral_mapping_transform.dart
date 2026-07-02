@@ -13,6 +13,11 @@ import '../midi_transform_kind.dart';
 /// A pitch absent from [table] passes through unchanged, so a sparse table
 /// only affects the pitch classes it names. Mapped values are clamped to
 /// `[0, 127]` so a table authored loosely can't emit out-of-range MIDI.
+///
+/// Targets are **fractional** MIDI pitches (issue #36), so the table can retune
+/// the 12 semitones onto a microtonal grid — e.g. mapping the equal-tempered
+/// scale onto just-intonation cents. Keys stay integer source pitches; a
+/// fractional input never matches a key and so passes through untouched.
 class SpectralMappingTransform extends MidiTransform {
   const SpectralMappingTransform({
     required this.table,
@@ -20,8 +25,9 @@ class SpectralMappingTransform extends MidiTransform {
     this.active = true,
   });
 
-  /// Maps a source MIDI pitch to its replacement. Missing keys are identity.
-  final Map<int, int> table;
+  /// Maps a source MIDI pitch (integer semitone) to its fractional
+  /// replacement. Missing keys are identity.
+  final Map<int, double> table;
 
   @override
   final String label;
@@ -44,5 +50,10 @@ class SpectralMappingTransform extends MidiTransform {
     active: active ?? this.active,
   );
 
-  int _map(int pitch) => (table[pitch] ?? pitch).clamp(0, 127);
+  double _map(double pitch) {
+    // Only an integer source pitch can name a key; a fractional input is left
+    // alone so a microtonal note isn't silently re-quantised by a sparse table.
+    final mapped = pitch == pitch.roundToDouble() ? table[pitch.toInt()] : null;
+    return (mapped ?? pitch).clamp(0.0, 127.0);
+  }
 }

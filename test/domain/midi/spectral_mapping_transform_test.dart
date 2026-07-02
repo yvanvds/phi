@@ -25,6 +25,37 @@ void main() {
       expect(out.map((n) => n.pitch), [72, 62]);
     });
 
+    test('maps to fractional (microtonal) targets, issue #36', () {
+      // Retune the tempered major third onto a just one: 64 → 63.8631.
+      const t = SpectralMappingTransform(
+        table: {64: 63.8631},
+        label: 'just third',
+      );
+      expect(
+        t
+            .apply(const [
+              MidiNote(pitch: 64, start: 0, duration: 1, velocity: 1),
+            ])
+            .single
+            .pitch,
+        closeTo(63.8631, 1e-9),
+      );
+    });
+
+    test('a fractional input never matches an integer key', () {
+      const t = SpectralMappingTransform(table: {60: 72}, label: 'sparse');
+      // 60.5 is not the key 60, so it passes through untouched.
+      expect(
+        t
+            .apply(const [
+              MidiNote(pitch: 60.5, start: 0, duration: 1, velocity: 1),
+            ])
+            .single
+            .pitch,
+        60.5,
+      );
+    });
+
     test('an empty table is the identity', () {
       const t = SpectralMappingTransform(table: {}, label: 'noop');
       final out = t.apply(const [

@@ -38,8 +38,9 @@ void main() {
       expect(out.map((n) => n.pitch), [61, 60]);
     });
 
-    test('rounds a fractional reflection to the nearest semitone', () {
-      // axis 60.25 → 2*60.25 - 64 = 56.5 → rounds to 57 (round-half-up).
+    test('preserves a fractional reflection (microtonal, issue #36)', () {
+      // axis 60.25 → 2*60.25 - 64 = 56.5, kept exactly rather than rounded so
+      // a mirror around a quarter-tone axis lands on a quarter-tone pitch.
       const t = InversionTransform(axis: 60.25, label: 'quarter axis');
       expect(
         t
@@ -48,7 +49,7 @@ void main() {
             ])
             .single
             .pitch,
-        57,
+        56.5,
       );
     });
 

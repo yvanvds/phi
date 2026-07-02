@@ -47,12 +47,17 @@ class PianoRollGeometry {
 
   double widthForBeats(double beats) => (beats / beatSpan) * size.width;
 
-  /// Y of the lane *line* for [pitch] (notes are drawn centred on it).
-  double yForPitch(int pitch) {
-    final clamped = pitch.clamp(minPitch, maxPitch);
+  /// Y of the lane *line* for [pitch] (notes are drawn centred on it). A
+  /// fractional pitch lands proportionally between two lanes, so a microtonal
+  /// note draws slightly off the semitone grid (issue #36).
+  double yForPitch(double pitch) {
+    final clamped = pitch.clamp(minPitch.toDouble(), maxPitch.toDouble());
     return ((maxPitch - clamped) / pitchSpan) * size.height;
   }
 
+  /// The integer lane under [y]. Authoring snaps to whole semitones, so this
+  /// deliberately rounds — fractional pitches come from transforms, not the
+  /// pointer.
   int pitchForY(double y) =>
       (maxPitch - (y / laneHeight).round()).clamp(minPitch, maxPitch);
 

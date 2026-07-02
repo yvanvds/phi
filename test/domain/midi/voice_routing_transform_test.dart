@@ -5,7 +5,7 @@ import 'package:phi/domain/midi/music_scale.dart';
 import 'package:phi/domain/midi/transforms/voice_routing_rule.dart';
 import 'package:phi/domain/midi/transforms/voice_routing_transform.dart';
 
-MidiNote _note({int pitch = 60, double velocity = 0.7, int channel = 0}) =>
+MidiNote _note({double pitch = 60, double velocity = 0.7, int channel = 0}) =>
     MidiNote(
       pitch: pitch,
       start: 0,

@@ -28,6 +28,14 @@ void main() {
       expect(geo.pitchForY(200), 55);
     });
 
+    test('a fractional pitch lands between two lanes (issue #36)', () {
+      // laneHeight = 200 / 21 ≈ 9.524. Pitch 60 and 61 are one lane apart;
+      // 60.5 sits exactly halfway between their lane lines.
+      final y60 = geo.yForPitch(60);
+      final y61 = geo.yForPitch(61);
+      expect(geo.yForPitch(60.5), closeTo((y60 + y61) / 2, 1e-9));
+    });
+
     test('out-of-window pitch clamps into the visible band', () {
       expect(geo.yForPitch(200), 0);
       expect(geo.pitchForY(10000), 55);

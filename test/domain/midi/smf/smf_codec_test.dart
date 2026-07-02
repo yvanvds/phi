@@ -14,7 +14,7 @@ List<MidiNote> _sorted(List<MidiNote> notes) {
   final copy = List<MidiNote>.of(notes)
     ..sort((a, b) {
       if (a.start != b.start) return a.start.compareTo(b.start);
-      return a.pitch - b.pitch;
+      return a.pitch.compareTo(b.pitch);
     });
   return copy;
 }

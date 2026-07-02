@@ -4,6 +4,13 @@
 /// host clip carries the meter that turns beats into seconds. `velocity` is
 /// normalised to `[0, 1]` so transformations don't have to round-trip the
 /// 7-bit MIDI range until output.
+///
+/// [pitch] is a **fractional** MIDI note number (issue #36): `60.0` is middle
+/// C, `60.5` sits a quarter-tone above it, `60.5` again a hair under C♯. This
+/// lets a clip carry microtonal / just-intonation / arbitrary-cents tunings
+/// through the transform chain; the output stage rounds to the nearest
+/// semitone and (optionally) voices the leftover cents as pitch-bend. Whole
+/// numbers behave exactly like the old `int` pitch.
 class MidiNote {
   const MidiNote({
     required this.pitch,
@@ -13,14 +20,14 @@ class MidiNote {
     this.channel = 0,
   });
 
-  final int pitch;
+  final double pitch;
   final double start;
   final double duration;
   final double velocity;
   final int channel;
 
   MidiNote copyWith({
-    int? pitch,
+    double? pitch,
     double? start,
     double? duration,
     double? velocity,

@@ -77,7 +77,7 @@ class ClipEditor extends ChangeNotifier {
   /// Adds a note (clamped + floored to domain bounds) and selects it.
   void addNote(MidiNote note) {
     final clamped = note.copyWith(
-      pitch: note.pitch.clamp(minPitch, maxPitch),
+      pitch: note.pitch.clamp(minPitch.toDouble(), maxPitch.toDouble()),
       start: note.start < 0 ? 0 : note.start,
       duration: note.duration < gridDivision ? gridDivision : note.duration,
     );
@@ -96,7 +96,10 @@ class ClipEditor extends ChangeNotifier {
     if (dPitch == 0 && dBeats == 0) return;
     _edit(
       (n) => n.copyWith(
-        pitch: (n.pitch + dPitch).clamp(minPitch, maxPitch),
+        pitch: (n.pitch + dPitch).clamp(
+          minPitch.toDouble(),
+          maxPitch.toDouble(),
+        ),
         start: _floor0(n.start + dBeats),
       ),
     );
