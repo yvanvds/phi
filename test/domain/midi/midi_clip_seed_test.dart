@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/midi/midi_clip_seed.dart';
 import 'package:phi/domain/midi/midi_transform_kind.dart';
+import 'package:phi/domain/midi/transforms/agent_spawn_transform.dart';
 import 'package:phi/domain/midi/transforms/loop_transform.dart';
 import 'package:phi/domain/midi/transforms/quantization_transform.dart';
 import 'package:phi/domain/midi/transforms/scale_conformance_transform.dart';
@@ -50,13 +51,13 @@ void main() {
       expect(chain.transforms[3].label, 'quantize · gravity 0.6');
     });
 
-    test('the route slot is a real transform; agent-spawn stays a stub', () {
+    test('the route and agent-spawn slots are both real transforms', () {
       final chain = defaultDemoChain();
-      // Voice routing is real as of issue #33; the agent-spawn chip waits on
-      // its own split-out issue.
+      // Voice routing is real as of issue #33; the agent-spawn chip is real as
+      // of issue #37.
       expect(chain.transforms[4], isA<VoiceRoutingTransform>());
       expect(chain.transforms[4].label, 'route · osc.saw');
-      expect(chain.transforms[5], isA<StubTransform>());
+      expect(chain.transforms[5], isA<AgentSpawnTransform>());
       expect(chain.transforms[5].label, 'spawn · agent @ p,v');
     });
 

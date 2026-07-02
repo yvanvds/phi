@@ -106,9 +106,19 @@ main + app          (orchestration)
   `ConditionalMutingTransform` (drops notes that fail a pure `NotePredicate`
   — the same caller-supplied-callback seam as `VelocityCurve`, standing in
   for the future state-machine/scene-volume/code-variable read) as library
-  code awaiting UI. The `domain · drum @ 124` chip stays a `StubTransform`
-  pending time-domain infrastructure (issues #60/#61), and `spawn · agent @
-  p,v` waits on its own split-out issue; `branch · state.break` stays a
+  code awaiting UI. The `spawn · agent @ p,v` chip is real as of issue #37:
+  `AgentSpawnTransform` (voice-family) maps each note onto an `AgentSpawn`
+  (position + voice + lifetime) while passing notes through untouched — the
+  same control-vs-note seam as `VelocityToParameterTransform`. Position is
+  three independent `SpawnAxis`es (`lib/domain/midi/spawn_axis.dart`), each a
+  clamped linear remap of a `SpawnSource` (pitch / time / velocity / channel)
+  into a spatial range; voice colour derives from the note's channel. During
+  playback `EngineMidiController` reads the chain's active spawn transform and
+  drives a new `SceneAgentSink` bridge (`lib/engine/bridge/`, implemented by
+  `SceneRenderer`): each note-on spawns a live `SceneAgent`, its note-off
+  despawns it, and stop clears the scene — so playing the demo clip populates
+  the 3D Scene. The `domain · drum @ 124` chip stays a `StubTransform` pending
+  time-domain infrastructure (issues #60/#61); `branch · state.break` stays a
   `StubTransform` in the linear chain, but the branching model it points to
   now exists (issue #35): `lib/domain/midi/graph/` adds `MidiTransformGraph`
   (ChangeNotifier) — a DAG of `TransformNode`s wired by guarded

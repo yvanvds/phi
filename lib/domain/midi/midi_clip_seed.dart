@@ -4,6 +4,9 @@ import 'midi_transform.dart';
 import 'midi_transform_chain.dart';
 import 'midi_transform_kind.dart';
 import 'music_scale.dart';
+import 'spawn_axis.dart';
+import 'spawn_source.dart';
+import 'transforms/agent_spawn_transform.dart';
 import 'transforms/loop_transform.dart';
 import 'transforms/quantization_transform.dart';
 import 'transforms/scale_conformance_transform.dart';
@@ -55,8 +58,12 @@ MidiTransformChain defaultDemoChain() => MidiTransformChain(
       rules: [PitchRangeRule(minPitch: 0, maxPitch: 127, channel: 1)],
       label: 'route · osc.saw',
     ),
-    const StubTransform(
-      kind: MidiTransformKind.voice,
+    AgentSpawnTransform(
+      // Pitch drives X, velocity lifts Y, and the note's start beat pushes it
+      // back along Z — so the phrase scatters across the Scene as it plays.
+      x: SpawnAxis.of(SpawnSource.pitch),
+      y: SpawnAxis.of(SpawnSource.velocity),
+      z: SpawnAxis.of(SpawnSource.time),
       label: 'spawn · agent @ p,v',
     ),
     const LoopTransform(
