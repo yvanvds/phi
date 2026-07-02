@@ -104,7 +104,17 @@ main + app          (orchestration)
   code awaiting UI. The `domain · drum @ 124` chip stays a `StubTransform`
   pending time-domain infrastructure (issues #60/#61), and `spawn · agent @
   p,v` waits on its own split-out issue; `branch · state.break` stays a
-  `StubTransform` pending the DAG issue.
+  `StubTransform` in the linear chain, but the branching model it points to
+  now exists (issue #35): `lib/domain/midi/graph/` adds `MidiTransformGraph`
+  (ChangeNotifier) — a DAG of `TransformNode`s wired by guarded
+  `TransformEdge`s. Each edge carries an `EdgeCondition` (`AlwaysCondition`,
+  `StateMatchCondition` on a live `PerformanceStateId`, or
+  `RuntimeVariableCondition`); `evaluate([GraphEvalContext])` walks the
+  subgraph whose edges are open for the current state — broadcasting a node's
+  output down every open branch and merging fan-in — with `connect` rejecting
+  cycles so a topological order always exists. `MidiTransformGraph.linear`
+  bridges an existing chain into a degenerate DAG whose `evaluate` matches
+  `MidiTransformChain.output`. The node-and-cable editor UI is issue #65.
   Editing (issue #28) is a command layer: `ClipEditor` (ChangeNotifier)
   owns the clip, the selection, and an undo/redo stack of `ClipEditCommand`s
   (`lib/domain/midi/edit/` — add / delete / in-place edit). Gestures author
