@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/transforms/conditional_muting_transform.dart';
 
-MidiNote _n(int pitch, double start) =>
+MidiNote _n(double pitch, double start) =>
     MidiNote(pitch: pitch, start: start, duration: 0.25, velocity: 0.7);
 
 void main() {
@@ -77,4 +77,4 @@ bool _alwaysTrue(MidiNote note) => true;
 
 bool _alwaysFalse(MidiNote note) => false;
 
-bool _evenPitchOnly(MidiNote note) => note.pitch.isEven;
+bool _evenPitchOnly(MidiNote note) => note.pitch.round().isEven;

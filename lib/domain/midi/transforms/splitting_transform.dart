@@ -53,7 +53,7 @@ class SplittingTransform extends MidiTransform {
 
   MidiNote _copy(MidiNote note, SplitVoice voice) => note.copyWith(
     channel: voice.channel ?? note.channel,
-    pitch: (note.pitch + voice.pitchOffset).clamp(0, 127),
+    pitch: (note.pitch + voice.pitchOffset).clamp(0.0, 127.0),
     velocity: (note.velocity * voice.velocityScale).clamp(0.0, 1.0),
   );
 }

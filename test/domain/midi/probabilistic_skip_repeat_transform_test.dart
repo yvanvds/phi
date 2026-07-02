@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/transforms/probabilistic_skip_repeat_transform.dart';
 
-MidiNote _n(int pitch, double start, {double duration = 0.25}) =>
+MidiNote _n(double pitch, double start, {double duration = 0.25}) =>
     MidiNote(pitch: pitch, start: start, duration: duration, velocity: 0.7);
 
 void main() {
@@ -55,12 +55,18 @@ void main() {
         repeatCount: 2,
         seed: 123,
       );
-      final input = List.generate(20, (i) => _n(60 + i, i.toDouble()));
+      final input = List.generate(
+        20,
+        (i) => _n((60 + i).toDouble(), i.toDouble()),
+      );
       expect(t.apply(input), t.apply(input));
     });
 
     test('a different seed generally produces a different result', () {
-      final input = List.generate(20, (i) => _n(60 + i, i.toDouble()));
+      final input = List.generate(
+        20,
+        (i) => _n((60 + i).toDouble(), i.toDouble()),
+      );
       const a = ProbabilisticSkipRepeatTransform(
         label: 'a',
         skipProbability: 0.5,

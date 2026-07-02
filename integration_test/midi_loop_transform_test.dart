@@ -60,11 +60,11 @@ void main() {
     final looped = const SmfReader().read(fakeIo.savedBytes!).notes;
 
     expect(looped.length, unlooped.length * 2);
-    final unloopedCounts = <int, int>{};
+    final unloopedCounts = <double, int>{};
     for (final n in unlooped) {
       unloopedCounts[n.pitch] = (unloopedCounts[n.pitch] ?? 0) + 1;
     }
-    final loopedCounts = <int, int>{};
+    final loopedCounts = <double, int>{};
     for (final n in looped) {
       loopedCounts[n.pitch] = (loopedCounts[n.pitch] ?? 0) + 1;
     }

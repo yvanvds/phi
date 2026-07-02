@@ -30,6 +30,14 @@ abstract interface class MidiGateway {
   /// Send Note-Off. [channel] is `0..15`, [pitch] is `0..127`.
   void noteOff({required int channel, required int pitch});
 
+  /// Send a 14-bit pitch-bend on [channel] (`0..15`). [value] is `0..16383`,
+  /// centred at `8192` (no bend). Used to voice microtonal (fractional) pitches
+  /// that Note-On's 7-bit integer pitch can't express — see issue #36 and
+  /// `EngineMidiController`'s microtonal mode. Bend is per-channel: two notes
+  /// sounding on one channel share the last bend, so route differently-detuned
+  /// voices to separate channels.
+  void pitchBend({required int channel, required int value});
+
   /// Send three raw MIDI bytes — the escape hatch for messages the typed
   /// helpers don't cover.
   void raw3(int a, int b, int c);

@@ -5,6 +5,9 @@ import '../midi_transform_kind.dart';
 /// Shifts every note's pitch by a fixed number of semitones. Pitches that
 /// would leave the 7-bit MIDI range clamp to `[0, 127]` rather than wrap —
 /// the alternative (silent loss) would surprise more than it would help.
+///
+/// The shift is applied to the note's (possibly fractional) pitch, so any
+/// microtonal offset a note already carries survives the transpose.
 class TransposeTransform extends MidiTransform {
   const TransposeTransform({
     required this.semitones,
@@ -25,7 +28,7 @@ class TransposeTransform extends MidiTransform {
 
   @override
   List<MidiNote> apply(List<MidiNote> input) => input
-      .map((n) => n.copyWith(pitch: (n.pitch + semitones).clamp(0, 127)))
+      .map((n) => n.copyWith(pitch: (n.pitch + semitones).clamp(0.0, 127.0)))
       .toList(growable: false);
 
   @override

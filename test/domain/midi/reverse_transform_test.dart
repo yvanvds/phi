@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/transforms/reverse_transform.dart';
 
-MidiNote _n(int pitch, double start, {double duration = 0.25}) =>
+MidiNote _n(double pitch, double start, {double duration = 0.25}) =>
     MidiNote(pitch: pitch, start: start, duration: duration, velocity: 0.7);
 
 void main() {

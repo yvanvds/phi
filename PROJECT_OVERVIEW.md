@@ -76,11 +76,16 @@ main + app          (orchestration)
 - MIDI surface — editable piano roll plus a 250px transformation-chain
   sidebar of eight chips. Domain in `lib/domain/midi/`: pure-Dart
   `MidiNote` / `MidiClip` (now **mutable**) / `MidiTransform` +
-  `MidiTransformChain` (ChangeNotifier). Four pitch transforms work
+  `MidiTransformChain` (ChangeNotifier). `MidiNote.pitch` is a **fractional**
+  MIDI number (issue #36): `60.5` sits a quarter-tone above middle C, so a clip
+  carries microtonal / just-intonation tunings through the whole chain; whole
+  numbers behave exactly like the old `int` pitch. Four pitch transforms work
   end-to-end — `TransposeTransform`, `ScaleConformanceTransform` (snaps to a
-  diatonic mode, tie-break upward), `InversionTransform` (mirrors pitch
-  around a fractional axis), and `SpectralMappingTransform` (arbitrary
-  pitch→pitch lookup table). Four time transforms follow (issue #32):
+  `ScaleTuning` — a cents-per-degree table, so non-12-TET scales like just
+  intonation and arbitrary/non-octave tunings work; `.diatonic` builds one from
+  a `MusicScale`; tie-break upward), `InversionTransform` (mirrors pitch around
+  a fractional axis, keeping the fractional result), and
+  `SpectralMappingTransform` (arbitrary pitch→fractional-pitch lookup table). Four time transforms follow (issue #32):
   `QuantizationTransform` (gravity-weighted snap to a beat grid — wired into
   the default chain), `StretchTransform` (scale start+duration by a factor),
   and the seedable/reproducible `HumanizationTransform` (±jitter on start and
@@ -130,7 +135,11 @@ main + app          (orchestration)
   chip toggles are heard immediately, not on the next play) and
   forwarding `noteOn`/`noteOff` through a `MidiGateway` (Real over
   `package:yse`'s `MidiOut`, Fake recording calls in tests — the same
-  split as `YseGateway`). `PhiEngine.midi` exposes it; the top-toolbar
+  split as `YseGateway`). An opt-in `microtonal` flag (issue #36) voices a
+  note's fractional pitch as its nearest semitone plus a per-channel
+  `pitchBend` (added to `MidiGateway`, ±2-semitone GM range assumed); off by
+  default it just rounds. SMF export rounds fractional pitch to the nearest
+  semitone (a `.mid` can't carry cents). `PhiEngine.midi` exposes it; the top-toolbar
   transport drives `play`/`stop` at `SessionState.tempo`, the piano-roll
   painter animates a non-zero playhead, and stop sends `allNotesOff`. The
   shell sources the chain/editor from `engine.midi` when present (falling

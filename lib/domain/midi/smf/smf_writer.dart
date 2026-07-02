@@ -15,6 +15,11 @@ import '../midi_clip.dart';
 /// clip-level tempo yet), then the paired note-on/note-off events and an
 /// end-of-track meta. Velocity is de-normalised to `1..127` (0 is reserved for
 /// note-off, so a note never encodes as silent).
+///
+/// A Standard MIDI File carries only 7-bit integer pitch, so a fractional
+/// (microtonal) pitch is **rounded to the nearest semitone** on export
+/// (issue #36); the cents offset is lost. Live output preserves it via
+/// pitch-bend (see `EngineMidiController`).
 class SmfWriter {
   const SmfWriter({this.ticksPerBeat = 480});
 
@@ -50,15 +55,13 @@ class SmfWriter {
       final offTick = ((note.start + note.duration) * ticksPerBeat).round();
       final channel = note.channel & 0x0F;
       final velocity = (note.velocity * 127).round().clamp(1, 127);
-      events.add(_Event(onTick, false, channel, note.pitch, velocity));
+      // SMF pitch is a 7-bit integer: round the (possibly fractional) pitch to
+      // its nearest semitone. Microtonal detune is preserved only in live
+      // output, not in the file.
+      final pitch = note.pitch.round().clamp(0, 127);
+      events.add(_Event(onTick, false, channel, pitch, velocity));
       events.add(
-        _Event(
-          offTick < onTick ? onTick : offTick,
-          true,
-          channel,
-          note.pitch,
-          0,
-        ),
+        _Event(offTick < onTick ? onTick : offTick, true, channel, pitch, 0),
       );
     }
     events.sort(_Event.compare);

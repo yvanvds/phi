@@ -27,6 +27,7 @@ class EngineMidiController {
     ClipEditor? editor,
     double bpm = 120,
     int outputPort = 0,
+    this.microtonal = false,
     Duration tickInterval = const Duration(milliseconds: 16),
   }) : _chain = chain,
        _gateway = gateway,
@@ -39,6 +40,18 @@ class EngineMidiController {
   final MidiGateway _gateway;
   final int _outputPort;
   final Duration _tickInterval;
+
+  /// Opt-in microtonal output (issue #36). When `true`, a note's fractional
+  /// pitch is split into its nearest semitone (sent as the Note-On pitch) and
+  /// the leftover cents, voiced as a per-channel pitch-bend emitted just before
+  /// the Note-On. When `false` the fractional pitch is simply rounded to the
+  /// nearest semitone — the pre-microtonal behaviour, so nothing bends unless
+  /// asked. Toggleable live; takes effect on the next note dispatched.
+  ///
+  /// Assumes the synth's pitch-bend range is the General-MIDI default of ±2
+  /// semitones. Bend is per-channel, so simultaneous notes with *different*
+  /// detunes must be routed to different channels to bend independently.
+  bool microtonal;
 
   /// The shared authoring controller. Gestures on the piano roll edit the
   /// same clip this player reads.
@@ -142,21 +155,39 @@ class EngineMidiController {
 
   void _noteOn(MidiNote note) {
     final velocity = (note.velocity * 127).round().clamp(1, 127);
-    _gateway.noteOn(
-      channel: note.channel,
-      pitch: note.pitch,
-      velocity: velocity,
-    );
-    _sounding.add(_voiceKey(note.channel, note.pitch));
+    final semitone = _semitoneOf(note);
+    if (microtonal) {
+      _gateway.pitchBend(
+        channel: note.channel,
+        value: _bendFor(note, semitone),
+      );
+    }
+    _gateway.noteOn(channel: note.channel, pitch: semitone, velocity: velocity);
+    _sounding.add(_voiceKey(note.channel, semitone));
   }
 
   void _noteOff(MidiNote note) {
-    final key = _voiceKey(note.channel, note.pitch);
+    final semitone = _semitoneOf(note);
+    final key = _voiceKey(note.channel, semitone);
     if (!_sounding.remove(key)) return;
-    _gateway.noteOff(channel: note.channel, pitch: note.pitch);
+    _gateway.noteOff(channel: note.channel, pitch: semitone);
+  }
+
+  /// The integer MIDI pitch a note is voiced on — the semitone it rounds to.
+  int _semitoneOf(MidiNote note) => note.pitch.round().clamp(0, 127);
+
+  /// 14-bit pitch-bend that voices [note]'s leftover cents (its distance from
+  /// [semitone]). Centred at 8192, scaled by the assumed ±2-semitone range.
+  int _bendFor(MidiNote note, int semitone) {
+    final cents = (note.pitch - semitone) * 100.0;
+    final bend = _bendCenter + (cents / _bendRangeCents) * _bendCenter;
+    return bend.round().clamp(0, 16383);
   }
 
   int _voiceKey(int channel, int pitch) => channel * 128 + pitch;
+
+  static const int _bendCenter = 8192;
+  static const double _bendRangeCents = 200.0; // GM default: ±2 semitones.
 
   /// Release timers, notifiers, the shared editor, the chain, and the output
   /// port. Call when the owning engine stops.

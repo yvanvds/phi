@@ -45,6 +45,13 @@ class RealMidiGateway implements MidiGateway {
       _out?.noteOff(channel: channel, pitch: pitch);
 
   @override
+  void pitchBend({required int channel, required int value}) => _out?.raw3(
+    0xE0 | (channel & 0x0F),
+    value & 0x7F, // LSB (7 bits)
+    (value >> 7) & 0x7F, // MSB (7 bits)
+  );
+
+  @override
   void raw3(int a, int b, int c) => _out?.raw3(a, b, c);
 
   @override

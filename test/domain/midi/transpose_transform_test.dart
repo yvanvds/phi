@@ -13,6 +13,21 @@ void main() {
       expect(out.map((n) => n.pitch), [67, 71]);
     });
 
+    test('preserves a fractional pitch offset (issue #36)', () {
+      const t = TransposeTransform(semitones: 3, label: '+3');
+      // A quarter-tone-sharp C (60.5) stays a quarter-tone sharp after the
+      // whole-semitone shift: 60.5 → 63.5.
+      expect(
+        t
+            .apply(const [
+              MidiNote(pitch: 60.5, start: 0, duration: 1, velocity: 1),
+            ])
+            .single
+            .pitch,
+        63.5,
+      );
+    });
+
     test('clamps to the 7-bit MIDI range rather than wrapping', () {
       const high = TransposeTransform(semitones: 60, label: '+60');
       const low = TransposeTransform(semitones: -120, label: '-120');

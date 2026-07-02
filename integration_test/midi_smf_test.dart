@@ -32,7 +32,7 @@ void main() {
   List<MidiNote> sortNotes(List<MidiNote> notes) =>
       List<MidiNote>.of(notes)..sort((a, b) {
         if (a.start != b.start) return a.start.compareTo(b.start);
-        return a.pitch - b.pitch;
+        return a.pitch.compareTo(b.pitch);
       });
 
   testWidgets('midi: import a clip then export its transformed output', (

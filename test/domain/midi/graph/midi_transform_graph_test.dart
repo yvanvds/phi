@@ -15,7 +15,7 @@ MidiClip _clip(List<int> pitches) => MidiClip(
   bars: 1,
   notes: [
     for (final p in pitches)
-      MidiNote(pitch: p, start: 0, duration: 1, velocity: 1),
+      MidiNote(pitch: p.toDouble(), start: 0, duration: 1, velocity: 1),
   ],
 );
 

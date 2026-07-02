@@ -9,9 +9,10 @@ import '../midi_transform_kind.dart';
 /// [axis] is a fractional pitch number rather than an `int` so the mirror
 /// can sit *between* two keys — inverting around 60.5 swaps C4↔D4 without
 /// leaving a fixed point on a played note, which is the usual musical
-/// intent. The reflected pitch is rounded to the nearest semitone and
-/// clamped to `[0, 127]` (matching [TransposeTransform]'s clamp-not-wrap
-/// choice) so extreme axes can't push notes out of MIDI range.
+/// intent. The reflected pitch keeps its fractional part (issue #36 — a
+/// microtonal note mirrors to a microtonal note) and is clamped to `[0, 127]`
+/// (matching [TransposeTransform]'s clamp-not-wrap choice) so extreme axes
+/// can't push notes out of MIDI range.
 ///
 /// A scale-degree axis is expressed by passing that degree's pitch as
 /// [axis]; the transform itself is scale-agnostic.
@@ -46,5 +47,5 @@ class InversionTransform extends MidiTransform {
     active: active ?? this.active,
   );
 
-  int _mirror(int pitch) => (2 * axis - pitch).round().clamp(0, 127);
+  double _mirror(double pitch) => (2 * axis - pitch).clamp(0.0, 127.0);
 }
