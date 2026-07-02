@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/midi/midi_clip_seed.dart';
 import 'package:phi/domain/midi/midi_transform_kind.dart';
+import 'package:phi/domain/midi/transforms/loop_transform.dart';
 import 'package:phi/domain/midi/transforms/quantization_transform.dart';
 import 'package:phi/domain/midi/transforms/scale_conformance_transform.dart';
 import 'package:phi/domain/midi/transforms/stub_transform.dart';
@@ -73,6 +74,16 @@ void main() {
       for (final t in inactive) {
         expect(t.kind, MidiTransformKind.struct);
       }
+    });
+
+    test('the loop slot is a real transform; branch stays a stub', () {
+      final chain = defaultDemoChain();
+      // Loop is real as of issue #34; branching waits on the DAG issue.
+      expect(chain.transforms[6], isA<LoopTransform>());
+      expect(chain.transforms[6].label, 'loop · 4 bars');
+      expect(chain.transforms[6].active, isFalse);
+      expect(chain.transforms[7], isA<StubTransform>());
+      expect(chain.transforms[7].label, 'branch · state.break');
     });
   });
 }

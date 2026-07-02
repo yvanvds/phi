@@ -93,10 +93,18 @@ main + app          (orchestration)
   `ParameterEvent`s via a pure `VelocityCurve` callback — the
   `CodeEvaluator`-friendly seam; notes pass through untouched), and
   `SplittingTransform` (each note copied once per `SplitVoice` —
-  channel/pitch-offset/velocity-scale layers). The `domain · drum @ 124` chip
-  stays a `StubTransform` pending time-domain infrastructure (issues
-  #60/#61), and `spawn · agent @ p,v` waits on its own split-out issue; the
-  remaining chips are `StubTransform`s.
+  channel/pitch-offset/velocity-scale layers). Three structural transforms
+  (issue #34): `LoopTransform` (tiles notes across a loop window, fixed
+  repeat count or fill-to-length, with a phase offset — wired into the
+  default chain as `loop · 4 bars`), `ReverseTransform` (mirrors start times
+  within a fixed window, preserving duration), and
+  `ConditionalMutingTransform` (drops notes that fail a pure `NotePredicate`
+  — the same caller-supplied-callback seam as `VelocityCurve`, standing in
+  for the future state-machine/scene-volume/code-variable read) as library
+  code awaiting UI. The `domain · drum @ 124` chip stays a `StubTransform`
+  pending time-domain infrastructure (issues #60/#61), and `spawn · agent @
+  p,v` waits on its own split-out issue; `branch · state.break` stays a
+  `StubTransform` pending the DAG issue.
   Editing (issue #28) is a command layer: `ClipEditor` (ChangeNotifier)
   owns the clip, the selection, and an undo/redo stack of `ClipEditCommand`s
   (`lib/domain/midi/edit/` — add / delete / in-place edit). Gestures author
@@ -126,8 +134,7 @@ main + app          (orchestration)
   chain's transformed `output` back to a file. The native open/save dialogs
   live behind a `MidiFileIo` seam (`FileSelectorMidiFileIo` in production,
   faked in tests) so the flow is driveable end-to-end; `desktop_drop` +
-  `file_selector` own the OS shell only. Still tracked separately: the
-  remaining transforms.
+  `file_selector` own the OS shell only.
 - State surface scaffold: pan/zoom canvas (reuses the patcher's 16px
   dot grid backdrop) of rounded-square `PerformanceState` nodes with
   four voice-coloured corner pins, plus directed `StateTransition`
