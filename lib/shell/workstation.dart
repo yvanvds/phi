@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../design/tokens/phi_colors.dart';
 import '../domain/midi/clip_editor.dart';
+import '../domain/midi/custom_transform_registry.dart';
 import '../domain/midi/midi_clip_seed.dart';
 import '../domain/midi/midi_transform_chain.dart';
 import '../domain/session/session_state.dart';
+import '../engine/bridge/code_evaluator.dart';
 import '../engine/bridge/no_op_code_evaluator.dart';
 import '../engine/engine.dart';
 import '../surfaces/code/code_surface.dart';
@@ -28,6 +30,8 @@ class Workstation extends StatefulWidget {
     required this.engine,
     required this.session,
     this.midiFileIo,
+    this.codeEvaluator,
+    this.customTransformRegistry,
     super.key,
   });
 
@@ -39,13 +43,28 @@ class Workstation extends StatefulWidget {
   /// tests inject a fake to drive the flow without native dialogs.
   final MidiFileIo? midiFileIo;
 
+  /// Runs Code-surface blocks. `null` in production today (the shell builds a
+  /// [NoOpCodeEvaluator]); tests inject a `FakeCodeEvaluator` to drive the
+  /// live-coding → custom-transform handshake (issue #38). When the shell owns
+  /// the evaluator it also disposes it.
+  final CodeEvaluator? codeEvaluator;
+
+  /// Catalogue of performer-authored MIDI transforms shared by the Code and
+  /// MIDI surfaces (issue #38). `null` lets the shell build its own; tests
+  /// inject one so a fake evaluator can register into the same instance the
+  /// MIDI `+` menu reads.
+  final CustomTransformRegistry? customTransformRegistry;
+
   @override
   State<Workstation> createState() => _WorkstationState();
 }
 
 class _WorkstationState extends State<Workstation> {
   SurfaceId _selected = SurfaceId.mix;
-  final NoOpCodeEvaluator _codeEvaluator = NoOpCodeEvaluator();
+  late final CodeEvaluator _codeEvaluator;
+  late final bool _ownsCodeEvaluator;
+  late final CustomTransformRegistry _customTransforms;
+  late final bool _ownsCustomTransforms;
 
   // The MIDI chain + editor are owned by the engine's player when one is
   // wired (production, and tests that exercise playback), so playback and the
@@ -61,6 +80,13 @@ class _WorkstationState extends State<Workstation> {
   @override
   void initState() {
     super.initState();
+
+    _ownsCodeEvaluator = widget.codeEvaluator == null;
+    _codeEvaluator = widget.codeEvaluator ?? NoOpCodeEvaluator();
+    _ownsCustomTransforms = widget.customTransformRegistry == null;
+    _customTransforms =
+        widget.customTransformRegistry ?? CustomTransformRegistry();
+
     final midi = widget.engine.midiOrNull;
     _ownsMidiState = midi == null;
     _midiChain = midi?.chain ?? defaultDemoChain();
@@ -80,7 +106,9 @@ class _WorkstationState extends State<Workstation> {
   void dispose() {
     widget.session.transport.removeListener(_onTransport);
     widget.session.tempo.removeListener(_onTempo);
-    _codeEvaluator.dispose();
+    // Only dispose what the shell owns; injected doubles are the test's to own.
+    if (_ownsCodeEvaluator) _codeEvaluator.dispose();
+    if (_ownsCustomTransforms) _customTransforms.dispose();
     // Only dispose the MIDI state the shell owns; the engine disposes its own.
     if (_ownsMidiState) {
       _midiEditor.dispose();
@@ -167,6 +195,7 @@ class _WorkstationState extends State<Workstation> {
           engine: widget.engine,
           chain: _midiChain,
           editor: _midiEditor,
+          registry: _customTransforms,
           playhead: widget.engine.midiOrNull?.playhead,
           fileIo: widget.midiFileIo,
         );

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../domain/midi/clip_editor.dart';
+import '../../domain/midi/custom_transform_registry.dart';
 import '../../domain/midi/midi_clip_seed.dart';
 import '../../domain/midi/midi_transform_chain.dart';
 import '../../engine/engine.dart';
@@ -15,7 +16,9 @@ import 'midi_viewport.dart';
 /// The `chain` and `editor` are injected by the shell so editing state (undo
 /// history, selection) and chip toggles persist across surface switches. When
 /// omitted (widget tests) a default demo chain is built and the viewport owns
-/// the editor. `playhead` is the engine player's beat position (issue #29);
+/// the editor. `registry` (issue #38) feeds the chain `+` menu with
+/// performer-authored transforms; `null` leaves the `+` inert. `playhead` is
+/// the engine player's beat position (issue #29);
 /// when present the roll renders and animates a playhead line, otherwise it
 /// stays parked at the origin.
 class MidiSurface extends Surface {
@@ -23,12 +26,14 @@ class MidiSurface extends Surface {
     required PhiEngine engine,
     MidiTransformChain? chain,
     ClipEditor? editor,
+    CustomTransformRegistry? registry,
     ValueListenable<double>? playhead,
     MidiFileIo? fileIo,
     super.key,
   }) : _engine = engine,
        _chain = chain ?? defaultDemoChain(),
        _editor = editor,
+       _registry = registry,
        _playhead = playhead,
        _fileIo = fileIo;
 
@@ -36,6 +41,7 @@ class MidiSurface extends Surface {
   final PhiEngine _engine;
   final MidiTransformChain _chain;
   final ClipEditor? _editor;
+  final CustomTransformRegistry? _registry;
   final ValueListenable<double>? _playhead;
   final MidiFileIo? _fileIo;
 
@@ -43,6 +49,7 @@ class MidiSurface extends Surface {
   Widget build(BuildContext context) => MidiViewport(
     chain: _chain,
     editor: _editor,
+    registry: _registry,
     playhead: _playhead,
     fileIo: _fileIo,
   );

@@ -1,13 +1,22 @@
 import 'package:flutter/material.dart';
 
 import 'design/theme.dart';
+import 'domain/midi/custom_transform_registry.dart';
 import 'domain/session/session_state.dart';
+import 'engine/bridge/code_evaluator.dart';
 import 'engine/engine.dart';
 import 'shell/workstation.dart';
 import 'surfaces/midi/midi_file_io.dart';
 
 class PhiApp extends StatefulWidget {
-  const PhiApp({super.key, this.engine, this.session, this.midiFileIo});
+  const PhiApp({
+    super.key,
+    this.engine,
+    this.session,
+    this.midiFileIo,
+    this.codeEvaluator,
+    this.customTransformRegistry,
+  });
 
   /// Optional engine override — tests inject a fake-backed engine here so
   /// the production `PhiEngine.production()` (and its libyse.dll load)
@@ -21,6 +30,16 @@ class PhiApp extends StatefulWidget {
   /// `null` in production (the surface uses the real `file_selector` backend);
   /// tests inject a fake to drive the flow without native dialogs.
   final MidiFileIo? midiFileIo;
+
+  /// Optional Code-surface evaluator override. `null` in production (the shell
+  /// builds a `NoOpCodeEvaluator`); tests inject a `FakeCodeEvaluator` to drive
+  /// the live-coding → custom-transform handshake (issue #38).
+  final CodeEvaluator? codeEvaluator;
+
+  /// Optional shared custom-transform registry. Injected alongside
+  /// [codeEvaluator] so a fake evaluator registers into the same instance the
+  /// MIDI `+` menu reads (issue #38).
+  final CustomTransformRegistry? customTransformRegistry;
 
   @override
   State<PhiApp> createState() => _PhiAppState();
@@ -76,6 +95,8 @@ class _PhiAppState extends State<PhiApp> {
         engine: _engine,
         session: _session,
         midiFileIo: widget.midiFileIo,
+        codeEvaluator: widget.codeEvaluator,
+        customTransformRegistry: widget.customTransformRegistry,
       ),
     );
   }
