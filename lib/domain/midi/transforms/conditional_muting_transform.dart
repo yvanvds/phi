@@ -40,10 +40,10 @@ class ConditionalMutingTransform extends MidiTransform {
       input.where(predicate).toList(growable: false);
 
   @override
-  ConditionalMutingTransform copyWith({bool? active}) =>
+  ConditionalMutingTransform copyWith({bool? active, String? label}) =>
       ConditionalMutingTransform(
         predicate: predicate,
-        label: label,
+        label: label ?? this.label,
         active: active ?? this.active,
       );
 }

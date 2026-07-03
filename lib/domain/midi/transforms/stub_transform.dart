@@ -28,6 +28,9 @@ class StubTransform extends MidiTransform {
   List<MidiNote> apply(List<MidiNote> input) => input;
 
   @override
-  StubTransform copyWith({bool? active}) =>
-      StubTransform(kind: kind, label: label, active: active ?? this.active);
+  StubTransform copyWith({bool? active, String? label}) => StubTransform(
+    kind: kind,
+    label: label ?? this.label,
+    active: active ?? this.active,
+  );
 }

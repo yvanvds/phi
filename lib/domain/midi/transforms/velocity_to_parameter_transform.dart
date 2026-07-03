@@ -50,11 +50,11 @@ class VelocityToParameterTransform extends MidiTransform {
   List<MidiNote> apply(List<MidiNote> input) => input;
 
   @override
-  VelocityToParameterTransform copyWith({bool? active}) =>
+  VelocityToParameterTransform copyWith({bool? active, String? label}) =>
       VelocityToParameterTransform(
         parameter: parameter,
         curve: curve,
-        label: label,
+        label: label ?? this.label,
         active: active ?? this.active,
       );
 

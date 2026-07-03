@@ -41,11 +41,12 @@ class InversionTransform extends MidiTransform {
       .toList(growable: false);
 
   @override
-  InversionTransform copyWith({bool? active}) => InversionTransform(
-    axis: axis,
-    label: label,
-    active: active ?? this.active,
-  );
+  InversionTransform copyWith({bool? active, String? label}) =>
+      InversionTransform(
+        axis: axis,
+        label: label ?? this.label,
+        active: active ?? this.active,
+      );
 
   double _mirror(double pitch) => (2 * axis - pitch).clamp(0.0, 127.0);
 }

@@ -46,12 +46,13 @@ class QuantizationTransform extends MidiTransform {
   }
 
   @override
-  QuantizationTransform copyWith({bool? active}) => QuantizationTransform(
-    gravity: gravity,
-    label: label,
-    grid: grid,
-    active: active ?? this.active,
-  );
+  QuantizationTransform copyWith({bool? active, String? label}) =>
+      QuantizationTransform(
+        gravity: gravity,
+        label: label ?? this.label,
+        grid: grid,
+        active: active ?? this.active,
+      );
 
   double _snap(double start, double g) {
     final target = (start / grid).round() * grid;

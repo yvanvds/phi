@@ -63,13 +63,14 @@ class HumanizationTransform extends MidiTransform {
   }
 
   @override
-  HumanizationTransform copyWith({bool? active}) => HumanizationTransform(
-    label: label,
-    timeRange: timeRange,
-    velocityRange: velocityRange,
-    seed: seed,
-    active: active ?? this.active,
-  );
+  HumanizationTransform copyWith({bool? active, String? label}) =>
+      HumanizationTransform(
+        label: label ?? this.label,
+        timeRange: timeRange,
+        velocityRange: velocityRange,
+        seed: seed,
+        active: active ?? this.active,
+      );
 
   /// Uniform draw in `[-range, +range]`. Both draws happen unconditionally and
   /// in a fixed order so the RNG stream stays aligned across runs.

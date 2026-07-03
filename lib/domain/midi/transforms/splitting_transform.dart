@@ -45,11 +45,12 @@ class SplittingTransform extends MidiTransform {
   }
 
   @override
-  SplittingTransform copyWith({bool? active}) => SplittingTransform(
-    voices: voices,
-    label: label,
-    active: active ?? this.active,
-  );
+  SplittingTransform copyWith({bool? active, String? label}) =>
+      SplittingTransform(
+        voices: voices,
+        label: label ?? this.label,
+        active: active ?? this.active,
+      );
 
   MidiNote _copy(MidiNote note, SplitVoice voice) => note.copyWith(
     channel: voice.channel ?? note.channel,

@@ -19,11 +19,20 @@ import '../midi_transform_kind.dart';
 /// stays memoisable; the function itself is trusted to be pure (a throwing or
 /// impure live-coded function surfaces upstream, on the Code surface).
 class CustomTransform extends MidiTransform {
-  const CustomTransform({required this.definition, this.active = true});
+  const CustomTransform({
+    required this.definition,
+    this.active = true,
+    String? label,
+  }) : _label = label;
 
   /// The live, hot-reloadable unit this chip runs. Shared with the registry and
   /// with any other chip built from the same definition.
   final CustomTransformDefinition definition;
+
+  /// Per-chip rename override. `null` falls back to the definition name, so a
+  /// freshly-added chip reads as its registered name until the performer
+  /// renames it; renaming one chip never touches the definition or its twins.
+  final String? _label;
 
   @override
   final bool active;
@@ -32,7 +41,7 @@ class CustomTransform extends MidiTransform {
   MidiTransformKind get kind => definition.kind;
 
   @override
-  String get label => definition.name;
+  String get label => _label ?? definition.name;
 
   @override
   List<MidiNote> apply(List<MidiNote> input) {
@@ -42,6 +51,9 @@ class CustomTransform extends MidiTransform {
   }
 
   @override
-  CustomTransform copyWith({bool? active}) =>
-      CustomTransform(definition: definition, active: active ?? this.active);
+  CustomTransform copyWith({bool? active, String? label}) => CustomTransform(
+    definition: definition,
+    active: active ?? this.active,
+    label: label ?? _label,
+  );
 }

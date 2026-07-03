@@ -73,9 +73,9 @@ class ProbabilisticSkipRepeatTransform extends MidiTransform {
   }
 
   @override
-  ProbabilisticSkipRepeatTransform copyWith({bool? active}) =>
+  ProbabilisticSkipRepeatTransform copyWith({bool? active, String? label}) =>
       ProbabilisticSkipRepeatTransform(
-        label: label,
+        label: label ?? this.label,
         skipProbability: skipProbability,
         repeatProbability: repeatProbability,
         repeatCount: repeatCount,

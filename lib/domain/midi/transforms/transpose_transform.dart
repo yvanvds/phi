@@ -32,9 +32,10 @@ class TransposeTransform extends MidiTransform {
       .toList(growable: false);
 
   @override
-  TransposeTransform copyWith({bool? active}) => TransposeTransform(
-    semitones: semitones,
-    label: label,
-    active: active ?? this.active,
-  );
+  TransposeTransform copyWith({bool? active, String? label}) =>
+      TransposeTransform(
+        semitones: semitones,
+        label: label ?? this.label,
+        active: active ?? this.active,
+      );
 }

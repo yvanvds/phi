@@ -6,9 +6,10 @@ import 'midi_transform.dart';
 
 /// Ordered pipeline of [MidiTransform]s applied to a source [MidiClip].
 ///
-/// Mutates in place via [add] / [removeAt] / [replaceAt] / [reorder] /
-/// [setActiveAt]; each mutation notifies listeners and bumps [version] so
-/// painters that key on a counter (instead of list equality) repaint.
+/// Mutates in place via [add] / [insert] / [removeAt] / [replaceAt] /
+/// [reorder] / [setActiveAt]; each mutation notifies listeners and bumps
+/// [version] so painters that key on a counter (instead of list equality)
+/// repaint.
 ///
 /// Inactive transforms are **skipped**, not called with a no-op `apply`.
 /// That keeps the "does this transform contribute?" question a single
@@ -46,6 +47,14 @@ class MidiTransformChain extends ChangeNotifier {
 
   void add(MidiTransform t) {
     _transforms.add(t);
+    _bump();
+  }
+
+  /// Inserts [t] at [index] (clamped to `[0, length]`), shifting later
+  /// transforms right. Used by the sidebar's "duplicate" action to drop the
+  /// copy directly after its original rather than at the end of the chain.
+  void insert(int index, MidiTransform t) {
+    _transforms.insert(index.clamp(0, _transforms.length), t);
     _bump();
   }
 

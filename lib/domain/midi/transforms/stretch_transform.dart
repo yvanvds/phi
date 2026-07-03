@@ -43,9 +43,9 @@ class StretchTransform extends MidiTransform {
   }
 
   @override
-  StretchTransform copyWith({bool? active}) => StretchTransform(
+  StretchTransform copyWith({bool? active, String? label}) => StretchTransform(
     factor: factor,
-    label: label,
+    label: label ?? this.label,
     active: active ?? this.active,
   );
 }

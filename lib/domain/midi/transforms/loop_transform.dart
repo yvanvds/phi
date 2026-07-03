@@ -76,9 +76,9 @@ class LoopTransform extends MidiTransform {
   }
 
   @override
-  LoopTransform copyWith({bool? active}) => LoopTransform(
+  LoopTransform copyWith({bool? active, String? label}) => LoopTransform(
     loopLengthBeats: loopLengthBeats,
-    label: label,
+    label: label ?? this.label,
     repeatCount: repeatCount,
     untilBeat: untilBeat,
     phaseOffset: phaseOffset,
