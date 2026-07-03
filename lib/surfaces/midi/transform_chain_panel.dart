@@ -10,6 +10,7 @@ import '../../domain/midi/midi_transform.dart';
 import '../../domain/midi/midi_transform_chain.dart';
 import '../../domain/midi/midi_transform_kind.dart';
 import 'transform_chip.dart';
+import 'transform_param_editor.dart';
 
 /// 250px right-hand sidebar listing the [MidiTransformChain]'s transforms.
 ///
@@ -19,7 +20,8 @@ import 'transform_chip.dart';
 /// one appends it to the chain with sensible defaults.
 ///
 /// Chips can be reordered by dragging their handle, toggled active by tapping,
-/// and right-clicked for a context menu (remove · duplicate · rename).
+/// and right-clicked for a context menu (remove · duplicate · rename · edit
+/// parameters).
 class TransformChainPanel extends StatefulWidget {
   const TransformChainPanel({required this.chain, this.registry, super.key});
 
@@ -48,6 +50,11 @@ class _TransformChainPanelState extends State<TransformChainPanel> {
       Rect.fromPoints(globalPosition, globalPosition),
       Offset.zero & overlay.size,
     );
+    // "edit parameters…" greys out for chips that expose none — the
+    // table/callback-driven transforms awaiting typed editors (issue #95).
+    final editable =
+        index < widget.chain.transforms.length &&
+        widget.chain.transforms[index].params.isNotEmpty;
     final action = await showMenu<_ChipAction>(
       context: context,
       position: position,
@@ -57,11 +64,14 @@ class _TransformChainPanelState extends State<TransformChainPanel> {
           PopupMenuItem<_ChipAction>(
             value: a,
             height: 32,
+            enabled: a != _ChipAction.editParams || editable,
             child: Text(
               a.label,
               style: PhiType.monoS().copyWith(
                 fontSize: 11,
-                color: PhiColors.fg0,
+                color: a != _ChipAction.editParams || editable
+                    ? PhiColors.fg0
+                    : PhiColors.fg3,
               ),
             ),
           ),
@@ -79,7 +89,18 @@ class _TransformChainPanelState extends State<TransformChainPanel> {
         widget.chain.insert(index + 1, transforms[index].copyWith());
       case _ChipAction.rename:
         await _renameChip(index);
+      case _ChipAction.editParams:
+        await _editChipParams(index);
     }
+  }
+
+  Future<void> _editChipParams(int index) async {
+    if (index >= widget.chain.transforms.length) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) =>
+          TransformParamEditor(chain: widget.chain, index: index),
+    );
   }
 
   Future<void> _renameChip(int index) async {
@@ -400,7 +421,8 @@ class _RenameDialogState extends State<_RenameDialog> {
 enum _ChipAction {
   remove('remove'),
   duplicate('duplicate'),
-  rename('rename…');
+  rename('rename…'),
+  editParams('edit parameters…');
 
   const _ChipAction(this.label);
 

@@ -1,6 +1,7 @@
 import '../midi_note.dart';
 import '../midi_transform.dart';
 import '../midi_transform_kind.dart';
+import '../transform_param.dart';
 
 /// Mirrors every note's pitch around a fixed [axis]. A pitch `p` maps to
 /// `2 * axis - p`, so notes above the axis fall below it by the same
@@ -47,6 +48,21 @@ class InversionTransform extends MidiTransform {
         label: label ?? this.label,
         active: active ?? this.active,
       );
+
+  @override
+  List<TransformParam> get params => [
+    DoubleParam(name: 'axis', value: axis, min: 0, max: 127),
+  ];
+
+  @override
+  InversionTransform withParam(String name, num value) => switch (name) {
+    'axis' => InversionTransform(
+      axis: value.toDouble(),
+      label: label,
+      active: active,
+    ),
+    _ => throw ArgumentError.value(name, 'name', 'not an editable parameter'),
+  };
 
   double _mirror(double pitch) => (2 * axis - pitch).clamp(0.0, 127.0);
 }

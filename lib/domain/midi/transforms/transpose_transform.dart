@@ -1,6 +1,7 @@
 import '../midi_note.dart';
 import '../midi_transform.dart';
 import '../midi_transform_kind.dart';
+import '../transform_param.dart';
 
 /// Shifts every note's pitch by a fixed number of semitones. Pitches that
 /// would leave the 7-bit MIDI range clamp to `[0, 127]` rather than wrap —
@@ -38,4 +39,19 @@ class TransposeTransform extends MidiTransform {
         label: label ?? this.label,
         active: active ?? this.active,
       );
+
+  @override
+  List<TransformParam> get params => [
+    IntParam(name: 'semitones', value: semitones, min: -127, max: 127),
+  ];
+
+  @override
+  TransposeTransform withParam(String name, num value) => switch (name) {
+    'semitones' => TransposeTransform(
+      semitones: value.toInt(),
+      label: label,
+      active: active,
+    ),
+    _ => throw ArgumentError.value(name, 'name', 'not an editable parameter'),
+  };
 }

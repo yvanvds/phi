@@ -192,10 +192,19 @@ main + app          (orchestration)
   passthrough default the performer edits later). Chips reorder by dragging a
   handle (`ReorderableListView` → `MidiTransformChain.reorder`) and carry a
   right-click context menu: remove, duplicate (`chain.insert` places the copy
-  after the original), and rename (labels now thread through
+  after the original), rename (labels now thread through
   `MidiTransform.copyWith({label})`; `CustomTransform` gains a per-chip label
-  override). A full per-transform **parameter editor** is deferred (issue #39
-  ships add / reorder / remove / duplicate / rename only). Real Python is still
+  override), and **edit parameters…** (issue #71): every scalar transform
+  exposes its editable params as `TransformParam` descriptors
+  (`lib/domain/midi/transform_param.dart` — sealed `IntParam`/`DoubleParam`
+  with optional bounds) plus a `MidiTransform.withParam(name, value)` mutation
+  seam, and `TransformParamEditor` (`lib/surfaces/midi/`) renders one field per
+  descriptor, applying each parse-valid keystroke live through
+  `MidiTransformChain.replaceAt` so ghost and playback follow while the dialog
+  is open. The table/callback-driven transforms (spectral map, routing rules,
+  split voices, velocity curve, muting predicate, spawn axes) expose no params
+  yet — their menu item greys out until issue #95 gives them typed editors.
+  Real Python is still
   a `NoOpCodeEvaluator`
   (issue #9's kernel decision is open), so the live-coding→registration
   handshake runs through `FakeCodeEvaluator` (now carrying an `onEvaluate`

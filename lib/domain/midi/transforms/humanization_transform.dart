@@ -3,6 +3,7 @@ import 'dart:math';
 import '../midi_note.dart';
 import '../midi_transform.dart';
 import '../midi_transform_kind.dart';
+import '../transform_param.dart';
 
 /// Adds small random jitter to every note's start time and velocity to shake
 /// off the mechanical grid. Each note's start is nudged by a uniform amount in
@@ -71,6 +72,33 @@ class HumanizationTransform extends MidiTransform {
         seed: seed,
         active: active ?? this.active,
       );
+
+  @override
+  List<TransformParam> get params => [
+    DoubleParam(name: 'time ±', value: timeRange, min: 0),
+    DoubleParam(name: 'velocity ±', value: velocityRange, min: 0, max: 1),
+    IntParam(name: 'seed', value: seed, min: 0),
+  ];
+
+  @override
+  HumanizationTransform withParam(String name, num value) => switch (name) {
+    'time ±' => _with(timeRange: value.toDouble()),
+    'velocity ±' => _with(velocityRange: value.toDouble()),
+    'seed' => _with(seed: value.toInt()),
+    _ => throw ArgumentError.value(name, 'name', 'not an editable parameter'),
+  };
+
+  HumanizationTransform _with({
+    double? timeRange,
+    double? velocityRange,
+    int? seed,
+  }) => HumanizationTransform(
+    label: label,
+    timeRange: timeRange ?? this.timeRange,
+    velocityRange: velocityRange ?? this.velocityRange,
+    seed: seed ?? this.seed,
+    active: active,
+  );
 
   /// Uniform draw in `[-range, +range]`. Both draws happen unconditionally and
   /// in a fixed order so the RNG stream stays aligned across runs.

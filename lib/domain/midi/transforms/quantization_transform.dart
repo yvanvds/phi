@@ -1,6 +1,7 @@
 import '../midi_note.dart';
 import '../midi_transform.dart';
 import '../midi_transform_kind.dart';
+import '../transform_param.dart';
 
 /// Pulls each note's start toward the nearest point on a beat [grid], with
 /// [gravity] controlling how far. `gravity == 0` is the identity (snap off);
@@ -53,6 +54,29 @@ class QuantizationTransform extends MidiTransform {
         grid: grid,
         active: active ?? this.active,
       );
+
+  @override
+  List<TransformParam> get params => [
+    DoubleParam(name: 'grid', value: grid, min: 0.01),
+    DoubleParam(name: 'gravity', value: gravity, min: 0, max: 1),
+  ];
+
+  @override
+  QuantizationTransform withParam(String name, num value) => switch (name) {
+    'grid' => QuantizationTransform(
+      gravity: gravity,
+      label: label,
+      grid: value.toDouble(),
+      active: active,
+    ),
+    'gravity' => QuantizationTransform(
+      gravity: value.toDouble(),
+      label: label,
+      grid: grid,
+      active: active,
+    ),
+    _ => throw ArgumentError.value(name, 'name', 'not an editable parameter'),
+  };
 
   double _snap(double start, double g) {
     final target = (start / grid).round() * grid;
