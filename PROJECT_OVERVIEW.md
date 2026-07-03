@@ -122,10 +122,16 @@ main + app          (orchestration)
   than static points: a pure-Dart `SceneField` (`lib/domain/scene/`) owns the
   keyed agent set and a deterministic `step(dt)` that integrates each agent's
   `SceneAgent.velocity` (`position += velocity·dt`, with a hook for the
-  attraction / effect-volume / scatter forces of #80–#82). The player routes
+  scatter / grab forces of #81–#82). The player routes
   spawns/despawns through the field and steps it each tick, pushing the moving
   set at the sink — the demo's `+Y` spawn drift makes agents visibly rise as
-  they play. The `domain · drum @ 124` chip is real as of issue #61:
+  they play. Issue #80 adds **effect volumes**: an `EffectVolume` is a spatial
+  region (`SphereVolume` or AABB `BoxVolume`) carrying a named effect + a send
+  amount; the field holds a set of them and, each `step`, recomputes every
+  agent's `SceneAgent.sends` (effect tag → amount) from its new position, so an
+  agent picks up or drops a send as it drifts across a boundary. This is a
+  *send* the DSP layer will later route, not a velocity force — the actual
+  engine-bridge wiring is a separate slice. Placement is programmatic for now. The `domain · drum @ 124` chip is real as of issue #61:
   `DomainSubscriptionTransform` (time-family) resolves a `TimeDomain` by name
   through a `TimeDomainRegistry` and tempo-locks the clip to it — every note's
   start/duration is scaled by `referenceTempo / domainTempo`, so subscribing
