@@ -221,6 +221,12 @@ main + app          (orchestration)
   name plus a read-only three-section snapshot view (DOMAINS · CODE
   BLOCKS · SCENE REF — all empty until the time-domain / scripting /
   scene-pose layers ship).
+- Time-domains layer seed (issue #60): pure-Dart `TimeDomain` (a named
+  BPM tempo reference) and an immutable, copy-on-write `TimeDomainRegistry`
+  (name→domain lookup) in `lib/domain/time_domains/`. The minimal object a
+  clip subscribes to and tempo-locks against — the resolution surface #32's
+  `DomainSubscriptionTransform` binds to. No engine bridge, tempo UI, or
+  per-domain transport yet.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
