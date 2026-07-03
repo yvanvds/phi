@@ -75,6 +75,13 @@ void main() {
     expect(find.text('MIDI · PHRASE A'), findsOneWidget);
     expect(find.textContaining('10 notes'), findsOneWidget);
 
+    // Turn the domain subscription off (issue #61): it tempo-locks the clip by
+    // 120/124, pushing timings off the 1/16 grid so they can't round-trip
+    // byte-exact through integer SMF ticks. This test is about the import/export
+    // codec, not tempo-locking — the domain chip has its own e2e test.
+    await tester.tap(find.text('domain · drum @ 124'));
+    await tester.pumpAndSettle();
+
     // Import: the header IMPORT button pulls bytes from the fake dialog and
     // swaps them into the live clip. The roll repaints with the new content.
     await tester.tap(find.text('IMPORT'));

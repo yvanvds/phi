@@ -117,8 +117,13 @@ main + app          (orchestration)
   drives a new `SceneAgentSink` bridge (`lib/engine/bridge/`, implemented by
   `SceneRenderer`): each note-on spawns a live `SceneAgent`, its note-off
   despawns it, and stop clears the scene — so playing the demo clip populates
-  the 3D Scene. The `domain · drum @ 124` chip stays a `StubTransform` pending
-  time-domain infrastructure (issues #60/#61); `branch · state.break` stays a
+  the 3D Scene. The `domain · drum @ 124` chip is real as of issue #61:
+  `DomainSubscriptionTransform` (time-family) resolves a `TimeDomain` by name
+  through a `TimeDomainRegistry` and tempo-locks the clip to it — every note's
+  start/duration is scaled by `referenceTempo / domainTempo`, so subscribing
+  the 120 BPM demo phrase to `drum @ 124` compresses its beats by 120/124 (an
+  unresolved name or a matched tempo is the identity). `branch · state.break`
+  stays a
   `StubTransform` in the linear chain, but the branching model it points to
   now exists (issue #35): `lib/domain/midi/graph/` adds `MidiTransformGraph`
   — see below. Performers can also **author their own** transforms from the
@@ -224,9 +229,9 @@ main + app          (orchestration)
 - Time-domains layer seed (issue #60): pure-Dart `TimeDomain` (a named
   BPM tempo reference) and an immutable, copy-on-write `TimeDomainRegistry`
   (name→domain lookup) in `lib/domain/time_domains/`. The minimal object a
-  clip subscribes to and tempo-locks against — the resolution surface #32's
-  `DomainSubscriptionTransform` binds to. No engine bridge, tempo UI, or
-  per-domain transport yet.
+  clip subscribes to and tempo-locks against — the resolution surface the
+  `DomainSubscriptionTransform` binds to (issue #61, now wired into the demo
+  chain). No engine bridge, tempo UI, or per-domain transport yet.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
