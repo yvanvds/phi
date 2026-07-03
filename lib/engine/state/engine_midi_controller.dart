@@ -10,6 +10,7 @@ import '../../domain/midi/transforms/agent_spawn_transform.dart';
 import '../../domain/scene/pick_ray.dart';
 import '../../domain/scene/scatter.dart';
 import '../../domain/scene/scene_agent.dart';
+import '../../domain/scene/scene_demo.dart';
 import '../../domain/scene/scene_field.dart';
 import '../bridge/midi_gateway.dart';
 import '../bridge/scene_agent_sink.dart';
@@ -203,12 +204,50 @@ class EngineMidiController {
   }
 
   /// Drop every live agent and push the empty set to the sink, so the Scene
-  /// clears when the transport stops. No-op when nothing is spawned.
+  /// clears when the transport stops. No-op when nothing is spawned. Also drops
+  /// the pick-demo flag, since a cleared field holds no demo agents either.
   void _clearAgents() {
+    _sceneDemoLoaded = false;
     if (_field.isEmpty) return;
     _field.clear();
     _agentSink?.setAgents(const []);
   }
+
+  bool _sceneDemoLoaded = false;
+
+  /// Whether the pick-friendly Scene demo (issue #90) is currently loaded.
+  bool get isSceneDemoLoaded => _sceneDemoLoaded;
+
+  /// Populate the field with a handful of long-lived, well-separated agents so
+  /// the Scene surface's pick / select / grab can be exercised by hand without
+  /// waiting on the short, clustered agents playback spawns (issue #90).
+  ///
+  /// A dev aid, meant for the idle (stopped) Scene: the agents are keyed off a
+  /// negative base so they never collide with a playback voice key, sit still
+  /// (zero velocity), and stay until [clearSceneDemo] or a transport stop drops
+  /// them. Reloading replaces the previous demo set. Pushes the set to the sink
+  /// so the agents appear at once.
+  void loadSceneDemo() {
+    final agents = pickDemoAgents();
+    for (var i = 0; i < agents.length; i++) {
+      _field.spawn(_sceneDemoKeyBase - i, agents[i]);
+    }
+    _sceneDemoLoaded = true;
+    _agentSink?.setAgents(_field.agents);
+  }
+
+  /// Drop the pick-friendly Scene demo, clearing the field and pushing the
+  /// empty set to the sink. A no-op when no demo is loaded.
+  void clearSceneDemo() {
+    if (!_sceneDemoLoaded) return;
+    _field.clear();
+    _sceneDemoLoaded = false;
+    _agentSink?.setAgents(const []);
+  }
+
+  /// Base for the pick-demo agents' field keys. Negative, so a demo key never
+  /// collides with a playback voice key (`channel * 128 + pitch`, always ≥ 0).
+  static const int _sceneDemoKeyBase = -1000;
 
   void _onTick(Timer _) {
     final dtSeconds = _tickInterval.inMicroseconds * 1e-6;
