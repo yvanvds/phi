@@ -12,7 +12,7 @@ import '../../domain/midi/midi_transform.dart';
 ///
 /// A tap toggles the transform's active state; a secondary (right-click) tap
 /// opens the per-chip context menu via [onContext] (remove · duplicate ·
-/// rename), which the panel positions at the click point.
+/// rename · edit parameters), which the panel positions at the click point.
 class TransformChip extends StatelessWidget {
   const TransformChip({
     required this.transform,

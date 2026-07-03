@@ -8,6 +8,9 @@ import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/midi_transform.dart';
 import 'package:phi/domain/midi/midi_transform_chain.dart';
 import 'package:phi/domain/midi/midi_transform_kind.dart';
+import 'package:phi/domain/midi/transforms/conditional_muting_transform.dart';
+import 'package:phi/domain/midi/transforms/loop_transform.dart';
+import 'package:phi/domain/midi/transforms/quantization_transform.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/surfaces/midi/midi_surface.dart';
@@ -18,6 +21,8 @@ import '../../engine/test_doubles/fake_yse_gateway.dart';
 
 List<DslNote> _octaveUp(List<DslNote> notes) =>
     notes.map((n) => n.copyWith(pitch: n.pitch + 12)).toList();
+
+bool _keepAll(MidiNote note) => true;
 
 void main() {
   late FakeYseGateway gateway;
@@ -252,6 +257,147 @@ void main() {
         'dup me',
         'tail',
       ]);
+
+      chain.dispose();
+    });
+
+    testWidgets('edit parameters shows current values and applies live', (
+      tester,
+    ) async {
+      final chain = oneNoteChain(
+        transforms: const [TransposeTransform(semitones: 12, label: 'tr')],
+      );
+      await pump(tester, chain);
+
+      await openMenuOn(tester, find.byType(TransformChip));
+      await tester.tap(find.text('edit parameters…'));
+      await tester.pumpAndSettle();
+
+      // The editor round-trips the current value into its field.
+      expect(find.text('semitones'), findsOneWidget);
+      expect(find.widgetWithText(TextField, '12'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), '-12');
+      await tester.pump();
+
+      // Live: the chain already reflects the edit while the dialog is open.
+      expect(chain.output.single.pitch, 48);
+
+      await tester.tap(find.text('done'));
+      await tester.pumpAndSettle();
+
+      expect(chain.transforms.single.label, 'tr');
+      expect(chain.output.single.pitch, 48);
+
+      chain.dispose();
+    });
+
+    testWidgets('edited values clamp to the param bounds', (tester) async {
+      final chain = oneNoteChain(
+        transforms: const [
+          QuantizationTransform(gravity: 0.5, label: 'q', grid: 0.25),
+        ],
+      );
+      await pump(tester, chain);
+
+      await openMenuOn(tester, find.byType(TransformChip));
+      await tester.tap(find.text('edit parameters…'));
+      await tester.pumpAndSettle();
+
+      // Fields follow params order: grid, then gravity. Gravity is [0, 1].
+      await tester.enterText(find.byType(TextField).at(1), '5');
+      await tester.pump();
+
+      final edited = chain.transforms.single as QuantizationTransform;
+      expect(edited.gravity, 1.0);
+
+      chain.dispose();
+    });
+
+    testWidgets('text that does not parse leaves the last valid value', (
+      tester,
+    ) async {
+      final chain = oneNoteChain(
+        transforms: const [TransposeTransform(semitones: 12, label: 'tr')],
+      );
+      await pump(tester, chain);
+
+      await openMenuOn(tester, find.byType(TransformChip));
+      await tester.tap(find.text('edit parameters…'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), '-');
+      await tester.pump();
+
+      expect(chain.output.single.pitch, 72);
+
+      chain.dispose();
+    });
+
+    testWidgets('a struct-family edit reshapes the output live', (
+      tester,
+    ) async {
+      final chain = oneNoteChain(
+        transforms: const [
+          LoopTransform(loopLengthBeats: 4, repeatCount: 1, label: 'loop'),
+        ],
+      );
+      await pump(tester, chain);
+
+      await openMenuOn(tester, find.byType(TransformChip));
+      await tester.tap(find.text('edit parameters…'));
+      await tester.pumpAndSettle();
+
+      // Fields follow params order: length, repeats, phase.
+      await tester.enterText(find.byType(TextField).at(1), '3');
+      await tester.pump();
+
+      expect(chain.output, hasLength(3));
+
+      chain.dispose();
+    });
+
+    testWidgets('the context menu reopens after the param editor closes', (
+      tester,
+    ) async {
+      final chain = oneNoteChain(
+        transforms: const [TransposeTransform(semitones: 12, label: 'tr')],
+      );
+      await pump(tester, chain);
+
+      await openMenuOn(tester, find.byType(TransformChip));
+      await tester.tap(find.text('edit parameters…'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('done'));
+      await tester.pumpAndSettle();
+
+      await openMenuOn(tester, find.byType(TransformChip));
+      expect(find.text('remove'), findsOneWidget);
+
+      chain.dispose();
+    });
+
+    testWidgets('edit parameters is greyed out for callback-driven chips', (
+      tester,
+    ) async {
+      final chain = oneNoteChain(
+        transforms: const [
+          ConditionalMutingTransform(predicate: _keepAll, label: 'mute'),
+        ],
+      );
+      await pump(tester, chain);
+
+      await openMenuOn(tester, find.byType(TransformChip));
+
+      final item =
+          tester.widget(
+                find.ancestor(
+                  of: find.text('edit parameters…'),
+                  matching: find.byWidgetPredicate((w) => w is PopupMenuItem),
+                ),
+              )
+              as PopupMenuItem;
+      expect(item.enabled, isFalse);
 
       chain.dispose();
     });
