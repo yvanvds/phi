@@ -154,7 +154,11 @@ main + app          (orchestration)
   agent's `SceneAgent.sends` (effect tag → amount) from its new position, so an
   agent picks up or drops a send as it drifts across a boundary. This is a
   *send* the DSP layer will later route, not a velocity force — the actual
-  engine-bridge wiring is a separate slice. Placement is programmatic for now.
+  engine-bridge wiring (consuming `sends` into real effect routing) is a separate
+  slice. `EngineMidiController` exposes `addEffectVolume` / `removeEffectVolume` /
+  `clearEffectVolumes` / `effectVolumes` (issue #93), so the spawn→scene path
+  routes spawned agents through placed volumes and volumes outlive a transport
+  stop; pointer placement still waits on the Scene surface graduating.
   Issue #81 adds **scatter**: a `Scatter` (`lib/domain/scene/`) is a one-shot,
   seedable, bounded random impulse that kicks every live agent's position (and
   optionally velocity) apart; `SceneField.scatter` applies it in-place keeping

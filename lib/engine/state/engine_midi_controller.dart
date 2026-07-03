@@ -7,6 +7,7 @@ import '../../domain/midi/clip_editor.dart';
 import '../../domain/midi/midi_note.dart';
 import '../../domain/midi/midi_transform_chain.dart';
 import '../../domain/midi/transforms/agent_spawn_transform.dart';
+import '../../domain/scene/effect_volume.dart';
 import '../../domain/scene/pick_ray.dart';
 import '../../domain/scene/scatter.dart';
 import '../../domain/scene/scene_agent.dart';
@@ -161,6 +162,32 @@ class EngineMidiController {
     _field.scatter(scatter);
     _agentSink?.setAgents(_field.agents);
   }
+
+  /// Place an effect volume on the live field (issue #80). Spawned agents that
+  /// sit inside it pick up its send on the next tick's [SceneField.step] —
+  /// surfaced on each agent's [SceneAgent.sends] — and drop it again when they
+  /// drift or are dragged out. This is the seam that lets the spawn→scene path
+  /// actually route agents through effect volumes; without a volume placed here
+  /// the machinery is dormant.
+  ///
+  /// Volumes are placement, not transient motion, so they outlive a transport
+  /// [stop] (which clears agents but leaves volumes standing) — place them once,
+  /// then play. Not pushed to the sink here: a volume changes nothing until an
+  /// agent is stepped through it, and the next [step] recomputes membership.
+  void addEffectVolume(EffectVolume volume) => _field.addVolume(volume);
+
+  /// Remove a previously placed effect [volume] by identity. Returns `true` if
+  /// it was present. Agents keep whatever sends the last [step] assigned until
+  /// the next [step] recomputes them against the reduced set.
+  bool removeEffectVolume(EffectVolume volume) => _field.removeVolume(volume);
+
+  /// Drop every effect volume from the live field. Agents' sends clear on the
+  /// next [step].
+  void clearEffectVolumes() => _field.clearVolumes();
+
+  /// A snapshot of the effect volumes currently placed on the live field, in
+  /// insertion order. Detached from internal state.
+  List<EffectVolume> get effectVolumes => _field.volumes;
 
   /// The key of the live agent under [ray], or `null` when it hits none — the
   /// pick half of direct manipulation (issue #82). The Scene surface turns a

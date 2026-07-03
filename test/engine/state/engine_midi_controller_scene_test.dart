@@ -8,6 +8,7 @@ import 'package:phi/domain/midi/spawn_source.dart';
 import 'package:phi/domain/midi/transforms/agent_spawn_transform.dart';
 import 'package:phi/domain/scene/pick_ray.dart';
 import 'package:phi/domain/scene/scatter.dart';
+import 'package:phi/domain/scene/sphere_volume.dart';
 import 'package:phi/engine/state/engine_midi_controller.dart';
 import 'package:vector_math/vector_math_64.dart';
 
@@ -584,6 +585,199 @@ void main() {
       // Not playing, nothing spawned.
       controller.stepFromSurface(0.1);
       expect(renderer.calls, isEmpty);
+
+      controller.dispose();
+    });
+  });
+
+  group('EngineMidiController — effect volumes (issue #93, epic #68)', () {
+    // A sphere around note A's spawn point (60, 1, 0), radius 1 — so the
+    // zero-velocity spawned agent sits inside it.
+    SphereVolume aroundSpawn({String effect = 'reverb', double send = 0.7}) =>
+        SphereVolume(
+          center: Vector3(60, 1, 0),
+          radius: 1,
+          effect: effect,
+          send: send,
+        );
+
+    test('a spawned agent inside a placed volume gains its send', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        final controller = EngineMidiController(
+          chain: _chainWith(
+            _spawnTransform(),
+          ), // zero velocity → stays at spawn
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
+
+        controller.addEffectVolume(aroundSpawn());
+        controller.play();
+        async.elapse(
+          const Duration(milliseconds: 300),
+        ); // note A alive + stepped
+
+        expect(renderer.lastAgents, hasLength(1));
+        expect(renderer.lastAgents.single.sends, {'reverb': 0.7});
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('a spawned agent outside every volume carries no sends', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        final controller = EngineMidiController(
+          chain: _chainWith(_spawnTransform()),
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
+
+        // A volume far from the agent at (60, 1, 0).
+        controller.addEffectVolume(
+          SphereVolume(
+            center: Vector3(0, 0, 0),
+            radius: 1,
+            effect: 'reverb',
+            send: 0.7,
+          ),
+        );
+        controller.play();
+        async.elapse(const Duration(milliseconds: 300));
+
+        expect(renderer.lastAgents.single.sends, isEmpty);
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('a drifting agent gains the send as it crosses into a volume', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        // Drift +X at 1 unit/s from the spawn x=60. Place a volume it reaches
+        // only after ~0.3 s of drift, so it starts outside and crosses in.
+        final controller = EngineMidiController(
+          chain: _chainWith(_spawnTransform(velocity: Vector3(1, 0, 0))),
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
+        controller.addEffectVolume(
+          SphereVolume(
+            center: Vector3(60.4, 1, 0),
+            radius: 0.15,
+            effect: 'delay',
+            send: 0.5,
+          ),
+        );
+
+        controller.play();
+        async.elapse(
+          const Duration(milliseconds: 100),
+        ); // ~x=60.1, still outside
+        expect(renderer.lastAgents.single.sends, isEmpty);
+
+        async.elapse(const Duration(milliseconds: 300)); // ~x=60.4, now inside
+        expect(renderer.lastAgents.single.sends, {'delay': 0.5});
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('removing the volume drops the send on the next step', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        final controller = EngineMidiController(
+          chain: _chainWith(_spawnTransform()),
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
+
+        final volume = aroundSpawn();
+        controller.addEffectVolume(volume);
+        controller.play();
+        async.elapse(const Duration(milliseconds: 300));
+        expect(renderer.lastAgents.single.sends, {'reverb': 0.7});
+
+        expect(controller.removeEffectVolume(volume), isTrue);
+        async.elapse(const Duration(milliseconds: 50)); // one more step
+        expect(renderer.lastAgents.single.sends, isEmpty);
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('clearEffectVolumes drops sends and empties the snapshot', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        final controller = EngineMidiController(
+          chain: _chainWith(_spawnTransform()),
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
+
+        controller.addEffectVolume(aroundSpawn());
+        controller.addEffectVolume(aroundSpawn(effect: 'delay', send: 0.3));
+        expect(controller.effectVolumes, hasLength(2));
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 300));
+        expect(renderer.lastAgents.single.sends, hasLength(2));
+
+        controller.clearEffectVolumes();
+        expect(controller.effectVolumes, isEmpty);
+        async.elapse(const Duration(milliseconds: 50));
+        expect(renderer.lastAgents.single.sends, isEmpty);
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('placed volumes outlive a transport stop', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        final controller = EngineMidiController(
+          chain: _chainWith(_spawnTransform()),
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
+
+        controller.addEffectVolume(aroundSpawn());
+        controller.play();
+        async.elapse(const Duration(milliseconds: 300));
+        expect(renderer.lastAgents.single.sends, {'reverb': 0.7});
+
+        controller.stop(); // clears agents, but the volume stays placed
+        expect(controller.effectVolumes, hasLength(1));
+
+        // A fresh run: the respawned agent picks the send back up.
+        controller.play();
+        async.elapse(const Duration(milliseconds: 300));
+        expect(renderer.lastAgents.single.sends, {'reverb': 0.7});
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('effectVolumes returns a detached snapshot', () {
+      final controller = EngineMidiController(
+        chain: _chainWith(_spawnTransform()),
+        gateway: FakeMidiGateway(),
+      );
+
+      controller.addEffectVolume(aroundSpawn());
+      final snapshot = controller.effectVolumes;
+      controller.addEffectVolume(aroundSpawn(effect: 'delay', send: 0.3));
+
+      // The earlier snapshot didn't grow when a second volume was added.
+      expect(snapshot, hasLength(1));
+      expect(controller.effectVolumes, hasLength(2));
 
       controller.dispose();
     });
