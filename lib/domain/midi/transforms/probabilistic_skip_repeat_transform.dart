@@ -3,6 +3,7 @@ import 'dart:math';
 import '../midi_note.dart';
 import '../midi_transform.dart';
 import '../midi_transform_kind.dart';
+import '../transform_param.dart';
 
 /// Thins and stutters a phrase probabilistically. For each incoming note two
 /// independent draws are made, in a fixed order:
@@ -82,4 +83,40 @@ class ProbabilisticSkipRepeatTransform extends MidiTransform {
         seed: seed,
         active: active ?? this.active,
       );
+
+  @override
+  List<TransformParam> get params => [
+    DoubleParam(name: 'skip', value: skipProbability, min: 0, max: 1),
+    DoubleParam(name: 'repeat', value: repeatProbability, min: 0, max: 1),
+    IntParam(name: 'echoes', value: repeatCount, min: 1),
+    IntParam(name: 'seed', value: seed, min: 0),
+  ];
+
+  @override
+  ProbabilisticSkipRepeatTransform withParam(String name, num value) =>
+      switch (name) {
+        'skip' => _with(skipProbability: value.toDouble()),
+        'repeat' => _with(repeatProbability: value.toDouble()),
+        'echoes' => _with(repeatCount: value.toInt()),
+        'seed' => _with(seed: value.toInt()),
+        _ => throw ArgumentError.value(
+          name,
+          'name',
+          'not an editable parameter',
+        ),
+      };
+
+  ProbabilisticSkipRepeatTransform _with({
+    double? skipProbability,
+    double? repeatProbability,
+    int? repeatCount,
+    int? seed,
+  }) => ProbabilisticSkipRepeatTransform(
+    label: label,
+    skipProbability: skipProbability ?? this.skipProbability,
+    repeatProbability: repeatProbability ?? this.repeatProbability,
+    repeatCount: repeatCount ?? this.repeatCount,
+    seed: seed ?? this.seed,
+    active: active,
+  );
 }

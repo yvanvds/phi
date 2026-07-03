@@ -1,6 +1,7 @@
 import '../midi_note.dart';
 import '../midi_transform.dart';
 import '../midi_transform_kind.dart';
+import '../transform_param.dart';
 
 /// Tiles the incoming notes end-to-end across a loop window.
 ///
@@ -83,5 +84,37 @@ class LoopTransform extends MidiTransform {
     untilBeat: untilBeat,
     phaseOffset: phaseOffset,
     active: active ?? this.active,
+  );
+
+  /// [untilBeat] is deliberately absent: it's the host-driven "fill to here"
+  /// knob, not a performer edit, and while set it overrides `repeats`. A null
+  /// [repeatCount] (play once) is presented as `1` — writing `1` back is
+  /// behaviour-identical.
+  @override
+  List<TransformParam> get params => [
+    DoubleParam(name: 'length', value: loopLengthBeats, min: 0.01),
+    IntParam(name: 'repeats', value: repeatCount ?? 1, min: 1),
+    DoubleParam(name: 'phase', value: phaseOffset),
+  ];
+
+  @override
+  LoopTransform withParam(String name, num value) => switch (name) {
+    'length' => _with(loopLengthBeats: value.toDouble()),
+    'repeats' => _with(repeatCount: value.toInt()),
+    'phase' => _with(phaseOffset: value.toDouble()),
+    _ => throw ArgumentError.value(name, 'name', 'not an editable parameter'),
+  };
+
+  LoopTransform _with({
+    double? loopLengthBeats,
+    int? repeatCount,
+    double? phaseOffset,
+  }) => LoopTransform(
+    loopLengthBeats: loopLengthBeats ?? this.loopLengthBeats,
+    label: label,
+    repeatCount: repeatCount ?? this.repeatCount,
+    untilBeat: untilBeat,
+    phaseOffset: phaseOffset ?? this.phaseOffset,
+    active: active,
   );
 }

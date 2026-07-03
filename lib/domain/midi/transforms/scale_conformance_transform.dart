@@ -3,6 +3,7 @@ import '../midi_transform.dart';
 import '../midi_transform_kind.dart';
 import '../music_scale.dart';
 import '../scale_tuning.dart';
+import '../transform_param.dart';
 
 /// Snaps each note's pitch to the nearest degree of a [ScaleTuning], crossing
 /// the tuning's period (an octave, by default) freely so a note never moves
@@ -64,6 +65,24 @@ class ScaleConformanceTransform extends MidiTransform {
         label: label ?? this.label,
         active: active ?? this.active,
       );
+
+  /// Only the tonic is a scalar; the tuning is a cents table and gets its
+  /// editor (scale picker / cents grid) in issue #95.
+  @override
+  List<TransformParam> get params => [
+    DoubleParam(name: 'tonic', value: tonic, min: 0, max: 127),
+  ];
+
+  @override
+  ScaleConformanceTransform withParam(String name, num value) => switch (name) {
+    'tonic' => ScaleConformanceTransform(
+      tuning: tuning,
+      tonic: value.toDouble(),
+      label: label,
+      active: active,
+    ),
+    _ => throw ArgumentError.value(name, 'name', 'not an editable parameter'),
+  };
 
   /// Nearest scale degree to [pitch], measured in cents from [tonic] and
   /// reduced into one period, then re-expanded to the note's own octave.

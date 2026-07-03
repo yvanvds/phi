@@ -1,6 +1,7 @@
 import '../midi_note.dart';
 import '../midi_transform.dart';
 import '../midi_transform_kind.dart';
+import '../transform_param.dart';
 
 /// Inverts time direction across a fixed window: the note that used to end
 /// last now starts first. [lengthBeats] is the window the reversal mirrors
@@ -46,4 +47,19 @@ class ReverseTransform extends MidiTransform {
     label: label ?? this.label,
     active: active ?? this.active,
   );
+
+  @override
+  List<TransformParam> get params => [
+    DoubleParam(name: 'window', value: lengthBeats, min: 0.01),
+  ];
+
+  @override
+  ReverseTransform withParam(String name, num value) => switch (name) {
+    'window' => ReverseTransform(
+      lengthBeats: value.toDouble(),
+      label: label,
+      active: active,
+    ),
+    _ => throw ArgumentError.value(name, 'name', 'not an editable parameter'),
+  };
 }

@@ -1,6 +1,7 @@
 import '../midi_note.dart';
 import '../midi_transform.dart';
 import '../midi_transform_kind.dart';
+import '../transform_param.dart';
 
 /// Scales the clip along the time axis: every note's start and duration are
 /// multiplied by [factor]. `2.0` halves the tempo feel (the phrase takes twice
@@ -48,4 +49,19 @@ class StretchTransform extends MidiTransform {
     label: label ?? this.label,
     active: active ?? this.active,
   );
+
+  @override
+  List<TransformParam> get params => [
+    DoubleParam(name: 'factor', value: factor, min: 0.01),
+  ];
+
+  @override
+  StretchTransform withParam(String name, num value) => switch (name) {
+    'factor' => StretchTransform(
+      factor: value.toDouble(),
+      label: label,
+      active: active,
+    ),
+    _ => throw ArgumentError.value(name, 'name', 'not an editable parameter'),
+  };
 }
