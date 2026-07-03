@@ -140,8 +140,9 @@ main + app          (orchestration)
   keyed agent set and a deterministic `step(dt)` that integrates each agent's
   `SceneAgent.velocity` (`position += velocity·dt`). The player routes
   spawns/despawns through the field and steps it each tick, pushing the moving
-  set at the sink — the demo's `+Y` spawn drift makes agents visibly rise as
-  they play. Issue #80 adds **effect volumes**: an `EffectVolume` is a spatial
+  set at the sink — the demo's `+Z` spawn drift makes agents visibly rise as
+  they play (the scene camera's up axis is `+Z`, so `+Z` reads as up on
+  screen; issue #89). Issue #80 adds **effect volumes**: an `EffectVolume` is a spatial
   region (`SphereVolume` or AABB `BoxVolume`) carrying a named effect + a send
   amount; the field holds a set of them and, each `step`, recomputes every
   agent's `SceneAgent.sends` (effect tag → amount) from its new position, so an

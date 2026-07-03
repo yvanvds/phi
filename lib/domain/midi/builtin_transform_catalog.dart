@@ -146,8 +146,10 @@ abstract final class BuiltinTransformCatalog {
         y: SpawnAxis.of(SpawnSource.velocity),
         z: SpawnAxis.of(SpawnSource.time),
         // Gentle upward drift so spawned agents are live participants that
-        // move rather than static points (issue #79). Scene units / second.
-        velocity: Vector3(0, 0.2, 0),
+        // move rather than static points (issue #79). The scene camera's up
+        // axis is +Z (`Vector3(0, 0, 1)`), so "up" on screen is +Z, not +Y
+        // (issue #89). Scene units / second.
+        velocity: Vector3(0, 0, 0.2),
         label: 'spawn · agent',
       ),
     ),

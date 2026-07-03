@@ -14,7 +14,8 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 /// workstation (issues #37, #79).
 ///
 /// The `spawn · agent @ p,v` chip in the default chain is a real
-/// [AgentSpawnTransform] with a gentle +Y drift. Driving the real transport
+/// [AgentSpawnTransform] with a gentle +Z drift (the scene camera's up axis is
+/// +Z, so agents rise on screen — issue #89). Driving the real transport
 /// must turn the clip's note-ons into live `SceneAgent`s that the scene field
 /// advances each tick and pushes at the wired renderer — the full path:
 /// session transport → shell listener → EngineMidiController → SceneField.step
@@ -70,22 +71,40 @@ void main() {
       greaterThan(1),
     );
 
-    // Prove the field actually steps: sweep across a full loop, tracking the
-    // highest Y any agent reaches. Spawn Y is the velocity axis output, capped
-    // at 0.8 (the loudest demo note, velocity 0.9, maps to +0.8). The only way
-    // to observe a Y above that cap is the +Y drift carrying a live agent past
-    // its spawn point — so `maxY > 0.8` is a clean signature of live motion.
+    // Prove the field actually steps *and* that the drift now rides the +Z
+    // (up) axis (issue #89). Sweep across a couple of full loops, tracking the
+    // highest Z and highest Y any agent reaches.
+    //
+    // Spawn Z is the time axis: a note's start beat (max 3.5 in `phraseA`)
+    // remapped from [0, 16] beats onto [-1, 1], so no fresh agent can spawn
+    // above resolve(3.5) = -0.5625 (upstream tempo-locking only lowers starts,
+    // pushing fresh spawns further below the cap). The only way to observe a Z
+    // above that cap is the +Z drift carrying a live agent past its spawn
+    // point — so `maxZ > -0.5625` is a clean signature of upward live motion.
+    //
+    // Spawn Y is the velocity axis, capped at 0.8 (velocity 0.9 -> +0.8). With
+    // the drift moved off Y, no agent's Y ever exceeds its spawn Y, so
+    // `maxY <= 0.8` guards against the old +Y drift regressing.
+    const spawnZCap = -0.5625; // resolve(start 3.5) on the time axis
+    const spawnYCap = 0.8; // resolve(velocity 0.9) on the velocity axis
+    var maxZ = double.negativeInfinity;
     var maxY = double.negativeInfinity;
-    for (var i = 0; i < 60; i++) {
+    for (var i = 0; i < 140; i++) {
       await tester.pump(const Duration(milliseconds: 25));
       for (final agent in renderer.lastAgents) {
+        if (agent.position.z > maxZ) maxZ = agent.position.z;
         if (agent.position.y > maxY) maxY = agent.position.y;
       }
     }
     expect(
+      maxZ,
+      greaterThan(spawnZCap),
+      reason: 'a live agent should have drifted above the -0.5625 spawn-Z cap',
+    );
+    expect(
       maxY,
-      greaterThan(0.8),
-      reason: 'a live agent should have drifted above the 0.8 spawn-Y cap',
+      lessThanOrEqualTo(spawnYCap + 1e-9),
+      reason: 'the drift left the Y axis, so no agent should exceed spawn Y',
     );
 
     // Stopping the transport clears the scene back to empty.

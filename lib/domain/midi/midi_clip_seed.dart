@@ -85,8 +85,11 @@ MidiTransformChain defaultDemoChain() => MidiTransformChain(
       y: SpawnAxis.of(SpawnSource.velocity),
       z: SpawnAxis.of(SpawnSource.time),
       // Gentle upward drift so spawned agents rise while they live rather than
-      // hanging static (issue #79). Scene units / second.
-      velocity: Vector3(0, 0.2, 0),
+      // hanging static (issue #79). The scene camera's up axis is +Z
+      // (`Vector3(0, 0, 1)`), so drifting +Z reads as rising on screen; +Y
+      // would drift toward the lower-right instead (issue #89). Scene units /
+      // second.
+      velocity: Vector3(0, 0, 0.2),
       label: 'spawn · agent @ p,v',
     ),
     const LoopTransform(
