@@ -9,6 +9,7 @@ import '../../domain/midi/transforms/agent_spawn_transform.dart';
 import '../../domain/scene/scene_agent.dart';
 import '../bridge/midi_gateway.dart';
 import '../bridge/scene_agent_sink.dart';
+import 'midi_graph_controller.dart';
 
 /// Engine-side player for the MIDI surface.
 ///
@@ -37,12 +38,19 @@ class EngineMidiController {
        _gateway = gateway,
        _agentSink = agentSink,
        editor = editor ?? ClipEditor(chain.source),
+       graphController = MidiGraphController.seededFrom(chain),
        _bpm = bpm,
        _outputPort = outputPort,
        _tickInterval = tickInterval;
 
   final MidiTransformChain _chain;
   final MidiGateway _gateway;
+
+  /// The branching transform-graph editor (issue #65), seeded from [chain] so
+  /// it opens on the working linear chain. Shares [chain]'s source clip, so
+  /// piano-roll edits flow into its `evaluate`. The MIDI surface binds its
+  /// node-and-cable canvas to this; playback still reads the linear [chain].
+  final MidiGraphController graphController;
 
   /// Optional Scene sink. When wired and the chain carries an active
   /// [AgentSpawnTransform], each note-on spawns a live `SceneAgent` and its
@@ -260,6 +268,7 @@ class EngineMidiController {
     _clearAgents();
     _gateway.close();
     _playhead.dispose();
+    graphController.dispose();
     editor.dispose();
     _chain.dispose();
   }

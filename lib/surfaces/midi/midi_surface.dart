@@ -5,7 +5,9 @@ import '../../domain/midi/clip_editor.dart';
 import '../../domain/midi/custom_transform_registry.dart';
 import '../../domain/midi/midi_clip_seed.dart';
 import '../../domain/midi/midi_transform_chain.dart';
+import '../../domain/state_machine/state_graph.dart';
 import '../../engine/engine.dart';
+import '../../engine/state/midi_graph_controller.dart';
 import '../surface.dart';
 import 'midi_file_io.dart';
 import 'midi_viewport.dart';
@@ -29,21 +31,32 @@ class MidiSurface extends Surface {
     CustomTransformRegistry? registry,
     ValueListenable<double>? playhead,
     MidiFileIo? fileIo,
+    MidiGraphController? graphController,
+    StateGraph? stateGraph,
     super.key,
   }) : _engine = engine,
        _chain = chain ?? defaultDemoChain(),
        _editor = editor,
        _registry = registry,
        _playhead = playhead,
-       _fileIo = fileIo;
+       _fileIo = fileIo,
+       _graphController = graphController,
+       _stateGraph = stateGraph;
 
-  // ignore: unused_field
   final PhiEngine _engine;
   final MidiTransformChain _chain;
   final ClipEditor? _editor;
   final CustomTransformRegistry? _registry;
   final ValueListenable<double>? _playhead;
   final MidiFileIo? _fileIo;
+
+  /// The branching transform-graph controller (issue #65). When `null` the
+  /// viewport seeds and owns its own from [_chain].
+  final MidiGraphController? _graphController;
+
+  /// The state machine driving the graph's live evaluation context. `null`
+  /// falls back to an empty context.
+  final StateGraph? _stateGraph;
 
   @override
   Widget build(BuildContext context) => MidiViewport(
@@ -52,5 +65,7 @@ class MidiSurface extends Surface {
     registry: _registry,
     playhead: _playhead,
     fileIo: _fileIo,
+    graphController: _graphController ?? _engine.midiOrNull?.graphController,
+    stateGraph: _stateGraph ?? _engine.stateMachineOrNull?.graph,
   );
 }
