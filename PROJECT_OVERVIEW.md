@@ -121,8 +121,7 @@ main + app          (orchestration)
   the 3D Scene. As of issue #79 spawned agents are *live participants* rather
   than static points: a pure-Dart `SceneField` (`lib/domain/scene/`) owns the
   keyed agent set and a deterministic `step(dt)` that integrates each agent's
-  `SceneAgent.velocity` (`position += velocity·dt`, with a hook for the
-  grab force of #82). The player routes
+  `SceneAgent.velocity` (`position += velocity·dt`). The player routes
   spawns/despawns through the field and steps it each tick, pushing the moving
   set at the sink — the demo's `+Y` spawn drift makes agents visibly rise as
   they play. Issue #80 adds **effect volumes**: an `EffectVolume` is a spatial
@@ -233,7 +232,17 @@ main + app          (orchestration)
   header IMPORT button) to rewrite the shared clip in place — via
   `MidiClip.replaceWith` + `ClipEditor.reset` + `chain.notifySourceChanged`,
   keeping every reference intact — and the header EXPORT button encodes the
-  chain's transformed `output` back to a file. The native open/save dialogs
+  chain's transformed `output` back to a file. Issue #82 adds the **domain-side
+  grab** (direct-manipulation pull): `SceneField` holds a grabbed key + a held
+  target and, inside `step`, pulls the held agent `grabStrength` of the way to
+  the target each tick — carrying that displacement as velocity, so `release`
+  throws a moving grab and lets a settled one rest. A pure `PickRay`
+  (`lib/domain/scene/pick_ray.dart`) + `SceneField.pick` ray/sphere hit-test
+  resolves which agent sits under a ray, and `EngineMidiController` exposes
+  `pick` / `grab` / `moveGrabTo` / `releaseGrab` as code-drivable performer
+  actions — so code grabs exactly as the mouse will. The macbear surface half
+  (pointer picking, selection highlight, custom input controller) is split into
+  #86 (needs the GL viewport; not CI-testable). The native open/save dialogs
   live behind a `MidiFileIo` seam (`FileSelectorMidiFileIo` in production,
   faked in tests) so the flow is driveable end-to-end; `desktop_drop` +
   `file_selector` own the OS shell only.

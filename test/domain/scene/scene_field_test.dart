@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/scene/box_volume.dart';
+import 'package:phi/domain/scene/pick_ray.dart';
 import 'package:phi/domain/scene/scatter.dart';
 import 'package:phi/domain/scene/scene_agent.dart';
 import 'package:phi/domain/scene/scene_field.dart';
@@ -201,6 +202,255 @@ void main() {
       final field = SceneField();
       field.scatter(const Scatter(positionBound: 5, seed: 1));
       expect(field.isEmpty, isTrue);
+    });
+  });
+
+  group('SceneField grab', () {
+    test('a fresh field is not grabbing anything', () {
+      final field = SceneField();
+      expect(field.isGrabbing, isFalse);
+      expect(field.grabbedKey, isNull);
+    });
+
+    test('grab reports whether an agent was under the key', () {
+      final field = SceneField();
+      field.spawn(1, SceneAgent(position: Vector3.zero()));
+
+      expect(field.grab(1), isTrue);
+      expect(field.isGrabbing, isTrue);
+      expect(field.grabbedKey, 1);
+
+      // A key holding nothing leaves the grab untouched.
+      final other = SceneField();
+      expect(other.grab(99), isFalse);
+      expect(other.isGrabbing, isFalse);
+    });
+
+    test('a held agent left at its own position does not move', () {
+      final field = SceneField();
+      field.spawn(1, SceneAgent(position: Vector3(2, 0, 0)));
+
+      // Grab seeds the target to the current position, so with no moveGrabTo
+      // the pull has zero distance to cover.
+      field.grab(1);
+      field.step(0.1);
+      expect(field.agents.single.position, Vector3(2, 0, 0));
+      expect(field.agents.single.velocity, Vector3.zero());
+    });
+
+    test('a held agent is pulled toward the grab target', () {
+      final field = SceneField(grabStrength: 0.5);
+      field.spawn(1, SceneAgent(position: Vector3.zero()));
+
+      field.grab(1);
+      field.moveGrabTo(Vector3(4, 0, 0));
+      field.step(0.1);
+
+      // Moves half (grabStrength) of the remaining distance this step: 0 → 2.
+      expect(field.agents.single.position.x, closeTo(2.0, 1e-12));
+      // Velocity is that displacement over dt (2 units in 0.1 s = 20 u/s).
+      expect(field.agents.single.velocity.x, closeTo(20.0, 1e-9));
+    });
+
+    test('a rigid grab (strength 1) snaps straight onto the target', () {
+      final field = SceneField(grabStrength: 1);
+      field.spawn(1, SceneAgent(position: Vector3.zero()));
+
+      field.grab(1);
+      field.moveGrabTo(Vector3(3, -2, 1));
+      field.step(0.25);
+
+      expect(field.agents.single.position, Vector3(3, -2, 1));
+    });
+
+    test('a held grab converges on the target over repeated steps', () {
+      final field = SceneField(grabStrength: 0.5);
+      field.spawn(1, SceneAgent(position: Vector3.zero()));
+
+      field.grab(1);
+      field.moveGrabTo(Vector3(10, 0, 0));
+      for (var i = 0; i < 40; i++) {
+        field.step(0.1);
+      }
+      expect(field.agents.single.position.x, closeTo(10.0, 1e-6));
+    });
+
+    test('releasing a moving grab throws the agent with its velocity', () {
+      final field = SceneField(grabStrength: 1);
+      field.spawn(1, SceneAgent(position: Vector3.zero()));
+
+      // Rigid grab dragged one unit in 0.1 s → carries 10 u/s at release.
+      field.grab(1);
+      field.moveGrabTo(Vector3(1, 0, 0));
+      field.step(0.1);
+      expect(field.agents.single.velocity.x, closeTo(10.0, 1e-9));
+
+      field.release();
+      expect(field.isGrabbing, isFalse);
+
+      // Freed, the agent keeps drifting at the thrown velocity.
+      field.step(0.1);
+      expect(field.agents.single.position.x, closeTo(2.0, 1e-9));
+    });
+
+    test('releasing a settled grab lets the agent come to rest', () {
+      final field = SceneField(grabStrength: 0.5);
+      field.spawn(1, SceneAgent(position: Vector3.zero()));
+
+      field.grab(1);
+      field.moveGrabTo(Vector3(5, 0, 0));
+      for (var i = 0; i < 60; i++) {
+        field.step(0.1); // settle onto the target — velocity decays to ~0
+      }
+      field.release();
+
+      final resting = field.agents.single.position.clone();
+      field.step(0.1);
+      // No meaningful throw: the agent barely moves after release.
+      expect((field.agents.single.position - resting).length, lessThan(1e-3));
+    });
+
+    test('moveGrabTo without a grab never perturbs the field', () {
+      final field = SceneField();
+      field.spawn(1, SceneAgent(position: Vector3(1, 1, 1)));
+
+      field.moveGrabTo(Vector3(9, 9, 9));
+      field.step(0.1);
+      expect(field.agents.single.position, Vector3(1, 1, 1));
+    });
+
+    test('the grab target is detached from the caller vector', () {
+      final field = SceneField(grabStrength: 1);
+      field.spawn(1, SceneAgent(position: Vector3.zero()));
+
+      final target = Vector3(4, 0, 0);
+      field.grab(1);
+      field.moveGrabTo(target);
+      target.setValues(0, 0, 0); // mutate after handing it over
+      field.step(0.1);
+
+      // The field kept its own copy of (4,0,0), not the now-zeroed vector.
+      expect(field.agents.single.position, Vector3(4, 0, 0));
+    });
+
+    test(
+      'only the grabbed agent feels the pull; others integrate normally',
+      () {
+        final field = SceneField(grabStrength: 1);
+        field.spawn(1, SceneAgent(position: Vector3.zero()));
+        field.spawn(
+          2,
+          SceneAgent(position: Vector3(0, 5, 0), velocity: Vector3(1, 0, 0)),
+        );
+
+        field.grab(1);
+        field.moveGrabTo(Vector3(9, 0, 0));
+        field.step(1.0);
+
+        final byKey = {for (final a in field.agents) a.position.y: a};
+        expect(byKey[0.0]!.position.x, closeTo(9.0, 1e-9)); // grabbed → snapped
+        expect(byKey[5.0]!.position.x, closeTo(1.0, 1e-9)); // free → drifted
+      },
+    );
+
+    test('despawning the grabbed agent releases the grab', () {
+      final field = SceneField();
+      field.spawn(1, SceneAgent(position: Vector3.zero()));
+      field.grab(1);
+
+      expect(field.despawn(1), isTrue);
+      expect(field.isGrabbing, isFalse);
+      expect(field.grabbedKey, isNull);
+    });
+
+    test('despawning a different agent leaves the grab intact', () {
+      final field = SceneField();
+      field.spawn(1, SceneAgent(position: Vector3.zero()));
+      field.spawn(2, SceneAgent(position: Vector3(5, 0, 0)));
+      field.grab(1);
+
+      field.despawn(2);
+      expect(field.isGrabbing, isTrue);
+      expect(field.grabbedKey, 1);
+    });
+
+    test('clear releases any active grab', () {
+      final field = SceneField();
+      field.spawn(1, SceneAgent(position: Vector3.zero()));
+      field.grab(1);
+
+      field.clear();
+      expect(field.isGrabbing, isFalse);
+    });
+
+    test('grabbing a new key replaces the previous grab', () {
+      final field = SceneField(grabStrength: 1);
+      field.spawn(1, SceneAgent(position: Vector3(0, 1, 0)));
+      field.spawn(2, SceneAgent(position: Vector3(0, 2, 0)));
+
+      field.grab(1);
+      field.grab(2); // regrab re-seeds the target onto agent 2's position
+      expect(field.grabbedKey, 2);
+
+      field.moveGrabTo(Vector3(9, 2, 0));
+      field.step(0.1);
+
+      final byRow = {for (final a in field.agents) a.position.y: a};
+      // Only the now-grabbed agent 2 is pulled; agent 1 is left where it was.
+      expect(byRow[2.0]!.position.x, closeTo(9.0, 1e-9));
+      expect(byRow[1.0]!.position.x, closeTo(0.0, 1e-9));
+    });
+
+    test('an out-of-range grabStrength is rejected', () {
+      expect(() => SceneField(grabStrength: 0), throwsA(isA<AssertionError>()));
+      expect(
+        () => SceneField(grabStrength: 1.5),
+        throwsA(isA<AssertionError>()),
+      );
+    });
+  });
+
+  group('SceneField pick', () {
+    PickRay downX({Vector3? from}) =>
+        PickRay(origin: from ?? Vector3.zero(), direction: Vector3(1, 0, 0));
+
+    test('picks the agent under the ray', () {
+      final field = SceneField();
+      field.spawn(1, SceneAgent(position: Vector3(10, 0, 0)));
+
+      expect(field.pick(downX()), 1);
+    });
+
+    test('returns null when the ray hits no agent', () {
+      final field = SceneField();
+      field.spawn(1, SceneAgent(position: Vector3(10, 5, 0)));
+
+      expect(field.pick(downX()), isNull);
+    });
+
+    test('picks the nearest of several agents along the ray', () {
+      final field = SceneField();
+      field.spawn(1, SceneAgent(position: Vector3(20, 0, 0)));
+      field.spawn(2, SceneAgent(position: Vector3(5, 0, 0)));
+      field.spawn(3, SceneAgent(position: Vector3(12, 0, 0)));
+
+      // All three sit on the +X axis; the closest to the origin wins.
+      expect(field.pick(downX()), 2);
+    });
+
+    test('a wider pick radius can catch an agent a tight one misses', () {
+      final field = SceneField();
+      // 0.5 off-axis: outside the default 0.55 halo only barely — use a clear
+      // gap so intent is unambiguous.
+      field.spawn(1, SceneAgent(position: Vector3(10, 1, 0)));
+
+      expect(field.pick(downX()), isNull); // default 0.55 radius misses
+      expect(field.pick(downX(), radius: 2), 1); // a 2-unit radius catches it
+    });
+
+    test('picking an empty field is null', () {
+      final field = SceneField();
+      expect(field.pick(downX()), isNull);
     });
   });
 

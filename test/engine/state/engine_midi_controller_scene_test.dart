@@ -6,6 +6,7 @@ import 'package:phi/domain/midi/midi_transform_chain.dart';
 import 'package:phi/domain/midi/spawn_axis.dart';
 import 'package:phi/domain/midi/spawn_source.dart';
 import 'package:phi/domain/midi/transforms/agent_spawn_transform.dart';
+import 'package:phi/domain/scene/pick_ray.dart';
 import 'package:phi/domain/scene/scatter.dart';
 import 'package:phi/engine/state/engine_midi_controller.dart';
 import 'package:vector_math/vector_math_64.dart';
@@ -37,6 +38,21 @@ AgentSpawnTransform _spawnTransform({bool active = true, Vector3? velocity}) =>
 
 MidiTransformChain _chainWith(AgentSpawnTransform t) =>
     MidiTransformChain(source: _clip(), transforms: [t]);
+
+/// A one-note clip whose single note fills the whole bar, so the spawned agent
+/// stays alive through a grab-and-drag. Pitch 60 → x 60, velocity 1 → y 1,
+/// start 0 → z 0, so it spawns at (60, 1, 0).
+MidiTransformChain _heldChain() => MidiTransformChain(
+  source: MidiClip(
+    name: 'held',
+    bars: 1,
+    notes: const [
+      MidiNote(pitch: 60, start: 0.0, duration: 4.0, velocity: 1.0),
+    ],
+  ),
+  // Zero spawn velocity — only the grab moves the agent.
+  transforms: [_spawnTransform()],
+);
 
 void main() {
   group('EngineMidiController — scene agent spawns (issue #37)', () {
@@ -254,6 +270,117 @@ void main() {
         controller.scatter(const Scatter(positionBound: 2, seed: 1));
         expect(renderer.calls, isEmpty);
 
+        controller.dispose();
+      });
+    });
+  });
+
+  group('EngineMidiController — grab (issue #82)', () {
+    // A ray straight down +Z through the held agent's spawn point (60, 1, 0).
+    PickRay rayThroughSpawn() =>
+        PickRay(origin: Vector3(60, 1, -10), direction: Vector3(0, 0, 1));
+
+    test('pick + grab + drag pulls the live agent toward the target', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        final controller = EngineMidiController(
+          chain: _heldChain(),
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
+
+        controller.play();
+        async.elapse(
+          const Duration(milliseconds: 300),
+        ); // agent alive at (60,1,0)
+        expect(renderer.lastAgents, hasLength(1));
+
+        final key = controller.pick(rayThroughSpawn());
+        expect(
+          key,
+          isNotNull,
+          reason: 'the ray passes through the spawn point',
+        );
+        expect(controller.grab(key!), isTrue);
+
+        final yBefore = renderer.lastAgents.single.position.y;
+        controller.moveGrabTo(Vector3(60, 8, 0));
+        async.elapse(const Duration(milliseconds: 200)); // ~12 ticks of pull
+
+        final yAfter = renderer.lastAgents.single.position.y;
+        expect(yAfter, greaterThan(yBefore)); // dragged toward y = 8
+        expect(yAfter, lessThanOrEqualTo(8 + 1e-9)); // never past the target
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('releasing a moving grab keeps the agent drifting (a throw)', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        final controller = EngineMidiController(
+          chain: _heldChain(),
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 300));
+        controller.grab(controller.pick(rayThroughSpawn())!);
+
+        // Drag toward y = 8, then let go while still in motion.
+        controller.moveGrabTo(Vector3(60, 8, 0));
+        async.elapse(const Duration(milliseconds: 100));
+        final yAtRelease = renderer.lastAgents.single.position.y;
+        controller.releaseGrab();
+
+        async.elapse(const Duration(milliseconds: 100)); // free flight
+        expect(renderer.lastAgents.single.position.y, greaterThan(yAtRelease));
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('grabbing a key with no live agent is a no-op false', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        final controller = EngineMidiController(
+          chain: _heldChain(),
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 300));
+
+        expect(controller.grab(999999), isFalse);
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('pick returns null when the ray misses every live agent', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        final controller = EngineMidiController(
+          chain: _heldChain(),
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 300));
+
+        // A ray far from the agent at (60, 1, 0).
+        final key = controller.pick(
+          PickRay(origin: Vector3(0, 0, -10), direction: Vector3(0, 0, 1)),
+        );
+        expect(key, isNull);
+
+        controller.stop();
         controller.dispose();
       });
     });
