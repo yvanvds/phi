@@ -9,15 +9,24 @@ import '../../domain/midi/midi_transform.dart';
 /// One row in the transform chain sidebar. 36px kind tag + label + 20×10
 /// pill toggle. Active rows pick up the kind's voice colour and glow; the
 /// pill animates whenever it switches state.
+///
+/// A tap toggles the transform's active state; a secondary (right-click) tap
+/// opens the per-chip context menu via [onContext] (remove · duplicate ·
+/// rename), which the panel positions at the click point.
 class TransformChip extends StatelessWidget {
   const TransformChip({
     required this.transform,
     required this.onToggle,
+    this.onContext,
     super.key,
   });
 
   final MidiTransform transform;
   final VoidCallback onToggle;
+
+  /// Right-click handler, given the global click position so the panel can
+  /// anchor a popup menu there. `null` disables the context menu.
+  final void Function(Offset globalPosition)? onContext;
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +40,9 @@ class TransformChip extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onToggle,
+        onSecondaryTapDown: onContext == null
+            ? null
+            : (details) => onContext!(details.globalPosition),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           decoration: BoxDecoration(

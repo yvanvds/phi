@@ -44,11 +44,12 @@ class SpectralMappingTransform extends MidiTransform {
       .toList(growable: false);
 
   @override
-  SpectralMappingTransform copyWith({bool? active}) => SpectralMappingTransform(
-    table: table,
-    label: label,
-    active: active ?? this.active,
-  );
+  SpectralMappingTransform copyWith({bool? active, String? label}) =>
+      SpectralMappingTransform(
+        table: table,
+        label: label ?? this.label,
+        active: active ?? this.active,
+      );
 
   double _map(double pitch) {
     // Only an integer source pitch can name a key; a fractional input is left

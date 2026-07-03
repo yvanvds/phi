@@ -132,8 +132,19 @@ main + app          (orchestration)
   (ChangeNotifier) is the catalogue the DSL registers into. Re-registering the
   same name hot-reloads the function in place, so chips already in a chain keep
   their slot and active state and just run the new logic — hot-reload preserves
-  chain state. The MIDI sidebar's `+` menu reads the registry and appends a
-  picked transform to the chain. Real Python is still a `NoOpCodeEvaluator`
+  chain state. The MIDI sidebar's `+` add-transform gesture is real as of issue
+  #39: the header `+` opens a menu grouping every addable transform by family
+  (pitch · time · voice · struct) — the built-in `BuiltinTransformCatalog`
+  (`lib/domain/midi/`) plus the registry's custom transforms — and picking one
+  appends a chip with sensible defaults (callback/table-driven built-ins get a
+  passthrough default the performer edits later). Chips reorder by dragging a
+  handle (`ReorderableListView` → `MidiTransformChain.reorder`) and carry a
+  right-click context menu: remove, duplicate (`chain.insert` places the copy
+  after the original), and rename (labels now thread through
+  `MidiTransform.copyWith({label})`; `CustomTransform` gains a per-chip label
+  override). A full per-transform **parameter editor** is deferred (issue #39
+  ships add / reorder / remove / duplicate / rename only). Real Python is still
+  a `NoOpCodeEvaluator`
   (issue #9's kernel decision is open), so the live-coding→registration
   handshake runs through `FakeCodeEvaluator` (now carrying an `onEvaluate`
   hook); the shell owns a shared registry passed to both the Code and MIDI

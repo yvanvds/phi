@@ -48,13 +48,14 @@ class AgentSpawnTransform extends MidiTransform {
   List<MidiNote> apply(List<MidiNote> input) => input;
 
   @override
-  AgentSpawnTransform copyWith({bool? active}) => AgentSpawnTransform(
-    x: x,
-    y: y,
-    z: z,
-    label: label,
-    active: active ?? this.active,
-  );
+  AgentSpawnTransform copyWith({bool? active, String? label}) =>
+      AgentSpawnTransform(
+        x: x,
+        y: y,
+        z: z,
+        label: label ?? this.label,
+        active: active ?? this.active,
+      );
 
   /// One [AgentSpawn] per note, in input order. The caller decides what
   /// "input" means — typically the note list at this transform's position in

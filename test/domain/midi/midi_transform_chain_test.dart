@@ -217,6 +217,41 @@ void main() {
       expect(events.map((e) => e.value), [25, 100]);
     });
 
+    test('insert drops a transform at an index and notifies', () {
+      final chain = MidiTransformChain(
+        source: _clip(const []),
+        transforms: const [
+          TransposeTransform(semitones: 1, label: 'a'),
+          TransposeTransform(semitones: 2, label: 'c'),
+        ],
+      );
+      var notifications = 0;
+      chain.addListener(() => notifications++);
+
+      // Duplicate 'a' right after itself.
+      chain.insert(1, chain.transforms[0].copyWith(label: 'b'));
+
+      expect(chain.transforms.map((t) => t.label), ['a', 'b', 'c']);
+      expect(notifications, 1);
+    });
+
+    test('insert clamps an out-of-range index to the ends', () {
+      final chain = MidiTransformChain(
+        source: _clip(const []),
+        transforms: const [TransposeTransform(semitones: 1, label: 'a')],
+      );
+      chain.insert(99, const TransposeTransform(semitones: 2, label: 'z'));
+      expect(chain.transforms.map((t) => t.label), ['a', 'z']);
+    });
+
+    test('copyWith renames the label while preserving parameters', () {
+      const original = TransposeTransform(semitones: 7, label: 'up a fifth');
+      final renamed = original.copyWith(label: 'fifth');
+      expect(renamed.label, 'fifth');
+      expect(renamed.semitones, 7);
+      expect(renamed.active, isTrue);
+    });
+
     test('reorder is a no-op when from == to', () {
       final chain = MidiTransformChain(
         source: _clip(const []),

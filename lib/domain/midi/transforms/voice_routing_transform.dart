@@ -37,11 +37,12 @@ class VoiceRoutingTransform extends MidiTransform {
       input.map(_route).toList(growable: false);
 
   @override
-  VoiceRoutingTransform copyWith({bool? active}) => VoiceRoutingTransform(
-    rules: rules,
-    label: label,
-    active: active ?? this.active,
-  );
+  VoiceRoutingTransform copyWith({bool? active, String? label}) =>
+      VoiceRoutingTransform(
+        rules: rules,
+        label: label ?? this.label,
+        active: active ?? this.active,
+      );
 
   MidiNote _route(MidiNote note) {
     for (final rule in rules) {

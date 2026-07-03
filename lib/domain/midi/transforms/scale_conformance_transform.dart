@@ -57,11 +57,11 @@ class ScaleConformanceTransform extends MidiTransform {
       .toList(growable: false);
 
   @override
-  ScaleConformanceTransform copyWith({bool? active}) =>
+  ScaleConformanceTransform copyWith({bool? active, String? label}) =>
       ScaleConformanceTransform(
         tuning: tuning,
         tonic: tonic,
-        label: label,
+        label: label ?? this.label,
         active: active ?? this.active,
       );
 

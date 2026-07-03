@@ -41,9 +41,9 @@ class ReverseTransform extends MidiTransform {
   }
 
   @override
-  ReverseTransform copyWith({bool? active}) => ReverseTransform(
+  ReverseTransform copyWith({bool? active, String? label}) => ReverseTransform(
     lengthBeats: lengthBeats,
-    label: label,
+    label: label ?? this.label,
     active: active ?? this.active,
   );
 }
