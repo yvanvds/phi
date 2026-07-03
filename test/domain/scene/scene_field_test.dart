@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/scene/box_volume.dart';
+import 'package:phi/domain/scene/scatter.dart';
 import 'package:phi/domain/scene/scene_agent.dart';
 import 'package:phi/domain/scene/scene_field.dart';
 import 'package:phi/domain/scene/sphere_volume.dart';
@@ -132,6 +133,74 @@ void main() {
       field.spawn(2, SceneAgent(position: Vector3(1, 0, 0)));
       // The earlier snapshot did not grow when a new agent was spawned.
       expect(snapshot, hasLength(1));
+    });
+  });
+
+  group('SceneField scatter', () {
+    test('scatter disperses the live agents', () {
+      final field = SceneField();
+      field.spawn(1, SceneAgent(position: Vector3.zero()));
+      field.spawn(2, SceneAgent(position: Vector3.zero()));
+
+      field.scatter(const Scatter(positionBound: 2, seed: 42));
+
+      // Both agents were kicked off the origin they shared.
+      for (final agent in field.agents) {
+        expect(agent.position, isNot(Vector3.zero()));
+        expect(agent.position.x.abs(), lessThanOrEqualTo(2 + 1e-9));
+        expect(agent.position.y.abs(), lessThanOrEqualTo(2 + 1e-9));
+        expect(agent.position.z.abs(), lessThanOrEqualTo(2 + 1e-9));
+      }
+    });
+
+    test('the same scatter over the same field state is reproducible', () {
+      SceneField seeded() {
+        final field = SceneField();
+        field.spawn(1, SceneAgent(position: Vector3(1, 0, 0)));
+        field.spawn(2, SceneAgent(position: Vector3(0, 1, 0)));
+        return field;
+      }
+
+      final a = seeded()..scatter(const Scatter(positionBound: 1, seed: 7));
+      final b = seeded()..scatter(const Scatter(positionBound: 1, seed: 7));
+
+      final byA = {for (final agent in a.agents) agent.position.y: agent};
+      final byB = {for (final agent in b.agents) agent.position.y: agent};
+      // Keyed spawns iterate in insertion order, so the same seed lands the
+      // same kick on the same agent in both fields.
+      expect(a.agents[0].position, b.agents[0].position);
+      expect(a.agents[1].position, b.agents[1].position);
+      expect(byA.keys.toSet(), byB.keys.toSet());
+    });
+
+    test('scatter preserves keys, so despawn still finds the agent', () {
+      final field = SceneField();
+      field.spawn(5, SceneAgent(position: Vector3.zero()));
+
+      field.scatter(const Scatter(positionBound: 1, seed: 1));
+      expect(field.length, 1);
+      expect(field.despawn(5), isTrue);
+      expect(field.isEmpty, isTrue);
+    });
+
+    test('a velocity-bound scatter leaves the agents drifting apart', () {
+      final field = SceneField();
+      field.spawn(1, SceneAgent(position: Vector3.zero()));
+
+      field.scatter(const Scatter(positionBound: 0, velocityBound: 1, seed: 3));
+      // A pure velocity kick leaves the position put but the velocity non-zero,
+      // so the next step drifts the agent.
+      expect(field.agents.single.position, Vector3.zero());
+      expect(field.agents.single.velocity, isNot(Vector3.zero()));
+
+      field.step(1.0);
+      expect(field.agents.single.position, isNot(Vector3.zero()));
+    });
+
+    test('scatter on an empty field is a no-op', () {
+      final field = SceneField();
+      field.scatter(const Scatter(positionBound: 5, seed: 1));
+      expect(field.isEmpty, isTrue);
     });
   });
 

@@ -6,6 +6,7 @@ import '../../domain/midi/clip_editor.dart';
 import '../../domain/midi/midi_note.dart';
 import '../../domain/midi/midi_transform_chain.dart';
 import '../../domain/midi/transforms/agent_spawn_transform.dart';
+import '../../domain/scene/scatter.dart';
 import '../../domain/scene/scene_agent.dart';
 import '../../domain/scene/scene_field.dart';
 import '../bridge/midi_gateway.dart';
@@ -143,6 +144,19 @@ class EngineMidiController {
     _absBeat = 0;
     _prevAbsBeat = 0;
     _playhead.value = 0;
+  }
+
+  /// Scatter the live agents — a one-shot performer action that disperses the
+  /// spawned set with a seeded, bounded random impulse and pushes the kicked
+  /// set to the sink so the throw is seen at once. Deterministic: the same
+  /// [scatter] over the same live set always produces the same dispersal.
+  ///
+  /// A no-op when no agents are alive (or no Scene sink is wired), so
+  /// triggering scatter over an empty field never touches the sink.
+  void scatter(Scatter scatter) {
+    if (_field.isEmpty) return;
+    _field.scatter(scatter);
+    _agentSink?.setAgents(_field.agents);
   }
 
   /// Drop every live agent and push the empty set to the sink, so the Scene

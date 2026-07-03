@@ -1,6 +1,7 @@
 import 'package:vector_math/vector_math_64.dart';
 
 import 'effect_volume.dart';
+import 'scatter.dart';
 import 'scene_agent.dart';
 
 /// The live agent set of the 3D Scene, and the clock that advances it.
@@ -18,8 +19,8 @@ import 'scene_agent.dart';
 /// This is the seam the rest of the spatial machinery hangs off. Effect
 /// volumes (#80) live here as a set of [EffectVolume]s the field routes each
 /// agent through every [step], surfacing the active sends on the agent;
-/// scatter (#81) and grab (#82) will land as forces applied inside [step]
-/// before integration, adjusting each agent's [SceneAgent.velocity].
+/// [scatter] (#81) is a one-shot [Scatter] impulse that disperses the set;
+/// grab (#82) will land as a force applied inside [step] before integration.
 class SceneField {
   final Map<int, SceneAgent> _agents = <int, SceneAgent>{};
   final List<EffectVolume> _volumes = <EffectVolume>[];
@@ -75,6 +76,24 @@ class SceneField {
       final agent = _agents[key]!;
       final moved = agent.position + (agent.velocity * dt);
       _agents[key] = agent.copyWith(position: moved, sends: _sendsAt(moved));
+    }
+  }
+
+  /// Disperse the live agents with a one-shot [scatter] impulse — a seeded,
+  /// bounded random kick to every agent's position (and velocity). Keys are
+  /// preserved, so a later despawn still removes exactly the agent its spawn
+  /// added; only the motion state is perturbed.
+  ///
+  /// Deterministic and replayable: the same [Scatter] over the same field
+  /// state always produces the same throw. Sends are left as the last [step]
+  /// assigned — the next [step] recomputes them from each agent's kicked
+  /// position. A no-op when no agents are alive.
+  void scatter(Scatter scatter) {
+    if (_agents.isEmpty) return;
+    final keys = _agents.keys.toList(growable: false);
+    final dispersed = scatter.apply(keys.map((key) => _agents[key]!));
+    for (var i = 0; i < keys.length; i++) {
+      _agents[keys[i]] = dispersed[i];
     }
   }
 

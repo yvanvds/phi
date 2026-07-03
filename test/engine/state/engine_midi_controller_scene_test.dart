@@ -6,6 +6,7 @@ import 'package:phi/domain/midi/midi_transform_chain.dart';
 import 'package:phi/domain/midi/spawn_axis.dart';
 import 'package:phi/domain/midi/spawn_source.dart';
 import 'package:phi/domain/midi/transforms/agent_spawn_transform.dart';
+import 'package:phi/domain/scene/scatter.dart';
 import 'package:phi/engine/state/engine_midi_controller.dart';
 import 'package:vector_math/vector_math_64.dart';
 
@@ -178,6 +179,80 @@ void main() {
         // Notes still fired through the MIDI gateway — the missing scene sink
         // is a silent no-op, not a crash.
         expect(gateway.calls.any((c) => c.startsWith('noteOn')), isTrue);
+
+        controller.dispose();
+      });
+    });
+  });
+
+  group('EngineMidiController — scatter (issue #81)', () {
+    test('scatter disperses the live agent and pushes it to the sink', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        final controller = EngineMidiController(
+          chain: _chainWith(_spawnTransform()), // zero spawn velocity
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
+
+        controller.play();
+        async.elapse(
+          const Duration(milliseconds: 300),
+        ); // note A alive, at x=60
+        expect(renderer.lastAgents, hasLength(1));
+        final before = renderer.lastAgents.single.position.clone();
+        final callsBefore = renderer.calls.length;
+
+        controller.scatter(const Scatter(positionBound: 2, seed: 42));
+
+        // The sink received the kicked set, and the agent moved but stayed
+        // within one bound of where it sat.
+        expect(renderer.calls.length, greaterThan(callsBefore));
+        final after = renderer.lastAgents.single.position;
+        expect(after, isNot(before));
+        expect((after - before).x.abs(), lessThanOrEqualTo(2 + 1e-9));
+        expect((after - before).y.abs(), lessThanOrEqualTo(2 + 1e-9));
+        expect((after - before).z.abs(), lessThanOrEqualTo(2 + 1e-9));
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('scatter is deterministic across two identical runs', () {
+      Vector3 scatteredX() {
+        return fakeAsync((async) {
+          final renderer = FakeSceneRenderer();
+          final controller = EngineMidiController(
+            chain: _chainWith(_spawnTransform()),
+            gateway: FakeMidiGateway(),
+            agentSink: renderer,
+          );
+          controller.play();
+          async.elapse(const Duration(milliseconds: 300));
+          controller.scatter(const Scatter(positionBound: 2, seed: 7));
+          final pos = renderer.lastAgents.single.position.clone();
+          controller.stop();
+          controller.dispose();
+          return pos;
+        });
+      }
+
+      expect(scatteredX(), scatteredX());
+    });
+
+    test('scatter with no live agents never touches the sink', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        final controller = EngineMidiController(
+          chain: _chainWith(_spawnTransform()),
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
+
+        // Not playing — nothing spawned yet.
+        controller.scatter(const Scatter(positionBound: 2, seed: 1));
+        expect(renderer.calls, isEmpty);
 
         controller.dispose();
       });

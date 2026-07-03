@@ -122,7 +122,7 @@ main + app          (orchestration)
   than static points: a pure-Dart `SceneField` (`lib/domain/scene/`) owns the
   keyed agent set and a deterministic `step(dt)` that integrates each agent's
   `SceneAgent.velocity` (`position += velocity·dt`, with a hook for the
-  scatter / grab forces of #81–#82). The player routes
+  grab force of #82). The player routes
   spawns/despawns through the field and steps it each tick, pushing the moving
   set at the sink — the demo's `+Y` spawn drift makes agents visibly rise as
   they play. Issue #80 adds **effect volumes**: an `EffectVolume` is a spatial
@@ -131,7 +131,13 @@ main + app          (orchestration)
   agent's `SceneAgent.sends` (effect tag → amount) from its new position, so an
   agent picks up or drops a send as it drifts across a boundary. This is a
   *send* the DSP layer will later route, not a velocity force — the actual
-  engine-bridge wiring is a separate slice. Placement is programmatic for now. The `domain · drum @ 124` chip is real as of issue #61:
+  engine-bridge wiring is a separate slice. Placement is programmatic for now.
+  Issue #81 adds **scatter**: a `Scatter` (`lib/domain/scene/`) is a one-shot,
+  seedable, bounded random impulse that kicks every live agent's position (and
+  optionally velocity) apart; `SceneField.scatter` applies it in-place keeping
+  keys, and `EngineMidiController.scatter` exposes it as a one-shot performer
+  action that disperses the live set and pushes the throw to the sink — the UI
+  trigger waits on the Scene surface graduating. The `domain · drum @ 124` chip is real as of issue #61:
   `DomainSubscriptionTransform` (time-family) resolves a `TimeDomain` by name
   through a `TimeDomainRegistry` and tempo-locks the clip to it — every note's
   start/duration is scaled by `referenceTempo / domainTempo`, so subscribing
