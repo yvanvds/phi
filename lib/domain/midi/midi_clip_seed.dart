@@ -1,3 +1,5 @@
+import '../time_domains/time_domain.dart';
+import '../time_domains/time_domain_registry.dart';
 import 'midi_clip.dart';
 import 'midi_note.dart';
 import 'midi_transform.dart';
@@ -7,6 +9,7 @@ import 'music_scale.dart';
 import 'spawn_axis.dart';
 import 'spawn_source.dart';
 import 'transforms/agent_spawn_transform.dart';
+import 'transforms/domain_subscription_transform.dart';
 import 'transforms/loop_transform.dart';
 import 'transforms/quantization_transform.dart';
 import 'transforms/scale_conformance_transform.dart';
@@ -36,10 +39,23 @@ MidiClip phraseA() => MidiClip(
   ],
 );
 
-/// The eight-chip default sidebar from the design mockup — five working
-/// transforms (scale-conform, transpose, quantize, route, loop) and three
-/// stubs covering slots whose implementations are still open issues. The
-/// last two structural chips ship `active: false` to mirror the mockup state.
+/// The demo time-domains the seed chain resolves against. Just the `drum`
+/// domain @ 124 BPM the mockup's `domain · drum @ 124` chip subscribes to;
+/// more domains land with the time-domains surface.
+final TimeDomainRegistry demoTimeDomains = TimeDomainRegistry(const [
+  TimeDomain(name: 'drum', tempo: 124),
+]);
+
+/// Tempo (BPM) [phraseA]'s beats are authored against — the session default
+/// (see `SessionState.tempo`). The `drum` subscription tempo-locks the phrase
+/// relative to this reference.
+const double _demoReferenceTempo = 120;
+
+/// The eight-chip default sidebar from the design mockup — six working
+/// transforms (scale-conform, transpose, domain-subscribe, quantize, route,
+/// loop) and two stubs covering slots whose implementations are still open
+/// issues. The last two structural chips ship `active: false` to mirror the
+/// mockup state.
 MidiTransformChain defaultDemoChain() => MidiTransformChain(
   source: phraseA(),
   transforms: <MidiTransform>[
@@ -49,8 +65,10 @@ MidiTransformChain defaultDemoChain() => MidiTransformChain(
       label: 'scale · dorian D',
     ),
     const TransposeTransform(semitones: 3, label: 'transpose · +3 st'),
-    const StubTransform(
-      kind: MidiTransformKind.time,
+    DomainSubscriptionTransform.resolve(
+      registry: demoTimeDomains,
+      domainName: 'drum',
+      referenceTempo: _demoReferenceTempo,
       label: 'domain · drum @ 124',
     ),
     const QuantizationTransform(gravity: 0.6, label: 'quantize · gravity 0.6'),

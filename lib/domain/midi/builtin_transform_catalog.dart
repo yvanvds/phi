@@ -54,9 +54,13 @@ class BuiltinTransform {
 /// grouped by family. Performer-authored custom transforms (issue #38) are
 /// listed alongside these from the `CustomTransformRegistry`.
 ///
-/// [StubTransform]-backed slots (drum time-domain, state-machine branch) are
-/// deliberately *not* offered — they stand in for infrastructure that doesn't
-/// exist yet (issues #60/#61, #35), so there's nothing to add.
+/// Two slots are deliberately *not* offered. The state-machine branch is still
+/// a [StubTransform] standing in for infrastructure that doesn't exist yet
+/// (issue #35). The drum time-domain subscription is now a real transform
+/// ([DomainSubscriptionTransform], issues #60/#61), but the `+` menu can't
+/// mint a useful default: it needs a session time-domain registry and a
+/// reference tempo to bind to, and neither surface exists yet — so it's added
+/// only through the seed chain for now.
 abstract final class BuiltinTransformCatalog {
   /// Every built-in, in family order (pitch · time · voice · struct) and, within
   /// a family, in a hand-picked "most-reached-for first" order.

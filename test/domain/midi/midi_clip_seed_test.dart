@@ -2,12 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/midi/midi_clip_seed.dart';
 import 'package:phi/domain/midi/midi_transform_kind.dart';
 import 'package:phi/domain/midi/transforms/agent_spawn_transform.dart';
+import 'package:phi/domain/midi/transforms/domain_subscription_transform.dart';
 import 'package:phi/domain/midi/transforms/loop_transform.dart';
 import 'package:phi/domain/midi/transforms/quantization_transform.dart';
 import 'package:phi/domain/midi/transforms/scale_conformance_transform.dart';
 import 'package:phi/domain/midi/transforms/stub_transform.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
 import 'package:phi/domain/midi/transforms/voice_routing_transform.dart';
+import 'package:phi/domain/time_domains/time_domain.dart';
 
 void main() {
   group('phraseA', () {
@@ -41,14 +43,22 @@ void main() {
       expect(chain.transforms[1], isA<TransposeTransform>());
     });
 
-    test('the quantize slot is a real transform; domain stays a stub', () {
+    test('the domain and quantize slots are both real transforms', () {
       final chain = defaultDemoChain();
-      // The domain time-family chip is still a stub (issue #61); the quantize
-      // chip is now the real QuantizationTransform (this issue, #32).
-      expect(chain.transforms[2], isA<StubTransform>());
+      // The domain time-family chip is the real DomainSubscriptionTransform as
+      // of issue #61; the quantize chip is the QuantizationTransform (#32).
+      expect(chain.transforms[2], isA<DomainSubscriptionTransform>());
       expect(chain.transforms[2].label, 'domain · drum @ 124');
       expect(chain.transforms[3], isA<QuantizationTransform>());
       expect(chain.transforms[3].label, 'quantize · gravity 0.6');
+    });
+
+    test('the drum subscription tempo-locks the demo phrase to 124 BPM', () {
+      final chain = defaultDemoChain();
+      final domain = chain.transforms[2] as DomainSubscriptionTransform;
+      expect(domain.domain, const TimeDomain(name: 'drum', tempo: 124));
+      // Authored at 120, locked to 124 → beats compress by 120/124.
+      expect(domain.scale, closeTo(120 / 124, 1e-9));
     });
 
     test('the route and agent-spawn slots are both real transforms', () {
