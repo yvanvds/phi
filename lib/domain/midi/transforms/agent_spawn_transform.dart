@@ -21,19 +21,28 @@ import '../spawn_axis.dart';
 /// any axis to any note dimension. The agent's voice colour is derived from
 /// the note's channel — the domain-side voice handle a [VoiceRoutingTransform]
 /// earlier in the chain assigns — folded into the six-slot palette.
+///
+/// [velocity] stamps every spawn with an initial motion (scene units per
+/// second) the scene's `SceneField` integrates each tick — zero by default, so
+/// nothing drifts unless asked. A constant drift is the foundation baseline
+/// (issue #79); per-note velocity mapping is a natural later extension.
 class AgentSpawnTransform extends MidiTransform {
-  const AgentSpawnTransform({
+  AgentSpawnTransform({
     required this.x,
     required this.y,
     required this.z,
     required this.label,
     this.active = true,
-  });
+    Vector3? velocity,
+  }) : velocity = velocity ?? Vector3.zero();
 
   /// Position axes. Each maps a chosen note scalar into a spatial coordinate.
   final SpawnAxis x;
   final SpawnAxis y;
   final SpawnAxis z;
+
+  /// Constant initial velocity stamped on every spawn (scene units / second).
+  final Vector3 velocity;
 
   @override
   final String label;
@@ -55,6 +64,7 @@ class AgentSpawnTransform extends MidiTransform {
         z: z,
         label: label ?? this.label,
         active: active ?? this.active,
+        velocity: velocity,
       );
 
   /// One [AgentSpawn] per note, in input order. The caller decides what
@@ -66,6 +76,7 @@ class AgentSpawnTransform extends MidiTransform {
   /// The [AgentSpawn] a single [note] maps to.
   AgentSpawn spawnFor(MidiNote note) => AgentSpawn(
     position: Vector3(x.resolve(note), y.resolve(note), z.resolve(note)),
+    velocity: velocity.clone(),
     voiceIndex: _voiceOf(note),
     startBeat: note.start,
     lifetimeBeats: note.duration,

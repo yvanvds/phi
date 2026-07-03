@@ -7,6 +7,7 @@ import 'package:phi/domain/midi/spawn_axis.dart';
 import 'package:phi/domain/midi/spawn_source.dart';
 import 'package:phi/domain/midi/transforms/agent_spawn_transform.dart';
 import 'package:phi/engine/state/engine_midi_controller.dart';
+import 'package:vector_math/vector_math_64.dart';
 
 import '../test_doubles/fake_midi_gateway.dart';
 import '../test_doubles/fake_scene_renderer.dart';
@@ -23,13 +24,14 @@ MidiClip _clip() => MidiClip(
   ],
 );
 
-AgentSpawnTransform _spawnTransform({bool active = true}) =>
+AgentSpawnTransform _spawnTransform({bool active = true, Vector3? velocity}) =>
     AgentSpawnTransform(
       x: SpawnAxis.of(SpawnSource.pitch, outMin: 0, outMax: 127),
       y: SpawnAxis.of(SpawnSource.velocity, outMin: 0, outMax: 1),
       z: SpawnAxis.of(SpawnSource.time, outMin: 0, outMax: 4),
       label: 'spawn',
       active: active,
+      velocity: velocity,
     );
 
 MidiTransformChain _chainWith(AgentSpawnTransform t) =>
@@ -66,6 +68,55 @@ void main() {
         expect(renderer.lastAgents, hasLength(1));
         expect(renderer.lastAgents.single.voiceIndex, 3);
         expect(renderer.lastAgents.single.position.x, closeTo(72, 1e-9));
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('a spawned agent drifts each tick (position += velocity·dt)', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        // 1 scene-unit/second along +X. Note A spawns at x=60 (pitch 60).
+        final controller = EngineMidiController(
+          chain: _chainWith(_spawnTransform(velocity: Vector3(1, 0, 0))),
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
+
+        controller.play();
+
+        // Note A is alive over beats [0,1) = [0s, 0.5s] @ 120 BPM. Sample twice
+        // inside that window: the agent must have drifted past its spawn x and
+        // keep advancing between samples.
+        async.elapse(const Duration(milliseconds: 200)); // ~0.2 s of drift
+        expect(renderer.lastAgents, hasLength(1));
+        final xEarly = renderer.lastAgents.single.position.x;
+        expect(xEarly, greaterThan(60)); // moved off its spawn point
+        expect(xEarly, closeTo(60.2, 0.02)); // ~0.2 s at 1 unit/s
+
+        async.elapse(const Duration(milliseconds: 200)); // ~0.4 s total
+        final xLate = renderer.lastAgents.single.position.x;
+        expect(xLate, greaterThan(xEarly)); // still advancing
+        expect(xLate, closeTo(60.4, 0.02));
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('with no velocity, spawned agents stay put', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        final controller = EngineMidiController(
+          chain: _chainWith(_spawnTransform()), // zero velocity
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 400)); // well into note A
+        expect(renderer.lastAgents.single.position.x, closeTo(60, 1e-9));
 
         controller.stop();
         controller.dispose();

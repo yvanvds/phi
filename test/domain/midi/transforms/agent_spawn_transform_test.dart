@@ -5,6 +5,7 @@ import 'package:phi/domain/midi/midi_transform_kind.dart';
 import 'package:phi/domain/midi/spawn_axis.dart';
 import 'package:phi/domain/midi/spawn_source.dart';
 import 'package:phi/domain/midi/transforms/agent_spawn_transform.dart';
+import 'package:vector_math/vector_math_64.dart';
 
 void main() {
   group('SpawnAxis', () {
@@ -131,6 +132,27 @@ void main() {
       expect(spawn.lifetimeBeats, 2);
     });
 
+    test('a spawn carries zero velocity by default', () {
+      final t = transform();
+      const note = MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1);
+      expect(t.velocity, Vector3.zero());
+      expect(t.spawnFor(note).velocity, Vector3.zero());
+    });
+
+    test('an initial velocity is stamped onto every spawn', () {
+      final t = AgentSpawnTransform(
+        x: SpawnAxis.of(SpawnSource.pitch, outMin: 0, outMax: 127),
+        y: SpawnAxis.of(SpawnSource.velocity, outMin: 0, outMax: 1),
+        z: SpawnAxis.of(SpawnSource.time, outMin: 0, outMax: 16),
+        velocity: Vector3(0, 0.2, 0),
+        label: 'spawn',
+      );
+      const a = MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1);
+      const b = MidiNote(pitch: 72, start: 2, duration: 1, velocity: 0.5);
+      expect(t.spawnFor(a).velocity, Vector3(0, 0.2, 0));
+      expect(t.spawnFor(b).velocity, Vector3(0, 0.2, 0));
+    });
+
     test(
       'voice index derives from channel, folded into the six-slot palette',
       () {
@@ -165,6 +187,18 @@ void main() {
       expect(off.y, t.y);
       expect(off.z, t.z);
       expect(off.label, t.label);
+      expect(off.velocity, t.velocity);
+    });
+
+    test('copyWith preserves a configured velocity', () {
+      final t = AgentSpawnTransform(
+        x: SpawnAxis.of(SpawnSource.pitch),
+        y: SpawnAxis.of(SpawnSource.velocity),
+        z: SpawnAxis.of(SpawnSource.time),
+        velocity: Vector3(0, 0.2, 0),
+        label: 'spawn',
+      );
+      expect(t.copyWith(active: false).velocity, Vector3(0, 0.2, 0));
     });
 
     test('AgentSpawn value equality holds on identical spawns', () {
