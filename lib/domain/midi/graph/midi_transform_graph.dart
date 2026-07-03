@@ -59,6 +59,15 @@ class MidiTransformGraph extends ChangeNotifier {
   final List<TransformEdge> _edges = [];
   int _version = 0;
 
+  // Single-slot memo for [evaluate], keyed on everything that can change the
+  // result: the structural [version], the source clip's [MidiClip.revision],
+  // the summed node-transform revisions (hot-reload), and the eval context.
+  List<MidiNote>? _cache;
+  int _cacheVersion = -1;
+  int _cacheSourceRevision = -1;
+  int _cacheTransformsRevision = -1;
+  GraphEvalContext? _cacheContext;
+
   MidiClip get source => _source;
 
   List<TransformNode> get nodes => List.unmodifiable(_nodes.values);
@@ -199,11 +208,53 @@ class MidiTransformGraph extends ChangeNotifier {
   /// source edges are all closed — the source clip's notes pass through
   /// unchanged.
   ///
-  /// Recomputed on every call; like [MidiTransformChain.output], caching would
-  /// invalidate on the same signal that bumps [version].
+  /// The player reads this live each tick (~60×/sec), so it is memoised in a
+  /// single slot: the walk only re-runs when the graph structure changed
+  /// (tracked by [version]), the source clip was edited ([MidiClip.revision]),
+  /// a node transform hot-reloaded ([MidiTransform.revision]), or the [context]
+  /// differs from the last call (a state flip). Between those, repeated reads
+  /// with the same context return the cached list instance — an O(1) hit, not a
+  /// fresh walk. Callers must treat the result as read-only; mutating it
+  /// corrupts the cache.
+  ///
+  /// The slot holds one context at a time, so alternating calls with two
+  /// different contexts recompute each time; in practice the preview and the
+  /// player evaluate against the same live context, so the slot stays warm.
   List<MidiNote> evaluate([
     GraphEvalContext context = const GraphEvalContext.empty(),
   ]) {
+    final sourceRevision = _source.revision;
+    final transformsRevision = _transformsRevision;
+    if (_cache != null &&
+        _cacheVersion == _version &&
+        _cacheSourceRevision == sourceRevision &&
+        _cacheTransformsRevision == transformsRevision &&
+        _cacheContext == context) {
+      return _cache!;
+    }
+    final result = _evaluate(context);
+    _cache = result;
+    _cacheVersion = _version;
+    _cacheSourceRevision = sourceRevision;
+    _cacheTransformsRevision = transformsRevision;
+    _cacheContext = context;
+    return result;
+  }
+
+  /// Sum of the node transforms' own revisions — bumps when a chip hot-reloads
+  /// under a stable graph. Folded into the [evaluate] cache key, mirroring
+  /// [MidiTransformChain]. Revisions only increment, so any hot-reload strictly
+  /// increases the sum.
+  int get _transformsRevision {
+    var sum = 0;
+    for (final node in _nodes.values) {
+      sum += node.transform.revision;
+    }
+    return sum;
+  }
+
+  /// The uncached walk of the active subgraph for [context]. See [evaluate].
+  List<MidiNote> _evaluate(GraphEvalContext context) {
     final order = topologicalOrder();
     if (order == null) {
       throw StateError('MidiTransformGraph.evaluate called on a cyclic graph');

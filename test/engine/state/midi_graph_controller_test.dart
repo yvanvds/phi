@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/midi/graph/state_match_condition.dart';
 import 'package:phi/domain/midi/graph/transform_node_id.dart';
 import 'package:phi/domain/midi/midi_clip.dart';
+import 'package:phi/domain/midi/midi_clip_mode.dart';
 import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/midi_transform_chain.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
@@ -117,6 +118,22 @@ void main() {
     // With no state live the guard is closed, so the node passes through and
     // the source notes reach the (now unreachable) output unchanged.
     expect(controller.graph.evaluate().single.pitch, 60);
+
+    controller.dispose();
+    chain.dispose();
+  });
+
+  test('mode defaults to chain and notifies only on a real change', () {
+    final chain = chainWith(const []);
+    final controller = MidiGraphController.seededFrom(chain);
+    var notified = 0;
+    controller.addListener(() => notified++);
+
+    expect(controller.mode, MidiClipMode.chain);
+    controller.mode = MidiClipMode.graph;
+    expect(controller.mode, MidiClipMode.graph);
+    controller.mode = MidiClipMode.graph; // no-op, same value
+    expect(notified, 1);
 
     controller.dispose();
     chain.dispose();

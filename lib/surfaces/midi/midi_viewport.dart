@@ -11,6 +11,7 @@ import '../../domain/midi/clip_editor.dart';
 import '../../domain/midi/custom_transform_registry.dart';
 import '../../domain/midi/graph/graph_eval_context.dart';
 import '../../domain/midi/midi_clip.dart';
+import '../../domain/midi/midi_clip_mode.dart';
 import '../../domain/midi/midi_transform.dart';
 import '../../domain/midi/midi_transform_chain.dart';
 import '../../domain/midi/midi_transform_kind.dart';
@@ -27,10 +28,6 @@ import 'midi_header_strip.dart';
 import 'piano_roll_editor.dart';
 import 'transform_chain_panel.dart';
 import 'velocity_lane.dart';
-
-/// Which authoring view the MIDI surface's main area shows: the linear
-/// piano-roll editor, or the branching node-and-cable graph.
-enum _MidiView { chain, graph }
 
 /// Stateful host for the [MidiTransformChain] and its [ClipEditor]. Listens to
 /// both (merged) so toggling a chip *or* editing a note repaints the roll, the
@@ -96,8 +93,6 @@ class _MidiViewportState extends State<MidiViewport> {
   late final Listenable _listenable;
   late final MidiFileIo _fileIo;
 
-  _MidiView _view = _MidiView.chain;
-
   static const _reader = SmfReader();
   static const _writer = SmfWriter();
 
@@ -113,12 +108,14 @@ class _MidiViewportState extends State<MidiViewport> {
     _ownsGraph = widget.graphController == null;
     _graph =
         widget.graphController ?? MidiGraphController.seededFrom(widget.chain);
-    // Merge the registry (for the `+` menu), the graph (structure), and the
-    // state graph (live evaluation context) so a change to any repaints the
-    // roll ghost, the graph, and the preview.
+    // Merge the registry (for the `+` menu), the graph controller (mode +
+    // layout), the graph (structure), and the state graph (live evaluation
+    // context) so a change to any repaints the roll ghost, the graph, the
+    // preview — and swaps the whole editor when the clip's mode flips.
     _listenable = Listenable.merge([
       widget.chain,
       _editor,
+      _graph,
       _graph.graph,
       if (widget.registry != null) widget.registry,
       if (widget.stateGraph != null) widget.stateGraph,
@@ -224,29 +221,35 @@ class _MidiViewportState extends State<MidiViewport> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             _ViewToolbar(
-                              view: _view,
-                              onSelect: (v) => setState(() => _view = v),
-                              onAddNode: _view == _MidiView.graph
+                              mode: _graph.mode,
+                              onSelect: (v) => _graph.mode = v,
+                              onAddNode: _graph.mode == MidiClipMode.graph
                                   ? _pickAndAddNode
                                   : null,
                             ),
                             const SizedBox(height: 8),
                             Expanded(
-                              child: _view == _MidiView.chain
+                              child: _graph.mode == MidiClipMode.chain
                                   ? _buildChainBody(clip, showGhost)
                                   : _buildGraphBody(clip),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 250,
-                        child: TransformChainPanel(
-                          chain: widget.chain,
-                          registry: widget.registry,
+                      // The chip sidebar edits the *linear* chain, so it belongs
+                      // to a chain clip only — a graph clip authors its
+                      // transforms as nodes on the canvas, which takes the full
+                      // width (issue #77).
+                      if (_graph.mode == MidiClipMode.chain) ...[
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 250,
+                          child: TransformChainPanel(
+                            chain: widget.chain,
+                            registry: widget.registry,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -380,16 +383,18 @@ class _MidiViewportState extends State<MidiViewport> {
   }
 }
 
-/// The `CHAIN | GRAPH` view toggle plus, in graph mode, an add-node `+`.
+/// The `CHAIN | GRAPH` mode toggle plus, in graph mode, an add-node `+`. This
+/// picks the clip's representation (issue #77), not a throwaway view: the
+/// selected segment is both what the performer edits and what they hear.
 class _ViewToolbar extends StatelessWidget {
   const _ViewToolbar({
-    required this.view,
+    required this.mode,
     required this.onSelect,
     this.onAddNode,
   });
 
-  final _MidiView view;
-  final void Function(_MidiView view) onSelect;
+  final MidiClipMode mode;
+  final void Function(MidiClipMode mode) onSelect;
 
   /// Add-node handler, shown only in graph mode (`null` in chain mode).
   final VoidCallback? onAddNode;
@@ -400,14 +405,14 @@ class _ViewToolbar extends StatelessWidget {
       children: [
         _Segment(
           label: 'chain',
-          selected: view == _MidiView.chain,
-          onTap: () => onSelect(_MidiView.chain),
+          selected: mode == MidiClipMode.chain,
+          onTap: () => onSelect(MidiClipMode.chain),
         ),
         const SizedBox(width: 4),
         _Segment(
           label: 'graph',
-          selected: view == _MidiView.graph,
-          onTap: () => onSelect(_MidiView.graph),
+          selected: mode == MidiClipMode.graph,
+          onTap: () => onSelect(MidiClipMode.graph),
         ),
         const Spacer(),
         if (onAddNode != null)

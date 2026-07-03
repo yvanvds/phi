@@ -232,8 +232,18 @@ main + app          (orchestration)
   state-machine state, or a runtime variable). The surface feeds a live
   `GraphEvalContext` mirroring `StateGraph.activeStateId`, lights the active
   subgraph on the canvas, and re-evaluates a slim read-only piano-roll preview
-  strip below — so switching the live state changes the preview. `EngineMidiController`
-  owns the shared `graphController`; playback still reads the linear `chain`.
+  strip below — so switching the live state changes the preview. The
+  `CHAIN | GRAPH` toggle is the clip's **mode** (`MidiClipMode`,
+  `lib/domain/midi/`), not a throwaway view: a graph clip hides the chip sidebar
+  (its transforms are the canvas nodes) and playback reads
+  `graph.evaluate(context)` instead of the chain, so a state-guarded branch
+  re-routes the *sounding* notes as the live state flips, not just the preview
+  (issue #77). `EngineMidiController` owns the shared `graphController`, holds
+  the `StateGraph` for the live context, and reads whichever representation the
+  mode selects — the linear chain staying the zero-overhead default.
+  `MidiTransformGraph.evaluate` is memoised the same way the chain is (below),
+  the cache keyed additionally on the eval context so a state flip recomputes
+  once, not every tick.
   Editing (issue #28) is a command layer: `ClipEditor` (ChangeNotifier)
   owns the clip, the selection, and an undo/redo stack of `ClipEditCommand`s
   (`lib/domain/midi/edit/` — add / delete / in-place edit). Gestures author

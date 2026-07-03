@@ -9,6 +9,7 @@ import 'package:phi/engine/engine.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
 import 'package:phi/surfaces/midi/piano_roll_editor.dart';
+import 'package:phi/surfaces/midi/transform_chain_panel.dart';
 
 import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
@@ -53,16 +54,22 @@ void main() {
     );
     engine.stateMachine.setActive(main.id);
 
-    // Open the MIDI surface and switch to the graph view.
+    // Open the MIDI surface — a chain clip by default: the chip sidebar is up.
     await tester.tap(railFor(SurfaceId.midi));
     await tester.pumpAndSettle();
+    expect(find.byType(TransformChainPanel), findsOneWidget);
+
+    // Switch the clip to graph mode.
     await tester.tap(find.text('GRAPH'));
     await tester.pumpAndSettle();
 
     // The canvas is up (source node + the seeded chain) and the preview shows
-    // the demo phrase's ten notes.
+    // the demo phrase's ten notes. The chip sidebar is gone — a graph clip
+    // authors its transforms as nodes, so the linear chain editor has no place
+    // (issue #77).
     expect(find.text('SOURCE'), findsOneWidget);
     expect(find.textContaining('PREVIEW · 10 NOTES'), findsOneWidget);
+    expect(find.byType(TransformChainPanel), findsNothing);
 
     // Author a branch off the source, guarded by `break`: a new terminal node
     // that only carries notes while break is live. (The drag-to-connect and
@@ -95,10 +102,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('PREVIEW · 10 NOTES'), findsOneWidget);
 
-    // The toggle returns to the linear editor.
+    // The toggle returns to the linear editor — piano roll and chip sidebar
+    // both back.
     await tester.tap(find.text('CHAIN'));
     await tester.pumpAndSettle();
     expect(find.byType(PianoRollEditor), findsOneWidget);
+    expect(find.byType(TransformChainPanel), findsOneWidget);
 
     session.dispose();
     await engine.dispose();
