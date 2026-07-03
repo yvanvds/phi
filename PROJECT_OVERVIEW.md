@@ -171,8 +171,13 @@ main + app          (orchestration)
   wired (issue #29): `EngineMidiController` (`lib/engine/state/`) owns the
   chain + editor and drives a looping playhead off a periodic timer,
   reading the chain's transformed `output` **live** each tick (so edits and
-  chip toggles are heard immediately, not on the next play) and
-  forwarding `noteOn`/`noteOff` through a `MidiGateway` (Real over
+  chip toggles are heard immediately, not on the next play). That read is
+  memoised (issue #56): the pipeline re-evaluates only when the transform
+  list changes, the source clip is edited (`MidiClip.revision`, bumped by the
+  edit commands and `replaceWith`), or a chip hot-reloads
+  (`MidiTransform.revision`) — otherwise a read is an O(1) cache hit. The
+  controller forwards
+  `noteOn`/`noteOff` through a `MidiGateway` (Real over
   `package:yse`'s `MidiOut`, Fake recording calls in tests — the same
   split as `YseGateway`). An opt-in `microtonal` flag (issue #36) voices a
   note's fractional pitch as its nearest semitone plus a per-channel

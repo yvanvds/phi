@@ -26,10 +26,12 @@ class EditNotesCommand extends ClipEditCommand {
   @override
   void applyTo(MidiClip clip) {
     _after.forEach((i, note) => clip.notes[i] = note);
+    clip.touch();
   }
 
   @override
   void revert(MidiClip clip) {
     _before.forEach((i, note) => clip.notes[i] = note);
+    clip.touch();
   }
 }

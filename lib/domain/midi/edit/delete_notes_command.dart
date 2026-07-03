@@ -26,6 +26,7 @@ class DeleteNotesCommand extends ClipEditCommand {
     for (final i in _indices.reversed) {
       clip.notes.removeAt(i);
     }
+    clip.touch();
   }
 
   @override
@@ -33,5 +34,6 @@ class DeleteNotesCommand extends ClipEditCommand {
     for (var k = 0; k < _indices.length; k++) {
       clip.notes.insert(_indices[k], _removed[k]);
     }
+    clip.touch();
   }
 }

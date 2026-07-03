@@ -16,6 +16,13 @@ abstract class MidiTransform {
   String get label;
   bool get active;
 
+  /// Bumps whenever this transform's behaviour changes *in place* without the
+  /// containing chain's transform list changing — e.g. a live-coded
+  /// [CustomTransform] hot-reloaded under the same name. Pure transforms (the
+  /// vast majority) never change and stay at `0`; a [MidiTransformChain] folds
+  /// this into its output-cache key so a hot-reload invalidates the cache.
+  int get revision => 0;
+
   List<MidiNote> apply(List<MidiNote> input);
 
   MidiTransform copyWith({bool? active, String? label});
