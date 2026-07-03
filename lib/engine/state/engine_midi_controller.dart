@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:vector_math/vector_math_64.dart';
 
 import '../../domain/midi/clip_editor.dart';
 import '../../domain/midi/midi_note.dart';
 import '../../domain/midi/midi_transform_chain.dart';
 import '../../domain/midi/transforms/agent_spawn_transform.dart';
+import '../../domain/scene/pick_ray.dart';
 import '../../domain/scene/scatter.dart';
 import '../../domain/scene/scene_agent.dart';
 import '../../domain/scene/scene_field.dart';
@@ -158,6 +160,30 @@ class EngineMidiController {
     _field.scatter(scatter);
     _agentSink?.setAgents(_field.agents);
   }
+
+  /// The key of the live agent under [ray], or `null` when it hits none — the
+  /// pick half of direct manipulation (issue #82). The Scene surface turns a
+  /// pointer into a [PickRay] and feeds the result to [grab]; code can build a
+  /// ray and pick without a viewport, so anything the mouse can do, code can
+  /// too.
+  int? pick(PickRay ray) => _field.pick(ray);
+
+  /// Grab the live agent under [key] — begin a direct-manipulation pull. While
+  /// held the field draws the agent toward the target set by [moveGrabTo] on
+  /// each playback tick's [SceneField.step]; [releaseGrab] hands motion back
+  /// with the velocity the pull built up (a moving grab throws, a settled one
+  /// doesn't). Returns `true` if an agent was under [key]. The pull is realized
+  /// by the field's step — driven here by the running transport; the Scene
+  /// surface will drive its own step once it graduates.
+  bool grab(int key) => _field.grab(key);
+
+  /// Move the held grab target the grabbed agent is pulled toward. A no-op when
+  /// nothing is grabbed.
+  void moveGrabTo(Vector3 target) => _field.moveGrabTo(target);
+
+  /// Release the current grab, handing motion back to the field. A no-op when
+  /// nothing is grabbed.
+  void releaseGrab() => _field.release();
 
   /// Drop every live agent and push the empty set to the sink, so the Scene
   /// clears when the transport stops. No-op when nothing is spawned.
