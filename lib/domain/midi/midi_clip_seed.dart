@@ -1,3 +1,5 @@
+import 'package:vector_math/vector_math_64.dart';
+
 import '../time_domains/time_domain.dart';
 import '../time_domains/time_domain_registry.dart';
 import 'midi_clip.dart';
@@ -82,6 +84,9 @@ MidiTransformChain defaultDemoChain() => MidiTransformChain(
       x: SpawnAxis.of(SpawnSource.pitch),
       y: SpawnAxis.of(SpawnSource.velocity),
       z: SpawnAxis.of(SpawnSource.time),
+      // Gentle upward drift so spawned agents rise while they live rather than
+      // hanging static (issue #79). Scene units / second.
+      velocity: Vector3(0, 0.2, 0),
       label: 'spawn · agent @ p,v',
     ),
     const LoopTransform(

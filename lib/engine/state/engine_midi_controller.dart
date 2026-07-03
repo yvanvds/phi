@@ -7,6 +7,7 @@ import '../../domain/midi/midi_note.dart';
 import '../../domain/midi/midi_transform_chain.dart';
 import '../../domain/midi/transforms/agent_spawn_transform.dart';
 import '../../domain/scene/scene_agent.dart';
+import '../../domain/scene/scene_field.dart';
 import '../bridge/midi_gateway.dart';
 import '../bridge/scene_agent_sink.dart';
 import 'midi_graph_controller.dart';
@@ -108,11 +109,13 @@ class EngineMidiController {
   /// release exactly what it pressed if a transform overlaps voices.
   final Set<int> _sounding = <int>{};
 
-  /// Live scene agents, keyed by the same `(channel, pitch)` voice key as
+  /// The live scene, keyed by the same `(channel, pitch)` voice key as
   /// [_sounding], so a note-off despawns exactly the agent its note-on
   /// spawned. Only populated when an [SceneAgentSink] is wired *and* the chain
-  /// carries an active [AgentSpawnTransform].
-  final Map<int, SceneAgent> _agents = <int, SceneAgent>{};
+  /// carries an active [AgentSpawnTransform]. The player advances it each tick
+  /// ([_field.step]) and pushes the moving set at the sink, so spawned agents
+  /// are live participants that drift rather than static points (issue #79).
+  final SceneField _field = SceneField();
 
   /// Start (or restart) playback from the top of the clip. Opens the output
   /// port lazily on first play. No-op if already playing.
@@ -145,19 +148,31 @@ class EngineMidiController {
   /// Drop every live agent and push the empty set to the sink, so the Scene
   /// clears when the transport stops. No-op when nothing is spawned.
   void _clearAgents() {
-    if (_agents.isEmpty) return;
-    _agents.clear();
+    if (_field.isEmpty) return;
+    _field.clear();
     _agentSink?.setAgents(const []);
   }
 
   void _onTick(Timer _) {
-    final dBeats = _tickInterval.inMicroseconds * 1e-6 * (_bpm / 60.0);
+    final dtSeconds = _tickInterval.inMicroseconds * 1e-6;
+    final dBeats = dtSeconds * (_bpm / 60.0);
     _prevAbsBeat = _absBeat;
     _absBeat += dBeats;
     _dispatchWindow(_prevAbsBeat, _absBeat);
+    _stepAgents(dtSeconds);
 
     final total = _chain.source.totalBeats;
     _playhead.value = total > 0 ? _absBeat % total : _absBeat;
+  }
+
+  /// Advance the live agents by [dtSeconds] and push the moved set to the sink,
+  /// so spawned agents visibly drift each frame. No-op when the field is empty,
+  /// which keeps a Scene-less setup (or an inactive spawn chip) from ever
+  /// touching the sink.
+  void _stepAgents(double dtSeconds) {
+    if (_field.isEmpty) return;
+    _field.step(dtSeconds);
+    _agentSink?.setAgents(_field.agents);
   }
 
   /// Fire every note event whose absolute beat falls in `[from, to)`. Note
@@ -217,18 +232,22 @@ class EngineMidiController {
     final transform = _activeSpawnTransform;
     if (transform == null) return;
     final spawn = transform.spawnFor(note);
-    _agents[_voiceKey(note.channel, semitone)] = SceneAgent(
-      position: spawn.position,
-      voiceIndex: spawn.voiceIndex,
+    _field.spawn(
+      _voiceKey(note.channel, semitone),
+      SceneAgent(
+        position: spawn.position,
+        velocity: spawn.velocity,
+        voiceIndex: spawn.voiceIndex,
+      ),
     );
-    sink.setAgents(_agents.values.toList(growable: false));
+    sink.setAgents(_field.agents);
   }
 
   /// Despawn the agent a note-on left under [key], if any, and push the
   /// updated set to the sink.
   void _despawnAgent(int key) {
-    if (_agents.remove(key) == null) return;
-    _agentSink?.setAgents(_agents.values.toList(growable: false));
+    if (!_field.despawn(key)) return;
+    _agentSink?.setAgents(_field.agents);
   }
 
   /// The first active [AgentSpawnTransform] in the chain, or `null` if none —

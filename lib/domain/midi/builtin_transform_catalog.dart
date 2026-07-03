@@ -1,3 +1,5 @@
+import 'package:vector_math/vector_math_64.dart';
+
 import 'midi_note.dart';
 import 'midi_transform.dart';
 import 'midi_transform_kind.dart';
@@ -143,6 +145,9 @@ abstract final class BuiltinTransformCatalog {
         x: SpawnAxis.of(SpawnSource.pitch),
         y: SpawnAxis.of(SpawnSource.velocity),
         z: SpawnAxis.of(SpawnSource.time),
+        // Gentle upward drift so spawned agents are live participants that
+        // move rather than static points (issue #79). Scene units / second.
+        velocity: Vector3(0, 0.2, 0),
         label: 'spawn · agent',
       ),
     ),
