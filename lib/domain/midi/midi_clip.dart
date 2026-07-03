@@ -29,7 +29,21 @@ class MidiClip {
   int bars;
   int beatsPerBar;
 
+  int _revision = 0;
+
   double get totalBeats => bars * beatsPerBar.toDouble();
+
+  /// Monotonic counter bumped whenever [notes] changes — either through an
+  /// edit command or a wholesale [replaceWith]. A [MidiTransformChain] keys
+  /// its output cache on this so it can recompute the pipeline only when the
+  /// source material actually changed, instead of on every read. Selection
+  /// and other non-note edits leave it untouched.
+  int get revision => _revision;
+
+  /// Signals that [notes] was mutated in place. The edit commands and
+  /// [replaceWith] call this so anything caching keyed on [revision]
+  /// invalidates on its next read.
+  void touch() => _revision++;
 
   /// Replaces this clip's contents with [other]'s, in place.
   ///
@@ -45,5 +59,6 @@ class MidiClip {
     notes
       ..clear()
       ..addAll(other.notes);
+    touch();
   }
 }

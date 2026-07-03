@@ -44,6 +44,9 @@ class CustomTransform extends MidiTransform {
   String get label => _label ?? definition.name;
 
   @override
+  int get revision => definition.revision;
+
+  @override
   List<MidiNote> apply(List<MidiNote> input) {
     final dsl = input.map(DslNote.fromNote).toList(growable: false);
     final result = definition.transform(dsl);

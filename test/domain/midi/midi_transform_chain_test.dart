@@ -1,6 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/domain/midi/clip_editor.dart';
+import 'package:phi/domain/midi/custom_transform_definition.dart';
+import 'package:phi/domain/midi/dsl_note.dart';
 import 'package:phi/domain/midi/midi_clip.dart';
 import 'package:phi/domain/midi/midi_note.dart';
+import 'package:phi/domain/midi/midi_transform.dart';
 import 'package:phi/domain/midi/midi_transform_chain.dart';
 import 'package:phi/domain/midi/midi_transform_kind.dart';
 import 'package:phi/domain/midi/music_scale.dart';
@@ -263,4 +267,134 @@ void main() {
       expect(notifications, 0);
     });
   });
+
+  group('MidiTransformChain output caching', () {
+    test('repeated reads recompute the pipeline exactly once', () {
+      final counter = _CountingTransform();
+      final chain = MidiTransformChain(
+        source: _clip(const [
+          MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1),
+        ]),
+        transforms: [counter],
+      );
+
+      final first = chain.output;
+      for (var i = 0; i < 20; i++) {
+        // Every subsequent read is an O(1) cache hit: same instance, no
+        // recompute — mirroring the ~60 reads/sec the player does between
+        // edits.
+        expect(identical(chain.output, first), isTrue);
+      }
+      expect(counter.applyCount, 1);
+    });
+
+    test('a source-clip edit invalidates the cache exactly once per edit', () {
+      final counter = _CountingTransform();
+      final clip = _clip(const [
+        MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1),
+      ]);
+      final chain = MidiTransformChain(source: clip, transforms: [counter]);
+      final editor = ClipEditor(clip);
+
+      chain.output; // prime the cache
+      expect(counter.applyCount, 1);
+
+      editor.addNote(
+        const MidiNote(pitch: 64, start: 1, duration: 1, velocity: 1),
+      );
+      expect(chain.output.length, 2, reason: 'edit is reflected live');
+      expect(counter.applyCount, 2);
+      // Reads after the edit hit the cache again — no further recompute.
+      chain.output;
+      chain.output;
+      expect(counter.applyCount, 2);
+
+      editor.dispose();
+    });
+
+    test('a transform-list change invalidates the cache', () {
+      final counter = _CountingTransform();
+      final chain = MidiTransformChain(
+        source: _clip(const [
+          MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1),
+        ]),
+        transforms: [counter],
+      );
+
+      chain.output; // prime
+      expect(counter.applyCount, 1);
+
+      chain.add(const TransposeTransform(semitones: 2, label: '+2'));
+      expect(chain.output.single.pitch, 62);
+      expect(counter.applyCount, 2);
+    });
+
+    test('notifySourceChanged invalidates the cache', () {
+      final counter = _CountingTransform();
+      final chain = MidiTransformChain(
+        source: _clip(const [
+          MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1),
+        ]),
+        transforms: [counter],
+      );
+
+      chain.output; // prime
+      chain.notifySourceChanged();
+      chain.output;
+      expect(counter.applyCount, 2);
+    });
+
+    test('hot-reloading a custom transform in place invalidates the cache', () {
+      final definition = CustomTransformDefinition(
+        name: 'shift',
+        kind: MidiTransformKind.pitch,
+        transform: (List<DslNote> notes) =>
+            notes.map((n) => n.copyWith(pitch: n.pitch + 12)).toList(),
+      );
+      final chain = MidiTransformChain(
+        source: _clip(const [
+          MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1),
+        ]),
+        transforms: [definition.instantiate()],
+      );
+
+      expect(chain.output.single.pitch, 72);
+      final cached = chain.output;
+      expect(identical(chain.output, cached), isTrue);
+
+      // Re-registering the same definition swaps its function in place — the
+      // chain's transform list is untouched, but the output must change.
+      definition.updateTransform(
+        (List<DslNote> notes) =>
+            notes.map((n) => n.copyWith(pitch: 48)).toList(),
+      );
+
+      expect(chain.output.single.pitch, 48);
+      expect(identical(chain.output, cached), isFalse);
+    });
+  });
+}
+
+/// A transform that tallies how many times its [apply] runs, so a test can
+/// assert the chain recomputes only when something actually changed.
+class _CountingTransform extends MidiTransform {
+  int applyCount = 0;
+
+  @override
+  MidiTransformKind get kind => MidiTransformKind.pitch;
+
+  @override
+  String get label => 'count';
+
+  @override
+  bool get active => true;
+
+  @override
+  List<MidiNote> apply(List<MidiNote> input) {
+    applyCount++;
+    return input;
+  }
+
+  @override
+  _CountingTransform copyWith({bool? active, String? label}) => this;
 }

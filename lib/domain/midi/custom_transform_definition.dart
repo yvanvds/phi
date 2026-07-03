@@ -26,16 +26,27 @@ class CustomTransformDefinition {
   final MidiTransformKind kind;
 
   DslTransform _transform;
+  int _revision = 0;
 
   /// The function this definition currently runs. Updated in place on
   /// hot-reload via [updateTransform].
   DslTransform get transform => _transform;
 
+  /// Monotonic counter bumped every time [updateTransform] swaps the function.
+  /// A [CustomTransform] surfaces this as its own revision so a chain that
+  /// memoises its output invalidates the cache on hot-reload — the one signal
+  /// that changes what `apply` produces without the chain's transform list
+  /// changing.
+  int get revision => _revision;
+
   /// Hot-reload hook: replace the function this definition runs. Called by
   /// `CustomTransformRegistry.register` when a definition of the same name is
   /// re-registered; any [CustomTransform] holding this definition then runs the
   /// new logic on its next apply.
-  void updateTransform(DslTransform transform) => _transform = transform;
+  void updateTransform(DslTransform transform) {
+    _transform = transform;
+    _revision++;
+  }
 
   /// Builds a chain-ready [CustomTransform] bound to this definition.
   CustomTransform instantiate({bool active = true}) =>

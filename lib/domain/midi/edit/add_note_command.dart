@@ -20,10 +20,12 @@ class AddNoteCommand extends ClipEditCommand {
   void applyTo(MidiClip clip) {
     _index = clip.notes.length;
     clip.notes.add(note);
+    clip.touch();
   }
 
   @override
   void revert(MidiClip clip) {
     clip.notes.removeAt(_index!);
+    clip.touch();
   }
 }
