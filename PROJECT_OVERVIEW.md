@@ -62,10 +62,27 @@ main + app          (orchestration)
   right, user strips left). Header has a `+` to add channels and the
   `System.audioTest` toggle. Each strip carries voice-swatch + name + fader
   with overlaid peak meter + mute/solo buttons.
-- Scene surface stub: renderer-agnostic `SceneRenderer` bridge in
+- Scene surface: renderer-agnostic `SceneRenderer` bridge in
   `lib/engine/bridge/`, backed in production by `MacbearSceneRenderer`
   (`macbear_3d` on ANGLE). Renders one placeholder agent as a
   voice-coloured sphere; orbit/pan/zoom via macbear's built-in controller.
+  Pointer picking + grab landed with issue #86 (surface half of #82): a
+  `PhiScenePickController` (`M3InputController`) unprojects the pointer into a
+  world `PickRay` via the pure `SceneUnproject` (screen→world math over the
+  live camera's view/projection matrices), asks `SceneField.pick` which agent
+  sits under it, and — on a hit — selects + grabs it (drag → `moveGrabTo` on a
+  camera-facing plane at the agent's depth → `releaseGrab`), delegating misses,
+  right-drag pan, scroll zoom, and keyboard nav to a fallback orbit controller.
+  The Scene surface implements the renderer-agnostic `ScenePickHandler` seam
+  (forwarding pick/grab to `EngineMidiController`, which owns the shared field,
+  so mouse and code grab the same agents) and owns selection: a bright
+  translucent halo (`PhiMacbearScene.setSelection`) tracks the picked agent's
+  live position, refreshed by the surface's own gated ticker, which also drives
+  `EngineMidiController.stepFromSurface` so a grab pull is realized off the
+  playback tick (a no-op while playing, to avoid double-stepping). The GL
+  viewport can't be exercised headless (no ANGLE context in CI), so the pure
+  math, the input controller, and the surface wiring are unit/widget-tested
+  behind fakes and the pointer path is verified manually.
 - Code surface scaffold: `re_editor`-backed Python editor with custom
   Phi-flavoured highlight theme, projected view (full-line comments
   stripped, blank-line runs collapsed) driven by
@@ -282,7 +299,7 @@ main + app          (orchestration)
 
 | Surface  | Status   | Folder                          |
 |----------|----------|---------------------------------|
-| Scene    | stub     | `lib/surfaces/scene/`           |
+| Scene    | picking  | `lib/surfaces/scene/`           |
 | Patcher  | skeleton | `lib/surfaces/patcher/`         |
 | Code     | scaffold | `lib/surfaces/code/`            |
 | State    | scaffold | `lib/surfaces/state/`           |

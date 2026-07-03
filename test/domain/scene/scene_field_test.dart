@@ -35,6 +35,18 @@ void main() {
       expect(field.agents.single.position, Vector3(9, 9, 9));
     });
 
+    test('positionOf returns a clone of the keyed agent, null when absent', () {
+      final field = SceneField();
+      field.spawn(4, SceneAgent(position: Vector3(1, 2, 3)));
+
+      expect(field.positionOf(4), Vector3(1, 2, 3));
+      expect(field.positionOf(999), isNull);
+
+      // The returned vector is detached — mutating it can't perturb the field.
+      field.positionOf(4)!.setValues(9, 9, 9);
+      expect(field.positionOf(4), Vector3(1, 2, 3));
+    });
+
     test('despawn removes exactly the keyed agent and reports it', () {
       final field = SceneField();
       field.spawn(1, SceneAgent(position: Vector3.zero()));

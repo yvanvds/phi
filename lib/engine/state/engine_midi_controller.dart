@@ -168,6 +168,12 @@ class EngineMidiController {
   /// too.
   int? pick(PickRay ray) => _field.pick(ray);
 
+  /// The current world position of the live agent under [key], or `null` when
+  /// no such agent is alive. The Scene surface reads this to anchor a pointer
+  /// drag at the grabbed agent's depth and to keep the selection highlight on
+  /// the moving agent as the field advances.
+  Vector3? agentPosition(int key) => _field.positionOf(key);
+
   /// Grab the live agent under [key] — begin a direct-manipulation pull. While
   /// held the field draws the agent toward the target set by [moveGrabTo] on
   /// each playback tick's [SceneField.step]; [releaseGrab] hands motion back
@@ -184,6 +190,17 @@ class EngineMidiController {
   /// Release the current grab, handing motion back to the field. A no-op when
   /// nothing is grabbed.
   void releaseGrab() => _field.release();
+
+  /// Advance the field from the Scene surface's own ticker, so a grab pull is
+  /// realized even when the transport isn't running. A no-op while playing —
+  /// the playback tick ([_stepAgents]) already steps the field, and a second
+  /// step per frame would move every agent twice as fast — and when the field
+  /// is empty. Pushes the moved set to the sink so the drag is seen at once.
+  void stepFromSurface(double dtSeconds) {
+    if (_playing || _field.isEmpty) return;
+    _field.step(dtSeconds);
+    _agentSink?.setAgents(_field.agents);
+  }
 
   /// Drop every live agent and push the empty set to the sink, so the Scene
   /// clears when the transport stops. No-op when nothing is spawned.
