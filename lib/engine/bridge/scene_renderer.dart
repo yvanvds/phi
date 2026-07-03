@@ -1,8 +1,10 @@
 import 'package:flutter/widgets.dart';
+import 'package:vector_math/vector_math_64.dart';
 
 import '../../domain/scene/scene_agent.dart';
 import 'camera.dart';
 import 'scene_agent_sink.dart';
+import 'scene_pick_handler.dart';
 
 /// Abstract renderer for the 3D Scene surface.
 ///
@@ -22,6 +24,18 @@ abstract interface class SceneRenderer implements SceneAgentSink {
 
   /// Set the current camera. Applied on the next frame.
   void setCamera(Camera camera);
+
+  /// Highlight the agent at [worldPosition] as the current selection, or clear
+  /// the highlight with `null`. Reflected on the next frame. The Scene surface
+  /// pushes the selected agent's *live* position here each frame so the
+  /// highlight tracks the moving agent.
+  void setSelection(Vector3? worldPosition);
+
+  /// Wire the pointer-picking / grab input path, routing picks and grabs
+  /// through [handler]. Replaces the renderer's default camera-only input
+  /// controller; the built-in orbit / pan / zoom behaviour still runs for
+  /// misses and non-left-button gestures.
+  void installPicking(ScenePickHandler handler);
 
   /// Set the current agents. Reflected on the next frame.
   @override

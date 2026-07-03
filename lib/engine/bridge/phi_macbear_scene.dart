@@ -6,6 +6,8 @@ import 'package:vector_math/vector_math_64.dart' as vm64;
 import '../../design/tokens/phi_colors.dart';
 import '../../domain/scene/scene_agent.dart';
 import 'camera.dart';
+import 'phi_scene_pick_controller.dart';
+import 'scene_pick_handler.dart';
 
 /// Concrete `M3Scene` that draws one Phi-styled glowing dot per agent.
 ///
@@ -21,8 +23,13 @@ class PhiMacbearScene extends m3.M3Scene {
   static const double _coreRadius = 0.18;
   static const double _haloRadius = 0.55;
 
+  /// The selection halo sits just outside an agent's own halo, so the picked
+  /// agent reads as ringed by a brighter shell.
+  static const double _selectionRadius = 0.74;
+
   List<SceneAgent> _pending = const [];
   Camera? _pendingCamera;
+  vm64.Vector3? _selection;
   bool _dirty = false;
 
   /// Replace the agents that will render on the next frame.
@@ -35,6 +42,40 @@ class PhiMacbearScene extends m3.M3Scene {
   void setCamera(Camera camera) {
     _pendingCamera = camera;
     _dirty = true;
+  }
+
+  /// Highlight the agent at [worldPosition], or clear the highlight with
+  /// `null`. Only marks the frame dirty when the selection actually moves, so
+  /// the surface can push this every tick cheaply.
+  void setSelection(vm64.Vector3? worldPosition) {
+    if (_selectionEquals(worldPosition)) return;
+    _selection = worldPosition?.clone();
+    _dirty = true;
+  }
+
+  /// Install the pointer-picking input controller, routing picks and grabs
+  /// through [handler] and falling back to a fresh orbit controller for misses
+  /// and non-left-button gestures.
+  void installPicking(ScenePickHandler handler) {
+    inputController = PhiScenePickController(
+      camera: camera,
+      handler: handler,
+      fallback: m3.M3CameraOrbitController(camera),
+      // Pointer positions arrive in logical pixels; the app engine tracks the
+      // logical viewport size in the same units.
+      viewportSize: () {
+        final engine = m3.M3AppEngine.instance;
+        return (engine.appWidth.toDouble(), engine.appHeight.toDouble());
+      },
+    );
+  }
+
+  bool _selectionEquals(vm64.Vector3? other) {
+    final current = _selection;
+    if (current == null || other == null) {
+      return current == null && other == null;
+    }
+    return current.x == other.x && current.y == other.y && current.z == other.z;
   }
 
   @override
@@ -65,10 +106,15 @@ class PhiMacbearScene extends m3.M3Scene {
       _toVm32(pending.target),
       vm32.Vector3(0, 0, 1),
     );
+    // Apply the pose once. `_dirty` is also raised by every agent push, so
+    // re-applying here each frame would snap the camera back to the seed and
+    // fight the orbit controller the whole time the transport runs.
+    _pendingCamera = null;
   }
 
   void _rebuildEntities() {
     entities.clear();
+    _addSelectionHalo();
     for (final agent in _pending) {
       final position = _toVm32(agent.position);
       final core = _voiceColor(agent.voiceIndex, soft: false);
@@ -88,7 +134,26 @@ class PhiMacbearScene extends m3.M3Scene {
     }
   }
 
+  /// Draw the selection halo, if any — a translucent bright shell just outside
+  /// the picked agent's own halo, so the current selection reads as ringed.
+  void _addSelectionHalo() {
+    final selection = _selection;
+    if (selection == null) return;
+    final entity = addMesh(
+      m3.M3Mesh(m3.M3SphereGeom(_selectionRadius)),
+      _toVm32(selection),
+    )..color = _selectionColor;
+    final mtr = entity.mesh!.subMeshes.first.mtr;
+    mtr.setMatte();
+    mtr.alphaMode = m3.M3AlphaMode.blend;
+  }
+
   static vm32.Vector3 _toVm32(vm64.Vector3 v) => vm32.Vector3(v.x, v.y, v.z);
+
+  /// Bright, semi-transparent shell colour for the selection halo — pure white
+  /// at a high enough alpha to read clearly over the dark void and any voice
+  /// colour, while still letting the picked agent show through.
+  static final vm32.Vector4 _selectionColor = vm32.Vector4(1, 1, 1, 0.6);
 
   static vm32.Vector3 _vec3From(Color c) => vm32.Vector3(c.r, c.g, c.b);
 

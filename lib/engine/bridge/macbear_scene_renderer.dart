@@ -1,9 +1,11 @@
 import 'package:flutter/widgets.dart';
 import 'package:macbear_3d/macbear_3d.dart' as m3;
+import 'package:vector_math/vector_math_64.dart';
 
 import '../../domain/scene/scene_agent.dart';
 import 'camera.dart';
 import 'phi_macbear_scene.dart';
+import 'scene_pick_handler.dart';
 import 'scene_renderer.dart';
 
 /// Production [SceneRenderer] backed by `package:macbear_3d`.
@@ -62,6 +64,14 @@ class MacbearSceneRenderer implements SceneRenderer {
 
   @override
   void setCamera(Camera camera) => _scene.setCamera(camera);
+
+  @override
+  void setSelection(Vector3? worldPosition) =>
+      _scene.setSelection(worldPosition);
+
+  @override
+  void installPicking(ScenePickHandler handler) =>
+      _scene.installPicking(handler);
 
   @override
   void setAgents(List<SceneAgent> agents) => _scene.setAgents(agents);

@@ -66,6 +66,12 @@ class SceneField {
   /// renderer without risk of later mutation.
   List<SceneAgent> get agents => _agents.values.toList(growable: false);
 
+  /// The current position of the agent under [key], cloned so the caller can't
+  /// mutate the field through it, or `null` when no such agent is alive. The
+  /// Scene surface reads this to anchor a drag at the grabbed agent's depth and
+  /// to keep the selection highlight on the moving agent.
+  Vector3? positionOf(int key) => _agents[key]?.position.clone();
+
   /// Add (or replace) the agent under [key]. Replacing lets a re-triggered
   /// voice key overwrite a stale agent rather than leaking it.
   void spawn(int key, SceneAgent agent) => _agents[key] = agent;

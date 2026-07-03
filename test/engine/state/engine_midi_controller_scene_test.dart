@@ -385,4 +385,99 @@ void main() {
       });
     });
   });
+
+  group('EngineMidiController — surface pick/step seam (issue #86)', () {
+    // The held clip's single note is pitch 60 on channel 0, so its voice key is
+    // 0 * 128 + 60 = 60.
+    const heldKey = 60;
+
+    test('agentPosition returns the live agent, null for an unknown key', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        final controller = EngineMidiController(
+          chain: _heldChain(), // zero spawn velocity → stays at (60, 1, 0)
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 300));
+
+        final pos = controller.agentPosition(heldKey);
+        expect(pos, isNotNull);
+        expect(pos!.x, closeTo(60, 1e-9));
+        expect(pos.y, closeTo(1, 1e-9));
+        expect(controller.agentPosition(999999), isNull);
+
+        // After stop the field is cleared, so the position is gone too.
+        controller.stop();
+        expect(controller.agentPosition(heldKey), isNull);
+
+        controller.dispose();
+      });
+    });
+
+    test('agentPosition hands back a clone the caller cannot mutate', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        final controller = EngineMidiController(
+          chain: _heldChain(),
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 300));
+
+        controller.agentPosition(heldKey)!.setValues(9, 9, 9);
+        // The field's own copy is untouched.
+        expect(controller.agentPosition(heldKey)!.x, closeTo(60, 1e-9));
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('stepFromSurface is a no-op while playing (no double-step)', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        final controller = EngineMidiController(
+          // Drifting agent, so a stray extra step would visibly overshoot.
+          chain: _chainWith(_spawnTransform(velocity: Vector3(1, 0, 0))),
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 200)); // agent A drifting
+        expect(renderer.lastAgents, hasLength(1));
+        final callsBefore = renderer.calls.length;
+        final xBefore = renderer.lastAgents.single.position.x;
+
+        // A big surface step while the transport runs must change nothing —
+        // the playback tick owns stepping.
+        controller.stepFromSurface(1.0);
+        expect(renderer.calls.length, callsBefore); // never touched the sink
+        expect(renderer.lastAgents.single.position.x, xBefore);
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('stepFromSurface with an empty field never touches the sink', () {
+      final renderer = FakeSceneRenderer();
+      final controller = EngineMidiController(
+        chain: _chainWith(_spawnTransform()),
+        gateway: FakeMidiGateway(),
+        agentSink: renderer,
+      );
+
+      // Not playing, nothing spawned.
+      controller.stepFromSurface(0.1);
+      expect(renderer.calls, isEmpty);
+
+      controller.dispose();
+    });
+  });
 }

@@ -1,7 +1,9 @@
 import 'package:flutter/widgets.dart';
 import 'package:phi/domain/scene/scene_agent.dart';
 import 'package:phi/engine/bridge/camera.dart';
+import 'package:phi/engine/bridge/scene_pick_handler.dart';
 import 'package:phi/engine/bridge/scene_renderer.dart';
+import 'package:vector_math/vector_math_64.dart';
 
 /// In-memory [SceneRenderer] used in unit and widget tests.
 ///
@@ -13,6 +15,8 @@ class FakeSceneRenderer implements SceneRenderer {
   Camera? lastCamera;
   List<SceneAgent> lastAgents = const [];
   bool? lastVisible;
+  Vector3? lastSelection;
+  ScenePickHandler? installedHandler;
 
   @override
   void init() {
@@ -42,6 +46,18 @@ class FakeSceneRenderer implements SceneRenderer {
   void setVisible(bool visible) {
     calls.add('setVisible:$visible');
     lastVisible = visible;
+  }
+
+  @override
+  void setSelection(Vector3? worldPosition) {
+    calls.add('setSelection:${worldPosition == null ? 'null' : 'pos'}');
+    lastSelection = worldPosition;
+  }
+
+  @override
+  void installPicking(ScenePickHandler handler) {
+    calls.add('installPicking');
+    installedHandler = handler;
   }
 
   @override
