@@ -82,7 +82,13 @@ main + app          (orchestration)
   playback tick (a no-op while playing, to avoid double-stepping). The GL
   viewport can't be exercised headless (no ANGLE context in CI), so the pure
   math, the input controller, and the surface wiring are unit/widget-tested
-  behind fakes and the pointer path is verified manually.
+  behind fakes and the pointer path is verified manually. Issue #90 adds a
+  debug-only **pick demo** toggle on the Scene surface: the playback demo's
+  notes are too short and clustered to click by hand, so flipping the toggle
+  calls `EngineMidiController.loadSceneDemo` — seeding a handful of long-lived,
+  well-separated static agents (`pickDemoAgents`, `lib/domain/scene/`) into the
+  shared field so pick/select/grab can be exercised at leisure; toggling off
+  (or a transport stop) clears them.
 - Code surface scaffold: `re_editor`-backed Python editor with custom
   Phi-flavoured highlight theme, projected view (full-line comments
   stripped, blank-line runs collapsed) driven by

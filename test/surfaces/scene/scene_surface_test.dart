@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/design/widgets/toggle/phi_toggle.dart';
 import 'package:phi/domain/scene/pick_ray.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/surfaces/scene/scene_surface.dart';
@@ -100,6 +101,39 @@ void main() {
         ..releaseGrab()
         ..select(null);
     }, returnsNormally);
+  });
+
+  testWidgets('the dev toggle loads a pick-friendly demo set (issue #90)', (
+    tester,
+  ) async {
+    await pumpSurface(tester);
+    // The overlay toggle is present and starts off, so the scene still shows
+    // just the seeded placeholder.
+    final toggle = find.descendant(
+      of: find.byKey(const Key('scene-pick-demo-toggle')),
+      matching: find.byType(PhiToggle),
+    );
+    expect(toggle, findsOneWidget);
+    expect(renderer.lastAgents, hasLength(1));
+
+    // Flip it on: the controller seeds several well-separated agents and pushes
+    // them to the renderer, and each is pickable by the installed handler.
+    await tester.tap(toggle);
+    await tester.pump();
+    expect(renderer.lastAgents.length, greaterThan(1));
+    final handler = renderer.installedHandler!;
+    for (final agent in renderer.lastAgents) {
+      final p = agent.position;
+      final key = handler.pick(
+        PickRay(origin: p + Vector3(0, 0, -10), direction: Vector3(0, 0, 1)),
+      );
+      expect(key, isNotNull, reason: 'each demo agent is pickable');
+    }
+
+    // Flip it off: the demo clears back to an empty scene.
+    await tester.tap(toggle);
+    await tester.pump();
+    expect(renderer.lastAgents, isEmpty);
   });
 
   testWidgets('selecting a live agent puts the highlight on its position', (

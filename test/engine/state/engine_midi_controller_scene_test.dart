@@ -386,6 +386,114 @@ void main() {
     });
   });
 
+  group('EngineMidiController — pick-friendly Scene demo (issue #90)', () {
+    EngineMidiController demoController(FakeSceneRenderer renderer) =>
+        EngineMidiController(
+          chain: _chainWith(_spawnTransform()),
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
+
+    test('loadSceneDemo populates the field and pushes it to the sink', () {
+      final renderer = FakeSceneRenderer();
+      final controller = demoController(renderer);
+
+      expect(controller.isSceneDemoLoaded, isFalse);
+      controller.loadSceneDemo();
+
+      expect(controller.isSceneDemoLoaded, isTrue);
+      expect(renderer.lastAgents, isNotEmpty);
+      expect(
+        renderer.lastAgents.map((a) => a.voiceIndex).toSet().length,
+        renderer.lastAgents.length,
+        reason: 'each demo agent keeps its own voice colour',
+      );
+
+      controller.dispose();
+    });
+
+    test('demo agents are pickable and settled (well-separated)', () {
+      final renderer = FakeSceneRenderer();
+      final controller = demoController(renderer);
+      controller.loadSceneDemo();
+
+      // Aim a ray straight down +Z through each agent in turn: each resolves to
+      // exactly one key, proving they are spread beyond the pick radius.
+      final keys = <int?>{};
+      for (final agent in renderer.lastAgents) {
+        final p = agent.position;
+        final key = controller.pick(
+          PickRay(
+            origin: Vector3(p.x, p.y, p.z - 10),
+            direction: Vector3(0, 0, 1),
+          ),
+        );
+        expect(key, isNotNull);
+        keys.add(key);
+      }
+      expect(
+        keys.length,
+        renderer.lastAgents.length,
+        reason: 'every agent picks to a unique key',
+      );
+
+      controller.dispose();
+    });
+
+    test('clearSceneDemo drops the agents and clears the sink', () {
+      final renderer = FakeSceneRenderer();
+      final controller = demoController(renderer);
+      controller.loadSceneDemo();
+      expect(renderer.lastAgents, isNotEmpty);
+
+      controller.clearSceneDemo();
+      expect(controller.isSceneDemoLoaded, isFalse);
+      expect(renderer.lastAgents, isEmpty);
+
+      // Idempotent: a second clear with nothing loaded never touches the sink.
+      final callsBefore = renderer.calls.length;
+      controller.clearSceneDemo();
+      expect(renderer.calls.length, callsBefore);
+
+      controller.dispose();
+    });
+
+    test('stopping the transport drops a loaded demo', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        final controller = demoController(renderer);
+        controller.loadSceneDemo();
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 50));
+        controller.stop();
+
+        expect(renderer.lastAgents, isEmpty);
+        expect(controller.isSceneDemoLoaded, isFalse);
+
+        controller.dispose();
+      });
+    });
+
+    test('demo keys never collide with a playback voice key', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        final controller = demoController(renderer);
+        controller.loadSceneDemo();
+        final demoCount = renderer.lastAgents.length;
+
+        // Playing spawns note agents on top of the demo set — the counts add,
+        // so no note-on overwrote a demo agent (a key clash would drop one).
+        controller.play();
+        async.elapse(const Duration(milliseconds: 300)); // note A alive
+        expect(renderer.lastAgents.length, demoCount + 1);
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+  });
+
   group('EngineMidiController — surface pick/step seam (issue #86)', () {
     // The held clip's single note is pitch 60 on channel 0, so its voice key is
     // 0 * 128 + 60 = 60.

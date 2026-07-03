@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:vector_math/vector_math_64.dart';
 
 import '../../design/tokens/phi_colors.dart';
+import '../../design/widgets/toggle/phi_toggle.dart';
 import '../../domain/scene/pick_ray.dart';
 import '../../domain/scene/scene_agent.dart';
 import '../../engine/bridge/camera.dart';
@@ -75,6 +77,12 @@ class _SceneViewportState extends State<_SceneViewport>
   /// through a paused-transport drag (to realize the pull) even with nothing
   /// selected.
   bool _grabbing = false;
+
+  /// Whether the pick-friendly dev demo (issue #90) is currently loaded. The
+  /// overlay toggle drives this; loading seeds a handful of long-lived,
+  /// well-separated agents into the shared field so pick / select / grab can
+  /// be exercised by hand without waiting on short, clustered playback spawns.
+  bool _demoLoaded = false;
 
   @override
   void initState() {
@@ -169,11 +177,63 @@ class _SceneViewportState extends State<_SceneViewport>
     _syncTicker();
   }
 
+  /// Load or drop the pick-friendly dev demo (issue #90). Loading pushes a
+  /// spread of long-lived agents into the shared field via the MIDI player;
+  /// dropping clears them and any selection halo riding one of them.
+  void _toggleDemo(bool load) {
+    final midi = widget.engine.midiOrNull;
+    if (midi == null) return;
+    setState(() => _demoLoaded = load);
+    if (load) {
+      midi.loadSceneDemo();
+    } else {
+      _selectedKey = null;
+      widget.renderer.setSelection(null);
+      midi.clearSceneDemo();
+      _syncTicker();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
       color: PhiColors.voidField,
-      child: widget.renderer.buildView(),
+      child: Stack(
+        children: [
+          Positioned.fill(child: widget.renderer.buildView()),
+          // Dev-only aid: a toggle that seeds a pick-friendly agent set so the
+          // pointer path can be exercised by hand. Hidden in release builds.
+          if (kDebugMode && widget.engine.midiOrNull != null)
+            Positioned(top: 12, left: 12, child: _buildDemoToggle()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDemoToggle() {
+    return Container(
+      key: const Key('scene-pick-demo-toggle'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: PhiColors.bg1,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: PhiColors.line1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'PICK DEMO',
+            style: TextStyle(
+              color: PhiColors.fg2,
+              fontSize: 11,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(width: 8),
+          PhiToggle(value: _demoLoaded, onChanged: _toggleDemo),
+        ],
+      ),
     );
   }
 }
