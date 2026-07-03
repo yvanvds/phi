@@ -20,6 +20,30 @@ void main() {
       expect(agent.voiceIndex, 4);
     });
 
+    test('sends default to empty', () {
+      final agent = SceneAgent(position: Vector3.zero());
+      expect(agent.sends, isEmpty);
+    });
+
+    test('sends are held as an unmodifiable snapshot', () {
+      final source = {'reverb': 0.5};
+      final agent = SceneAgent(position: Vector3.zero(), sends: source);
+
+      // Mutating the source map does not leak into the agent.
+      source['reverb'] = 1.0;
+      expect(agent.sends, {'reverb': 0.5});
+      // And the agent's own map cannot be mutated.
+      expect(() => agent.sends['delay'] = 0.1, throwsUnsupportedError);
+    });
+
+    test('copyWith preserves sends when not replaced', () {
+      final agent = SceneAgent(
+        position: Vector3.zero(),
+        sends: {'reverb': 0.5},
+      );
+      expect(agent.copyWith(position: Vector3(1, 0, 0)).sends, {'reverb': 0.5});
+    });
+
     test('copyWith replaces only the given fields', () {
       final agent = SceneAgent(
         position: Vector3(1, 0, 0),
