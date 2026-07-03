@@ -121,6 +121,24 @@ main + app          (orchestration)
   time-domain infrastructure (issues #60/#61); `branch · state.break` stays a
   `StubTransform` in the linear chain, but the branching model it points to
   now exists (issue #35): `lib/domain/midi/graph/` adds `MidiTransformGraph`
+  — see below. Performers can also **author their own** transforms from the
+  Code surface (issue #37→#38, the registration-seam slice): a stable
+  immutable `DslNote` (`lib/domain/midi/dsl_note.dart`) is the note shape a
+  live-coded `def my_transform(notes)` sees, deliberately decoupled from the
+  internal `MidiNote`; a `CustomTransformDefinition` names a hot-reloadable
+  `DslTransform` function; `CustomTransform` (in `transforms/`) is a
+  `MidiTransform` that holds the *definition* (not the raw fn) and bridges
+  `MidiNote`↔`DslNote` in `apply`; and `CustomTransformRegistry`
+  (ChangeNotifier) is the catalogue the DSL registers into. Re-registering the
+  same name hot-reloads the function in place, so chips already in a chain keep
+  their slot and active state and just run the new logic — hot-reload preserves
+  chain state. The MIDI sidebar's `+` menu reads the registry and appends a
+  picked transform to the chain. Real Python is still a `NoOpCodeEvaluator`
+  (issue #9's kernel decision is open), so the live-coding→registration
+  handshake runs through `FakeCodeEvaluator` (now carrying an `onEvaluate`
+  hook); the shell owns a shared registry passed to both the Code and MIDI
+  surfaces, and `Workstation`/`PhiApp` accept injected evaluator+registry so
+  the whole flow is driveable end-to-end.
   (ChangeNotifier) — a DAG of `TransformNode`s wired by guarded
   `TransformEdge`s. Each edge carries an `EdgeCondition` (`AlwaysCondition`,
   `StateMatchCondition` on a live `PerformanceStateId`, or

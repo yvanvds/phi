@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../design/tokens/phi_colors.dart';
 import '../../domain/midi/clip_editor.dart';
+import '../../domain/midi/custom_transform_registry.dart';
 import '../../domain/midi/midi_clip.dart';
 import '../../domain/midi/midi_transform_chain.dart';
 import '../../domain/midi/smf/smf_exception.dart';
@@ -33,6 +34,7 @@ class MidiViewport extends StatefulWidget {
   const MidiViewport({
     required this.chain,
     this.editor,
+    this.registry,
     this.playhead,
     this.fileIo,
     super.key,
@@ -40,6 +42,11 @@ class MidiViewport extends StatefulWidget {
 
   final MidiTransformChain chain;
   final ClipEditor? editor;
+
+  /// Catalogue of performer-authored transforms surfaced in the chain `+` menu
+  /// (issue #38). `null` in setups without a live-coding registry; the `+`
+  /// then stays inert.
+  final CustomTransformRegistry? registry;
 
   /// The engine player's beat position (issue #29). `null` in setups without
   /// a wired MIDI player; the editor then parks the playhead at the origin.
@@ -71,7 +78,13 @@ class _MidiViewportState extends State<MidiViewport> {
     super.initState();
     _ownsEditor = widget.editor == null;
     _editor = widget.editor ?? ClipEditor(widget.chain.source);
-    _listenable = Listenable.merge([widget.chain, _editor]);
+    // Merge the registry too (when present) so a hot-registered or hot-reloaded
+    // custom transform repaints the roll ghost and refreshes the `+` menu.
+    _listenable = Listenable.merge([
+      widget.chain,
+      _editor,
+      if (widget.registry != null) widget.registry,
+    ]);
     _fileIo = widget.fileIo ?? const FileSelectorMidiFileIo();
   }
 
@@ -191,7 +204,10 @@ class _MidiViewportState extends State<MidiViewport> {
                       const SizedBox(width: 8),
                       SizedBox(
                         width: 250,
-                        child: TransformChainPanel(chain: widget.chain),
+                        child: TransformChainPanel(
+                          chain: widget.chain,
+                          registry: widget.registry,
+                        ),
                       ),
                     ],
                   ),
