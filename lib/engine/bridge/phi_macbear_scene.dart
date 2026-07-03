@@ -106,6 +106,10 @@ class PhiMacbearScene extends m3.M3Scene {
       _toVm32(pending.target),
       vm32.Vector3(0, 0, 1),
     );
+    // Apply the pose once. `_dirty` is also raised by every agent push, so
+    // re-applying here each frame would snap the camera back to the seed and
+    // fight the orbit controller the whole time the transport runs.
+    _pendingCamera = null;
   }
 
   void _rebuildEntities() {
@@ -146,14 +150,10 @@ class PhiMacbearScene extends m3.M3Scene {
 
   static vm32.Vector3 _toVm32(vm64.Vector3 v) => vm32.Vector3(v.x, v.y, v.z);
 
-  /// Bright, semi-transparent shell colour for the selection halo — the
-  /// foreground token at partial alpha so it reads over any voice colour.
-  static final vm32.Vector4 _selectionColor = vm32.Vector4(
-    PhiColors.fg0.r,
-    PhiColors.fg0.g,
-    PhiColors.fg0.b,
-    0.32,
-  );
+  /// Bright, semi-transparent shell colour for the selection halo — pure white
+  /// at a high enough alpha to read clearly over the dark void and any voice
+  /// colour, while still letting the picked agent show through.
+  static final vm32.Vector4 _selectionColor = vm32.Vector4(1, 1, 1, 0.6);
 
   static vm32.Vector3 _vec3From(Color c) => vm32.Vector3(c.r, c.g, c.b);
 
