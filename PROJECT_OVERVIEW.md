@@ -163,7 +163,21 @@ main + app          (orchestration)
   output down every open branch and merging fan-in — with `connect` rejecting
   cycles so a topological order always exists. `MidiTransformGraph.linear`
   bridges an existing chain into a degenerate DAG whose `evaluate` matches
-  `MidiTransformChain.output`. The node-and-cable editor UI is issue #65.
+  `MidiTransformChain.output`. The node-and-cable editor UI is real as of issue
+  #65: a `CHAIN | GRAPH` toggle in the MIDI surface swaps the piano-roll area
+  for a patcher-style canvas (`lib/surfaces/midi/graph/`, mirroring
+  `state_canvas`) driven by a `MidiGraphController` (`lib/engine/state/`) that
+  holds the graph plus node layout (positions live in the controller — the
+  domain graph stays position-free) and seeds itself from the linear chain via
+  `MidiTransformGraph.linear`. Nodes render the wrapped transform (kind tag +
+  label + active pill); drag a node's output port onto another node to author
+  an edge (the domain rejects cycles / duplicate pairs / edges into the source,
+  surfaced as a banner); tap a cable to guard it (`unconditional`, a
+  state-machine state, or a runtime variable). The surface feeds a live
+  `GraphEvalContext` mirroring `StateGraph.activeStateId`, lights the active
+  subgraph on the canvas, and re-evaluates a slim read-only piano-roll preview
+  strip below — so switching the live state changes the preview. `EngineMidiController`
+  owns the shared `graphController`; playback still reads the linear `chain`.
   Editing (issue #28) is a command layer: `ClipEditor` (ChangeNotifier)
   owns the clip, the selection, and an undo/redo stack of `ClipEditCommand`s
   (`lib/domain/midi/edit/` — add / delete / in-place edit). Gestures author
