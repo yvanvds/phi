@@ -139,6 +139,53 @@ void main() {
     chain.dispose();
   });
 
+  test('loadFromChain re-seeds the graph from the current chain', () {
+    // Seed the controller off an empty chain, then grow the chain and reload:
+    // the graph must reflect the *current* chain, not the one seeded at build.
+    final chain = chainWith(const []);
+    final controller = MidiGraphController.seededFrom(chain);
+    expect(controller.graph.nodes, isEmpty);
+
+    chain
+      ..add(const TransposeTransform(semitones: 5, label: '+5'))
+      ..add(const TransposeTransform(semitones: 2, label: '+2'));
+
+    var notified = 0;
+    controller.addListener(() => notified++);
+    controller.loadFromChain(chain);
+
+    // A linear spine matching the chain: 60 → +5 → +2 → 67.
+    expect(controller.graph.nodes, hasLength(2));
+    expect(controller.graph.isLinear, isTrue);
+    expect(controller.graph.evaluate().single.pitch, 67);
+    expect(controller.positionOf(TransformNodeId.source).dx, lessThan(200));
+    expect(notified, greaterThan(0));
+
+    controller.dispose();
+    chain.dispose();
+  });
+
+  test('loadFromChain replaces a previously branched graph', () {
+    final chain = chainWith([5]);
+    final controller = MidiGraphController.seededFrom(chain);
+    // Author an extra branch so the graph is no longer linear.
+    final branch = controller.addNodeAt(
+      const TransposeTransform(semitones: 12, label: '+12'),
+      const Offset(200, 360),
+    );
+    controller.connect(TransformNodeId.source, branch.id);
+    expect(controller.graph.isLinear, isFalse);
+
+    controller.loadFromChain(chain);
+
+    // Back to the chain's single-node linear spine — the branch is gone.
+    expect(controller.graph.nodes, hasLength(1));
+    expect(controller.graph.isLinear, isTrue);
+
+    controller.dispose();
+    chain.dispose();
+  });
+
   test('begin/endCableDrag toggles the drag source and notifies', () {
     final chain = chainWith(const []);
     final controller = MidiGraphController.seededFrom(chain);

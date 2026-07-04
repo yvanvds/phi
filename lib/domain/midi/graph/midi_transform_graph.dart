@@ -158,6 +158,74 @@ class MidiTransformGraph extends ChangeNotifier {
   /// (e.g. a file import mutated it in place). Bumps [version] and notifies.
   void notifySourceChanged() => _bump();
 
+  /// Drop every node and edge, leaving just the implicit source. Used before
+  /// re-seeding the graph from a chain on a chain→graph conversion (issue #77).
+  /// No-op on an already-empty graph.
+  void clear() {
+    if (_nodes.isEmpty && _edges.isEmpty) return;
+    _nodes.clear();
+    _edges.clear();
+    _bump();
+  }
+
+  // ─── linear-chain equivalence ──────────────────────────────────────────────
+
+  /// Whether the graph is exactly a linear chain — a single unconditional path
+  /// `source → n0 → n1 → …` that visits every node once, with no fan-out, no
+  /// fan-in, and no guarded edge. When `true`, converting to a [MidiTransformChain]
+  /// loses nothing; when `false`, a graph→chain conversion drops the branches
+  /// that have no chain equivalent (issue #77 warns before doing so).
+  bool get isLinear {
+    if (_edges.any((e) => e.condition is! AlwaysCondition)) return false;
+    final outCount = <TransformNodeId, int>{};
+    final inCount = <TransformNodeId, int>{};
+    for (final e in _edges) {
+      outCount[e.fromId] = (outCount[e.fromId] ?? 0) + 1;
+      inCount[e.toId] = (inCount[e.toId] ?? 0) + 1;
+    }
+    if (outCount.values.any((c) => c > 1)) return false; // fan-out
+    if (inCount.values.any((c) => c > 1)) return false; // fan-in
+    // Walk the single path from the source; it must cover every node.
+    final visited = <TransformNodeId>{};
+    var current = TransformNodeId.source;
+    while ((outCount[current] ?? 0) == 1) {
+      final next = _edges.firstWhere((e) => e.fromId == current).toId;
+      if (!visited.add(next)) return false; // defensive cycle guard
+      current = next;
+    }
+    return visited.length == _nodes.length;
+  }
+
+  /// The transforms along the graph's spine, in order — the linearisation used
+  /// to write a graph clip back into a [MidiTransformChain] (issue #77). Walks
+  /// from the source, preferring the unconditional out-edge at each fork, so on
+  /// a purely [isLinear] graph it returns every transform in order and on a
+  /// branched one it returns a best-effort main path (the branches are the data
+  /// the conversion warns it will drop).
+  List<MidiTransform> linearTransforms() {
+    final result = <MidiTransform>[];
+    final visited = <TransformNodeId>{};
+    var current = TransformNodeId.source;
+    while (true) {
+      TransformEdge? chosen;
+      for (final e in _edges) {
+        if (e.fromId != current) continue;
+        chosen ??= e;
+        if (e.condition is AlwaysCondition) {
+          chosen = e;
+          break;
+        }
+      }
+      if (chosen == null) break;
+      if (!visited.add(chosen.toId)) break; // defensive cycle guard
+      final node = _nodes[chosen.toId];
+      if (node == null) break;
+      result.add(node.transform);
+      current = chosen.toId;
+    }
+    return result;
+  }
+
   // ─── evaluation ──────────────────────────────────────────────────────────
 
   /// A topological order of the real nodes, or `null` if the graph contains a

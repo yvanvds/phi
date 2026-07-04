@@ -54,22 +54,28 @@ void main() {
     );
     engine.stateMachine.setActive(main.id);
 
-    // Open the MIDI surface — a chain clip by default: the chip sidebar is up.
+    // Open the MIDI surface — a chain clip by default: piano roll + chip
+    // sidebar, no NOTES/GRAPH tabs.
     await tester.tap(railFor(SurfaceId.midi));
     await tester.pumpAndSettle();
     expect(find.byType(TransformChainPanel), findsOneWidget);
+    expect(find.byType(PianoRollEditor), findsOneWidget);
 
-    // Switch the clip to graph mode.
-    await tester.tap(find.text('GRAPH'));
+    // Convert the clip to a graph — a confirmed, near-one-way action (#77).
+    await tester.tap(find.text('convert to graph →'));
+    await tester.pumpAndSettle();
+    expect(find.text('convert to graph'), findsOneWidget); // dialog title
+    await tester.tap(find.text('convert'));
     await tester.pumpAndSettle();
 
-    // The canvas is up (source node + the seeded chain) and the preview shows
-    // the demo phrase's ten notes. The chip sidebar is gone — a graph clip
-    // authors its transforms as nodes, so the linear chain editor has no place
-    // (issue #77).
+    // Graph mode: the canvas source node is up, the preview shows the demo
+    // phrase's ten notes, and the chip sidebar is gone — the transforms are the
+    // canvas nodes now. The NOTES | GRAPH tabs keep the roll one tab away.
     expect(find.text('SOURCE'), findsOneWidget);
     expect(find.textContaining('PREVIEW · 10 NOTES'), findsOneWidget);
     expect(find.byType(TransformChainPanel), findsNothing);
+    expect(find.text('NOTES'), findsOneWidget);
+    expect(find.text('GRAPH'), findsOneWidget);
 
     // Author a branch off the source, guarded by `break`: a new terminal node
     // that only carries notes while break is live. (The drag-to-connect and
@@ -102,9 +108,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('PREVIEW · 10 NOTES'), findsOneWidget);
 
-    // The toggle returns to the linear editor — piano roll and chip sidebar
-    // both back.
-    await tester.tap(find.text('CHAIN'));
+    // The NOTES tab is a full, editable piano roll — you never leave graph mode
+    // to edit the source clip.
+    await tester.tap(find.text('NOTES'));
+    await tester.pumpAndSettle();
+    expect(find.byType(PianoRollEditor), findsOneWidget);
+
+    // Convert back to a chain. The graph now branches, so the confirmation
+    // warns about dropped routes; on confirm the linear editor returns.
+    await tester.tap(find.text('← convert to chain'));
+    await tester.pumpAndSettle();
+    expect(find.text('convert to chain'), findsOneWidget); // dialog title
+    await tester.tap(find.text('convert'));
     await tester.pumpAndSettle();
     expect(find.byType(PianoRollEditor), findsOneWidget);
     expect(find.byType(TransformChainPanel), findsOneWidget);

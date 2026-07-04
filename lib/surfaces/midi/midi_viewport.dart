@@ -6,12 +6,14 @@ import '../../design/tokens/phi_colors.dart';
 import '../../design/tokens/phi_radii.dart';
 import '../../design/tokens/phi_type.dart';
 import '../../design/tokens/phi_voices.dart';
+import '../../design/widgets/dialog/confirm_dialog.dart';
 import '../../domain/midi/builtin_transform_catalog.dart';
 import '../../domain/midi/clip_editor.dart';
 import '../../domain/midi/custom_transform_registry.dart';
 import '../../domain/midi/graph/graph_eval_context.dart';
 import '../../domain/midi/midi_clip.dart';
 import '../../domain/midi/midi_clip_mode.dart';
+import '../../domain/midi/midi_note.dart';
 import '../../domain/midi/midi_transform.dart';
 import '../../domain/midi/midi_transform_chain.dart';
 import '../../domain/midi/midi_transform_kind.dart';
@@ -28,6 +30,11 @@ import 'midi_header_strip.dart';
 import 'piano_roll_editor.dart';
 import 'transform_chain_panel.dart';
 import 'velocity_lane.dart';
+
+/// Which pane graph mode's `NOTES | GRAPH` tabs show: the editable piano roll
+/// (notes) or the node-and-cable canvas (graph). Local UI state — unlike the
+/// clip's [MidiClipMode], it doesn't affect playback.
+enum _GraphTab { notes, graph }
 
 /// Stateful host for the [MidiTransformChain] and its [ClipEditor]. Listens to
 /// both (merged) so toggling a chip *or* editing a note repaints the roll, the
@@ -92,6 +99,10 @@ class _MidiViewportState extends State<MidiViewport> {
   late final bool _ownsGraph;
   late final Listenable _listenable;
   late final MidiFileIo _fileIo;
+
+  /// Which tab graph mode shows; defaults to the graph canvas (you convert to
+  /// graph to work on the topology). Only meaningful while in graph mode.
+  _GraphTab _graphTab = _GraphTab.graph;
 
   static const _reader = SmfReader();
   static const _writer = SmfWriter();
@@ -213,45 +224,9 @@ class _MidiViewportState extends State<MidiViewport> {
                 ),
                 const SizedBox(height: 8),
                 Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _ViewToolbar(
-                              mode: _graph.mode,
-                              onSelect: (v) => _graph.mode = v,
-                              onAddNode: _graph.mode == MidiClipMode.graph
-                                  ? _pickAndAddNode
-                                  : null,
-                            ),
-                            const SizedBox(height: 8),
-                            Expanded(
-                              child: _graph.mode == MidiClipMode.chain
-                                  ? _buildChainBody(clip, showGhost)
-                                  : _buildGraphBody(clip),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // The chip sidebar edits the *linear* chain, so it belongs
-                      // to a chain clip only — a graph clip authors its
-                      // transforms as nodes on the canvas, which takes the full
-                      // width (issue #77).
-                      if (_graph.mode == MidiClipMode.chain) ...[
-                        const SizedBox(width: 8),
-                        SizedBox(
-                          width: 250,
-                          child: TransformChainPanel(
-                            chain: widget.chain,
-                            registry: widget.registry,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+                  child: _graph.mode == MidiClipMode.chain
+                      ? _buildChainMode(clip, showGhost)
+                      : _buildGraphMode(clip),
                 ),
               ],
             ),
@@ -261,14 +236,87 @@ class _MidiViewportState extends State<MidiViewport> {
     );
   }
 
-  Widget _buildChainBody(MidiClip clip, bool showGhost) {
+  /// Chain mode — the default: the piano roll edits the source clip, the
+  /// `TRANSFORM CHAIN` sidebar manages the linear transforms, and the bar
+  /// carries the one-way-ish "convert to graph" action (issue #77).
+  Widget _buildChainMode(MidiClip clip, bool showGhost) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ChainModeBar(onConvertToGraph: _confirmConvertToGraph),
+        const SizedBox(height: 8),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _buildRoll(
+                  clip,
+                  ghostNotes: widget.chain.output,
+                  showGhost: showGhost,
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 250,
+                child: TransformChainPanel(
+                  chain: widget.chain,
+                  registry: widget.registry,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Graph mode — the branching representation. The canvas needs the full area,
+  /// so a `NOTES | GRAPH` tab pair keeps the piano roll a first-class editor
+  /// (the roll is the clip; you never have to leave graph mode to edit notes)
+  /// while the graph gets its own full-width tab (issue #77).
+  Widget _buildGraphMode(MidiClip clip) {
+    final onGraphTab = _graphTab == _GraphTab.graph;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _GraphModeBar(
+          tab: _graphTab,
+          onSelectTab: (t) => setState(() => _graphTab = t),
+          onAddNode: onGraphTab ? _pickAndAddNode : null,
+          onConvertToChain: _confirmConvertToChain,
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: onGraphTab
+              ? _buildGraphBody(clip)
+              : _buildRoll(
+                  clip,
+                  // The ghost is the graph's live output, so editing a note on
+                  // the roll shows how the active subgraph transforms it.
+                  ghostNotes: _graph.graph.evaluate(_evalContext),
+                  showGhost: _graph.graph.nodes.isNotEmpty,
+                ),
+        ),
+      ],
+    );
+  }
+
+  /// The piano roll + velocity lane over the shared source clip. Used by chain
+  /// mode and by graph mode's `NOTES` tab, with the [ghostNotes] behind the
+  /// source differing per mode (chain output vs. graph evaluate).
+  Widget _buildRoll(
+    MidiClip clip, {
+    required List<MidiNote> ghostNotes,
+    required bool showGhost,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
           child: PianoRollEditor(
             editor: _editor,
-            ghostNotes: widget.chain.output,
+            ghostNotes: ghostNotes,
             showGhost: showGhost,
             bars: clip.bars,
             beatsPerBar: clip.beatsPerBar,
@@ -284,6 +332,48 @@ class _MidiViewportState extends State<MidiViewport> {
         ),
       ],
     );
+  }
+
+  // ── Chain ↔ graph conversion ───────────────────────────────────────────────
+
+  /// Convert the linear chain clip to a branching graph clip, after a
+  /// confirmation that flags the near-one-way nature. Re-seeds the graph from
+  /// the *current* chain so it opens on exactly what was sounding.
+  Future<void> _confirmConvertToGraph() async {
+    final ok = await ConfirmDialog.show(
+      context,
+      title: 'convert to graph',
+      message:
+          'A graph lets transforms branch and route on the live state. Once you '
+          'add branches you may not be able to convert everything back to a '
+          'chain. Continue?',
+      confirmLabel: 'convert',
+    );
+    if (!ok || !mounted) return;
+    _graph.loadFromChain(widget.chain);
+    _graph.mode = MidiClipMode.graph;
+    setState(() => _graphTab = _GraphTab.graph);
+  }
+
+  /// Convert the graph clip back to a linear chain, after a confirmation that
+  /// warns about dropped branches when the graph is not already linear. Writes
+  /// the graph's spine into the chain so playback follows the moment the mode
+  /// flips.
+  Future<void> _confirmConvertToChain() async {
+    final branched = !_graph.graph.isLinear;
+    final ok = await ConfirmDialog.show(
+      context,
+      title: 'convert to chain',
+      message: branched
+          ? 'This graph branches or routes on state — a linear chain can\'t '
+                'hold that. Converting keeps only the main path and drops the '
+                'rest. Continue?'
+          : 'Convert this graph back to a linear chain?',
+      confirmLabel: 'convert',
+    );
+    if (!ok || !mounted) return;
+    widget.chain.setTransforms(_graph.graph.linearTransforms());
+    _graph.mode = MidiClipMode.chain;
   }
 
   Widget _buildGraphBody(MidiClip clip) {
@@ -383,51 +473,114 @@ class _MidiViewportState extends State<MidiViewport> {
   }
 }
 
-/// The `CHAIN | GRAPH` mode toggle plus, in graph mode, an add-node `+`. This
-/// picks the clip's representation (issue #77), not a throwaway view: the
-/// selected segment is both what the performer edits and what they hear.
-class _ViewToolbar extends StatelessWidget {
-  const _ViewToolbar({
-    required this.mode,
-    required this.onSelect,
-    this.onAddNode,
-  });
+/// Chain mode's bar: a static `CHAIN` tag on the left (so the current
+/// representation reads at a glance) and the `convert to graph →` action on the
+/// right (issue #77).
+class _ChainModeBar extends StatelessWidget {
+  const _ChainModeBar({required this.onConvertToGraph});
 
-  final MidiClipMode mode;
-  final void Function(MidiClipMode mode) onSelect;
-
-  /// Add-node handler, shown only in graph mode (`null` in chain mode).
-  final VoidCallback? onAddNode;
+  final VoidCallback onConvertToGraph;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
+        const _ModeTag(label: 'chain'),
+        const Spacer(),
+        _BarAction(label: 'convert to graph →', onTap: onConvertToGraph),
+      ],
+    );
+  }
+}
+
+/// Graph mode's bar: the `NOTES | GRAPH` tab pair on the left, and on the right
+/// the add-node `+` (graph tab only) and the `← convert to chain` action
+/// (issue #77).
+class _GraphModeBar extends StatelessWidget {
+  const _GraphModeBar({
+    required this.tab,
+    required this.onSelectTab,
+    required this.onConvertToChain,
+    this.onAddNode,
+  });
+
+  final _GraphTab tab;
+  final void Function(_GraphTab tab) onSelectTab;
+  final VoidCallback onConvertToChain;
+
+  /// Add-node handler, shown only on the graph tab (`null` on the notes tab).
+  final VoidCallback? onAddNode;
+
+  @override
+  Widget build(BuildContext context) {
+    final addNode = onAddNode;
+    return Row(
+      children: [
         _Segment(
-          label: 'chain',
-          selected: mode == MidiClipMode.chain,
-          onTap: () => onSelect(MidiClipMode.chain),
+          label: 'notes',
+          selected: tab == _GraphTab.notes,
+          onTap: () => onSelectTab(_GraphTab.notes),
         ),
         const SizedBox(width: 4),
         _Segment(
           label: 'graph',
-          selected: mode == MidiClipMode.graph,
-          onTap: () => onSelect(MidiClipMode.graph),
+          selected: tab == _GraphTab.graph,
+          onTap: () => onSelectTab(_GraphTab.graph),
         ),
         const Spacer(),
-        if (onAddNode != null)
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onAddNode,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Text(
-                '+ node',
-                style: PhiType.monoS().copyWith(color: PhiColors.fg1),
-              ),
-            ),
-          ),
+        if (addNode != null) ...[
+          _BarAction(label: '+ node', onTap: addNode),
+          const SizedBox(width: 12),
+        ],
+        _BarAction(label: '← convert to chain', onTap: onConvertToChain),
       ],
+    );
+  }
+}
+
+/// A non-interactive capsule naming the current clip mode — the static twin of
+/// a selected [_Segment], so a mode reads at a glance without looking clickable.
+class _ModeTag extends StatelessWidget {
+  const _ModeTag({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: PhiColors.bg2,
+        border: Border.all(color: PhiColors.line2),
+        borderRadius: PhiRadii.all1,
+      ),
+      child: Text(
+        label.toUpperCase(),
+        style: PhiType.caption().copyWith(color: PhiColors.fg0),
+      ),
+    );
+  }
+}
+
+/// A slim text action button for the mode bars (`convert …`, `+ node`).
+class _BarAction extends StatelessWidget {
+  const _BarAction({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Text(
+          label,
+          style: PhiType.monoS().copyWith(color: PhiColors.fg1),
+        ),
+      ),
     );
   }
 }

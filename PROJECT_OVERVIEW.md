@@ -232,15 +232,24 @@ main + app          (orchestration)
   state-machine state, or a runtime variable). The surface feeds a live
   `GraphEvalContext` mirroring `StateGraph.activeStateId`, lights the active
   subgraph on the canvas, and re-evaluates a slim read-only piano-roll preview
-  strip below — so switching the live state changes the preview. The
-  `CHAIN | GRAPH` toggle is the clip's **mode** (`MidiClipMode`,
-  `lib/domain/midi/`), not a throwaway view: a graph clip hides the chip sidebar
-  (its transforms are the canvas nodes) and playback reads
-  `graph.evaluate(context)` instead of the chain, so a state-guarded branch
-  re-routes the *sounding* notes as the live state flips, not just the preview
-  (issue #77). `EngineMidiController` owns the shared `graphController`, holds
-  the `StateGraph` for the live context, and reads whichever representation the
-  mode selects — the linear chain staying the zero-overhead default.
+  strip below — so switching the live state changes the preview. A clip is
+  **either** a linear (chain) or branching (graph) clip — its
+  `MidiClipMode` (`lib/domain/midi/`) — and you move between them by
+  **conversion**, not a casual toggle (issue #77). Chain is the default: the
+  piano roll edits the source, the `TRANSFORM CHAIN` sidebar manages the linear
+  transforms, and a `convert to graph` action (behind a `ConfirmDialog`,
+  `lib/design/widgets/dialog/`) re-seeds the graph from the *current* chain
+  (`MidiGraphController.loadFromChain`) and flips the mode. Graph mode drops the
+  sidebar and shows `NOTES | GRAPH` tabs — the roll stays a first-class editor
+  (you never leave graph mode to edit notes) while the canvas gets the full
+  width — plus a `convert to chain` action that warns before dropping branches
+  when the graph is no longer `MidiTransformGraph.isLinear`, writing the
+  extracted spine (`linearTransforms`) back via `MidiTransformChain.setTransforms`.
+  Playback follows the mode: `EngineMidiController` owns the shared
+  `graphController`, holds the `StateGraph` for the live context, and reads the
+  chain's `output` or `graph.evaluate(context)` accordingly — so a state-guarded
+  branch re-routes the *sounding* notes as the live state flips, not just the
+  preview. The linear chain stays the zero-overhead default;
   `MidiTransformGraph.evaluate` is memoised the same way the chain is (below),
   the cache keyed additionally on the eval context so a state flip recomputes
   once, not every tick.

@@ -36,6 +36,33 @@ class MidiGraphController extends ChangeNotifier {
     final positions = <TransformNodeId, Offset>{
       TransformNodeId.source: _origin,
     };
+    _seedLinear(graph, positions, chain);
+    return MidiGraphController(graph: graph, positions: positions);
+  }
+
+  /// Rebuild the graph as the linear spine of [chain], discarding whatever it
+  /// held — the chain→graph conversion (issue #77). Called with the chain the
+  /// clip is currently editing, so the graph opens on exactly what the chain
+  /// was yielding (my earlier seed-once wiring left the graph stale after chip
+  /// edits; this re-seeds from the live chain). Notifies so the canvas redraws.
+  void loadFromChain(MidiTransformChain chain) {
+    graph.clear();
+    _positions
+      ..clear()
+      ..[TransformNodeId.source] = _origin;
+    _seedLinear(graph, _positions, chain);
+    notifyListeners();
+  }
+
+  /// Wire `source → t0 → t1 → …` into [graph] with unconditional edges, laying
+  /// nodes out left-to-right into [positions]. Shared by [seededFrom] (fresh
+  /// graph) and [loadFromChain] (cleared graph); both start with the source at
+  /// [_origin].
+  static void _seedLinear(
+    MidiTransformGraph graph,
+    Map<TransformNodeId, Offset> positions,
+    MidiTransformChain chain,
+  ) {
     var previous = TransformNodeId.source;
     var column = 1;
     for (final transform in chain.transforms) {
@@ -48,7 +75,6 @@ class MidiGraphController extends ChangeNotifier {
       previous = node.id;
       column++;
     }
-    return MidiGraphController(graph: graph, positions: positions);
   }
 
   /// The domain graph. Listen for add/remove/connect/condition changes.
