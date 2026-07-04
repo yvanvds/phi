@@ -2,10 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
     types: [opened, synchronize, reopened]
+  # Manual trigger: lets the main-only Windows build be exercised on demand
+  # (e.g. to verify it from develop before the first develop -> main release).
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -71,3 +74,84 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # Expensive Windows build: produces a runnable .exe bundle carrying libyse.dll.
+  # Gated to main (release PRs from develop + pushes to main) and manual dispatch;
+  # routine feature PRs to develop skip it to keep everyday CI cheap (issue #12).
+  build-windows:
+    name: build windows (.exe + bundle libyse.dll)
+    needs: analyze-test-scan
+    if: ${{ github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.event_name == 'workflow_dispatch' }}
+    runs-on: windows-latest
+    env:
+      # Prebuilt engine binaries come from the yse-soundengine GitHub releases.
+      # Bump this to track the engine version that dart-yse currently wraps.
+      YSE_ENGINE_VERSION: v2.2.0
+    steps:
+      - name: Checkout phi
+        uses: actions/checkout@v4
+        with:
+          path: phi
+
+      - name: Checkout dart-yse (path dep sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: yvanvds/dart-yse
+          path: dart-yse
+          ref: main
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.3'
+          channel: stable
+          cache: true
+
+      - name: Resolve dart-yse deps
+        working-directory: dart-yse
+        run: dart pub get
+
+      - name: Resolve phi deps
+        working-directory: phi
+        run: flutter pub get
+
+      - name: Build Windows app (release)
+        working-directory: phi
+        run: flutter build windows --release
+
+      - name: Fetch prebuilt libyse.dll from the yse-soundengine release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $dest = "$env:RUNNER_TEMP\yse"
+          New-Item -ItemType Directory -Force $dest | Out-Null
+          gh release download $env:YSE_ENGINE_VERSION -R yvanvds/yse-soundengine -p "*windows-x64.zip" -D $dest
+          $zip = Get-ChildItem "$dest\*.zip" | Select-Object -First 1
+          Expand-Archive -Path $zip.FullName -DestinationPath "$dest\extracted" -Force
+
+      - name: Bundle native libraries next to phi.exe and verify
+        shell: pwsh
+        working-directory: phi
+        run: |
+          $bundle = "build\windows\x64\runner\Release"
+          # The engine's bin/ ships libyse.dll plus every runtime dependency
+          # (libc++, portaudio, sndfile, rtmidi, codecs). Copy them all so the
+          # artifact actually runs. phi's windows CMake already drops the stray
+          # flutter_angle libc++.dll, so libyse's own libc++ wins the loader.
+          Get-ChildItem -Recurse -Filter *.dll "$env:RUNNER_TEMP\yse\extracted" |
+            Copy-Item -Destination $bundle -Force
+          if (-not (Test-Path "$bundle\libyse.dll")) {
+            Write-Error "libyse.dll was not bundled into $bundle"
+            exit 1
+          }
+          Write-Host "Bundled DLLs next to phi.exe:"
+          Get-ChildItem "$bundle\*.dll" | Select-Object -ExpandProperty Name
+
+      - name: Upload Windows build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: phi-windows-x64
+          path: phi/build/windows/x64/runner/Release
+          if-no-files-found: error
+          retention-days: 7
