@@ -4,16 +4,19 @@ import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
+import 'package:phi/surfaces/scene/scene_surface.dart';
 
 import '../engine/test_doubles/fake_scene_renderer.dart';
 import '../engine/test_doubles/fake_yse_gateway.dart';
 
-/// Widget tests for the workstation's Scene-visibility wiring (issue #18).
+/// Widget tests for the workstation's Scene-surface wiring.
 ///
-/// The Scene surface stays mounted in the [IndexedStack] across switches, so
-/// the shell tells its [SceneRenderer] when Scene goes on- / off-stage. These
-/// tests assert the `setVisible` signal tracks the selected surface, driving a
-/// [FakeSceneRenderer] so no real 3D engine is touched.
+/// Unlike the other surfaces (kept resident in the [IndexedStack]), Scene
+/// mounts only while selected so macbear's `M3View` stays out of the tree when
+/// offstage (issue #19). The shell also signals the renderer's on-/off-stage
+/// state (issue #18). These tests assert both — the lazy mount/unmount and the
+/// `setVisible` signal — driving a [FakeSceneRenderer] so no real 3D engine is
+/// touched.
 void main() {
   Finder railFor(SurfaceId id) =>
       find.byWidgetPredicate((w) => w is RailButton && w.label == id.label);
@@ -67,6 +70,49 @@ void main() {
       'setVisible:true',
       'setVisible:false',
     ]);
+
+    session.dispose();
+    await engine.dispose();
+  });
+
+  testWidgets('Scene view mounts only while Scene is selected (issue #19)', (
+    tester,
+  ) async {
+    final renderer = FakeSceneRenderer();
+    final engine = PhiEngine(FakeYseGateway(), sceneRenderer: renderer);
+    final session = SessionState();
+
+    await tester.pumpWidget(PhiApp(engine: engine, session: session));
+    await tester.pumpAndSettle();
+
+    // App boots on Mix → the Scene surface (and macbear's M3View) never entered
+    // the tree, so ANGLE init stays off the boot path.
+    expect(find.byType(SceneSurface), findsNothing);
+    expect(renderer.viewMounted, isFalse);
+    expect(renderer.viewMounts, 0);
+
+    // Select Scene → the surface and the renderer's view mount.
+    await tester.tap(railFor(SurfaceId.scene));
+    await tester.pumpAndSettle();
+    expect(find.byType(SceneSurface), findsOneWidget);
+    expect(renderer.viewMounted, isTrue);
+    expect(renderer.viewMounts, 1);
+
+    // Leave Scene → both unmount (the fork keeps M3AppEngine warm underneath).
+    await tester.tap(railFor(SurfaceId.mix));
+    await tester.pumpAndSettle();
+    expect(find.byType(SceneSurface), findsNothing);
+    expect(renderer.viewMounted, isFalse);
+    expect(renderer.viewDisposes, 1);
+
+    // Re-enter Scene → a fresh view attaches without crashing (the regression
+    // this issue fixes hit on the second mount).
+    await tester.tap(railFor(SurfaceId.scene));
+    await tester.pumpAndSettle();
+    expect(find.byType(SceneSurface), findsOneWidget);
+    expect(renderer.viewMounted, isTrue);
+    expect(renderer.viewMounts, 2);
+    expect(tester.takeException(), isNull);
 
     session.dispose();
     await engine.dispose();

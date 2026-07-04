@@ -11,6 +11,7 @@ import 'package:phi/surfaces/midi/midi_viewport.dart';
 import 'package:phi/surfaces/midi/piano_roll_editor.dart';
 import 'package:phi/surfaces/midi/piano_roll_painter.dart';
 import 'package:phi/surfaces/midi/velocity_lane.dart';
+import 'package:phi/surfaces/scene/scene_surface.dart';
 
 import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_scene_renderer.dart';
@@ -229,4 +230,55 @@ void main() {
     session.dispose();
     await engine.dispose();
   });
+
+  testWidgets(
+    'scene: mounts lazily and survives unmount/remount end to end (issue #19)',
+    (tester) async {
+      // Drives the real app + left rail. macbear's real `M3View` can't run
+      // against a headless CI GL context, so this uses a fake renderer to prove
+      // the *shell wiring* mounts the Scene surface only while selected and
+      // tears it down when it leaves — the M3AppEngine unmount/remount safety
+      // itself is covered by the fork's own `-d windows` remount test.
+      final renderer = FakeSceneRenderer();
+      final engine = PhiEngine(
+        FakeYseGateway(),
+        sceneRenderer: renderer,
+        telemetryInterval: const Duration(milliseconds: 20),
+      );
+      final session = SessionState();
+
+      await tester.pumpWidget(PhiApp(engine: engine, session: session));
+      await tester.pumpAndSettle();
+
+      // Boots on Mix: the Scene surface (and its renderer view) never entered
+      // the tree, so ANGLE init stays off the boot path.
+      expect(find.byType(SceneSurface), findsNothing);
+      expect(renderer.viewMounts, 0);
+
+      // Enter Scene: surface + view mount.
+      await tester.tap(railFor(SurfaceId.scene));
+      await tester.pumpAndSettle();
+      expect(find.byType(SceneSurface), findsOneWidget);
+      expect(renderer.viewMounts, 1);
+
+      // Leave and re-enter twice: each round fully unmounts then remounts. The
+      // crash this issue fixes surfaced on the *second* mount, so the loop is
+      // the meaningful part.
+      for (var i = 0; i < 2; i++) {
+        await tester.tap(railFor(SurfaceId.mix));
+        await tester.pumpAndSettle();
+        expect(find.byType(SceneSurface), findsNothing);
+
+        await tester.tap(railFor(SurfaceId.scene));
+        await tester.pumpAndSettle();
+        expect(find.byType(SceneSurface), findsOneWidget);
+      }
+      expect(renderer.viewMounts, 3);
+      expect(renderer.viewDisposes, 2);
+      expect(tester.takeException(), isNull);
+
+      session.dispose();
+      await engine.dispose();
+    },
+  );
 }

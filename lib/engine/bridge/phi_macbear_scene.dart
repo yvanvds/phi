@@ -122,13 +122,13 @@ class PhiMacbearScene extends m3.M3Scene {
 
       addMesh(m3.M3Mesh(m3.M3SphereGeom(_coreRadius)), position)
         ..color = core
-        ..mesh!.subMeshes.first.mtr.setMatte();
+        ..mesh.subMeshes.first.mtr.setMatte();
 
       final haloEntity = addMesh(
         m3.M3Mesh(m3.M3SphereGeom(_haloRadius)),
         position,
       )..color = halo;
-      final haloMtr = haloEntity.mesh!.subMeshes.first.mtr;
+      final haloMtr = haloEntity.mesh.subMeshes.first.mtr;
       haloMtr.setMatte();
       haloMtr.alphaMode = m3.M3AlphaMode.blend;
     }
@@ -143,7 +143,7 @@ class PhiMacbearScene extends m3.M3Scene {
       m3.M3Mesh(m3.M3SphereGeom(_selectionRadius)),
       _toVm32(selection),
     )..color = _selectionColor;
-    final mtr = entity.mesh!.subMeshes.first.mtr;
+    final mtr = entity.mesh.subMeshes.first.mtr;
     mtr.setMatte();
     mtr.alphaMode = m3.M3AlphaMode.blend;
   }

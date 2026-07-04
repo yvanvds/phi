@@ -37,9 +37,11 @@ class MacbearSceneRenderer implements SceneRenderer {
 
   @override
   void dispose() {
-    // macbear's singleton owns the underlying GL context for the process
-    // lifetime; we cannot tear it down without breaking later remounts.
-    // Clearing the scene's agents is the safe equivalent.
+    // Called from `PhiEngine.stop()` (app teardown), not on surface unmount:
+    // the Scene surface leaving the tree is handled by `M3View` itself, which
+    // detaches via `M3AppEngine.unmount()` and keeps the singleton warm for a
+    // later remount. Here we only clear the scene's agents; the GL context is
+    // left to the process to reclaim on exit.
     _scene.setAgents(const []);
   }
 

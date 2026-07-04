@@ -14,10 +14,17 @@ dependencies:
     path: ../dart-yse
   google_fonts: ^6.2.1
   vector_math: ^2.1.4
-  # Pinned to 0.9.0: it carries the merged Windows-build fix yet stays on
-  # the Flutter >= 3.38 floor. 0.9.1 pulls image -> xml ^7.0.1, which needs
-  # Dart 3.11 (Flutter 3.44+); revisit when the project raises that floor.
-  macbear_3d: 0.9.0
+  # Pinned to our fork (yvanvds/macbear_3d) at the remount-safety fix
+  # (phi#19 / fork#2). Upstream 0.9.x tears down the process-wide
+  # `M3AppEngine` singleton when an `M3View` unmounts but never resets its
+  # init flag, so remounting the Scene surface crashes. The fork adds
+  # `M3AppEngine.unmount()`/`remount()` so `M3View` can leave and re-enter
+  # the tree safely. Ref-pinned to the merge commit for a reproducible
+  # resolve; move back to a published version once the fork tags one.
+  macbear_3d:
+    git:
+      url: https://github.com/yvanvds/macbear_3d.git
+      ref: dddb55100978414b798b1a3c671a641dcdba793b
   re_editor: ^0.9.0
   re_highlight: ^0.0.3
   # SMF import/export (#30): drag a `.mid` onto the MIDI surface
