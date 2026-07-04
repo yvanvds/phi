@@ -112,6 +112,17 @@ class MidiTransformChain extends ChangeNotifier {
     _bump();
   }
 
+  /// Replace the whole transform list in one shot. Used when converting a
+  /// branching graph clip back to a linear chain (issue #77): the graph's
+  /// linear spine is written here wholesale, so the chain reflects the graph
+  /// the moment the mode flips.
+  void setTransforms(Iterable<MidiTransform> transforms) {
+    _transforms
+      ..clear()
+      ..addAll(transforms);
+    _bump();
+  }
+
   /// Signals that the source clip's contents changed underneath the chain
   /// (e.g. a file import mutated it via [MidiClip.replaceWith]). Bumps
   /// [version] and notifies so bound painters recompute [output] and repaint.

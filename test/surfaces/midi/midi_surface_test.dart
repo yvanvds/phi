@@ -9,6 +9,7 @@ import 'package:phi/domain/midi/transforms/stub_transform.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/surfaces/midi/midi_surface.dart';
+import 'package:phi/surfaces/midi/piano_roll_editor.dart';
 import 'package:phi/surfaces/midi/transform_chip.dart';
 
 import '../../engine/test_doubles/fake_patcher_gateway.dart';
@@ -114,6 +115,91 @@ void main() {
     expect(find.text('scale · dorian D'), findsOneWidget);
     expect(find.text('transpose · +3 st'), findsOneWidget);
     expect(find.text('loop · 4 bars'), findsOneWidget);
+
+    chain.dispose();
+  });
+
+  // ── Chain ↔ graph conversion (#77) ─────────────────────────────────────────
+
+  MidiTransformChain oneTransformChain() => MidiTransformChain(
+    source: MidiClip(
+      name: 't',
+      bars: 1,
+      notes: const [MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1)],
+    ),
+    transforms: const [TransposeTransform(semitones: 5, label: '+5')],
+  );
+
+  testWidgets('convert to graph confirms, then swaps to tabs and hides chips', (
+    tester,
+  ) async {
+    final chain = oneTransformChain();
+    await pumpSurface(tester, chain: chain);
+
+    // Chain mode by default: the chip sidebar and the CHAIN tag are up; no tabs.
+    expect(find.byType(TransformChip), findsOneWidget);
+    expect(find.text('CHAIN'), findsOneWidget);
+    expect(find.text('GRAPH'), findsNothing);
+
+    await tester.tap(find.text('convert to graph →'));
+    await tester.pumpAndSettle();
+    expect(find.text('convert to graph'), findsOneWidget); // dialog title
+
+    await tester.tap(find.text('convert'));
+    await tester.pumpAndSettle();
+
+    // Graph mode: NOTES | GRAPH tabs, chips gone, the canvas source node up.
+    expect(find.text('NOTES'), findsOneWidget);
+    expect(find.text('GRAPH'), findsOneWidget);
+    expect(find.byType(TransformChip), findsNothing);
+    expect(find.text('SOURCE'), findsOneWidget);
+
+    chain.dispose();
+  });
+
+  testWidgets('convert to graph can be cancelled', (tester) async {
+    final chain = oneTransformChain();
+    await pumpSurface(tester, chain: chain);
+
+    await tester.tap(find.text('convert to graph →'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('cancel'));
+    await tester.pumpAndSettle();
+
+    // Still chain mode — nothing converted.
+    expect(find.byType(TransformChip), findsOneWidget);
+    expect(find.text('CHAIN'), findsOneWidget);
+    expect(find.text('NOTES'), findsNothing);
+
+    chain.dispose();
+  });
+
+  testWidgets('graph NOTES tab shows the roll; convert back restores chips', (
+    tester,
+  ) async {
+    final chain = oneTransformChain();
+    await pumpSurface(tester, chain: chain);
+
+    await tester.tap(find.text('convert to graph →'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('convert'));
+    await tester.pumpAndSettle();
+
+    // Lands on the GRAPH tab (canvas, no roll); the NOTES tab brings the roll.
+    expect(find.byType(PianoRollEditor), findsNothing);
+    await tester.tap(find.text('NOTES'));
+    await tester.pumpAndSettle();
+    expect(find.byType(PianoRollEditor), findsOneWidget);
+
+    // Convert back — a still-linear graph, so a plain confirm restores the chain.
+    await tester.tap(find.text('← convert to chain'));
+    await tester.pumpAndSettle();
+    expect(find.text('convert to chain'), findsOneWidget);
+    await tester.tap(find.text('convert'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TransformChip), findsOneWidget);
+    expect(find.text('CHAIN'), findsOneWidget);
 
     chain.dispose();
   });

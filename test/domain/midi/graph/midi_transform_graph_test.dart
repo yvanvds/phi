@@ -286,4 +286,155 @@ void main() {
       expect(notifications, 0);
     });
   });
+
+  group('MidiTransformGraph — evaluate memoisation (#56/#77)', () {
+    test('repeated calls with the same context return the cached instance', () {
+      final graph = MidiTransformGraph.linear(
+        source: _clip([60]),
+        transforms: const [TransposeTransform(semitones: 5, label: '+5')],
+      );
+
+      final first = graph.evaluate();
+      expect(identical(graph.evaluate(), first), isTrue);
+      expect(first.single.pitch, 65);
+    });
+
+    test('a structural mutation invalidates the cache', () {
+      final graph = MidiTransformGraph.linear(
+        source: _clip([60]),
+        transforms: const [TransposeTransform(semitones: 5, label: '+5')],
+      );
+      final first = graph.evaluate();
+
+      final node = graph.addNode(_t(2));
+      graph.connect(graph.nodes.first.id, node.id);
+
+      final second = graph.evaluate();
+      expect(identical(second, first), isFalse);
+      expect(second.single.pitch, 67); // +5 then +2
+    });
+
+    test('a source-clip edit (touch) invalidates the cache', () {
+      final source = _clip([60]);
+      final graph = MidiTransformGraph.linear(
+        source: source,
+        transforms: const [TransposeTransform(semitones: 5, label: '+5')],
+      );
+      final first = graph.evaluate();
+
+      source.touch(); // the source clip changed underneath the graph
+      expect(identical(graph.evaluate(), first), isFalse);
+    });
+
+    test('a changed context recomputes; re-using it re-hits the cache', () {
+      const s1 = PerformanceStateId('s1');
+      final graph = MidiTransformGraph(source: _clip([60]));
+      final node = graph.addNode(_t(5));
+      // The only edge is guarded by `s1`, so under the empty context the node
+      // is unreachable and the source passes through unchanged.
+      graph.connect(
+        TransformNodeId.source,
+        node.id,
+        condition: const StateMatchCondition(s1),
+      );
+
+      final dark = graph.evaluate(const GraphEvalContext.empty());
+      expect(dark.single.pitch, 60);
+
+      const live = GraphEvalContext(activeStateId: s1);
+      final lit = graph.evaluate(live);
+      expect(identical(lit, dark), isFalse); // context differs → recompute
+      expect(lit.single.pitch, 65); // edge open → +5 applied
+
+      // Same context again re-hits the single slot.
+      expect(identical(graph.evaluate(live), lit), isTrue);
+    });
+  });
+
+  group('MidiTransformGraph — linear-chain conversion (#77)', () {
+    test('clear drops every node and edge and notifies once', () {
+      final graph = MidiTransformGraph.linear(
+        source: _clip([60]),
+        transforms: const [
+          TransposeTransform(semitones: 5, label: '+5'),
+          TransposeTransform(semitones: 2, label: '+2'),
+        ],
+      );
+      var notifications = 0;
+      graph.addListener(() => notifications++);
+
+      graph.clear();
+      expect(graph.nodes, isEmpty);
+      expect(graph.edges, isEmpty);
+      expect(notifications, 1);
+
+      graph.clear(); // already empty
+      expect(notifications, 1);
+    });
+
+    test('isLinear is true for a seeded chain, false once it branches', () {
+      final graph = MidiTransformGraph.linear(
+        source: _clip([60]),
+        transforms: const [
+          TransposeTransform(semitones: 5, label: '+5'),
+          TransposeTransform(semitones: 2, label: '+2'),
+        ],
+      );
+      expect(graph.isLinear, isTrue);
+
+      // A second edge off the source is a fan-out → no longer linear.
+      final branch = graph.addNode(_t(12));
+      graph.connect(TransformNodeId.source, branch.id);
+      expect(graph.isLinear, isFalse);
+    });
+
+    test('isLinear is false when any edge is guarded', () {
+      const s1 = PerformanceStateId('s1');
+      final graph = MidiTransformGraph(source: _clip([60]));
+      final node = graph.addNode(_t(5));
+      graph.connect(
+        TransformNodeId.source,
+        node.id,
+        condition: const StateMatchCondition(s1),
+      );
+      expect(graph.isLinear, isFalse);
+    });
+
+    test('an empty graph is trivially linear', () {
+      expect(MidiTransformGraph(source: _clip([60])).isLinear, isTrue);
+    });
+
+    test('linearTransforms returns the spine in order for a linear graph', () {
+      const transforms = [
+        TransposeTransform(semitones: 5, label: '+5'),
+        TransposeTransform(semitones: 2, label: '+2'),
+      ];
+      final graph = MidiTransformGraph.linear(
+        source: _clip([60]),
+        transforms: transforms,
+      );
+
+      final spine = graph.linearTransforms();
+      expect(spine.map((t) => t.label), ['+5', '+2']);
+    });
+
+    test('linearTransforms follows the unconditional path past a branch', () {
+      const s1 = PerformanceStateId('s1');
+      final graph = MidiTransformGraph(source: _clip([60]));
+      // Main spine: source → +5 (unconditional).
+      final main = graph.addNode(_t(5));
+      graph.connect(TransformNodeId.source, main.id);
+      // Guarded branch off the source that a chain can't hold.
+      final branch = graph.addNode(_t(12));
+      graph.connect(
+        TransformNodeId.source,
+        branch.id,
+        condition: const StateMatchCondition(s1),
+      );
+
+      expect(graph.isLinear, isFalse);
+      // The extraction keeps the unconditional main path, dropping the branch.
+      expect(graph.linearTransforms().map((t) => t.label), ['+5']);
+    });
+  });
 }

@@ -172,7 +172,8 @@ class PhiEngine {
       pg.init(mainOutputs: 1);
       _patcher = PatcherController(pg);
     }
-    _stateMachine = StateMachineController();
+    final sm = StateMachineController();
+    _stateMachine = sm;
     // MIDI subsystem is optional — tests that don't inject a MidiGateway get
     // an engine without a player (engine.midi throws). When wired, it owns
     // the demo chain + its editor so playback and the piano-roll editor
@@ -182,6 +183,10 @@ class PhiEngine {
       _midi = EngineMidiController(
         chain: defaultDemoChain(),
         gateway: mg,
+        // The state machine drives the graph's live evaluation context, so a
+        // graph clip's state-guarded branch re-routes the sounding notes as the
+        // live state flips (issue #77).
+        stateGraph: sm.graph,
         // The Scene renderer doubles as the agent sink (issue #37): playing a
         // clip whose chain has an active AgentSpawnTransform populates the 3D
         // Scene. `null` when no renderer is wired — spawning just no-ops.

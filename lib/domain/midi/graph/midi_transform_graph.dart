@@ -59,6 +59,15 @@ class MidiTransformGraph extends ChangeNotifier {
   final List<TransformEdge> _edges = [];
   int _version = 0;
 
+  // Single-slot memo for [evaluate], keyed on everything that can change the
+  // result: the structural [version], the source clip's [MidiClip.revision],
+  // the summed node-transform revisions (hot-reload), and the eval context.
+  List<MidiNote>? _cache;
+  int _cacheVersion = -1;
+  int _cacheSourceRevision = -1;
+  int _cacheTransformsRevision = -1;
+  GraphEvalContext? _cacheContext;
+
   MidiClip get source => _source;
 
   List<TransformNode> get nodes => List.unmodifiable(_nodes.values);
@@ -149,6 +158,74 @@ class MidiTransformGraph extends ChangeNotifier {
   /// (e.g. a file import mutated it in place). Bumps [version] and notifies.
   void notifySourceChanged() => _bump();
 
+  /// Drop every node and edge, leaving just the implicit source. Used before
+  /// re-seeding the graph from a chain on a chain→graph conversion (issue #77).
+  /// No-op on an already-empty graph.
+  void clear() {
+    if (_nodes.isEmpty && _edges.isEmpty) return;
+    _nodes.clear();
+    _edges.clear();
+    _bump();
+  }
+
+  // ─── linear-chain equivalence ──────────────────────────────────────────────
+
+  /// Whether the graph is exactly a linear chain — a single unconditional path
+  /// `source → n0 → n1 → …` that visits every node once, with no fan-out, no
+  /// fan-in, and no guarded edge. When `true`, converting to a [MidiTransformChain]
+  /// loses nothing; when `false`, a graph→chain conversion drops the branches
+  /// that have no chain equivalent (issue #77 warns before doing so).
+  bool get isLinear {
+    if (_edges.any((e) => e.condition is! AlwaysCondition)) return false;
+    final outCount = <TransformNodeId, int>{};
+    final inCount = <TransformNodeId, int>{};
+    for (final e in _edges) {
+      outCount[e.fromId] = (outCount[e.fromId] ?? 0) + 1;
+      inCount[e.toId] = (inCount[e.toId] ?? 0) + 1;
+    }
+    if (outCount.values.any((c) => c > 1)) return false; // fan-out
+    if (inCount.values.any((c) => c > 1)) return false; // fan-in
+    // Walk the single path from the source; it must cover every node.
+    final visited = <TransformNodeId>{};
+    var current = TransformNodeId.source;
+    while ((outCount[current] ?? 0) == 1) {
+      final next = _edges.firstWhere((e) => e.fromId == current).toId;
+      if (!visited.add(next)) return false; // defensive cycle guard
+      current = next;
+    }
+    return visited.length == _nodes.length;
+  }
+
+  /// The transforms along the graph's spine, in order — the linearisation used
+  /// to write a graph clip back into a [MidiTransformChain] (issue #77). Walks
+  /// from the source, preferring the unconditional out-edge at each fork, so on
+  /// a purely [isLinear] graph it returns every transform in order and on a
+  /// branched one it returns a best-effort main path (the branches are the data
+  /// the conversion warns it will drop).
+  List<MidiTransform> linearTransforms() {
+    final result = <MidiTransform>[];
+    final visited = <TransformNodeId>{};
+    var current = TransformNodeId.source;
+    while (true) {
+      TransformEdge? chosen;
+      for (final e in _edges) {
+        if (e.fromId != current) continue;
+        chosen ??= e;
+        if (e.condition is AlwaysCondition) {
+          chosen = e;
+          break;
+        }
+      }
+      if (chosen == null) break;
+      if (!visited.add(chosen.toId)) break; // defensive cycle guard
+      final node = _nodes[chosen.toId];
+      if (node == null) break;
+      result.add(node.transform);
+      current = chosen.toId;
+    }
+    return result;
+  }
+
   // ─── evaluation ──────────────────────────────────────────────────────────
 
   /// A topological order of the real nodes, or `null` if the graph contains a
@@ -199,11 +276,53 @@ class MidiTransformGraph extends ChangeNotifier {
   /// source edges are all closed — the source clip's notes pass through
   /// unchanged.
   ///
-  /// Recomputed on every call; like [MidiTransformChain.output], caching would
-  /// invalidate on the same signal that bumps [version].
+  /// The player reads this live each tick (~60×/sec), so it is memoised in a
+  /// single slot: the walk only re-runs when the graph structure changed
+  /// (tracked by [version]), the source clip was edited ([MidiClip.revision]),
+  /// a node transform hot-reloaded ([MidiTransform.revision]), or the [context]
+  /// differs from the last call (a state flip). Between those, repeated reads
+  /// with the same context return the cached list instance — an O(1) hit, not a
+  /// fresh walk. Callers must treat the result as read-only; mutating it
+  /// corrupts the cache.
+  ///
+  /// The slot holds one context at a time, so alternating calls with two
+  /// different contexts recompute each time; in practice the preview and the
+  /// player evaluate against the same live context, so the slot stays warm.
   List<MidiNote> evaluate([
     GraphEvalContext context = const GraphEvalContext.empty(),
   ]) {
+    final sourceRevision = _source.revision;
+    final transformsRevision = _transformsRevision;
+    if (_cache != null &&
+        _cacheVersion == _version &&
+        _cacheSourceRevision == sourceRevision &&
+        _cacheTransformsRevision == transformsRevision &&
+        _cacheContext == context) {
+      return _cache!;
+    }
+    final result = _evaluate(context);
+    _cache = result;
+    _cacheVersion = _version;
+    _cacheSourceRevision = sourceRevision;
+    _cacheTransformsRevision = transformsRevision;
+    _cacheContext = context;
+    return result;
+  }
+
+  /// Sum of the node transforms' own revisions — bumps when a chip hot-reloads
+  /// under a stable graph. Folded into the [evaluate] cache key, mirroring
+  /// [MidiTransformChain]. Revisions only increment, so any hot-reload strictly
+  /// increases the sum.
+  int get _transformsRevision {
+    var sum = 0;
+    for (final node in _nodes.values) {
+      sum += node.transform.revision;
+    }
+    return sum;
+  }
+
+  /// The uncached walk of the active subgraph for [context]. See [evaluate].
+  List<MidiNote> _evaluate(GraphEvalContext context) {
     final order = topologicalOrder();
     if (order == null) {
       throw StateError('MidiTransformGraph.evaluate called on a cyclic graph');

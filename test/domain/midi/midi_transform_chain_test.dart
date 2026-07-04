@@ -38,6 +38,29 @@ void main() {
       expect(chain.output.single.pitch, 65);
     });
 
+    test('setTransforms replaces the whole list and re-evaluates output', () {
+      final chain = MidiTransformChain(
+        source: _clip(const [
+          MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1),
+        ]),
+        transforms: const [TransposeTransform(semitones: 2, label: '+2')],
+      );
+      expect(chain.output.single.pitch, 62);
+
+      var notifications = 0;
+      chain.addListener(() => notifications++);
+
+      // The graph→chain conversion writes the extracted spine here wholesale.
+      chain.setTransforms(const [
+        TransposeTransform(semitones: 5, label: '+5'),
+        TransposeTransform(semitones: 7, label: '+7'),
+      ]);
+
+      expect(chain.transforms.map((t) => t.label), ['+5', '+7']);
+      expect(chain.output.single.pitch, 72); // 60 +5 +7
+      expect(notifications, 1);
+    });
+
     test(
       'order matters: transpose-then-snap differs from snap-then-transpose',
       () {

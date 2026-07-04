@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/midi/graph/state_match_condition.dart';
 import 'package:phi/domain/midi/graph/transform_node_id.dart';
 import 'package:phi/domain/midi/midi_clip.dart';
+import 'package:phi/domain/midi/midi_clip_mode.dart';
 import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/midi_transform_chain.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
@@ -117,6 +118,69 @@ void main() {
     // With no state live the guard is closed, so the node passes through and
     // the source notes reach the (now unreachable) output unchanged.
     expect(controller.graph.evaluate().single.pitch, 60);
+
+    controller.dispose();
+    chain.dispose();
+  });
+
+  test('mode defaults to chain and notifies only on a real change', () {
+    final chain = chainWith(const []);
+    final controller = MidiGraphController.seededFrom(chain);
+    var notified = 0;
+    controller.addListener(() => notified++);
+
+    expect(controller.mode, MidiClipMode.chain);
+    controller.mode = MidiClipMode.graph;
+    expect(controller.mode, MidiClipMode.graph);
+    controller.mode = MidiClipMode.graph; // no-op, same value
+    expect(notified, 1);
+
+    controller.dispose();
+    chain.dispose();
+  });
+
+  test('loadFromChain re-seeds the graph from the current chain', () {
+    // Seed the controller off an empty chain, then grow the chain and reload:
+    // the graph must reflect the *current* chain, not the one seeded at build.
+    final chain = chainWith(const []);
+    final controller = MidiGraphController.seededFrom(chain);
+    expect(controller.graph.nodes, isEmpty);
+
+    chain
+      ..add(const TransposeTransform(semitones: 5, label: '+5'))
+      ..add(const TransposeTransform(semitones: 2, label: '+2'));
+
+    var notified = 0;
+    controller.addListener(() => notified++);
+    controller.loadFromChain(chain);
+
+    // A linear spine matching the chain: 60 → +5 → +2 → 67.
+    expect(controller.graph.nodes, hasLength(2));
+    expect(controller.graph.isLinear, isTrue);
+    expect(controller.graph.evaluate().single.pitch, 67);
+    expect(controller.positionOf(TransformNodeId.source).dx, lessThan(200));
+    expect(notified, greaterThan(0));
+
+    controller.dispose();
+    chain.dispose();
+  });
+
+  test('loadFromChain replaces a previously branched graph', () {
+    final chain = chainWith([5]);
+    final controller = MidiGraphController.seededFrom(chain);
+    // Author an extra branch so the graph is no longer linear.
+    final branch = controller.addNodeAt(
+      const TransposeTransform(semitones: 12, label: '+12'),
+      const Offset(200, 360),
+    );
+    controller.connect(TransformNodeId.source, branch.id);
+    expect(controller.graph.isLinear, isFalse);
+
+    controller.loadFromChain(chain);
+
+    // Back to the chain's single-node linear spine — the branch is gone.
+    expect(controller.graph.nodes, hasLength(1));
+    expect(controller.graph.isLinear, isTrue);
 
     controller.dispose();
     chain.dispose();

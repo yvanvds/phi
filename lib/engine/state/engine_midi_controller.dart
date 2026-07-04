@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:vector_math/vector_math_64.dart';
 
 import '../../domain/midi/clip_editor.dart';
+import '../../domain/midi/graph/graph_eval_context.dart';
+import '../../domain/midi/midi_clip_mode.dart';
 import '../../domain/midi/midi_note.dart';
 import '../../domain/midi/midi_transform_chain.dart';
 import '../../domain/midi/transforms/agent_spawn_transform.dart';
@@ -13,6 +15,7 @@ import '../../domain/scene/scatter.dart';
 import '../../domain/scene/scene_agent.dart';
 import '../../domain/scene/scene_demo.dart';
 import '../../domain/scene/scene_field.dart';
+import '../../domain/state_machine/state_graph.dart';
 import '../bridge/midi_gateway.dart';
 import '../bridge/scene_agent_sink.dart';
 import 'midi_graph_controller.dart';
@@ -26,16 +29,24 @@ import 'midi_graph_controller.dart';
 /// boundary it forwards `noteOn` / `noteOff` to the injected [MidiGateway].
 ///
 /// Per Phi's vision (§3.7) clips are "interpreted, not played": the player
-/// reads the chain's **transformed** [MidiTransformChain.output], not the raw
-/// source. Output is read live each tick, so editing a note or toggling a
-/// transform while the clip loops is heard immediately — the representation
-/// and the MIDI output are one thing, not two copies.
+/// reads the **transformed** notes, not the raw source, live each tick — so
+/// editing a note or toggling a transform while the clip loops is heard
+/// immediately, the representation and the MIDI output being one thing, not two
+/// copies.
+///
+/// Which transformed notes depends on the clip's [MidiGraphController.mode]
+/// (issue #77): a **chain** clip reads the linear [MidiTransformChain.output]
+/// (the zero-overhead default); a **graph** clip reads the branching
+/// [MidiTransformGraph]'s `evaluate` against a live [GraphEvalContext] mirroring
+/// [StateGraph.activeStateId], so a state-guarded branch actually re-routes the
+/// sounding notes as the live state flips.
 class EngineMidiController {
   EngineMidiController({
     required MidiTransformChain chain,
     required MidiGateway gateway,
     ClipEditor? editor,
     SceneAgentSink? agentSink,
+    StateGraph? stateGraph,
     double bpm = 120,
     int outputPort = 0,
     this.microtonal = false,
@@ -43,6 +54,7 @@ class EngineMidiController {
   }) : _chain = chain,
        _gateway = gateway,
        _agentSink = agentSink,
+       _stateGraph = stateGraph,
        editor = editor ?? ClipEditor(chain.source),
        graphController = MidiGraphController.seededFrom(chain),
        _bpm = bpm,
@@ -52,10 +64,18 @@ class EngineMidiController {
   final MidiTransformChain _chain;
   final MidiGateway _gateway;
 
+  /// The live state machine, mirrored into the graph's [GraphEvalContext] so a
+  /// `state · break` edge opens exactly while that state is live. `null` in
+  /// setups without a state machine — the graph then evaluates against the
+  /// empty context (only unconditional edges fire).
+  final StateGraph? _stateGraph;
+
   /// The branching transform-graph editor (issue #65), seeded from [chain] so
   /// it opens on the working linear chain. Shares [chain]'s source clip, so
-  /// piano-roll edits flow into its `evaluate`. The MIDI surface binds its
-  /// node-and-cable canvas to this; playback still reads the linear [chain].
+  /// piano-roll edits flow into its `evaluate`. Its [MidiGraphController.mode]
+  /// decides whether playback reads the linear chain or this graph (issue #77);
+  /// the MIDI surface binds both its node-and-cable canvas *and* that mode to
+  /// this instance, so what the performer sees and what they hear stay in step.
   final MidiGraphController graphController;
 
   /// Optional Scene sink. When wired and the chain carries an active
@@ -298,17 +318,33 @@ class EngineMidiController {
     _agentSink?.setAgents(_field.agents);
   }
 
+  /// The transformed notes playback reads this tick, chosen by the clip's
+  /// [MidiGraphController.mode]: the linear [MidiTransformChain.output] for a
+  /// chain clip, or the branching graph's `evaluate` against the live context
+  /// for a graph clip. Both are memoised, so reading every tick is an O(1) hit
+  /// between edits (and, for the graph, between state flips).
+  List<MidiNote> get _playbackNotes =>
+      graphController.mode == MidiClipMode.graph
+      ? graphController.graph.evaluate(_liveContext)
+      : _chain.output;
+
+  /// The live evaluation context — the state machine's `activeStateId` mirrored
+  /// in, exactly as the graph preview does — so playback and preview agree on
+  /// which branches are open.
+  GraphEvalContext get _liveContext =>
+      GraphEvalContext(activeStateId: _stateGraph?.activeStateId);
+
   /// Fire every note event whose absolute beat falls in `[from, to)`. Note
   /// events repeat every `totalBeats` (the clip loops), so the same source
   /// event is mapped into each loop iteration the window spans.
   ///
-  /// Reads the chain's transformed [MidiTransformChain.output] *live* each
-  /// tick, so editing the clip or toggling a transform while it loops is
-  /// heard on the next window — the played notes and the edited clip are one
-  /// and the same.
+  /// Reads the clip's transformed notes ([_playbackNotes]) *live* each tick, so
+  /// editing the clip, toggling a transform, or flipping the live state while
+  /// it loops is heard on the next window — the played notes and the authored
+  /// clip are one and the same.
   void _dispatchWindow(double from, double to) {
     final total = _chain.source.totalBeats;
-    final notes = _chain.output;
+    final notes = _playbackNotes;
     if (total <= 0 || notes.isEmpty) return;
 
     final firstLoop = (from / total).floor();

@@ -1,9 +1,15 @@
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/domain/midi/graph/state_match_condition.dart';
+import 'package:phi/domain/midi/graph/transform_node_id.dart';
 import 'package:phi/domain/midi/midi_clip.dart';
+import 'package:phi/domain/midi/midi_clip_mode.dart';
 import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/midi_transform_chain.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
+import 'package:phi/domain/state_machine/performance_state.dart';
+import 'package:phi/domain/state_machine/performance_state_id.dart';
+import 'package:phi/domain/state_machine/state_graph.dart';
 import 'package:phi/engine/state/engine_midi_controller.dart';
 
 import '../test_doubles/fake_midi_gateway.dart';
@@ -289,5 +295,112 @@ void main() {
         controller.dispose();
       });
     });
+  });
+
+  group('EngineMidiController — graph-mode playback (#77)', () {
+    // A 1-bar clip (4 beats) with a single note at beat 0.
+    MidiTransformChain oneNoteChain() => MidiTransformChain(
+      source: MidiClip(
+        name: 'one note',
+        bars: 1,
+        notes: const [
+          MidiNote(pitch: 60, start: 0.0, duration: 1.0, velocity: 1.0),
+        ],
+      ),
+    );
+
+    test('graph mode drives playback from the graph, not the linear chain', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final controller = EngineMidiController(
+          chain: oneNoteChain(), // no chain transforms → chain output is 60
+          gateway: gateway,
+        );
+
+        // Author a +7 node in the graph and switch the clip to graph mode: now
+        // playback must follow the graph (67), never the linear chain (60).
+        final graph = controller.graphController;
+        final node = graph.addNodeAt(
+          const TransposeTransform(semitones: 7, label: '+7'),
+          const Offset(200, 240),
+        );
+        graph.connect(TransformNodeId.source, node.id);
+        graph.mode = MidiClipMode.graph;
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 100));
+        controller.stop();
+
+        expect(gateway.calls, contains('noteOn:0:67:127'));
+        expect(gateway.calls.any((c) => c.startsWith('noteOn:0:60')), isFalse);
+
+        controller.dispose();
+      });
+    });
+
+    test(
+      'a state-guarded branch changes the emitted notes as the state flips',
+      () {
+        fakeAsync((async) {
+          const brk = PerformanceStateId('break');
+          final stateGraph = StateGraph()
+            ..addState(
+              PerformanceState(
+                id: brk,
+                name: 'break',
+                voice: 3,
+                position: Offset.zero,
+              ),
+            );
+          final gateway = FakeMidiGateway();
+          final controller = EngineMidiController(
+            chain: oneNoteChain(),
+            gateway: gateway,
+            stateGraph: stateGraph,
+          );
+
+          // Baseline spine: source → +0 (unconditional), always terminal → 60.
+          // Branch: source → +12 guarded by `break`, a second terminal that
+          // only carries notes while `break` is live → adds 72 to the union.
+          final graph = controller.graphController;
+          final base = graph.addNodeAt(
+            const TransposeTransform(semitones: 0, label: 'base'),
+            const Offset(200, 200),
+          );
+          graph.connect(TransformNodeId.source, base.id);
+          final branch = graph.addNodeAt(
+            const TransposeTransform(semitones: 12, label: 'branch · +12'),
+            const Offset(200, 360),
+          );
+          graph.connect(
+            TransformNodeId.source,
+            branch.id,
+            condition: const StateMatchCondition(brk),
+          );
+          graph.mode = MidiClipMode.graph;
+
+          // No state live: the branch is closed → only 60 sounds.
+          controller.play();
+          async.elapse(const Duration(milliseconds: 100));
+          expect(gateway.calls, contains('noteOn:0:60:127'));
+          expect(
+            gateway.calls.any((c) => c.startsWith('noteOn:0:72')),
+            isFalse,
+          );
+
+          // Go live on `break` → the branch opens; on the next loop the beat-0
+          // note fans out to both terminals, so 72 joins 60 in the output.
+          stateGraph.setActive(brk);
+          async.elapse(
+            const Duration(milliseconds: 2000),
+          ); // wrap the 4-beat bar
+          controller.stop();
+
+          expect(gateway.calls, contains('noteOn:0:72:127'));
+
+          controller.dispose();
+        });
+      },
+    );
   });
 }
