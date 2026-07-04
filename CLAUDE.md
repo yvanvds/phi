@@ -6,9 +6,10 @@ start. Pair with [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md).
 ## How we work
 
 1. **Issues first.** Every bug, feature, or enhancement is filed as a
-   labelled GitHub issue *before* code is written. Branch from `main` as
-   `<issue-number>-<short-slug>`. PR through CI. The only exception is a
-   trivial doc fix.
+   labelled GitHub issue *before* code is written. Branch from `develop`
+   as `<issue-number>-<short-slug>` and PR back into `develop` through CI;
+   `main` is protected and release-only, reached via a `develop → main`
+   PR. The only exception is a trivial doc fix.
 2. **Tests where sensible** (not dogmatically). Pure domain logic, the
    engine bridge, and end-to-end paths get tests first. Widget tests follow
    widget implementation. One-off scripts and animation tweaks don't need
