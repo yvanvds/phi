@@ -5,6 +5,7 @@ import '../../domain/midi/clip_editor.dart';
 import '../../domain/midi/custom_transform_registry.dart';
 import '../../domain/midi/midi_clip_seed.dart';
 import '../../domain/midi/midi_transform_chain.dart';
+import '../../domain/runtime/runtime_variable_registry.dart';
 import '../../domain/state_machine/state_graph.dart';
 import '../../engine/engine.dart';
 import '../../engine/state/midi_graph_controller.dart';
@@ -33,6 +34,7 @@ class MidiSurface extends Surface {
     MidiFileIo? fileIo,
     MidiGraphController? graphController,
     StateGraph? stateGraph,
+    RuntimeVariableRegistry? runtimeVariables,
     super.key,
   }) : _engine = engine,
        _chain = chain ?? defaultDemoChain(),
@@ -41,7 +43,8 @@ class MidiSurface extends Surface {
        _playhead = playhead,
        _fileIo = fileIo,
        _graphController = graphController,
-       _stateGraph = stateGraph;
+       _stateGraph = stateGraph,
+       _runtimeVariables = runtimeVariables;
 
   final PhiEngine _engine;
   final MidiTransformChain _chain;
@@ -58,6 +61,11 @@ class MidiSurface extends Surface {
   /// falls back to an empty context.
   final StateGraph? _stateGraph;
 
+  /// The runtime-variable registry backing the graph's `var · name = value`
+  /// guards and its variables bar (issue #78). `null` falls back to the
+  /// engine's, so the shell need not thread it explicitly.
+  final RuntimeVariableRegistry? _runtimeVariables;
+
   @override
   Widget build(BuildContext context) => MidiViewport(
     chain: _chain,
@@ -67,5 +75,6 @@ class MidiSurface extends Surface {
     fileIo: _fileIo,
     graphController: _graphController ?? _engine.midiOrNull?.graphController,
     stateGraph: _stateGraph ?? _engine.stateMachineOrNull?.graph,
+    runtimeVariables: _runtimeVariables ?? _engine.runtimeVariablesOrNull,
   );
 }

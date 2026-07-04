@@ -14,9 +14,9 @@ import '../../../domain/midi/graph/runtime_variable_condition.dart';
 import '../../../domain/midi/graph/state_match_condition.dart';
 import '../../../domain/midi/graph/transform_edge.dart';
 import '../../../domain/midi/graph/transform_node_id.dart';
+import '../../../domain/runtime/runtime_variable_registry.dart';
 import '../../../domain/state_machine/state_graph.dart';
 import '../../../engine/state/midi_graph_controller.dart';
-import 'runtime_variable_dialog.dart';
 import 'transform_edge_layer.dart';
 import 'transform_ghost_cable.dart';
 import 'transform_graph_node_view.dart';
@@ -37,18 +37,24 @@ class TransformGraphCanvas extends StatefulWidget {
     required this.controller,
     required this.evalContext,
     this.stateGraph,
+    this.runtimeVariables,
     super.key,
   });
 
   final MidiGraphController controller;
 
-  /// The live evaluation context (mirroring `StateGraph.activeStateId`), used
-  /// to light the active subgraph.
+  /// The live evaluation context (mirroring `StateGraph.activeStateId` and the
+  /// runtime registry's values), used to light the active subgraph.
   final GraphEvalContext evalContext;
 
   /// The state machine, for the condition menu's state list. `null` when no
-  /// state machine is wired — the menu then offers only `always` + a variable.
+  /// state machine is wired — the menu then offers only `always` + variables.
   final StateGraph? stateGraph;
+
+  /// The runtime-variable registry, for the condition menu's `var · name =
+  /// value` entries (issue #78). `null` when none is wired — the menu then
+  /// offers no variable guards.
+  final RuntimeVariableRegistry? runtimeVariables;
 
   @override
   State<TransformGraphCanvas> createState() => _TransformGraphCanvasState();
@@ -81,6 +87,7 @@ class _TransformGraphCanvasState extends State<TransformGraphCanvas> {
                 _controller,
                 _controller.graph,
                 widget.stateGraph,
+                widget.runtimeVariables,
               ]),
               builder: (context, _) {
                 final dragActive = _controller.dragSourceId != null;
@@ -242,6 +249,10 @@ class _TransformGraphCanvasState extends State<TransformGraphCanvas> {
       Offset.zero & overlay.size,
     );
     final states = widget.stateGraph?.states.toList() ?? const [];
+    // Every (variable, candidate value) pair is a concrete guard — no free
+    // text (issue #78): the registry enumerates exactly what a variable can
+    // hold, so the picker can only author a guard the variable can satisfy.
+    final variables = widget.runtimeVariables?.variables.toList() ?? const [];
     final choice = await showMenu<Object>(
       context: context,
       position: position,
@@ -250,31 +261,25 @@ class _TransformGraphCanvasState extends State<TransformGraphCanvas> {
         _item('unconditional', const AlwaysCondition()),
         for (final s in states)
           _item('state · ${s.name}', StateMatchCondition(s.id)),
-        _item('runtime variable…', const _PickVariable()),
+        for (final v in variables)
+          for (final value in v.values)
+            _item(
+              'var · ${v.name} = $value',
+              RuntimeVariableCondition(name: v.name, expected: value),
+            ),
         const PopupMenuDivider(),
         _item('disconnect', const _Disconnect()),
       ],
     );
     if (choice == null || !mounted) return;
-    await _applyChoice(edge, choice);
+    _applyChoice(edge, choice);
   }
 
-  Future<void> _applyChoice(TransformEdge edge, Object choice) async {
+  void _applyChoice(TransformEdge edge, Object choice) {
     if (choice is EdgeCondition) {
       _controller.setEdgeCondition(edge.fromId, edge.toId, choice);
     } else if (choice is _Disconnect) {
       _controller.disconnect(edge.fromId, edge.toId);
-    } else if (choice is _PickVariable) {
-      final input = await showDialog<RuntimeVariableInput>(
-        context: context,
-        builder: (_) => const RuntimeVariableDialog(),
-      );
-      if (input == null || !mounted) return;
-      _controller.setEdgeCondition(
-        edge.fromId,
-        edge.toId,
-        RuntimeVariableCondition(name: input.name, expected: input.expected),
-      );
     }
   }
 
@@ -319,11 +324,6 @@ class _TransformGraphCanvasState extends State<TransformGraphCanvas> {
     }
     return (openEdges, reached);
   }
-}
-
-/// Menu sentinel: open the runtime-variable dialog.
-class _PickVariable {
-  const _PickVariable();
 }
 
 /// Menu sentinel: remove the edge.
