@@ -147,7 +147,7 @@ The aesthetic is dark, gritty, glowing. Primitives and particles. Minimal text. 
 
 The stack is chosen to ship Phi in a reasonable time, with a polished look, on a platform that runs reliably during performance.
 
-- **Audio engine:** C++ (existing yse-soundengine, extended). Handles DSP, the realtime audio thread, scheduling, the authoritative Scene state. All time-critical work happens here. Time domains, agent behavior, MIDI event processing, and the scene graph live in the engine.
+- **Audio engine:** C++ (existing yse-soundengine, extended). Handles DSP, the realtime audio thread, scheduling, the authoritative Scene state. All time-critical work happens here. Time domains, agent behavior, MIDI event *timing and dispatch*, and the scene graph live in the engine. MIDI *interpretation* — the transformation graphs of §3.7 — is control-rate work and deliberately lives UI-side, where it stays malleable; it pushes evaluated event lists down to the engine's clocks. See [timing-architecture.md](timing-architecture.md) for the worked-out split.
 
 - **Scripting:** Python, embedded in the C++ engine. Chosen for familiarity, AZERTY-friendliness, ecosystem, and audience legibility of the resulting DSL. A custom vocabulary layer on top of Python provides the domain-specific verbs and objects.
 

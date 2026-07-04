@@ -288,7 +288,13 @@ main + app          (orchestration)
   header IMPORT button) to rewrite the shared clip in place — via
   `MidiClip.replaceWith` + `ClipEditor.reset` + `chain.notifySourceChanged`,
   keeping every reference intact — and the header EXPORT button encodes the
-  chain's transformed `output` back to a file. Issue #82 adds the **domain-side
+  chain's transformed `output` back to a file. **Note:** the timer-driven
+  player (UI-isolate `Timer.periodic` dispatching notes over FFI) is interim
+  scaffolding — it audibly jitters under UI load and is slated to migrate to
+  an engine-side transport per
+  [timing-architecture.md](timing-architecture.md); the chain/graph
+  interpretation layer stays in Dart and pushes revision-keyed note lists
+  instead of dispatching. Issue #82 adds the **domain-side
   grab** (direct-manipulation pull): `SceneField` holds a grabbed key + a held
   target and, inside `step`, pulls the held agent `grabStrength` of the way to
   the target each tick — carrying that displacement as velocity, so `release`
@@ -330,7 +336,11 @@ main + app          (orchestration)
   (name→domain lookup) in `lib/domain/time_domains/`. The minimal object a
   clip subscribes to and tempo-locks against — the resolution surface the
   `DomainSubscriptionTransform` binds to (issue #61, now wired into the demo
-  chain). No engine bridge, tempo UI, or per-domain transport yet.
+  chain). No engine bridge, tempo UI, or per-domain transport yet. Slated to
+  invert per [timing-architecture.md](timing-architecture.md): domains become
+  beat-accumulator clocks in the engine with tempo as a rampable, *playable*
+  parameter, and subscription becomes a clock binding rather than a note-time
+  rescale.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
@@ -356,7 +366,10 @@ main + app          (orchestration)
   `.github/workflows/sonar.yaml` (SonarCloud).
 - **SonarCloud:** project key `yvanvds_phi`, organization `yvanvds`.
 - **Issue templates:** `.github/ISSUE_TEMPLATE/`. Labels: see
-  [CLAUDE.md](CLAUDE.md).
+  [CLAUDE.md](../CLAUDE.md).
+- **Architecture decision records:** this `docs/` folder —
+  [timing-architecture.md](timing-architecture.md) (engine-owned clock &
+  dispatch, domain clocks, playable tempo).
 
 ## How to start work on something
 

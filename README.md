@@ -5,9 +5,11 @@ single-developer, years-long project — not a product. Public so others can
 read along.
 
 The vision: polytemporal, spatially-aware electronic music shaped in real time,
-on a substrate where no layer is master. See **[phi-vision.md](phi-vision.md)**
-for the full design intent, and **[PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md)**
-for the current architectural snapshot.
+on a substrate where no layer is master. See **[docs/phi-vision.md](docs/phi-vision.md)**
+for the full design intent, and **[docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md)**
+for the current architectural snapshot. Architecture decision records also
+live under [docs/](docs/) — start with
+**[docs/timing-architecture.md](docs/timing-architecture.md)**.
 
 ## Status
 

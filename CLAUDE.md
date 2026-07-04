@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 Workflow rules for Claude Code sessions on the Phi project. Read at session
-start. Pair with [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md).
+start. Pair with [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md).
 
 ## How we work
 
@@ -17,7 +17,7 @@ start. Pair with [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md).
    cheap; bundling classes is friction.
 4. **Layered structure.** `core/` → `domain/` → `design/` → `engine/` →
    `shell/`+`surfaces/` → `app/main`. One-way dependencies. Update
-   `PROJECT_OVERVIEW.md` after structural changes.
+   `docs/PROJECT_OVERVIEW.md` after structural changes.
 5. **Design tokens come from `design system/colors_and_type.css`.** Dart
    tokens under `lib/design/tokens/` are derivations — keep them in sync.
 
