@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../domain/midi/midi_clip_seed.dart';
+import '../domain/runtime/runtime_variable_registry.dart';
 import 'bridge/macbear_scene_renderer.dart';
 import 'bridge/midi_gateway.dart';
 import 'bridge/patcher_gateway.dart';
@@ -93,6 +94,23 @@ class PhiEngine {
   /// Nullable variant of [stateMachine] — `null` before [start].
   StateMachineController? get stateMachineOrNull => _stateMachine;
 
+  RuntimeVariableRegistry? _runtimeVariables;
+
+  /// The runtime-variable registry — the store backing the MIDI graph's
+  /// `var · name = value` edge guards (issue #78). Pure Dart, like the state
+  /// machine; created on [start], disposed on [stop]. Throws before [start];
+  /// use [runtimeVariablesOrNull] for the nullable variant.
+  RuntimeVariableRegistry get runtimeVariables {
+    final r = _runtimeVariables;
+    if (r == null) {
+      throw StateError('PhiEngine.runtimeVariables used before start()');
+    }
+    return r;
+  }
+
+  /// Nullable variant of [runtimeVariables] — `null` before [start].
+  RuntimeVariableRegistry? get runtimeVariablesOrNull => _runtimeVariables;
+
   EngineMidiController? _midi;
 
   /// The MIDI subsystem — owns the transform chain, its editor, and the
@@ -174,6 +192,8 @@ class PhiEngine {
     }
     final sm = StateMachineController();
     _stateMachine = sm;
+    final rv = RuntimeVariableRegistry();
+    _runtimeVariables = rv;
     // MIDI subsystem is optional — tests that don't inject a MidiGateway get
     // an engine without a player (engine.midi throws). When wired, it owns
     // the demo chain + its editor so playback and the piano-roll editor
@@ -187,6 +207,10 @@ class PhiEngine {
         // graph clip's state-guarded branch re-routes the sounding notes as the
         // live state flips (issue #77).
         stateGraph: sm.graph,
+        // The runtime-variable registry drives the graph's other context
+        // source, so a `var · mode = lead` branch re-routes as the performance
+        // moves the variable (issue #78).
+        runtimeVariables: rv,
         // The Scene renderer doubles as the agent sink (issue #37): playing a
         // clip whose chain has an active AgentSpawnTransform populates the 3D
         // Scene. `null` when no renderer is wired — spawning just no-ops.
@@ -214,6 +238,8 @@ class PhiEngine {
       _patcherGateway?.dispose();
       _stateMachine?.dispose();
       _stateMachine = null;
+      _runtimeVariables?.dispose();
+      _runtimeVariables = null;
       _midi?.dispose();
       _midi = null;
       _disposeUserChannels();

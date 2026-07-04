@@ -20,10 +20,12 @@ import '../../domain/midi/midi_transform_kind.dart';
 import '../../domain/midi/smf/smf_exception.dart';
 import '../../domain/midi/smf/smf_reader.dart';
 import '../../domain/midi/smf/smf_writer.dart';
+import '../../domain/runtime/runtime_variable_registry.dart';
 import '../../domain/state_machine/state_graph.dart';
 import '../../engine/state/midi_graph_controller.dart';
 import 'file_selector_midi_file_io.dart';
 import 'graph/graph_preview_strip.dart';
+import 'graph/runtime_variables_bar.dart';
 import 'graph/transform_graph_canvas.dart';
 import 'midi_file_io.dart';
 import 'midi_header_strip.dart';
@@ -58,6 +60,7 @@ class MidiViewport extends StatefulWidget {
     this.fileIo,
     this.graphController,
     this.stateGraph,
+    this.runtimeVariables,
     super.key,
   });
 
@@ -74,6 +77,12 @@ class MidiViewport extends StatefulWidget {
   /// condition picker. `null` when no state machine is wired — the graph then
   /// evaluates against an empty context (only unconditional edges fire).
   final StateGraph? stateGraph;
+
+  /// The runtime-variable registry backing the graph's `var · name = value`
+  /// guards, its live evaluation context, and the variables bar (issue #78).
+  /// `null` when none is wired — the variables bar is hidden and the picker
+  /// offers no variables.
+  final RuntimeVariableRegistry? runtimeVariables;
 
   /// Catalogue of performer-authored transforms surfaced in the chain `+` menu
   /// (issue #38). `null` in setups without a live-coding registry; the `+`
@@ -130,6 +139,7 @@ class _MidiViewportState extends State<MidiViewport> {
       _graph.graph,
       if (widget.registry != null) widget.registry,
       if (widget.stateGraph != null) widget.stateGraph,
+      if (widget.runtimeVariables != null) widget.runtimeVariables,
     ]);
     _fileIo = widget.fileIo ?? const FileSelectorMidiFileIo();
   }
@@ -141,8 +151,10 @@ class _MidiViewportState extends State<MidiViewport> {
     super.dispose();
   }
 
-  GraphEvalContext get _evalContext =>
-      GraphEvalContext(activeStateId: widget.stateGraph?.activeStateId);
+  GraphEvalContext get _evalContext => GraphEvalContext(
+    activeStateId: widget.stateGraph?.activeStateId,
+    variables: widget.runtimeVariables?.snapshot() ?? const {},
+  );
 
   // ── Import / export ────────────────────────────────────────────────────────
 
@@ -378,16 +390,23 @@ class _MidiViewportState extends State<MidiViewport> {
 
   Widget _buildGraphBody(MidiClip clip) {
     // Evaluate the active subgraph for the live context, so the preview strip
-    // reflects the state the performance is in (issue #65).
+    // reflects the state the performance is in (issue #65) and the runtime
+    // variables it holds (issue #78).
     final notes = _graph.graph.evaluate(_evalContext);
+    final registry = widget.runtimeVariables;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (registry != null) ...[
+          RuntimeVariablesBar(registry: registry),
+          const SizedBox(height: 8),
+        ],
         Expanded(
           child: TransformGraphCanvas(
             controller: _graph,
             evalContext: _evalContext,
             stateGraph: widget.stateGraph,
+            runtimeVariables: registry,
           ),
         ),
         const SizedBox(height: 8),

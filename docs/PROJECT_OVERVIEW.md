@@ -229,10 +229,20 @@ main + app          (orchestration)
   label + active pill); drag a node's output port onto another node to author
   an edge (the domain rejects cycles / duplicate pairs / edges into the source,
   surfaced as a banner); tap a cable to guard it (`unconditional`, a
-  state-machine state, or a runtime variable). The surface feeds a live
-  `GraphEvalContext` mirroring `StateGraph.activeStateId`, lights the active
-  subgraph on the canvas, and re-evaluates a slim read-only piano-roll preview
-  strip below — so switching the live state changes the preview. A clip is
+  state-machine state, or a `var · name = value` runtime variable). Those
+  variables come from a `RuntimeVariableRegistry` (`lib/domain/runtime/`,
+  ChangeNotifier) — the store #78 added to close the loop #65 left open: a
+  `RuntimeVariable` is an *enumerated* choice (name + candidate string values +
+  current), so the picker offers concrete guards instead of the old free-text
+  stub, and a guard can only ever name a value the variable can actually take
+  (value type settled as string — stable, hashable, `==`-comparable). The engine
+  owns the registry (like the `StateMachine`) and a graph-mode **variables bar**
+  (`lib/surfaces/midi/graph/runtime_variables_bar.dart`) defines variables and
+  flips their value live. The surface feeds a live `GraphEvalContext` mirroring
+  **both** `StateGraph.activeStateId` and the registry's current values
+  (`snapshot()`), lights the active subgraph on the canvas, and re-evaluates a
+  slim read-only piano-roll preview strip below — so switching the live state
+  *or moving a variable* changes the preview. A clip is
   **either** a linear (chain) or branching (graph) clip — its
   `MidiClipMode` (`lib/domain/midi/`) — and you move between them by
   **conversion**, not a casual toggle (issue #77). Chain is the default: the
@@ -246,10 +256,10 @@ main + app          (orchestration)
   when the graph is no longer `MidiTransformGraph.isLinear`, writing the
   extracted spine (`linearTransforms`) back via `MidiTransformChain.setTransforms`.
   Playback follows the mode: `EngineMidiController` owns the shared
-  `graphController`, holds the `StateGraph` for the live context, and reads the
-  chain's `output` or `graph.evaluate(context)` accordingly — so a state-guarded
-  branch re-routes the *sounding* notes as the live state flips, not just the
-  preview. The linear chain stays the zero-overhead default;
+  `graphController`, holds the `StateGraph` and `RuntimeVariableRegistry` for the
+  live context, and reads the chain's `output` or `graph.evaluate(context)`
+  accordingly — so a state- or variable-guarded branch re-routes the *sounding*
+  notes as the live state flips or a variable moves, not just the preview. The linear chain stays the zero-overhead default;
   `MidiTransformGraph.evaluate` is memoised the same way the chain is (below),
   the cache keyed additionally on the eval context so a state flip recomputes
   once, not every tick.

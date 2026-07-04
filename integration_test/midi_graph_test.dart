@@ -1,6 +1,8 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
+import 'package:phi/domain/midi/graph/runtime_variable_condition.dart';
 import 'package:phi/domain/midi/graph/state_match_condition.dart';
 import 'package:phi/domain/midi/graph/transform_node_id.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
@@ -123,6 +125,84 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(PianoRollEditor), findsOneWidget);
     expect(find.byType(TransformChainPanel), findsOneWidget);
+
+    session.dispose();
+    await engine.dispose();
+  });
+
+  testWidgets('graph mode: a runtime variable, set live, flips a branch', (
+    tester,
+  ) async {
+    final engine = PhiEngine(
+      FakeYseGateway(),
+      midiGateway: FakeMidiGateway(),
+      telemetryInterval: const Duration(milliseconds: 20),
+    );
+    final session = SessionState();
+
+    await tester.pumpWidget(PhiApp(engine: engine, session: session));
+    await tester.pumpAndSettle();
+
+    // Open MIDI and convert the chain clip to a graph.
+    await tester.tap(railFor(SurfaceId.midi));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('convert to graph →'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('convert'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('PREVIEW · 10 NOTES'), findsOneWidget);
+
+    // Before any variable is defined the bar shows its empty-state hint.
+    expect(find.textContaining('no runtime variables'), findsOneWidget);
+
+    // Define `mode ∈ {lead, pad}` through the variables bar — real dialog.
+    await tester.tap(find.text('+ var'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'name (e.g. intensity)'),
+      'mode',
+    );
+    await tester.enterText(
+      find.widgetWithText(
+        TextField,
+        'values, comma-separated (e.g. low, high)',
+      ),
+      'lead, pad',
+    );
+    await tester.tap(find.text('define'));
+    await tester.pumpAndSettle();
+    expect(find.text('LEAD'), findsOneWidget);
+    expect(find.text('PAD'), findsOneWidget);
+
+    // Author a branch off the source guarded by `mode = pad`. (The drag and
+    // menu gestures are covered by the canvas widget test; here we verify the
+    // live wiring — variable → context → preview — through the real app.)
+    final graph = engine.midi.graphController;
+    final branch = graph.addNodeAt(
+      const TransposeTransform(semitones: 12, label: 'branch · +12'),
+      const Offset(200, 360),
+    );
+    graph.connect(
+      TransformNodeId.source,
+      branch.id,
+      condition: const RuntimeVariableCondition(name: 'mode', expected: 'pad'),
+    );
+    await tester.pumpAndSettle();
+
+    // `mode` is `lead` → the branch is closed → preview unchanged.
+    expect(find.textContaining('PREVIEW · 10 NOTES'), findsOneWidget);
+
+    // Tap `PAD` in the bar → the guard opens, live, and the branch's ten notes
+    // join the output.
+    await tester.tap(find.text('PAD'));
+    await tester.pumpAndSettle();
+    expect(engine.runtimeVariables.byName('mode')!.current, 'pad');
+    expect(find.textContaining('PREVIEW · 20 NOTES'), findsOneWidget);
+
+    // Back to `LEAD` → the branch closes → preview returns to ten.
+    await tester.tap(find.text('LEAD'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('PREVIEW · 10 NOTES'), findsOneWidget);
 
     session.dispose();
     await engine.dispose();

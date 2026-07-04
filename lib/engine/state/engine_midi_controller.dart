@@ -9,6 +9,7 @@ import '../../domain/midi/midi_clip_mode.dart';
 import '../../domain/midi/midi_note.dart';
 import '../../domain/midi/midi_transform_chain.dart';
 import '../../domain/midi/transforms/agent_spawn_transform.dart';
+import '../../domain/runtime/runtime_variable_registry.dart';
 import '../../domain/scene/effect_volume.dart';
 import '../../domain/scene/pick_ray.dart';
 import '../../domain/scene/scatter.dart';
@@ -47,6 +48,7 @@ class EngineMidiController {
     ClipEditor? editor,
     SceneAgentSink? agentSink,
     StateGraph? stateGraph,
+    RuntimeVariableRegistry? runtimeVariables,
     double bpm = 120,
     int outputPort = 0,
     this.microtonal = false,
@@ -55,6 +57,7 @@ class EngineMidiController {
        _gateway = gateway,
        _agentSink = agentSink,
        _stateGraph = stateGraph,
+       _runtimeVariables = runtimeVariables,
        editor = editor ?? ClipEditor(chain.source),
        graphController = MidiGraphController.seededFrom(chain),
        _bpm = bpm,
@@ -69,6 +72,12 @@ class EngineMidiController {
   /// setups without a state machine — the graph then evaluates against the
   /// empty context (only unconditional edges fire).
   final StateGraph? _stateGraph;
+
+  /// The live runtime-variable registry, mirrored into the graph's
+  /// [GraphEvalContext] so a `var · mode = lead` edge opens exactly while that
+  /// variable holds that value (issue #78). `null` in setups without a registry
+  /// — the graph then sees no variables (a `var = x` guard stays closed).
+  final RuntimeVariableRegistry? _runtimeVariables;
 
   /// The branching transform-graph editor (issue #65), seeded from [chain] so
   /// it opens on the working linear chain. Shares [chain]'s source clip, so
@@ -328,11 +337,13 @@ class EngineMidiController {
       ? graphController.graph.evaluate(_liveContext)
       : _chain.output;
 
-  /// The live evaluation context — the state machine's `activeStateId` mirrored
-  /// in, exactly as the graph preview does — so playback and preview agree on
-  /// which branches are open.
-  GraphEvalContext get _liveContext =>
-      GraphEvalContext(activeStateId: _stateGraph?.activeStateId);
+  /// The live evaluation context — the state machine's `activeStateId` and the
+  /// runtime registry's current values mirrored in, exactly as the graph
+  /// preview does — so playback and preview agree on which branches are open.
+  GraphEvalContext get _liveContext => GraphEvalContext(
+    activeStateId: _stateGraph?.activeStateId,
+    variables: _runtimeVariables?.snapshot() ?? const {},
+  );
 
   /// Fire every note event whose absolute beat falls in `[from, to)`. Note
   /// events repeat every `totalBeats` (the clip loops), so the same source
