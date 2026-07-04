@@ -43,13 +43,19 @@ class SpectralMappingTransform extends MidiTransform {
       .map((n) => n.copyWith(pitch: _map(n.pitch)))
       .toList(growable: false);
 
+  /// Carries [table] alongside the base [active]/[label] so the typed table
+  /// editor (issue #95) can replace the mapping in place without losing the
+  /// chip's toggle or name.
   @override
-  SpectralMappingTransform copyWith({bool? active, String? label}) =>
-      SpectralMappingTransform(
-        table: table,
-        label: label ?? this.label,
-        active: active ?? this.active,
-      );
+  SpectralMappingTransform copyWith({
+    bool? active,
+    String? label,
+    Map<int, double>? table,
+  }) => SpectralMappingTransform(
+    table: table ?? this.table,
+    label: label ?? this.label,
+    active: active ?? this.active,
+  );
 
   double _map(double pitch) {
     // Only an integer source pitch can name a key; a fractional input is left

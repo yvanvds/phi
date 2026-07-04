@@ -26,13 +26,15 @@ import 'transforms/voice_routing_transform.dart';
 /// One built-in transform the chain `+` menu can add.
 ///
 /// [build] mints a fresh, chain-ready instance with sensible defaults each
-/// time it's picked. Transforms whose behaviour is a caller-supplied callback
-/// or table ([VelocityToParameterTransform], [SpectralMappingTransform],
-/// [VoiceRoutingTransform], [ConditionalMutingTransform], [AgentSpawnTransform],
-/// [SplittingTransform]) have no meaningful zero-config behaviour, so their
-/// default is a **passthrough**: the chip appears and toggles, but leaves the
-/// clip unchanged until the performer edits its parameters (a follow-up —
-/// issue #39 ships add / reorder / remove / duplicate / rename only).
+/// time it's picked. Transforms whose behaviour is a caller-supplied table or
+/// rule-list ([SpectralMappingTransform], [VoiceRoutingTransform],
+/// [SplittingTransform], [AgentSpawnTransform], and the scale-tuning of a
+/// [ScaleConformanceTransform]) have no meaningful zero-config behaviour, so
+/// their default is a **passthrough**: the chip appears and toggles, but leaves
+/// the clip unchanged until the performer edits it through the chip's typed
+/// parameter editor (issue #95). The two still-callback-driven transforms
+/// ([VelocityToParameterTransform], [ConditionalMutingTransform]) stay
+/// passthrough until their declarative models land (#108/#109).
 class BuiltinTransform {
   const BuiltinTransform({
     required this.name,

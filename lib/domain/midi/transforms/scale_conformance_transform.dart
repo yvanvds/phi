@@ -57,14 +57,21 @@ class ScaleConformanceTransform extends MidiTransform {
       .map((n) => n.copyWith(pitch: _snap(n.pitch)))
       .toList(growable: false);
 
+  /// Carries [tuning] and [tonic] alongside the base [active]/[label] so the
+  /// typed scale editor (issue #95) can swap the scale preset in place — the
+  /// scalar [tonic] still round-trips through [withParam] as well.
   @override
-  ScaleConformanceTransform copyWith({bool? active, String? label}) =>
-      ScaleConformanceTransform(
-        tuning: tuning,
-        tonic: tonic,
-        label: label ?? this.label,
-        active: active ?? this.active,
-      );
+  ScaleConformanceTransform copyWith({
+    bool? active,
+    String? label,
+    ScaleTuning? tuning,
+    double? tonic,
+  }) => ScaleConformanceTransform(
+    tuning: tuning ?? this.tuning,
+    tonic: tonic ?? this.tonic,
+    label: label ?? this.label,
+    active: active ?? this.active,
+  );
 
   /// Only the tonic is a scalar; the tuning is a cents table and gets its
   /// editor (scale picker / cents grid) in issue #95.

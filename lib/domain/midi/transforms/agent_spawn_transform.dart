@@ -56,16 +56,25 @@ class AgentSpawnTransform extends MidiTransform {
   @override
   List<MidiNote> apply(List<MidiNote> input) => input;
 
+  /// Carries the [x]/[y]/[z] axes and [velocity] drift alongside the base
+  /// [active]/[label] so the typed spawn editor (issue #95) can rebind any
+  /// axis or the drift in place without losing the chip's toggle or name.
   @override
-  AgentSpawnTransform copyWith({bool? active, String? label}) =>
-      AgentSpawnTransform(
-        x: x,
-        y: y,
-        z: z,
-        label: label ?? this.label,
-        active: active ?? this.active,
-        velocity: velocity,
-      );
+  AgentSpawnTransform copyWith({
+    bool? active,
+    String? label,
+    SpawnAxis? x,
+    SpawnAxis? y,
+    SpawnAxis? z,
+    Vector3? velocity,
+  }) => AgentSpawnTransform(
+    x: x ?? this.x,
+    y: y ?? this.y,
+    z: z ?? this.z,
+    label: label ?? this.label,
+    active: active ?? this.active,
+    velocity: velocity ?? this.velocity,
+  );
 
   /// One [AgentSpawn] per note, in input order. The caller decides what
   /// "input" means — typically the note list at this transform's position in

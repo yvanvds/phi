@@ -9,6 +9,7 @@ import '../../domain/midi/custom_transform_registry.dart';
 import '../../domain/midi/midi_transform.dart';
 import '../../domain/midi/midi_transform_chain.dart';
 import '../../domain/midi/midi_transform_kind.dart';
+import 'param_editors/typed_param_editors.dart';
 import 'transform_chip.dart';
 import 'transform_param_editor.dart';
 
@@ -50,11 +51,15 @@ class _TransformChainPanelState extends State<TransformChainPanel> {
       Rect.fromPoints(globalPosition, globalPosition),
       Offset.zero & overlay.size,
     );
-    // "edit parameters…" greys out for chips that expose none — the
-    // table/callback-driven transforms awaiting typed editors (issue #95).
+    // "edit parameters…" greys out only for chips with nothing to edit — the
+    // two still-callback-driven transforms (#108/#109). A transform is editable
+    // if it exposes scalar params or has a dedicated typed editor (issue #95).
+    final transform = index < widget.chain.transforms.length
+        ? widget.chain.transforms[index]
+        : null;
     final editable =
-        index < widget.chain.transforms.length &&
-        widget.chain.transforms[index].params.isNotEmpty;
+        transform != null &&
+        (transform.params.isNotEmpty || hasTypedEditor(transform));
     final action = await showMenu<_ChipAction>(
       context: context,
       position: position,
@@ -96,10 +101,13 @@ class _TransformChainPanelState extends State<TransformChainPanel> {
 
   Future<void> _editChipParams(int index) async {
     if (index >= widget.chain.transforms.length) return;
+    // Table/rule-list transforms get their dedicated typed dialog; the rest
+    // fall back to the generic scalar editor.
+    final typed = buildTypedParamEditor(widget.chain, index);
     await showDialog<void>(
       context: context,
       builder: (context) =>
-          TransformParamEditor(chain: widget.chain, index: index),
+          typed ?? TransformParamEditor(chain: widget.chain, index: index),
     );
   }
 
