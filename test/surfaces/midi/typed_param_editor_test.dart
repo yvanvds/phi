@@ -14,6 +14,7 @@ import 'package:phi/domain/midi/transforms/scale_conformance_transform.dart';
 import 'package:phi/domain/midi/transforms/spectral_mapping_transform.dart';
 import 'package:phi/domain/midi/transforms/split_voice.dart';
 import 'package:phi/domain/midi/transforms/splitting_transform.dart';
+import 'package:phi/domain/midi/transforms/voice_routing_rule.dart';
 import 'package:phi/domain/midi/transforms/voice_routing_transform.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/surfaces/midi/midi_surface.dart';
@@ -129,6 +130,35 @@ void main() {
     await tester.enterText(dialogFields().at(2), '3');
     await tester.pump();
     expect(chain.output.single.channel, 3);
+
+    chain.dispose();
+  });
+
+  testWidgets('routing: switching a rule kind rebuilds it as that kind', (
+    tester,
+  ) async {
+    final chain = oneNoteChain(const [
+      VoiceRoutingTransform(
+        rules: [PitchRangeRule(minPitch: 0, maxPitch: 127, channel: 2)],
+        label: 'route',
+      ),
+    ]);
+    await pump(tester, chain);
+    await openEditor(tester);
+
+    // The kind picker shows the current kind; switch it to scale degree.
+    await tester.tap(find.text('pitch range'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('scale degree').last);
+    await tester.pumpAndSettle();
+
+    final rule =
+        (chain.transforms.single as VoiceRoutingTransform).rules.single;
+    expect(rule, isA<ScaleDegreeRule>());
+    // The channel carries across the kind switch.
+    expect(rule.channel, 2);
+    // The tonic-degree default routes the middle-C note (degree 1 of C).
+    expect(chain.output.single.channel, 2);
 
     chain.dispose();
   });
