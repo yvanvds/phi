@@ -165,15 +165,31 @@ class _WorkstationState extends State<Workstation> {
   }
 
   Widget _buildCentre() {
-    // All surfaces stay in the element tree; IndexedStack only paints the
-    // selected one. macbear's `M3AppEngine` is a process-wide singleton
-    // that `M3View.dispose` tears down irreversibly, so unmounting the
-    // Scene surface crashes any subsequent re-entry.
+    // Every surface except Scene stays resident: IndexedStack keeps each in the
+    // element tree so its transient UI state (scroll, selection, in-progress
+    // edits) survives rail switches while only the selected one paints.
+    //
+    // Scene is the exception. It hosts macbear's `M3View`, which drives a
+    // process-wide GL context, so we mount it only while Scene is selected —
+    // keeping ANGLE init off the boot path when the app opens elsewhere and
+    // letting the GPU context idle when Scene is offstage. The fork's
+    // `M3AppEngine.unmount()`/`remount()` (issue #19) keeps the engine warm, so
+    // leaving and re-entering Scene is cheap and crash-free.
     return IndexedStack(
       index: SurfaceId.values.indexOf(_selected),
       sizing: StackFit.expand,
-      children: [for (final id in SurfaceId.values) _surfaceFor(id)],
+      children: [for (final id in SurfaceId.values) _surfaceSlot(id)],
     );
+  }
+
+  /// The child for [id]'s IndexedStack slot. Every surface is built eagerly
+  /// except Scene, whose `M3View` is kept out of the tree until Scene is
+  /// selected (see [_buildCentre]); its slot is an empty box while offstage.
+  Widget _surfaceSlot(SurfaceId id) {
+    if (id == SurfaceId.scene && _selected != SurfaceId.scene) {
+      return const SizedBox.shrink();
+    }
+    return _surfaceFor(id);
   }
 
   Widget _surfaceFor(SurfaceId id) {

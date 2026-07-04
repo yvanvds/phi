@@ -18,6 +18,15 @@ class FakeSceneRenderer implements SceneRenderer {
   Vector3? lastSelection;
   ScenePickHandler? installedHandler;
 
+  /// How many times the widget returned by [buildView] has mounted / unmounted.
+  /// Shell tests use these to assert the Scene view is attached only while Scene
+  /// is the selected surface and detaches when it leaves (issue #19), without
+  /// pulling in a real GL context. Kept off [calls] so exact call-sequence
+  /// assertions elsewhere are unaffected.
+  int viewMounts = 0;
+  int viewDisposes = 0;
+  bool get viewMounted => viewMounts > viewDisposes;
+
   @override
   void init() {
     calls.add('init');
@@ -61,5 +70,37 @@ class FakeSceneRenderer implements SceneRenderer {
   }
 
   @override
-  Widget buildView() => const SizedBox.shrink();
+  Widget buildView() => _FakeSceneView(
+    onMount: () => viewMounts++,
+    onDispose: () => viewDisposes++,
+  );
+}
+
+/// Stand-in for macbear's `M3View` in tests: renders nothing but reports its
+/// mount / unmount so a test can observe the Scene view's widget lifecycle.
+class _FakeSceneView extends StatefulWidget {
+  const _FakeSceneView({required this.onMount, required this.onDispose});
+
+  final VoidCallback onMount;
+  final VoidCallback onDispose;
+
+  @override
+  State<_FakeSceneView> createState() => _FakeSceneViewState();
+}
+
+class _FakeSceneViewState extends State<_FakeSceneView> {
+  @override
+  void initState() {
+    super.initState();
+    widget.onMount();
+  }
+
+  @override
+  void dispose() {
+    widget.onDispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
