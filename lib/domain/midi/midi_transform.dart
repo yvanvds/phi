@@ -29,9 +29,10 @@ abstract class MidiTransform {
   MidiTransform copyWith({bool? active, String? label});
 
   /// The editable scalar parameters, in display order. Empty (the default)
-  /// means a generic editor has nothing to mutate — either the transform is
-  /// genuinely parameterless or its behaviour lives in a table/callback that
-  /// awaits a typed editor (issue #95).
+  /// means the generic scalar editor has nothing to mutate — either the
+  /// transform is genuinely parameterless, its behaviour lives in a
+  /// table/rule-list edited by a dedicated typed editor instead (issue #95),
+  /// or it is still a bare callback awaiting a serialisable model (#108/#109).
   List<TransformParam> get params => const [];
 
   /// Returns a copy with the parameter named [name] set to [value], where

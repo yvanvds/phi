@@ -201,10 +201,16 @@ main + app          (orchestration)
   seam, and `TransformParamEditor` (`lib/surfaces/midi/`) renders one field per
   descriptor, applying each parse-valid keystroke live through
   `MidiTransformChain.replaceAt` so ghost and playback follow while the dialog
-  is open. The table/callback-driven transforms (spectral map, routing rules,
-  split voices, velocity curve, muting predicate, spawn axes) expose no params
-  yet — their menu item greys out until issue #95 gives them typed editors.
-  Real Python is still
+  is open. The five table/rule-list transforms (spectral map, routing rules,
+  split voices, spawn axes, scale tuning) don't fit that scalar seam, so
+  issue #95 gives each a dedicated **typed editor** under
+  `lib/surfaces/midi/param_editors/` (a shared field vocabulary in
+  `editor_fields.dart`, one dialog per family, dispatched by
+  `typed_param_editors.dart`); each mutates the chip in place through the
+  transform's own `copyWith({…data field…})` — again live via
+  `MidiTransformChain.replaceAt`. The two still-callback-driven transforms
+  (velocity curve, muting predicate) stay greyed out until their declarative
+  models land (#108/#109). Real Python is still
   a `NoOpCodeEvaluator`
   (issue #9's kernel decision is open), so the live-coding→registration
   handshake runs through `FakeCodeEvaluator` (now carrying an `onEvaluate`

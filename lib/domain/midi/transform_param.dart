@@ -7,10 +7,14 @@
 /// other way, through [MidiTransform.withParam], which mints a fresh
 /// transform — the descriptors themselves stay immutable.
 ///
-/// Only the two numeric shapes exist today, which covers every scalar
-/// transform. The table/callback-driven transforms (spectral map, routing
-/// rules, velocity curve, muting predicate…) need richer descriptor kinds and
-/// get them in issue #95 — until then they expose no params at all.
+/// Only the two numeric shapes exist here, which covers every scalar
+/// transform. The transforms whose behaviour lives in a table or rule-list
+/// (spectral map, routing rules, split voices, spawn axes, scale tuning) are
+/// edited by dedicated typed editor widgets instead (issue #95), mutating in
+/// place through each transform's own `copyWith` rather than this scalar seam.
+/// The two callback-driven transforms (velocity curve #108, muting predicate
+/// #109) first need a serialisable data model before they can be edited at
+/// all, so they expose no params yet.
 ///
 /// The subtypes are sealed variants of one concept, so they share this file
 /// (`sealed` requires a single library) — the same bundling exception

@@ -36,13 +36,19 @@ class VoiceRoutingTransform extends MidiTransform {
   List<MidiNote> apply(List<MidiNote> input) =>
       input.map(_route).toList(growable: false);
 
+  /// Carries [rules] alongside the base [active]/[label] so the typed
+  /// rule-list editor (issue #95) can replace the routing table in place
+  /// without losing the chip's toggle or name.
   @override
-  VoiceRoutingTransform copyWith({bool? active, String? label}) =>
-      VoiceRoutingTransform(
-        rules: rules,
-        label: label ?? this.label,
-        active: active ?? this.active,
-      );
+  VoiceRoutingTransform copyWith({
+    bool? active,
+    String? label,
+    List<VoiceRoutingRule>? rules,
+  }) => VoiceRoutingTransform(
+    rules: rules ?? this.rules,
+    label: label ?? this.label,
+    active: active ?? this.active,
+  );
 
   MidiNote _route(MidiNote note) {
     for (final rule in rules) {

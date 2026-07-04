@@ -44,13 +44,19 @@ class SplittingTransform extends MidiTransform {
         .toList(growable: false);
   }
 
+  /// Carries [voices] alongside the base [active]/[label] so the typed
+  /// split-voices editor (issue #95) can replace the layer list in place
+  /// without losing the chip's toggle or name.
   @override
-  SplittingTransform copyWith({bool? active, String? label}) =>
-      SplittingTransform(
-        voices: voices,
-        label: label ?? this.label,
-        active: active ?? this.active,
-      );
+  SplittingTransform copyWith({
+    bool? active,
+    String? label,
+    List<SplitVoice>? voices,
+  }) => SplittingTransform(
+    voices: voices ?? this.voices,
+    label: label ?? this.label,
+    active: active ?? this.active,
+  );
 
   MidiNote _copy(MidiNote note, SplitVoice voice) => note.copyWith(
     channel: voice.channel ?? note.channel,
