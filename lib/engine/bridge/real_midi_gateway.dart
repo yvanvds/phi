@@ -1,19 +1,28 @@
 import 'package:yse/yse.dart';
 
 import 'midi_gateway.dart';
+import 'midi_transport.dart';
+import 'real_midi_transport.dart';
 
 /// Production [MidiGateway] backed by `package:yse`.
 ///
 /// Device enumeration goes through `System.instance` (the same singleton
 /// [RealYseGateway] initialises); output goes through a single [MidiOut]
-/// port opened on demand. Requires `libyse.dll` discoverable at runtime —
-/// see README.md for the Windows setup.
+/// port opened on demand. Timed note dispatch has moved to the engine clip
+/// transport ([createTransport]) since issue #101; what stays here is device
+/// enumeration, the port, and [allNotesOff]. Requires `libyse.dll`
+/// discoverable at runtime — see README.md for the Windows setup.
 class RealMidiGateway implements MidiGateway {
   System? _sys;
   MidiOut? _out;
   int? _openPort;
 
   System get _system => _sys ??= System.instance;
+
+  /// The currently open output port, or `null` when none is open. Exposed so a
+  /// [RealMidiTransport] this gateway mints can route the engine clip to the
+  /// same port the gateway opened, rather than opening a second device handle.
+  MidiOut? get midiOut => _out;
 
   @override
   int get outputDeviceCount => _system.midiOutDeviceCount;
@@ -34,25 +43,14 @@ class RealMidiGateway implements MidiGateway {
   }
 
   @override
-  void noteOn({
-    required int channel,
-    required int pitch,
-    required int velocity,
-  }) => _out?.noteOn(channel: channel, pitch: pitch, velocity: velocity);
-
-  @override
-  void noteOff({required int channel, required int pitch}) =>
-      _out?.noteOff(channel: channel, pitch: pitch);
-
-  @override
-  void pitchBend({required int channel, required int value}) => _out?.raw3(
-    0xE0 | (channel & 0x0F),
-    value & 0x7F, // LSB (7 bits)
-    (value >> 7) & 0x7F, // MSB (7 bits)
-  );
-
-  @override
-  void raw3(int a, int b, int c) => _out?.raw3(a, b, c);
+  MidiTransport createTransport({
+    required String clockName,
+    required double tempo,
+  }) {
+    final clock = DomainClock(clockName, tempo: tempo);
+    final clip = ClipTransport(clock);
+    return RealMidiTransport(this, clock, clip);
+  }
 
   @override
   void allNotesOff({int? channel}) => _out?.allNotesOff(channel: channel);

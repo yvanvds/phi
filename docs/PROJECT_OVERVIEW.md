@@ -279,20 +279,29 @@ main + app          (orchestration)
   marquee, arrow-key nudge, Delete, and Ctrl+Z/Y; a `VelocityLane` below the
   roll (shared time axis) does click/drag-to-paint velocity. Playback is
   wired (issue #29): `EngineMidiController` (`lib/engine/state/`) owns the
-  chain + editor and drives a looping playhead off a periodic timer,
-  reading the chain's transformed `output` **live** each tick (so edits and
-  chip toggles are heard immediately, not on the next play). That read is
-  memoised (issue #56): the pipeline re-evaluates only when the transform
-  list changes, the source clip is edited (`MidiClip.revision`, bumped by the
-  edit commands and `replaceWith`), or a chip hot-reloads
-  (`MidiTransform.revision`) — otherwise a read is an O(1) cache hit. The
-  controller forwards
-  `noteOn`/`noteOff` through a `MidiGateway` (Real over
-  `package:yse`'s `MidiOut`, Fake recording calls in tests — the same
-  split as `YseGateway`). An opt-in `microtonal` flag (issue #36) voices a
-  note's fractional pitch as its nearest semitone plus a per-channel
-  `pitchBend` (added to `MidiGateway`, ±2-semitone GM range assumed); off by
-  default it just rounds. SMF export rounds fractional pitch to the nearest
+  chain + editor. **Since issue #101 note dispatch belongs to the engine, not
+  the UI isolate** ([timing-architecture.md](timing-architecture.md) §2): on
+  `play` the controller flattens the chain's transformed `output` into a
+  `TransportNote` list and **pushes** it (plus the loop length) to a
+  `MidiTransport` bound to a domain clock, and the engine fires every note from
+  the audio thread. A periodic timer still runs, but only for the display
+  playhead and the Scene agent field — and to **re-push on change**: the
+  `output` read is memoised (issue #56), so it hands back a *fresh list
+  instance* only when the transform list changes, the source clip is edited
+  (`MidiClip.revision`, bumped by the edit commands and `replaceWith`), a chip
+  hot-reloads (`MidiTransform.revision`), or — graph mode — a state/variable
+  flip re-evaluates; the tick detects the new instance and re-pushes, so "read
+  every tick" became "push on change" and an edit is heard within one audio
+  block with UI jank out of the timing path. `MidiTransport` (Real over
+  `package:yse`'s `DomainClock` + `ClipTransport`, Fake recording the pushed
+  events in tests) is minted by `MidiGateway.createTransport`; the gateway's own
+  surface shrank to the genuinely immediate MIDI — device enumeration, opening
+  the port, and `allNotesOff` on stop (the same Real/Fake split as `YseGateway`).
+  An opt-in `microtonal` flag (issue #36) voices a
+  note's fractional pitch as its nearest semitone plus normalised pitch-bend
+  event data the transport carries (±2-semitone GM range assumed); off by
+  default it just rounds, and flipping it while playing re-pushes. SMF export
+  rounds fractional pitch to the nearest
   semitone (a `.mid` can't carry cents). `PhiEngine.midi` exposes it; the top-toolbar
   transport drives `play`/`stop` at `SessionState.tempo`, the piano-roll
   painter animates a non-zero playhead, and stop sends `allNotesOff`. The
@@ -304,13 +313,15 @@ main + app          (orchestration)
   header IMPORT button) to rewrite the shared clip in place — via
   `MidiClip.replaceWith` + `ClipEditor.reset` + `chain.notifySourceChanged`,
   keeping every reference intact — and the header EXPORT button encodes the
-  chain's transformed `output` back to a file. **Note:** the timer-driven
-  player (UI-isolate `Timer.periodic` dispatching notes over FFI) is interim
-  scaffolding — it audibly jitters under UI load and is slated to migrate to
-  an engine-side transport per
-  [timing-architecture.md](timing-architecture.md); the chain/graph
-  interpretation layer stays in Dart and pushes revision-keyed note lists
-  instead of dispatching. Issue #82 adds the **domain-side
+  chain's transformed `output` back to a file. **Note:** note dispatch has
+  migrated to the engine clip transport (issue #101,
+  [timing-architecture.md](timing-architecture.md) §2) — the UI isolate no
+  longer times notes; the chain/graph interpretation layer stays in Dart and
+  pushes revision-keyed note lists to the transport instead of dispatching them
+  tick-by-tick. Still Dart-side and slated to follow (§4): scene spawn
+  re-anchoring and the playhead as an engine-clock query (both currently ride
+  the display timer), and playable/ramped domain tempo (§3). Issue #82 adds
+  the **domain-side
   grab** (direct-manipulation pull): `SceneField` holds a grabbed key + a held
   target and, inside `step`, pulls the held agent `grabStrength` of the way to
   the target each tick — carrying that displacement as velocity, so `release`

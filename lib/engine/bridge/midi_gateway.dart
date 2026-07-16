@@ -1,3 +1,5 @@
+import 'midi_transport.dart';
+
 /// Abstract port over `package:yse`'s MIDI **output** surface.
 ///
 /// `EngineMidiController` depends on this interface, not on `package:yse`
@@ -5,6 +7,11 @@
 /// the only place the real FFI surface is touched. Mirrors [YseGateway] for
 /// the audio side. See `real_midi_gateway.dart` for the production
 /// implementation and `test/.../fake_midi_gateway.dart` for the test double.
+///
+/// Since issue #101 note *dispatch* left this surface: timed notes are pushed
+/// to a [MidiTransport] (minted by [createTransport]) that the engine plays
+/// from the audio thread. What remains here is the genuinely immediate MIDI —
+/// device enumeration, opening the port, and [allNotesOff] on stop.
 abstract interface class MidiGateway {
   /// Number of MIDI output devices visible to the engine. `0` when none are
   /// present or the platform has no MIDI support.
@@ -20,27 +27,14 @@ abstract interface class MidiGateway {
   /// Whether an output port is currently open.
   bool get isOpen;
 
-  /// Send Note-On. [channel] is `0..15`, [pitch] and [velocity] are `0..127`.
-  void noteOn({
-    required int channel,
-    required int pitch,
-    required int velocity,
+  /// Mint a [MidiTransport] bound to a fresh domain clock named [clockName],
+  /// starting at [tempo] BPM, and routed to this gateway's output. The player
+  /// pushes its flattened note list here and lets the engine dispatch it from
+  /// the audio thread (issue #101).
+  MidiTransport createTransport({
+    required String clockName,
+    required double tempo,
   });
-
-  /// Send Note-Off. [channel] is `0..15`, [pitch] is `0..127`.
-  void noteOff({required int channel, required int pitch});
-
-  /// Send a 14-bit pitch-bend on [channel] (`0..15`). [value] is `0..16383`,
-  /// centred at `8192` (no bend). Used to voice microtonal (fractional) pitches
-  /// that Note-On's 7-bit integer pitch can't express — see issue #36 and
-  /// `EngineMidiController`'s microtonal mode. Bend is per-channel: two notes
-  /// sounding on one channel share the last bend, so route differently-detuned
-  /// voices to separate channels.
-  void pitchBend({required int channel, required int value});
-
-  /// Send three raw MIDI bytes — the escape hatch for messages the typed
-  /// helpers don't cover.
-  void raw3(int a, int b, int c);
 
   /// Silence every sounding note. Pass a [channel] to scope it, or `null`
   /// for all channels. Used on transport stop so a clip that stopped
