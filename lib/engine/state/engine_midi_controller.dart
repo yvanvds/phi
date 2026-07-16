@@ -18,6 +18,8 @@ import '../../domain/scene/scene_agent.dart';
 import '../../domain/scene/scene_demo.dart';
 import '../../domain/scene/scene_field.dart';
 import '../../domain/state_machine/state_graph.dart';
+import '../../domain/time_domains/fader_tempo_source.dart';
+import '../../domain/time_domains/tempo_source_stack.dart';
 import '../bridge/midi_gateway.dart';
 import '../bridge/midi_transport.dart';
 import '../bridge/scene_agent_sink.dart';
@@ -83,7 +85,14 @@ class EngineMidiController {
        graphController = MidiGraphController.seededFrom(chain),
        _bpm = bpm,
        _outputPort = outputPort,
-       _tickInterval = tickInterval;
+       _tickInterval = tickInterval {
+    // The tempo-source seam (issue #104): the played tempo is the base rate
+    // (subscription or session) bent by the sum of the stack's sources. The
+    // fader is the first source; re-ramp the clock whenever it (or any future
+    // source) moves.
+    _tempoSources = TempoSourceStack([_tempoFader]);
+    _tempoSources.addListener(_applyTempo);
+  }
 
   final MidiTransformChain _chain;
   final MidiGateway _gateway;
@@ -158,6 +167,29 @@ class EngineMidiController {
   /// its chip panel and ghost layer to the same instance.
   MidiTransformChain get chain => _chain;
 
+  /// The tempo-source seam (issue #104) — the list of control-rate sources
+  /// summed onto the base tempo. Holds a single [FaderTempoSource] today;
+  /// designed as a stack so future sources compose behind it without touching
+  /// the engine. `late` because it wires a listener in the constructor body.
+  late final TempoSourceStack _tempoSources;
+
+  /// The hand-driven tempo bend — the first source in [_tempoSources] and the
+  /// "first gesture" of played tempo. Bipolar, resting at `0`; pulling it bends
+  /// the played domain's tempo up or down, live, without moving a single note
+  /// beat (tempo lives in the clock, not the data). Exposed as [tempoFader] so a
+  /// fader widget — or code, exactly as the mouse would — can drive it.
+  final FaderTempoSource _tempoFader = FaderTempoSource();
+
+  /// The tempo-source seam. Exposed so a future tempo UI can add or inspect
+  /// sources; today it carries only [tempoFader].
+  TempoSourceStack get tempoSources => _tempoSources;
+
+  /// The hand fader riding the played domain's tempo (issue #104). Drive its
+  /// [FaderTempoSource.position] (`[-1, 1]`, `0` at rest) to bend playback; the
+  /// clock re-ramps on the next change, and because tempo lives in the clock the
+  /// note list is never re-pushed.
+  FaderTempoSource get tempoFader => _tempoFader;
+
   double _bpm;
 
   /// Current *session* tempo in beats-per-minute. This is the clock rate for an
@@ -178,13 +210,13 @@ class EngineMidiController {
   /// until the first application.
   double? _appliedTempo;
 
-  /// The tempo the transport clock should run at: the tempo of the first
-  /// **active** [DomainSubscriptionTransform] in the chain that resolves a
+  /// The clip's **base** tempo before any played steering: the tempo of the
+  /// first **active** [DomainSubscriptionTransform] in the chain that resolves a
   /// domain (a subscription binds the clock — issue #102), or the session [bpm]
   /// when no clip is subscribed. Because the subscription only chooses the
   /// clock and never rewrites note times, switching it on or off changes this
   /// tempo without changing the pushed event list.
-  double get _effectiveTempo {
+  double get _baseTempo {
     for (final t in _chain.transforms) {
       if (t is DomainSubscriptionTransform && t.active) {
         final bound = t.boundTempo;
@@ -193,6 +225,14 @@ class EngineMidiController {
     }
     return _bpm;
   }
+
+  /// The tempo the transport clock should run at: the [_baseTempo] bent by the
+  /// tempo-source seam (issue #104). With every source at rest the seam is the
+  /// identity, so an unsteered clip plays exactly its base rate; pulling the
+  /// [tempoFader] adds its offset here. Like the subscription, this only chooses
+  /// the clock rate — it never rewrites note times, so bending tempo never
+  /// forces a re-push.
+  double get _effectiveTempo => _tempoSources.apply(_baseTempo);
 
   /// Push [_effectiveTempo] to the transport clock when it changed. Called on
   /// play, on a session [bpm] change, and each tick — so toggling the domain
@@ -634,6 +674,9 @@ class EngineMidiController {
     _transport = null;
     _clearAgents();
     _gateway.close();
+    _tempoSources.removeListener(_applyTempo);
+    _tempoSources.dispose();
+    _tempoFader.dispose();
     _playhead.dispose();
     graphController.dispose();
     editor.dispose();
