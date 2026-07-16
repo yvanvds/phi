@@ -4,45 +4,54 @@ import '../midi_note.dart';
 import '../midi_transform.dart';
 import '../midi_transform_kind.dart';
 
-/// Tempo-locks a clip to a named [TimeDomain] (issue #61).
+/// Binds a clip's transport to a named [TimeDomain]'s clock (issues #61/#102).
 ///
-/// A clip's beats are authored against a [referenceTempo] (the session
-/// tempo the notes were written at). Subscribing to a domain re-expresses
-/// those beats so the phrase *sounds* at the domain's tempo when the
-/// downstream player still reads beats at the reference rate: every note's
-/// start and duration is scaled by `referenceTempo / domainTempo`. Locking
-/// to a faster domain (`domainTempo > referenceTempo`) compresses the beats
-/// so the phrase plays faster; a slower domain stretches them. Pitch,
-/// velocity, and channel are untouched — a subscription only rescales
-/// *when* notes play.
+/// A subscription is a **clock choice, not a note rewrite**. In the engine-clock
+/// world (see `docs/timing-architecture.md` §4) the clip stays in
+/// domain-beats and the *transport's* clock decides how fast those beats
+/// advance: subscribing to `drum @ 124` runs the bound clock at 124 BPM, so the
+/// phrase plays at the domain's tempo without any note's start or duration
+/// changing. Locking to a faster domain makes the phrase end sooner in
+/// wall-clock time (the clock ticks faster); a slower domain stretches it — but
+/// the beat numbers the notes carry are untouched.
 ///
-/// The domain is resolved by [domainName] through a [TimeDomainRegistry] —
-/// see [DomainSubscriptionTransform.resolve]. Resolution happens once, at
-/// construction, so [apply] stays pure and registry-free. When the name
-/// doesn't resolve (or the domain is already at the reference tempo) the
-/// transform is the identity: there is nothing to lock against, so the beats
-/// pass through unchanged rather than collapsing to zero.
+/// This inverts the original transform, which baked `referenceTempo /
+/// domainTempo` into every note's timing at evaluation time. Rescaling the
+/// notes was wrong by construction once tempo became a played control signal:
+/// every live tempo nudge would invalidate the pushed event list and force a
+/// re-evaluate + re-push, smuggling the rescheduling problem back in through the
+/// data. Keeping tempo in the clock makes tempo changes free — the engine
+/// integrates the new rate and the clip bends immediately, no re-push.
+///
+/// So [apply] is the **identity**: a subscription contributes no change to the
+/// note stream. What it contributes is [boundTempo] — the tempo the player runs
+/// the transport's clock at while the chip is active — read by
+/// `EngineMidiController`, not by the note pipeline. Pitch, velocity, channel,
+/// and timing all pass through unchanged.
+///
+/// The domain is resolved by [domainName] through a [TimeDomainRegistry] — see
+/// [DomainSubscriptionTransform.resolve]. Resolution happens once, at
+/// construction, so [apply] stays pure and registry-free. When the name doesn't
+/// resolve, [boundTempo] is `null`: there is nothing to bind against, so the
+/// player falls back to the session tempo.
 class DomainSubscriptionTransform extends MidiTransform {
   const DomainSubscriptionTransform({
     required this.domainName,
-    required this.referenceTempo,
     required this.label,
     this.domain,
     this.active = true,
-  }) : assert(referenceTempo > 0, 'referenceTempo must be a positive BPM');
+  });
 
   /// Resolves [domainName] against [registry] and binds the result. The
-  /// domain may be absent from the registry — the transform then behaves as
-  /// the identity until a domain by that name exists.
+  /// domain may be absent from the registry — [boundTempo] is then `null`
+  /// until a domain by that name exists.
   factory DomainSubscriptionTransform.resolve({
     required TimeDomainRegistry registry,
     required String domainName,
-    required double referenceTempo,
     required String label,
     bool active = true,
   }) => DomainSubscriptionTransform(
     domainName: domainName,
-    referenceTempo: referenceTempo,
     label: label,
     domain: registry.resolve(domainName),
     active: active,
@@ -51,11 +60,8 @@ class DomainSubscriptionTransform extends MidiTransform {
   /// The subscribed domain's name — also the registry key it resolves through.
   final String domainName;
 
-  /// Tempo (BPM) the clip's beats were authored against. Always positive.
-  final double referenceTempo;
-
-  /// The resolved domain to lock against, or `null` when [domainName] didn't
-  /// resolve. A `null` domain makes [apply] the identity.
+  /// The resolved domain to bind the clock to, or `null` when [domainName]
+  /// didn't resolve. A `null` domain leaves [boundTempo] `null`.
   final TimeDomain? domain;
 
   @override
@@ -67,28 +73,21 @@ class DomainSubscriptionTransform extends MidiTransform {
   @override
   MidiTransformKind get kind => MidiTransformKind.time;
 
-  /// The tempo ratio baked into each beat: `referenceTempo / domainTempo`.
-  /// `1.0` when unresolved or already at the reference tempo (identity).
-  double get scale {
-    final d = domain;
-    if (d == null) return 1.0;
-    return referenceTempo / d.tempo;
-  }
+  /// The tempo (BPM) the player should run the bound clock at while this
+  /// subscription is active, or `null` when it resolves no domain (nothing to
+  /// bind — the clip plays at the session tempo). Read by the engine player to
+  /// pick the transport's clock tempo; the note pipeline never sees it.
+  double? get boundTempo => domain?.tempo;
 
+  /// Identity: a subscription binds a clock, it does not rewrite note times.
+  /// Tempo lives in the clock ([boundTempo]), not in the note data.
   @override
-  List<MidiNote> apply(List<MidiNote> input) {
-    final s = scale;
-    if (s == 1.0) return input;
-    return input
-        .map((n) => n.copyWith(start: n.start * s, duration: n.duration * s))
-        .toList(growable: false);
-  }
+  List<MidiNote> apply(List<MidiNote> input) => input;
 
   @override
   DomainSubscriptionTransform copyWith({bool? active, String? label}) =>
       DomainSubscriptionTransform(
         domainName: domainName,
-        referenceTempo: referenceTempo,
         label: label ?? this.label,
         domain: domain,
         active: active ?? this.active,

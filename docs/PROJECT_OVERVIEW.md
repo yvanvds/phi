@@ -166,11 +166,15 @@ main + app          (orchestration)
   action that disperses the live set and pushes the throw to the sink — the UI
   trigger waits on the Scene surface graduating. The `domain · drum @ 124` chip is real as of issue #61:
   `DomainSubscriptionTransform` (time-family) resolves a `TimeDomain` by name
-  through a `TimeDomainRegistry` and tempo-locks the clip to it — every note's
-  start/duration is scaled by `referenceTempo / domainTempo`, so subscribing
-  the 120 BPM demo phrase to `drum @ 124` compresses its beats by 120/124 (an
-  unresolved name or a matched tempo is the identity). `branch · state.break`
-  stays a
+  through a `TimeDomainRegistry` and **binds the clip's transport clock** to it.
+  Since issue #102 the subscription is a *clock choice, not a note rewrite*: it
+  is the identity on the note stream and exposes `boundTempo`, which
+  `EngineMidiController` runs the transport's domain clock at while the chip is
+  active (the session tempo when unsubscribed) — so subscribing the demo phrase
+  to `drum @ 124` plays it at 124 BPM without moving a single note beat, and a
+  live tempo change never forces a re-push (`docs/timing-architecture.md` §4).
+  An unresolved name binds nothing (`boundTempo == null` → the session tempo).
+  `branch · state.break` stays a
   `StubTransform` in the linear chain, but the branching model it points to
   now exists (issue #35): `lib/domain/midi/graph/` adds `MidiTransformGraph`
   — see below. Performers can also **author their own** transforms from the
@@ -361,13 +365,14 @@ main + app          (orchestration)
 - Time-domains layer seed (issue #60): pure-Dart `TimeDomain` (a named
   BPM tempo reference) and an immutable, copy-on-write `TimeDomainRegistry`
   (name→domain lookup) in `lib/domain/time_domains/`. The minimal object a
-  clip subscribes to and tempo-locks against — the resolution surface the
-  `DomainSubscriptionTransform` binds to (issue #61, now wired into the demo
-  chain). No engine bridge, tempo UI, or per-domain transport yet. Slated to
-  invert per [timing-architecture.md](timing-architecture.md): domains become
-  beat-accumulator clocks in the engine with tempo as a rampable, *playable*
-  parameter, and subscription becomes a clock binding rather than a note-time
-  rescale.
+  clip subscribes to — the resolution surface the `DomainSubscriptionTransform`
+  binds to (issue #61, wired into the demo chain). Since issue #102 a
+  subscription is a **clock binding**: the transform is the identity on the note
+  stream and its `boundTempo` sets the transport clock's rate — the first step
+  of the inversion in [timing-architecture.md](timing-architecture.md) §4. Still
+  no tempo UI or independent per-domain engine clock (one shared default clock,
+  set to the bound tempo); domains as rampable, *playable* beat-accumulator
+  clocks in the engine remain ahead.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

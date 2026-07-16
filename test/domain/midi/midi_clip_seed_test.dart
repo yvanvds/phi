@@ -53,12 +53,16 @@ void main() {
       expect(chain.transforms[3].label, 'quantize · gravity 0.6');
     });
 
-    test('the drum subscription tempo-locks the demo phrase to 124 BPM', () {
+    test('the drum subscription binds the clip clock to 124 BPM', () {
       final chain = defaultDemoChain();
       final domain = chain.transforms[2] as DomainSubscriptionTransform;
       expect(domain.domain, const TimeDomain(name: 'drum', tempo: 124));
-      // Authored at 120, locked to 124 → beats compress by 120/124.
-      expect(domain.scale, closeTo(120 / 124, 1e-9));
+      // Subscribing binds the transport clock to the domain's tempo (issue
+      // #102) — 124 BPM — rather than rewriting the note beats.
+      expect(domain.boundTempo, 124);
+      // The subscription is a clock choice, so it leaves the notes untouched.
+      final source = chain.source.notes;
+      expect(domain.apply(source), same(source));
     });
 
     test('the route and agent-spawn slots are both real transforms', () {
