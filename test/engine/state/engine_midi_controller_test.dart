@@ -6,10 +6,12 @@ import 'package:phi/domain/midi/midi_clip.dart';
 import 'package:phi/domain/midi/midi_clip_mode.dart';
 import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/midi_transform_chain.dart';
+import 'package:phi/domain/midi/transforms/domain_subscription_transform.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
 import 'package:phi/domain/state_machine/performance_state.dart';
 import 'package:phi/domain/state_machine/performance_state_id.dart';
 import 'package:phi/domain/state_machine/state_graph.dart';
+import 'package:phi/domain/time_domains/time_domain.dart';
 import 'package:phi/engine/bridge/transport_note.dart';
 import 'package:phi/engine/state/engine_midi_controller.dart';
 
@@ -439,6 +441,126 @@ void main() {
 
         expect(transport.events.map((e) => e.pitch), containsAll([60, 72]));
 
+        controller.dispose();
+      });
+    });
+  });
+
+  group('EngineMidiController — subscription-as-clock-binding (#102)', () {
+    const drum = TimeDomain(name: 'drum', tempo: 124);
+
+    // A 1-bar clip subscribed to the `drum` domain (124 BPM) via an active
+    // DomainSubscriptionTransform. Session tempo stays at the 120 default.
+    MidiTransformChain subscribedChain() => MidiTransformChain(
+      source: MidiClip(
+        name: 'subscribed',
+        bars: 1,
+        notes: const [
+          MidiNote(pitch: 60, start: 0.0, duration: 1.0, velocity: 1.0),
+          MidiNote(pitch: 64, start: 2.0, duration: 0.5, velocity: 0.6),
+        ],
+      ),
+      transforms: const [
+        DomainSubscriptionTransform(
+          domainName: 'drum',
+          label: 'domain · drum @ 124',
+          domain: drum,
+        ),
+      ],
+    );
+
+    test('an active subscription binds the clock to the domain tempo', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final controller = EngineMidiController(
+          chain: subscribedChain(),
+          gateway: gateway,
+          bpm: 120,
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 40));
+
+        // The transport clock runs at the domain's 124, not the session 120.
+        expect(transportOf(gateway).tempo, 124);
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('the subscription does not rewrite pushed note times', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final controller = EngineMidiController(
+          chain: subscribedChain(),
+          gateway: gateway,
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 40));
+
+        // Beats pass through unchanged — tempo lives in the clock, not the data.
+        expect(shapeOf(transportOf(gateway).events), const [
+          (0, 60, 0.0, 1.0, 1.0),
+          (0, 64, 2.0, 0.5, 0.6),
+        ]);
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('toggling the chip off rebinds the clock to the session tempo', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final chain = subscribedChain();
+        final controller = EngineMidiController(
+          chain: chain,
+          gateway: gateway,
+          bpm: 120,
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 40));
+        final transport = transportOf(gateway);
+        expect(transport.tempo, 124);
+        final beforeToggle = shapeOf(transport.events);
+
+        // Toggle the subscription off — the next tick re-binds the clock.
+        chain.setActiveAt(0, false);
+        async.elapse(const Duration(milliseconds: 40));
+
+        // Clock falls back to the session tempo; the note times never moved.
+        expect(transport.tempo, 120);
+        expect(shapeOf(transport.events), beforeToggle);
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('a session bpm change while subscribed leaves the clock on the '
+        'domain tempo', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final controller = EngineMidiController(
+          chain: subscribedChain(),
+          gateway: gateway,
+          bpm: 120,
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 40));
+        expect(transportOf(gateway).tempo, 124);
+
+        // Nudging the session tempo must not disturb a domain-bound clip: its
+        // clock follows the domain, not the session (polytemporal independence).
+        controller.bpm = 90;
+        async.elapse(const Duration(milliseconds: 40));
+        expect(transportOf(gateway).tempo, 124);
+
+        controller.stop();
         controller.dispose();
       });
     });

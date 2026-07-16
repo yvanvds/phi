@@ -43,15 +43,12 @@ MidiClip phraseA() => MidiClip(
 
 /// The demo time-domains the seed chain resolves against. Just the `drum`
 /// domain @ 124 BPM the mockup's `domain · drum @ 124` chip subscribes to;
-/// more domains land with the time-domains surface.
+/// more domains land with the time-domains surface. Subscribing binds the
+/// clip's transport clock to this domain's tempo (issue #102) — the beats stay
+/// as authored, the clock runs at 124.
 final TimeDomainRegistry demoTimeDomains = TimeDomainRegistry(const [
   TimeDomain(name: 'drum', tempo: 124),
 ]);
-
-/// Tempo (BPM) [phraseA]'s beats are authored against — the session default
-/// (see `SessionState.tempo`). The `drum` subscription tempo-locks the phrase
-/// relative to this reference.
-const double _demoReferenceTempo = 120;
 
 /// The eight-chip default sidebar from the design mockup — six working
 /// transforms (scale-conform, transpose, domain-subscribe, quantize, route,
@@ -70,7 +67,6 @@ MidiTransformChain defaultDemoChain() => MidiTransformChain(
     DomainSubscriptionTransform.resolve(
       registry: demoTimeDomains,
       domainName: 'drum',
-      referenceTempo: _demoReferenceTempo,
       label: 'domain · drum @ 124',
     ),
     const QuantizationTransform(gravity: 0.6, label: 'quantize · gravity 0.6'),

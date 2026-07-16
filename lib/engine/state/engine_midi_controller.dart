@@ -9,6 +9,7 @@ import '../../domain/midi/midi_clip_mode.dart';
 import '../../domain/midi/midi_note.dart';
 import '../../domain/midi/midi_transform_chain.dart';
 import '../../domain/midi/transforms/agent_spawn_transform.dart';
+import '../../domain/midi/transforms/domain_subscription_transform.dart';
 import '../../domain/runtime/runtime_variable_registry.dart';
 import '../../domain/scene/effect_volume.dart';
 import '../../domain/scene/pick_ray.dart';
@@ -151,14 +152,49 @@ class EngineMidiController {
 
   double _bpm;
 
-  /// Current playback tempo in beats-per-minute. Tempo lives in the transport's
-  /// domain clock, so updating it while playing ramps the clock (and the
-  /// display accumulator) without re-pushing the note list.
+  /// Current *session* tempo in beats-per-minute. This is the clock rate for an
+  /// unsubscribed clip; a clip subscribed to a time domain (an active
+  /// [DomainSubscriptionTransform]) runs its transport clock at the domain's
+  /// tempo instead — see [_effectiveTempo]. Tempo lives in the transport's
+  /// domain clock, so updating it while playing ramps the clock (and the display
+  /// accumulator) without re-pushing the note list.
   double get bpm => _bpm;
   set bpm(double value) {
     if (value <= 0) return;
     _bpm = value;
-    _transport?.setTempo(value);
+    _applyTempo();
+  }
+
+  /// The tempo the last [_applyTempo] pushed to the transport clock, so a
+  /// re-application is a no-op when the effective tempo hasn't moved. `null`
+  /// until the first application.
+  double? _appliedTempo;
+
+  /// The tempo the transport clock should run at: the tempo of the first
+  /// **active** [DomainSubscriptionTransform] in the chain that resolves a
+  /// domain (a subscription binds the clock — issue #102), or the session [bpm]
+  /// when no clip is subscribed. Because the subscription only chooses the
+  /// clock and never rewrites note times, switching it on or off changes this
+  /// tempo without changing the pushed event list.
+  double get _effectiveTempo {
+    for (final t in _chain.transforms) {
+      if (t is DomainSubscriptionTransform && t.active) {
+        final bound = t.boundTempo;
+        if (bound != null) return bound;
+      }
+    }
+    return _bpm;
+  }
+
+  /// Push [_effectiveTempo] to the transport clock when it changed. Called on
+  /// play, on a session [bpm] change, and each tick — so toggling the domain
+  /// chip (or editing the subscribed domain's tempo) re-binds the clock live,
+  /// without ever re-pushing the note list. Idempotent between changes.
+  void _applyTempo() {
+    final tempo = _effectiveTempo;
+    if (tempo == _appliedTempo) return;
+    _appliedTempo = tempo;
+    _transport?.setTempo(tempo);
   }
 
   final ValueNotifier<double> _playhead = ValueNotifier<double>(0);
@@ -208,9 +244,12 @@ class EngineMidiController {
     // let the engine own the note timing from here.
     final transport = _transport ??= _gateway.createTransport(
       clockName: _clockName,
-      tempo: _bpm,
+      tempo: _effectiveTempo,
     );
-    transport.setTempo(_bpm);
+    // Bind the clock to the active subscription's domain tempo (or the session
+    // tempo when unsubscribed) before the first push.
+    _appliedTempo = null;
+    _applyTempo();
     _pushEvents();
     transport.play();
     // The tick drives only display + Scene now, and re-pushes on change.
@@ -360,8 +399,12 @@ class EngineMidiController {
   static const int _sceneDemoKeyBase = -1000;
 
   void _onTick(Timer _) {
+    // Re-bind the clock first: toggling the domain chip changes the effective
+    // tempo but not the note data, so this is where a live subscription change
+    // takes hold (the display accumulator below then advances at the new rate).
+    _applyTempo();
     final dtSeconds = _tickInterval.inMicroseconds * 1e-6;
-    final dBeats = dtSeconds * (_bpm / 60.0);
+    final dBeats = dtSeconds * (_effectiveTempo / 60.0);
     _prevAbsBeat = _absBeat;
     _absBeat += dBeats;
     // Push-on-change: the memoised output hands back a new list instance only
