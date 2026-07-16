@@ -193,9 +193,9 @@ void main() {
         async.elapse(const Duration(milliseconds: 300));
         controller.stop();
 
-        // Notes still fired through the MIDI gateway — the missing scene sink
-        // is a silent no-op, not a crash.
-        expect(gateway.calls.any((c) => c.startsWith('noteOn')), isTrue);
+        // Notes still reached the engine transport — the missing scene sink is
+        // a silent no-op, not a crash.
+        expect(gateway.transport?.events, isNotEmpty);
 
         controller.dispose();
       });

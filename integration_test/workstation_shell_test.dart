@@ -173,14 +173,19 @@ void main() {
         .last;
     expect(painter.playhead, greaterThan(0));
 
-    // Notes reached the gateway — the port opened and at least one note fired.
+    // The port opened and the interpreted clip was pushed to the engine
+    // transport — the audio thread dispatches it, not the UI isolate.
     expect(midiGateway.calls, contains('open:0'));
-    expect(midiGateway.calls.any((c) => c.startsWith('noteOn:')), isTrue);
+    expect(midiGateway.transport, isNotNull);
+    expect(midiGateway.transport!.isPlaying, isTrue);
+    expect(midiGateway.transport!.events, isNotEmpty);
 
-    // Stop rewinds the playhead and silences any held note.
+    // Stop rewinds the playhead, stops the transport, and silences any held
+    // note.
     await tester.tap(find.byTooltip('stop'));
     await tester.pump();
     expect(engine.midi.playhead.value, 0);
+    expect(midiGateway.transport!.isPlaying, isFalse);
     expect(midiGateway.calls, contains('allNotesOff:all'));
 
     session.dispose();

@@ -18,22 +18,33 @@ import '../../domain/scene/scene_demo.dart';
 import '../../domain/scene/scene_field.dart';
 import '../../domain/state_machine/state_graph.dart';
 import '../bridge/midi_gateway.dart';
+import '../bridge/midi_transport.dart';
 import '../bridge/scene_agent_sink.dart';
+import '../bridge/transport_note.dart';
 import 'midi_graph_controller.dart';
 
 /// Engine-side player for the MIDI surface.
 ///
 /// Owns the [MidiTransformChain] (source clip → transforms → [output]) and
 /// its [ClipEditor], so the player and the piano-roll editor share one source
-/// clip — edits land in the same place the player reads from. Drives a
-/// looping playhead off a periodic timer; as the playhead crosses each note
-/// boundary it forwards `noteOn` / `noteOff` to the injected [MidiGateway].
+/// clip — edits land in the same place the player reads from.
+///
+/// Since issue #101 note *dispatch* belongs to the engine, not the UI isolate:
+/// on [play] the player flattens the interpreted notes into a [TransportNote]
+/// list and pushes it (with the loop length) to a [MidiTransport] bound to a
+/// domain clock; the engine fires every note from the audio thread. A periodic
+/// timer still runs, but only for the concerns that need mere frame accuracy —
+/// the display [playhead] and the Scene agent field — and to **re-push** on
+/// change: when the interpreted output changes (a clip edit, chip toggle,
+/// hot-reload, or state/variable flip re-evaluating the graph) the memoised
+/// [output] returns a fresh list instance, which the tick detects and pushes
+/// anew. "Read every tick" became "push on change".
 ///
 /// Per Phi's vision (§3.7) clips are "interpreted, not played": the player
-/// reads the **transformed** notes, not the raw source, live each tick — so
-/// editing a note or toggling a transform while the clip loops is heard
-/// immediately, the representation and the MIDI output being one thing, not two
-/// copies.
+/// pushes the **transformed** notes, not the raw source — so editing a note or
+/// toggling a transform while the clip loops is heard within one audio block of
+/// the push, the representation and the MIDI output being one thing, not two
+/// copies, with UI jank out of the timing path entirely.
 ///
 /// Which transformed notes depends on the clip's [MidiGraphController.mode]
 /// (issue #77): a **chain** clip reads the linear [MidiTransformChain.output]
@@ -51,10 +62,11 @@ class EngineMidiController {
     RuntimeVariableRegistry? runtimeVariables,
     double bpm = 120,
     int outputPort = 0,
-    this.microtonal = false,
+    bool microtonal = false,
     Duration tickInterval = const Duration(milliseconds: 16),
   }) : _chain = chain,
        _gateway = gateway,
+       _microtonal = microtonal,
        _agentSink = agentSink,
        _stateGraph = stateGraph,
        _runtimeVariables = runtimeVariables,
@@ -66,6 +78,20 @@ class EngineMidiController {
 
   final MidiTransformChain _chain;
   final MidiGateway _gateway;
+
+  /// The engine clip transport, minted lazily from [_gateway] on first [play]
+  /// (after the port is open) and reused across plays. `null` until then.
+  MidiTransport? _transport;
+
+  /// Name of the domain clock this player's transport binds to. One player,
+  /// one clock; disposed with the transport.
+  static const String _clockName = 'phi.midi.default';
+
+  /// The note-list instance last pushed to the transport, by identity. The
+  /// memoised [output] / graph `evaluate` return the *same* instance between
+  /// changes, so a differing instance is exactly the "revision bumped" signal
+  /// (issue #56) — the tick re-pushes when it sees one.
+  List<MidiNote>? _pushedNotes;
 
   /// The live state machine, mirrored into the graph's [GraphEvalContext] so a
   /// `state · break` edge opens exactly while that state is live. `null` in
@@ -104,7 +130,16 @@ class EngineMidiController {
   /// Assumes the synth's pitch-bend range is the General-MIDI default of ±2
   /// semitones. Bend is per-channel, so simultaneous notes with *different*
   /// detunes must be routed to different channels to bend independently.
-  bool microtonal;
+  bool _microtonal;
+
+  /// Whether fractional pitches are voiced as bend (see above). Flipping it
+  /// while playing re-pushes the event list so the change is heard at once.
+  bool get microtonal => _microtonal;
+  set microtonal(bool value) {
+    if (_microtonal == value) return;
+    _microtonal = value;
+    if (_playing) _pushEvents();
+  }
 
   /// The shared authoring controller. Gestures on the piano roll edit the
   /// same clip this player reads.
@@ -116,10 +151,15 @@ class EngineMidiController {
 
   double _bpm;
 
-  /// Current playback tempo in beats-per-minute. Updating it while playing
-  /// takes effect on the next tick — the playhead keeps its position.
+  /// Current playback tempo in beats-per-minute. Tempo lives in the transport's
+  /// domain clock, so updating it while playing ramps the clock (and the
+  /// display accumulator) without re-pushing the note list.
   double get bpm => _bpm;
-  set bpm(double value) => _bpm = value <= 0 ? _bpm : value;
+  set bpm(double value) {
+    if (value <= 0) return;
+    _bpm = value;
+    _transport?.setTempo(value);
+  }
 
   final ValueNotifier<double> _playhead = ValueNotifier<double>(0);
 
@@ -152,7 +192,9 @@ class EngineMidiController {
   final SceneField _field = SceneField();
 
   /// Start (or restart) playback from the top of the clip. Opens the output
-  /// port lazily on first play. No-op if already playing.
+  /// port and mints the engine transport lazily on first play, then pushes the
+  /// interpreted note list to it and lets the engine dispatch. No-op if already
+  /// playing.
   void play() {
     if (_playing) return;
     if (!_gateway.isOpen && _gateway.outputDeviceCount > _outputPort) {
@@ -162,6 +204,16 @@ class EngineMidiController {
     _prevAbsBeat = 0;
     _playhead.value = 0;
     _playing = true;
+    // Mint the transport now the port is open, push the current output, and
+    // let the engine own the note timing from here.
+    final transport = _transport ??= _gateway.createTransport(
+      clockName: _clockName,
+      tempo: _bpm,
+    );
+    transport.setTempo(_bpm);
+    _pushEvents();
+    transport.play();
+    // The tick drives only display + Scene now, and re-pushes on change.
     _timer = Timer.periodic(_tickInterval, _onTick);
   }
 
@@ -171,8 +223,10 @@ class EngineMidiController {
     _timer?.cancel();
     _timer = null;
     _playing = false;
+    _transport?.stop();
     _gateway.allNotesOff();
     _sounding.clear();
+    _pushedNotes = null;
     _clearAgents();
     _absBeat = 0;
     _prevAbsBeat = 0;
@@ -310,11 +364,42 @@ class EngineMidiController {
     final dBeats = dtSeconds * (_bpm / 60.0);
     _prevAbsBeat = _absBeat;
     _absBeat += dBeats;
+    // Push-on-change: the memoised output hands back a new list instance only
+    // when the interpretation changed (edit, chip toggle, hot-reload, or —
+    // graph mode — a state/variable flip). Re-push then, so the engine swaps
+    // its event buffer at the next block.
+    if (!identical(_playbackNotes, _pushedNotes)) _pushEvents();
+    // The Dart window drives the Scene agent field only — note *sound* is the
+    // engine transport's job now.
     _dispatchWindow(_prevAbsBeat, _absBeat);
     _stepAgents(dtSeconds);
 
     final total = _chain.source.totalBeats;
     _playhead.value = total > 0 ? _absBeat % total : _absBeat;
+  }
+
+  /// Flatten the interpreted notes into [TransportNote]s and push them (with
+  /// the loop length) to the engine transport. Resolves each fractional pitch
+  /// to its nearest semitone and, in microtonal mode, carries the leftover
+  /// cents as normalised pitch-bend event data — the interpretation stays in
+  /// Dart, only the dispatch is the engine's. Records the pushed instance so
+  /// the tick can tell an unchanged output from a genuine revision bump.
+  void _pushEvents() {
+    final notes = _playbackNotes;
+    _pushedNotes = notes;
+    final total = _chain.source.totalBeats;
+    final events = <TransportNote>[
+      for (final note in notes)
+        TransportNote(
+          startBeat: note.start,
+          durationBeats: note.duration,
+          channel: note.channel,
+          pitch: _semitoneOf(note),
+          velocity: note.velocity.clamp(0.0, 1.0).toDouble(),
+          pitchBend: _microtonal ? _bendFor(note, _semitoneOf(note)) : 0.0,
+        ),
+    ];
+    _transport?.setEvents(events, loopBeats: total);
   }
 
   /// Advance the live agents by [dtSeconds] and push the moved set to the sink,
@@ -345,15 +430,18 @@ class EngineMidiController {
     variables: _runtimeVariables?.snapshot() ?? const {},
   );
 
-  /// Fire every note event whose absolute beat falls in `[from, to)`. Note
-  /// events repeat every `totalBeats` (the clip loops), so the same source
-  /// event is mapped into each loop iteration the window spans.
+  /// Cross the Scene agent field over every note whose absolute beat falls in
+  /// `[from, to)`. Note events repeat every `totalBeats` (the clip loops), so
+  /// the same source event is mapped into each loop iteration the window spans.
   ///
-  /// Reads the clip's transformed notes ([_playbackNotes]) *live* each tick, so
-  /// editing the clip, toggling a transform, or flipping the live state while
-  /// it loops is heard on the next window — the played notes and the authored
-  /// clip are one and the same.
+  /// This drives the *Scene* only — a note-on spawns an agent, its note-off
+  /// despawns it. The audible notes are the engine transport's job (pushed on
+  /// change), so this window carries no MIDI; it needs mere frame accuracy,
+  /// which is all the visuals want. Reads the transformed notes
+  /// ([_playbackNotes]) live, so an edit while playing re-anchors spawns on the
+  /// next window just as it re-pushes the sound.
   void _dispatchWindow(double from, double to) {
+    if (_agentSink == null) return;
     final total = _chain.source.totalBeats;
     final notes = _playbackNotes;
     if (total <= 0 || notes.isEmpty) return;
@@ -372,15 +460,7 @@ class EngineMidiController {
   }
 
   void _noteOn(MidiNote note) {
-    final velocity = (note.velocity * 127).round().clamp(1, 127);
     final semitone = _semitoneOf(note);
-    if (microtonal) {
-      _gateway.pitchBend(
-        channel: note.channel,
-        value: _bendFor(note, semitone),
-      );
-    }
-    _gateway.noteOn(channel: note.channel, pitch: semitone, velocity: velocity);
     _sounding.add(_voiceKey(note.channel, semitone));
     _spawnAgent(note, semitone);
   }
@@ -389,7 +469,6 @@ class EngineMidiController {
     final semitone = _semitoneOf(note);
     final key = _voiceKey(note.channel, semitone);
     if (!_sounding.remove(key)) return;
-    _gateway.noteOff(channel: note.channel, pitch: semitone);
     _despawnAgent(key);
   }
 
@@ -432,28 +511,31 @@ class EngineMidiController {
   /// The integer MIDI pitch a note is voiced on — the semitone it rounds to.
   int _semitoneOf(MidiNote note) => note.pitch.round().clamp(0, 127);
 
-  /// 14-bit pitch-bend that voices [note]'s leftover cents (its distance from
-  /// [semitone]). Centred at 8192, scaled by the assumed ±2-semitone range.
-  int _bendFor(MidiNote note, int semitone) {
-    final cents = (note.pitch - semitone) * 100.0;
-    final bend = _bendCenter + (cents / _bendRangeCents) * _bendCenter;
-    return bend.round().clamp(0, 16383);
+  /// Normalised pitch-bend in `[-1, 1]` that voices [note]'s leftover cents
+  /// (its distance from [semitone]). `±1` maps to the assumed ±2-semitone bend
+  /// range, so a quarter-tone (50 cents) is `0.25`. The engine turns this back
+  /// into a 14-bit bend at dispatch — Phi carries it as event data, not a call.
+  double _bendFor(MidiNote note, int semitone) {
+    final semitonesOff = note.pitch - semitone;
+    return (semitonesOff / _bendRangeSemitones).clamp(-1.0, 1.0);
   }
 
   int _voiceKey(int channel, int pitch) => channel * 128 + pitch;
 
-  static const int _bendCenter = 8192;
-  static const double _bendRangeCents = 200.0; // GM default: ±2 semitones.
+  static const double _bendRangeSemitones = 2.0; // GM default: ±2 semitones.
 
-  /// Release timers, notifiers, the shared editor, the chain, and the output
-  /// port. Call when the owning engine stops.
+  /// Release timers, notifiers, the transport, the shared editor, the chain,
+  /// and the output port. Call when the owning engine stops.
   void dispose() {
     _timer?.cancel();
     _timer = null;
     if (_playing) {
+      _transport?.stop();
       _gateway.allNotesOff();
       _playing = false;
     }
+    _transport?.dispose();
+    _transport = null;
     _clearAgents();
     _gateway.close();
     _playhead.dispose();
