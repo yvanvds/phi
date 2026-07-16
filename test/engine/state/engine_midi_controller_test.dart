@@ -565,4 +565,121 @@ void main() {
       });
     });
   });
+
+  group('EngineMidiController — tempo-source seam (#104)', () {
+    test('a resting fader leaves the clock on the base tempo', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final controller = EngineMidiController(
+          chain: _twoBarChain(),
+          gateway: gateway,
+          bpm: 120,
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 40));
+        // Fader at rest → the seam is the identity, clock plays the base 120.
+        expect(controller.tempoFader.position, 0);
+        expect(transportOf(gateway).tempo, 120);
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('bending the fader ramps the clock without re-pushing notes', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final controller = EngineMidiController(
+          chain: _twoBarChain(),
+          gateway: gateway,
+          bpm: 120,
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 40));
+        final transport = transportOf(gateway);
+        expect(transport.tempo, 120);
+        final startsBefore = shapeOf(transport.events);
+        final pushesBefore = transport.pushCount;
+
+        // Pull the fader up: +0.5 of a ±40 BPM span → +20 BPM.
+        controller.tempoFader.position = 0.5;
+        async.elapse(const Duration(milliseconds: 40));
+        expect(transport.tempo, 140);
+
+        // Pull it down past centre: -0.25 → -10 BPM off the base.
+        controller.tempoFader.position = -0.25;
+        async.elapse(const Duration(milliseconds: 40));
+        expect(transport.tempo, 110);
+
+        // Tempo lives in the clock: bending it never re-pushed the note list.
+        expect(transport.pushCount, pushesBefore);
+        expect(shapeOf(transport.events), startsBefore);
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('the fader bends on top of a subscription-bound clock', () {
+      fakeAsync((async) {
+        const drum = TimeDomain(name: 'drum', tempo: 124);
+        final gateway = FakeMidiGateway();
+        final controller = EngineMidiController(
+          chain: MidiTransformChain(
+            source: MidiClip(
+              name: 'subscribed',
+              bars: 1,
+              notes: const [
+                MidiNote(pitch: 60, start: 0.0, duration: 1.0, velocity: 1.0),
+              ],
+            ),
+            transforms: const [
+              DomainSubscriptionTransform(
+                domainName: 'drum',
+                label: 'domain · drum @ 124',
+                domain: drum,
+              ),
+            ],
+          ),
+          gateway: gateway,
+          bpm: 120,
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 40));
+        // Base is the domain's 124, not the session's 120.
+        expect(transportOf(gateway).tempo, 124);
+
+        // The fader bends the *domain-bound* base: 124 + 20 = 144.
+        controller.tempoFader.position = 0.5;
+        async.elapse(const Duration(milliseconds: 40));
+        expect(transportOf(gateway).tempo, 144);
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('a hard-down bend floors the clock at a positive tempo', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final controller = EngineMidiController(
+          chain: _twoBarChain(),
+          gateway: gateway,
+          bpm: 30, // small base so a full -40 bend would go negative
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 40));
+        controller.tempoFader.position = -1; // -40 BPM off a 30 base
+        async.elapse(const Duration(milliseconds: 40));
+        expect(transportOf(gateway).tempo, greaterThan(0));
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+  });
 }

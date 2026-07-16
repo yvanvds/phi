@@ -376,10 +376,26 @@ main + app          (orchestration)
   binds to (issue #61, wired into the demo chain). Since issue #102 a
   subscription is a **clock binding**: the transform is the identity on the note
   stream and its `boundTempo` sets the transport clock's rate — the first step
-  of the inversion in [timing-architecture.md](timing-architecture.md) §4. Still
-  no tempo UI or independent per-domain engine clock (one shared default clock,
-  set to the bound tempo); domains as rampable, *playable* beat-accumulator
-  clocks in the engine remain ahead.
+  of the inversion in [timing-architecture.md](timing-architecture.md) §4.
+  Issue #104 adds the **Dart-side tempo-source seam** ([timing-architecture.md]
+  (timing-architecture.md) §3): tempo is *played, not set*, so a played domain's
+  tempo is a base rate (the subscription or session tempo) bent by a
+  `TempoSourceStack` — a list of `TempoSource`s summed at control rate in Dart,
+  never crossing the FFI boundary. Zero idle cost: with every source at rest the
+  stack is the identity (no offset, no ticker, no FFI). The first and only source
+  today is `FaderTempoSource` — a bipolar hand fader (`position` in `[-1, 1]`,
+  `offset = position * bendRange`) riding the played domain's tempo, the "first
+  gesture" that lets two time streams be bent against each other by hand.
+  `EngineMidiController` owns the stack + fader (`tempoSources` / `tempoFader`),
+  folds them into its `_effectiveTempo`, and re-ramps the transport clock live on
+  a bend — and because tempo lives in the clock, bending it never re-pushes a
+  note (the same clock-not-data property as the subscription). Future sources
+  (state-machine ramps, LFO-on-time, spatial coupling, a convergence autopilot)
+  compose behind the same seam without touching the engine. Still no tempo chrome
+  (the fader is code-drivable, like the scatter / grab / effect-volume performer
+  actions, until it graduates into the toolbar with the wider time-domain UI) and
+  no independent per-domain engine clock (one shared default clock); domains as
+  rampable, *playable* beat-accumulator clocks in the engine remain ahead.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
