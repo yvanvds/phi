@@ -21,9 +21,10 @@ import '../surface.dart';
 /// a drag pulls it, and a release throws or settles it — with misses, pan,
 /// zoom, and keyboard navigation still handled by macbear's own orbit
 /// controller. The screen→world unprojection lives in the engine bridge with
-/// the live camera; this surface owns the selection and drives the field's
-/// step from its own ticker so a grab pull is realized whether or not the
-/// transport is running.
+/// the live camera; this surface owns the selection and tracks the halo on the
+/// moving agent from its own ticker. Field motion itself is stepped by the
+/// player's frame ticker in all cases (issue #103) — a grab starts it even on a
+/// stopped transport — so this surface no longer steps the field.
 class SceneSurface extends Surface {
   const SceneSurface({required this.engine, super.key});
 
@@ -108,16 +109,17 @@ class _SceneViewportState extends State<_SceneViewport>
     super.dispose();
   }
 
-  /// Each frame: advance the field from our own clock so a grab pull settles
-  /// even with the transport paused (a no-op while playing — the playback tick
-  /// already steps it), then keep the selection halo on the moving agent,
-  /// dropping the selection once its agent despawns.
+  /// Each frame while a grab or selection is live: keep the selection halo on
+  /// the moving agent, dropping the selection once its agent despawns. The
+  /// field's own motion is stepped by the player's frame ticker in all cases
+  /// now (issue #103) — a grab starts it even on a stopped transport — so this
+  /// ticker only reads positions to track the halo, it no longer steps the
+  /// field.
   void _onTick(Duration elapsed) {
     final dt = (elapsed - _lastElapsed).inMicroseconds * 1e-6;
     _lastElapsed = elapsed;
     if (dt <= 0) return;
     final midi = widget.engine.midiOrNull;
-    midi?.stepFromSurface(dt);
     final key = _selectedKey;
     if (key != null) {
       final position = midi?.agentPosition(key);

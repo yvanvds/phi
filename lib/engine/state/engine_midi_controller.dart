@@ -33,13 +33,21 @@ import 'midi_graph_controller.dart';
 /// Since issue #101 note *dispatch* belongs to the engine, not the UI isolate:
 /// on [play] the player flattens the interpreted notes into a [TransportNote]
 /// list and pushes it (with the loop length) to a [MidiTransport] bound to a
-/// domain clock; the engine fires every note from the audio thread. A periodic
-/// timer still runs, but only for the concerns that need mere frame accuracy —
+/// domain clock; the engine fires every note from the audio thread. A frame
+/// ticker still runs, but only for the concerns that need mere frame accuracy —
 /// the display [playhead] and the Scene agent field — and to **re-push** on
 /// change: when the interpreted output changes (a clip edit, chip toggle,
 /// hot-reload, or state/variable flip re-evaluating the graph) the memoised
 /// [output] returns a fresh list instance, which the tick detects and pushes
 /// anew. "Read every tick" became "push on change".
+///
+/// Since issue #103 those frame-accurate concerns are **queries of the engine
+/// clock**, not a Dart-side integral: each tick reads the transport's
+/// [MidiTransport.beatPosition] and derives the playhead and the Scene-spawn
+/// window from it, so display and visuals track the audio-thread clock and stay
+/// coherent with the notes actually sounding even when the UI isolate janks. The
+/// same tick steps the Scene field in all cases (playing or a stopped grab), so
+/// the old play/stopped split collapses onto one ticker.
 ///
 /// Per Phi's vision (§3.7) clips are "interpreted, not played": the player
 /// pushes the **transformed** notes, not the raw source — so editing a note or
@@ -200,7 +208,9 @@ class EngineMidiController {
   final ValueNotifier<double> _playhead = ValueNotifier<double>(0);
 
   /// Position of the playhead within the clip, in beats `[0, totalBeats)`.
-  /// `0` while stopped. The piano-roll painter binds to this.
+  /// `0` while stopped. A frame-rate query of the engine clock's beat position
+  /// (issue #103), not a Dart accumulator, so it tracks the notes the audio
+  /// thread is actually sounding. The piano-roll painter binds to this.
   ValueListenable<double> get playhead => _playhead;
 
   bool _playing = false;
@@ -210,10 +220,18 @@ class EngineMidiController {
 
   Timer? _timer;
 
-  /// Absolute beats elapsed since [play], across loop boundaries. The
-  /// scheduling window each tick is `[_prevAbsBeat, _absBeat)`.
-  double _absBeat = 0;
-  double _prevAbsBeat = 0;
+  /// The engine clock's beat position captured at [play] (issue #103). Play is
+  /// relative to it, so `transport.beatPosition - _originBeat` is the beats
+  /// elapsed since play across loop boundaries — the same quantity the old
+  /// Dart accumulator held, but now *queried* from the audio-thread clock
+  /// rather than integrated on the jittery UI tick.
+  double _originBeat = 0;
+
+  /// End of the last Scene-spawn window, in play-relative beats. Each tick the
+  /// window is `[_prevBeat, now)` where `now` is the fresh clock query — so
+  /// agent spawn/despawn are re-anchored to the engine clock alongside the
+  /// playhead. `0` at [play].
+  double _prevBeat = 0;
 
   /// Notes currently sounding, by `(channel, pitch)` — so the player can
   /// release exactly what it pressed if a transform overlaps voices.
@@ -236,8 +254,7 @@ class EngineMidiController {
     if (!_gateway.isOpen && _gateway.outputDeviceCount > _outputPort) {
       _gateway.open(_outputPort);
     }
-    _absBeat = 0;
-    _prevAbsBeat = 0;
+    _prevBeat = 0;
     _playhead.value = 0;
     _playing = true;
     // Mint the transport now the port is open, push the current output, and
@@ -252,24 +269,35 @@ class EngineMidiController {
     _applyTempo();
     _pushEvents();
     transport.play();
-    // The tick drives only display + Scene now, and re-pushes on change.
-    _timer = Timer.periodic(_tickInterval, _onTick);
+    // Anchor play to the engine clock: the domain clock free-runs, so capture
+    // its beat now and read play-relative position as `beatPosition - origin`
+    // (issue #103). The playhead and Scene spawns are queries of this clock
+    // from here, not a Dart accumulator.
+    _originBeat = transport.beatPosition;
+    // The tick drives the display playhead, the Scene field, and a re-push on
+    // change; run it while playing (or while a grab needs realizing).
+    _syncTicker();
   }
 
   /// Stop playback, silence any sounding notes, and rewind the playhead.
   void stop() {
     if (!_playing) return;
-    _timer?.cancel();
-    _timer = null;
     _playing = false;
+    // Stop the engine transport first: the stop side effects — silencing
+    // sounding notes, clearing agents, rewinding the playhead — all follow from
+    // the transport no longer running (issue #103), rather than from the UI
+    // tick that used to own note timing.
     _transport?.stop();
     _gateway.allNotesOff();
     _sounding.clear();
     _pushedNotes = null;
     _clearAgents();
-    _absBeat = 0;
-    _prevAbsBeat = 0;
+    _originBeat = 0;
+    _prevBeat = 0;
     _playhead.value = 0;
+    // A cleared field and a stopped transport leave no per-frame work (unless a
+    // grab is somehow still live), so let the ticker idle.
+    _syncTicker();
   }
 
   /// Scatter the live agents — a one-shot performer action that disperses the
@@ -329,27 +357,25 @@ class EngineMidiController {
   /// each playback tick's [SceneField.step]; [releaseGrab] hands motion back
   /// with the velocity the pull built up (a moving grab throws, a settled one
   /// doesn't). Returns `true` if an agent was under [key]. The pull is realized
-  /// by the field's step — driven here by the running transport; the Scene
-  /// surface will drive its own step once it graduates.
-  bool grab(int key) => _field.grab(key);
+  /// by the field's step — driven by the frame ticker whether or not the
+  /// transport is running (issue #103), so a grab pull settles even on a stopped
+  /// Scene. Grabbing starts that ticker if it wasn't already spinning.
+  bool grab(int key) {
+    final grabbed = _field.grab(key);
+    if (grabbed) _syncTicker();
+    return grabbed;
+  }
 
   /// Move the held grab target the grabbed agent is pulled toward. A no-op when
   /// nothing is grabbed.
   void moveGrabTo(Vector3 target) => _field.moveGrabTo(target);
 
   /// Release the current grab, handing motion back to the field. A no-op when
-  /// nothing is grabbed.
-  void releaseGrab() => _field.release();
-
-  /// Advance the field from the Scene surface's own ticker, so a grab pull is
-  /// realized even when the transport isn't running. A no-op while playing —
-  /// the playback tick ([_stepAgents]) already steps the field, and a second
-  /// step per frame would move every agent twice as fast — and when the field
-  /// is empty. Pushes the moved set to the sink so the drag is seen at once.
-  void stepFromSurface(double dtSeconds) {
-    if (_playing || _field.isEmpty) return;
-    _field.step(dtSeconds);
-    _agentSink?.setAgents(_field.agents);
+  /// nothing is grabbed. Lets the ticker idle if the release leaves no per-frame
+  /// work (nothing playing, no live grab).
+  void releaseGrab() {
+    _field.release();
+    _syncTicker();
   }
 
   /// Drop every live agent and push the empty set to the sink, so the Scene
@@ -398,27 +424,52 @@ class EngineMidiController {
   /// collides with a playback voice key (`channel * 128 + pitch`, always ≥ 0).
   static const int _sceneDemoKeyBase = -1000;
 
+  /// Run the frame ticker exactly while there is per-frame work — the transport
+  /// is playing, or a grab needs realizing on a stopped Scene — and idle it
+  /// otherwise. This is the single frame driver for the Scene field in all
+  /// cases (issue #103): the old play/stopped split (a playback tick that
+  /// stepped the field versus a separate surface `stepFromSurface`) collapses
+  /// into this one ticker, so `SceneField.step` has exactly one dt source.
+  void _syncTicker() {
+    final needed = _playing || _field.isGrabbing;
+    if (needed && _timer == null) {
+      _timer = Timer.periodic(_tickInterval, _onTick);
+    } else if (!needed && _timer != null) {
+      _timer!.cancel();
+      _timer = null;
+    }
+  }
+
   void _onTick(Timer _) {
     // Re-bind the clock first: toggling the domain chip changes the effective
     // tempo but not the note data, so this is where a live subscription change
-    // takes hold (the display accumulator below then advances at the new rate).
+    // takes hold (the clock the playhead queries then runs at the new rate).
     _applyTempo();
     final dtSeconds = _tickInterval.inMicroseconds * 1e-6;
-    final dBeats = dtSeconds * (_effectiveTempo / 60.0);
-    _prevAbsBeat = _absBeat;
-    _absBeat += dBeats;
-    // Push-on-change: the memoised output hands back a new list instance only
-    // when the interpretation changed (edit, chip toggle, hot-reload, or —
-    // graph mode — a state/variable flip). Re-push then, so the engine swaps
-    // its event buffer at the next block.
-    if (!identical(_playbackNotes, _pushedNotes)) _pushEvents();
-    // The Dart window drives the Scene agent field only — note *sound* is the
-    // engine transport's job now.
-    _dispatchWindow(_prevAbsBeat, _absBeat);
-    _stepAgents(dtSeconds);
-
-    final total = _chain.source.totalBeats;
-    _playhead.value = total > 0 ? _absBeat % total : _absBeat;
+    if (_playing) {
+      // Query the engine clock instead of integrating a Dart accumulator: `now`
+      // is the play-relative beat, and the Scene-spawn window is `[_prevBeat,
+      // now)` (issue #103). Visuals need only frame accuracy, which a per-frame
+      // clock read gives.
+      final now = (_transport?.beatPosition ?? 0) - _originBeat;
+      // Push-on-change: the memoised output hands back a new list instance only
+      // when the interpretation changed (edit, chip toggle, hot-reload, or —
+      // graph mode — a state/variable flip). Re-push then, so the engine swaps
+      // its event buffer at the next block.
+      if (!identical(_playbackNotes, _pushedNotes)) _pushEvents();
+      // The window drives the Scene agent field only — note *sound* is the
+      // engine transport's job now.
+      _dispatchWindow(_prevBeat, now);
+      _prevBeat = now;
+      final total = _chain.source.totalBeats;
+      _playhead.value = total > 0 ? now % total : now;
+    }
+    // Advance the field every frame, playing or not, so drift and grab pulls
+    // integrate on the one ticker.
+    _stepField(dtSeconds);
+    // A despawn may have ended a grab (or stop cleared the field): re-check
+    // whether the ticker still has work.
+    _syncTicker();
   }
 
   /// Flatten the interpreted notes into [TransportNote]s and push them (with
@@ -446,10 +497,12 @@ class EngineMidiController {
   }
 
   /// Advance the live agents by [dtSeconds] and push the moved set to the sink,
-  /// so spawned agents visibly drift each frame. No-op when the field is empty,
-  /// which keeps a Scene-less setup (or an inactive spawn chip) from ever
-  /// touching the sink.
-  void _stepAgents(double dtSeconds) {
+  /// so spawned agents visibly drift (and grab pulls settle) each frame. No-op
+  /// when the field is empty, which keeps a Scene-less setup (or an inactive
+  /// spawn chip) from ever touching the sink. The single dt-based integration
+  /// point for the field, driven off the frame ticker whether or not the
+  /// transport is playing (issue #103).
+  void _stepField(double dtSeconds) {
     if (_field.isEmpty) return;
     _field.step(dtSeconds);
     _agentSink?.setAgents(_field.agents);

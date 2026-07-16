@@ -547,46 +547,62 @@ void main() {
       });
     });
 
-    test('stepFromSurface is a no-op while playing (no double-step)', () {
+    // A ray straight down +Z through the point [p].
+    PickRay rayThrough(Vector3 p) => PickRay(
+      origin: Vector3(p.x, p.y, p.z - 10),
+      direction: Vector3(0, 0, 1),
+    );
+
+    test('a grab pulls the agent while the transport is stopped (#103)', () {
       fakeAsync((async) {
         final renderer = FakeSceneRenderer();
         final controller = EngineMidiController(
-          // Drifting agent, so a stray extra step would visibly overshoot.
-          chain: _chainWith(_spawnTransform(velocity: Vector3(1, 0, 0))),
+          chain: _chainWith(_spawnTransform()),
           gateway: FakeMidiGateway(),
           agentSink: renderer,
         );
 
-        controller.play();
-        async.elapse(const Duration(milliseconds: 200)); // agent A drifting
-        expect(renderer.lastAgents, hasLength(1));
-        final callsBefore = renderer.calls.length;
-        final xBefore = renderer.lastAgents.single.position.x;
+        // Seed long-lived agents without playing — the transport stays stopped.
+        controller.loadSceneDemo();
+        expect(controller.isPlaying, isFalse);
+        final seeded = renderer.lastAgents.first.position;
+        final key = controller.pick(rayThrough(seeded));
+        expect(key, isNotNull, reason: 'the ray passes through a demo agent');
+        expect(controller.grab(key!), isTrue);
 
-        // A big surface step while the transport runs must change nothing —
-        // the playback tick owns stepping.
-        controller.stepFromSurface(1.0);
-        expect(renderer.calls.length, callsBefore); // never touched the sink
-        expect(renderer.lastAgents.single.position.x, xBefore);
+        // The unified frame ticker (started by the grab, not by playback) pulls
+        // the held agent toward its target even with the transport stopped.
+        final before = controller.agentPosition(key)!.clone();
+        controller.moveGrabTo(before + Vector3(0, 5, 0));
+        async.elapse(const Duration(milliseconds: 200));
+        final after = controller.agentPosition(key)!;
+        expect(after.y, greaterThan(before.y)); // dragged toward y + 5
+        expect(after.y, lessThanOrEqualTo(before.y + 5 + 1e-9));
 
-        controller.stop();
+        controller.releaseGrab(); // idles the ticker (nothing playing/grabbed)
         controller.dispose();
       });
     });
 
-    test('stepFromSurface with an empty field never touches the sink', () {
-      final renderer = FakeSceneRenderer();
-      final controller = EngineMidiController(
-        chain: _chainWith(_spawnTransform()),
-        gateway: FakeMidiGateway(),
-        agentSink: renderer,
-      );
+    test('a stopped Scene with agents but no grab runs no ticker (#103)', () {
+      fakeAsync((async) {
+        final renderer = FakeSceneRenderer();
+        final controller = EngineMidiController(
+          chain: _chainWith(_spawnTransform()),
+          gateway: FakeMidiGateway(),
+          agentSink: renderer,
+        );
 
-      // Not playing, nothing spawned.
-      controller.stepFromSurface(0.1);
-      expect(renderer.calls, isEmpty);
+        // Agents present, transport stopped, nothing grabbed: the ticker must
+        // stay idle, so it never churns stationary agents at the sink (and a
+        // real `pumpAndSettle` over an idle demo Scene still settles).
+        controller.loadSceneDemo();
+        final callsAfterLoad = renderer.calls.length;
+        async.elapse(const Duration(seconds: 1));
+        expect(renderer.calls.length, callsAfterLoad);
 
-      controller.dispose();
+        controller.dispose();
+      });
     });
   });
 

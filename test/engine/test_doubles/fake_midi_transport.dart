@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:phi/engine/bridge/midi_transport.dart';
 import 'package:phi/engine/bridge/transport_note.dart';
 
@@ -8,15 +9,35 @@ import 'package:phi/engine/bridge/transport_note.dart';
 /// `package:yse` or its native library. The engine-driven counterpart of
 /// [FakeMidiGateway]; the fake gateway mints one from [createTransport] and
 /// keeps it on [FakeMidiGateway.transport] so tests can reach it.
+///
+/// Models the engine domain clock (issue #103): [beatPosition] free-runs as the
+/// integral of [tempo] over elapsed time, read from `package:clock`'s
+/// ambient [clock]. `fakeAsync` runs its callback inside `withClock`, so under a
+/// `fakeAsync` test the beat advances exactly with `async.elapse`; in a
+/// real-time integration test it advances with the wall clock — either way the
+/// controller queries a real running clock, not a Dart accumulator it drives.
 class FakeMidiTransport implements MidiTransport {
   /// The clock name and tempo the gateway minted this transport with.
-  FakeMidiTransport({this.clockName = '', this.tempo = 120});
+  FakeMidiTransport({this.clockName = '', this.tempo = 120})
+    : _mark = clock.now();
 
   final String clockName;
 
   /// Latest tempo pushed — the constructor value, then whatever [setTempo]
   /// last set.
   double tempo;
+
+  /// Beats accumulated up to [_mark] at the tempo in force before it. Elapsed
+  /// beats since [_mark] are added on read, so a mid-run [setTempo] integrates
+  /// the two segments at their own tempos.
+  double _accumBeats = 0;
+
+  /// Wall-clock instant the current tempo segment began (play, construction, or
+  /// the last [setTempo]).
+  DateTime _mark;
+
+  double _beatsSinceMark() =>
+      clock.now().difference(_mark).inMicroseconds * 1e-6 * tempo / 60.0;
 
   /// The most recently pushed event list. Empty until the first [setEvents].
   List<TransportNote> events = const [];
@@ -42,7 +63,16 @@ class FakeMidiTransport implements MidiTransport {
   }
 
   @override
-  void setTempo(double bpm) => tempo = bpm;
+  void setTempo(double bpm) {
+    // Fold the beats accrued at the old tempo before the rate changes, so the
+    // running integral stays continuous across the switch.
+    _accumBeats += _beatsSinceMark();
+    _mark = clock.now();
+    tempo = bpm;
+  }
+
+  @override
+  double get beatPosition => _accumBeats + _beatsSinceMark();
 
   @override
   void play() {
