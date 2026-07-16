@@ -48,6 +48,9 @@ class RealMidiTransport implements MidiTransport {
   }
 
   @override
+  double get beatPosition => _disposed ? 0 : _clock.beatPosition;
+
+  @override
   void play() {
     if (_disposed) return;
     // Connect to the gateway's output lazily: the controller opens the port

@@ -77,9 +77,11 @@ main + app          (orchestration)
   (forwarding pick/grab to `EngineMidiController`, which owns the shared field,
   so mouse and code grab the same agents) and owns selection: a bright
   translucent halo (`PhiMacbearScene.setSelection`) tracks the picked agent's
-  live position, refreshed by the surface's own gated ticker, which also drives
-  `EngineMidiController.stepFromSurface` so a grab pull is realized off the
-  playback tick (a no-op while playing, to avoid double-stepping). The GL
+  live position, refreshed by the surface's own gated ticker. Field *motion*,
+  though, is stepped by the player's one frame ticker in all cases as of issue
+  #103 — a grab starts that ticker even on a stopped transport — so the surface
+  no longer owns a separate `stepFromSurface`, and the old play/stopped stepping
+  split is gone. The GL
   viewport can't be exercised headless (no ANGLE context in CI), so the pure
   math, the input controller, and the surface wiring are unit/widget-tested
   behind fakes and the pointer path is verified manually. Issue #90 adds a
@@ -288,8 +290,13 @@ main + app          (orchestration)
   `play` the controller flattens the chain's transformed `output` into a
   `TransportNote` list and **pushes** it (plus the loop length) to a
   `MidiTransport` bound to a domain clock, and the engine fires every note from
-  the audio thread. A periodic timer still runs, but only for the display
-  playhead and the Scene agent field — and to **re-push on change**: the
+  the audio thread. A frame ticker still runs, but only for the display
+  playhead and the Scene agent field — **both now queries of the engine clock**
+  (issue #103): each tick reads the transport's `beatPosition` (the audio-thread
+  integral of tempo) and derives the playhead and the Scene-spawn window from it
+  rather than integrating a Dart accumulator, so display and visuals track the
+  notes actually sounding even under UI jank; stop rewinds through the
+  transport's stopped state. The same tick also **re-pushes on change**: the
   `output` read is memoised (issue #56), so it hands back a *fresh list
   instance* only when the transform list changes, the source clip is edited
   (`MidiClip.revision`, bumped by the edit commands and `replaceWith`), a chip
@@ -322,9 +329,9 @@ main + app          (orchestration)
   [timing-architecture.md](timing-architecture.md) §2) — the UI isolate no
   longer times notes; the chain/graph interpretation layer stays in Dart and
   pushes revision-keyed note lists to the transport instead of dispatching them
-  tick-by-tick. Still Dart-side and slated to follow (§4): scene spawn
-  re-anchoring and the playhead as an engine-clock query (both currently ride
-  the display timer), and playable/ramped domain tempo (§3). Issue #82 adds
+  tick-by-tick. Scene spawn re-anchoring and the playhead as an engine-clock
+  query landed with issue #103 (§4); still Dart-side and slated to follow:
+  playable/ramped domain tempo (§3). Issue #82 adds
   the **domain-side
   grab** (direct-manipulation pull): `SceneField` holds a grabbed key + a held
   target and, inside `step`, pulls the held agent `grabStrength` of the way to

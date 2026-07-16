@@ -26,6 +26,15 @@ abstract interface class MidiTransport {
   /// in the pushed note data, so a tempo change never forces a re-push.
   void setTempo(double bpm);
 
+  /// The bound domain clock's current beat position — the running integral of
+  /// tempo, advanced on the audio thread (issue #103). This is the timing
+  /// authority the UI queries at frame rate to re-anchor the display playhead
+  /// and Scene agent spawn/despawn to the engine clock, rather than integrating
+  /// a Dart-side accumulator that jitters under UI-isolate load. Free-running:
+  /// the clock keeps advancing regardless of transport play state, so callers
+  /// that want a play-relative position subtract the beat captured at [play].
+  double get beatPosition;
+
   /// Start (or resume) playback of the pushed events.
   void play();
 
