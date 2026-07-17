@@ -15,10 +15,13 @@ import '../domain/project/registry_kinds.dart';
 import '../domain/runtime/runtime_variable_registry.dart';
 import 'bridge/macbear_scene_renderer.dart';
 import 'bridge/midi_gateway.dart';
+import 'bridge/no_op_registry_mirror.dart';
 import 'bridge/patcher_gateway.dart';
 import 'bridge/real_midi_gateway.dart';
 import 'bridge/real_patcher_gateway.dart';
 import 'bridge/real_yse_gateway.dart';
+import 'bridge/registry_mirror.dart';
+import 'bridge/registry_mirror_binder.dart';
 import 'bridge/scene_renderer.dart';
 import 'bridge/yse_gateway.dart';
 import 'state/engine_midi_controller.dart';
@@ -38,10 +41,12 @@ class PhiEngine {
     SceneRenderer? sceneRenderer,
     PatcherGateway? patcherGateway,
     MidiGateway? midiGateway,
+    RegistryMirror registryMirror = const NoOpRegistryMirror(),
     Duration telemetryInterval = const Duration(milliseconds: 50),
   }) : _sceneRenderer = sceneRenderer,
        _patcherGateway = patcherGateway,
        _midiGateway = midiGateway,
+       _mirrorBinder = RegistryMirrorBinder(registryMirror),
        _telemetryInterval = telemetryInterval {
     // The registry is the source of truth for the channel set (design §8): the
     // engine materialises its `MixerChannel`s from `mix.` entities and re-syncs
@@ -49,6 +54,10 @@ class PhiEngine {
     // registry it owns a private empty one, so a bare engine (Phase-1 tests)
     // still adds channels — they just live in a registry nobody persists.
     _mixRegistry.addListener(_syncChannelsFromRegistry);
+    // The RegistryMirror seam (design §8) follows the same registry, mirroring
+    // create / rename / delete / regroup into the engine's Python namespace —
+    // a no-op until the live-coding epic swaps in a live mirror.
+    _mirrorBinder.bind(_mixRegistry);
   }
 
   /// Production constructor — wires the real `package:yse` gateway and,
@@ -161,6 +170,10 @@ class PhiEngine {
   ProjectRegistry _mixRegistry = ProjectRegistry();
   bool _ownsMixRegistry = true;
 
+  /// Forwards the bound registry's lifecycle events to the [RegistryMirror]
+  /// seam (design §8). Rebound alongside [_mixRegistry] on every [bindProject].
+  final RegistryMirrorBinder _mirrorBinder;
+
   /// Records structural channel commands (create/remove) for dirty-tracking and
   /// the recovery journal — wired to `ProjectController.recordCommand`. `null`
   /// for a bare engine, which then makes registry edits without journaling them.
@@ -230,6 +243,7 @@ class PhiEngine {
     _ownsMixRegistry = false;
     _recordCommand = recordCommand;
     _mixRegistry.addListener(_syncChannelsFromRegistry);
+    _mirrorBinder.bind(_mixRegistry);
     _teardownChannels();
     _syncChannelsFromRegistry();
   }
@@ -535,6 +549,7 @@ class PhiEngine {
   /// is permanently torn down (e.g. app dispose).
   Future<void> dispose() async {
     stop();
+    _mirrorBinder.dispose();
     _mixRegistry.removeListener(_syncChannelsFromRegistry);
     if (_ownsMixRegistry) _mixRegistry.dispose();
     _testSignal.dispose();

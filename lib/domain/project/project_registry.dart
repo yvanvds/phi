@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'back_reference_index.dart';
@@ -6,6 +8,7 @@ import 'entity_address.dart';
 import 'reference_source.dart';
 import 'registry_entity.dart';
 import 'registry_error.dart';
+import 'registry_event.dart';
 import 'registry_exception.dart';
 import 'registry_group.dart';
 import 'registry_node.dart';
@@ -29,8 +32,11 @@ import 'registry_node.dart';
 /// payload is a [ReferenceSource]) or explicitly at [createEntity].
 ///
 /// **A [ChangeNotifier]**, so surfaces watch it: every structural mutation
-/// bumps [version] and notifies. **No persistence and no engine knowledge** —
-/// those seams (`ProjectStore`, `RegistryMirror`) arrive in later epic issues.
+/// bumps [version] and notifies. It also emits a fine-grained [events] stream —
+/// the create / move / delete signal the engine's `RegistryMirror` seam mirrors
+/// into the Python namespace (design §8). Still **no persistence and no engine
+/// knowledge**: `ProjectStore` owns the former, and the registry only *emits*
+/// events — the engine-side binder does the mirroring.
 ///
 /// Queries ([nodeAt], [entityAt], [groupAt], [contains], [childrenOfKind],
 /// [childrenOfGroup], [referrersOf], [referencesOf], [impactOfRemoving]) never
@@ -41,10 +47,20 @@ import 'registry_node.dart';
 class ProjectRegistry extends ChangeNotifier {
   final Map<String, RegistryGroup> _roots = {};
   final BackReferenceIndex _backrefs = BackReferenceIndex();
+  final StreamController<RegistryEvent> _events =
+      StreamController<RegistryEvent>.broadcast();
   int _version = 0;
 
   /// Bumps on every notify — a cheap change signal for listeners and painters.
   int get version => _version;
+
+  /// Fine-grained lifecycle events — one per structural mutation ([createEntity]
+  /// / [createGroup] → [RegistryEntityCreated], [move] → [RegistryEntityMoved],
+  /// [remove] → [RegistryEntityDeleted]). The `RegistryMirror` seam (design §8)
+  /// listens here to keep the engine's Python namespace in step. A broadcast
+  /// stream: it buffers nothing, so an event fired before anyone listens is
+  /// simply dropped, and [setReferences] emits none (edges are not namespace).
+  Stream<RegistryEvent> get events => _events.stream;
 
   /// The kinds that currently have a root. A namespace persists once created,
   /// even if later emptied.
@@ -146,6 +162,7 @@ class ProjectRegistry extends ChangeNotifier {
       _backrefs.add(address, entity.references);
     }
     _bumpAndNotify();
+    _emit(RegistryEntityCreated(address));
     return entity;
   }
 
@@ -164,6 +181,7 @@ class ProjectRegistry extends ChangeNotifier {
     final group = RegistryGroup(address.name);
     parent.put(group);
     _bumpAndNotify();
+    _emit(RegistryEntityCreated(address));
     return group;
   }
 
@@ -211,6 +229,7 @@ class ProjectRegistry extends ChangeNotifier {
     if (removed == null) return false;
     _deindexSubtree(removed, address);
     _bumpAndNotify();
+    _emit(RegistryEntityDeleted(address));
     return true;
   }
 
@@ -289,6 +308,7 @@ class ProjectRegistry extends ChangeNotifier {
     // tree rather than trying to patch every moved key incrementally.
     _reindex();
     _bumpAndNotify();
+    _emit(RegistryEntityMoved(from, to));
     return external;
   }
 
@@ -522,5 +542,16 @@ class ProjectRegistry extends ChangeNotifier {
   void _bumpAndNotify() {
     _version++;
     notifyListeners();
+  }
+
+  void _emit(RegistryEvent event) {
+    if (!_events.isClosed) _events.add(event);
+  }
+
+  /// Closes the [events] stream alongside the usual [ChangeNotifier] teardown.
+  @override
+  void dispose() {
+    _events.close();
+    super.dispose();
   }
 }
