@@ -431,7 +431,18 @@ main + app          (orchestration)
   the shell. Gesture coalescing stays a convention (a drag mutates transient
   state and commits one command on release). `entitiesTouched` is the seam
   save/autosave dirty-tracking (#121) and the recovery journal (#122) will
-  consume.
+  consume. Issue #120 adds references and refactoring (design §4): each entity
+  declares its outgoing references (from its payload when that is a
+  `ReferenceSource`, else an explicit set at `createEntity`), and the registry
+  keeps a `BackReferenceIndex` (who points at whom) current on every mutation.
+  That index makes **rename = refactor** — `move`/rename rewrites every referent
+  (external *and* between moved siblings, payload included via
+  `withReferenceUpdated`) as one undoable `MoveEntityCommand`, returning the
+  dirtied referents for `entitiesTouched` — and powers **delete warnings**:
+  `impactOfRemoving` returns a `DeleteImpact` listing the external entities a
+  delete would strand. The `ReferenceSource` hook is structural today but does
+  not preclude the deferred textual refactor of `code.` sources (live-coding
+  epic).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
