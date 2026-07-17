@@ -19,22 +19,33 @@ void main() {
   late ClipEditor editor;
 
   Future<void> pump(WidgetTester tester) async {
+    // The roll no longer handles Ctrl+Z/Y itself — it lets them bubble to a
+    // global handler (the shell's, #119). Mirror that ancestor here so the
+    // keyboard-undo test still exercises the real bubbling path.
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: Align(
-            alignment: Alignment.topLeft,
-            child: SizedBox(
-              width: 400,
-              height: 240,
-              child: PianoRollEditor(
-                editor: editor,
-                ghostNotes: const [],
-                showGhost: false,
-                bars: 4,
-                beatsPerBar: 4,
-                minPitch: _minPitch,
-                maxPitch: _maxPitch,
+          body: CallbackShortcuts(
+            bindings: {
+              const SingleActivator(LogicalKeyboardKey.keyZ, control: true):
+                  editor.undo,
+              const SingleActivator(LogicalKeyboardKey.keyY, control: true):
+                  editor.redo,
+            },
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 400,
+                height: 240,
+                child: PianoRollEditor(
+                  editor: editor,
+                  ghostNotes: const [],
+                  showGhost: false,
+                  bars: 4,
+                  beatsPerBar: 4,
+                  minPitch: _minPitch,
+                  maxPitch: _maxPitch,
+                ),
               ),
             ),
           ),

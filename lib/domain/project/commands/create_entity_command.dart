@@ -1,0 +1,38 @@
+import '../entity_address.dart';
+import '../project_command.dart';
+import '../project_registry.dart';
+
+/// Creates an entity at [address], carrying [payload] (design §6). [revert]
+/// removes it, so a create followed by an undo leaves the tree as it was.
+///
+/// Aimed at the common "create in place" case, where the parent group already
+/// exists. If [address] has missing ancestor groups, [apply] auto-creates them
+/// (`mkdir -p`) but [revert] removes only the entity, not those groups — an
+/// empty group is harmless and tracking auto-created ancestors is out of scope
+/// for this layer.
+class CreateEntityCommand implements ProjectCommand {
+  CreateEntityCommand(this.registry, this.address, {this.payload});
+
+  final ProjectRegistry registry;
+  final EntityAddress address;
+  final Object? payload;
+
+  @override
+  String get label => 'create $address';
+
+  @override
+  Set<EntityAddress> get entitiesTouched => {address};
+
+  @override
+  void apply() => registry.createEntity(address, payload: payload);
+
+  @override
+  void revert() => registry.remove(address);
+
+  @override
+  Map<String, Object?> toJson() => {
+    'type': 'create_entity',
+    'address': address.format(),
+    if (payload != null) 'payload': payload,
+  };
+}

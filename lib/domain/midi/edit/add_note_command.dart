@@ -1,4 +1,3 @@
-import '../midi_clip.dart';
 import '../midi_note.dart';
 import 'clip_edit_command.dart';
 
@@ -8,24 +7,33 @@ import 'clip_edit_command.dart';
 /// therefore any live selection — stay valid. [revert] removes the note at
 /// the index it landed on.
 class AddNoteCommand extends ClipEditCommand {
-  AddNoteCommand(this.note);
+  AddNoteCommand(super.clip, this.note, {super.clipAddress});
 
   final MidiNote note;
   int? _index;
 
   @override
+  String get label => 'add note';
+
+  @override
   Set<int> get affectedIndices => _index == null ? const {} : {_index!};
 
   @override
-  void applyTo(MidiClip clip) {
+  void apply() {
     _index = clip.notes.length;
     clip.notes.add(note);
     clip.touch();
   }
 
   @override
-  void revert(MidiClip clip) {
+  void revert() {
     clip.notes.removeAt(_index!);
     clip.touch();
   }
+
+  @override
+  Map<String, Object?> toJson() => {
+    'type': 'add_note',
+    'note': noteToJson(note),
+  };
 }

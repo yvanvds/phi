@@ -194,14 +194,9 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
     }
     final key = event.logicalKey;
     if (_ctrl) {
-      if (key == LogicalKeyboardKey.keyZ) {
-        _shift ? _editor.redo() : _editor.undo();
-        return KeyEventResult.handled;
-      }
-      if (key == LogicalKeyboardKey.keyY) {
-        _editor.redo();
-        return KeyEventResult.handled;
-      }
+      // Undo/redo are no longer handled here: the shell routes Ctrl+Z/Y to the
+      // focused surface's stack (undo follows focus, #119), so let the combo
+      // bubble up to that global handler rather than acting locally.
       return KeyEventResult.ignored;
     }
     switch (key) {

@@ -410,6 +410,28 @@ main + app          (orchestration)
   actions, until it graduates into the toolbar with the wider time-domain UI) and
   no independent per-domain engine clock (one shared default clock); domains as
   rampable, *playable* beat-accumulator clocks in the engine remain ahead.
+- Project model & registry (design `docs/design/project-registry.md`) — the
+  Phase-2 foundation for named, serialisable entities. Registry core (issue
+  #118) in `lib/domain/project/`: an `EntityAddress` value type (dotted
+  `kind.group….name`, valid by construction through the shared `NameValidator`),
+  `RegistryEntity` / `RegistryGroup` nodes, and a kind-generic `ProjectRegistry`
+  (ChangeNotifier) tree with transactional create / move / remove. Issue #119
+  adds the command + undo layer (design §6): a self-contained `ProjectCommand`
+  (`label` · `entitiesTouched` · `apply` / `revert` · `toJson`; the target —
+  registry or clip — is bound at construction, so `apply`/`revert` take no arg)
+  with concrete create-entity / remove-entity / move / create-group registry
+  commands; a per-surface `UndoScope` (an undo *applies the inverse command*,
+  recorded like any other) and an `UndoScopes` router so **undo follows focus** —
+  Ctrl+Z/Y route to the active surface's stack, wired at the shell over a
+  `CallbackShortcuts` that focuses the scope of the selected surface. The
+  existing `ClipEditor` stack folds into this: its `ClipEditCommand`s now
+  implement `ProjectCommand` and its stack *is* an `UndoScope` (exposed as
+  `ClipEditor.undoScope`), making the MIDI surface the first registered scope;
+  the piano roll no longer handles Ctrl+Z itself, letting the combo bubble to
+  the shell. Gesture coalescing stays a convention (a drag mutates transient
+  state and commits one command on release). `entitiesTouched` is the seam
+  save/autosave dirty-tracking (#121) and the recovery journal (#122) will
+  consume.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
