@@ -9,6 +9,7 @@ import 'package:phi/domain/midi/transforms/conditional_muting_transform.dart';
 import 'package:phi/domain/midi/transforms/humanization_transform.dart';
 import 'package:phi/domain/midi/transforms/inversion_transform.dart';
 import 'package:phi/domain/midi/transforms/loop_transform.dart';
+import 'package:phi/domain/midi/transforms/note_condition.dart';
 import 'package:phi/domain/midi/transforms/probabilistic_skip_repeat_transform.dart';
 import 'package:phi/domain/midi/transforms/quantization_transform.dart';
 import 'package:phi/domain/midi/transforms/reverse_transform.dart';
@@ -118,8 +119,13 @@ void main() {
       expect(() => t.withParam('nope', 1), throwsArgumentError);
     });
 
-    test('callback-driven transforms expose no params (issue #95)', () {
-      const t = ConditionalMutingTransform(predicate: _keepAll, label: 'l');
+    test('data-model transforms expose no scalar params (issue #95)', () {
+      // Its behaviour lives in a declarative NoteCondition edited by a typed
+      // editor (issue #109), not in the scalar withParam seam.
+      const t = ConditionalMutingTransform(
+        condition: NoteConditionGroup.empty(),
+        label: 'l',
+      );
       expect(t.params, isEmpty);
       expect(() => t.withParam('anything', 1), throwsArgumentError);
     });
@@ -148,5 +154,3 @@ void main() {
     });
   });
 }
-
-bool _keepAll(MidiNote note) => true;

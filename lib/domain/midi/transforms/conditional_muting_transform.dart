@@ -1,31 +1,41 @@
 import '../midi_note.dart';
 import '../midi_transform.dart';
 import '../midi_transform_kind.dart';
+import 'note_condition.dart';
 
-/// Gates a note through or drops it. The signature is deliberately minimal — a
-/// bare caller-supplied callback — so a state-machine read, a scene-volume
-/// check, or a live-coded variable can stand behind it later without this
-/// transform changing. (`VelocityToParameterTransform` started from the same
-/// callback seam before issue #108 gave it a declarative `VelocityCurve` model;
-/// this predicate's own model is #109.)
+/// The evaluated form of a mute predicate: `true` keeps the note, `false` drops
+/// it — the shape `List.where` consumes. It used to be the transform's whole
+/// model (a bare caller-supplied callback); issue #109 moves the model to a
+/// declarative [NoteCondition] and keeps this only as the *evaluated* view of
+/// it, so a state-machine read, scene-volume check, or live-coded variable can
+/// still stand behind the seam later.
 typedef NotePredicate = bool Function(MidiNote note);
 
-/// Drops notes that fail [predicate], keeping everything else in place.
+/// Drops notes that match [condition], keeping everything else in place.
 ///
 /// This is the boolean seed for what the vision calls conditional muting:
-/// gating notes by state-machine state, scene volume, or a code variable.
-/// None of that plumbing exists yet, so [predicate] starts as a plain Dart
-/// callback the caller supplies directly. Like every transform, it must be pure
-/// (same note, same verdict) so the chain stays memoisable.
+/// gating notes by their own fields today (pitch / velocity / channel / start),
+/// by state-machine state, scene volume, or a code variable later. The gate
+/// used to be a bare `NotePredicate` callback the caller supplied directly,
+/// which nothing could inspect or edit; issue #109 re-backs it with a
+/// declarative [NoteCondition] — a pure, immutable value model the typed
+/// predicate editor mutates in place. (`VelocityToParameterTransform` made the
+/// same callback → model move in issue #108.)
+///
+/// [condition] is read as a *mute* predicate: a note that matches is dropped.
+/// The [NoteConditionGroup.empty] default matches nothing, so a fresh chip is a
+/// passthrough the performer makes meaningful by editing alone. Like every
+/// transform, evaluation is pure — same note, same verdict — so the chain stays
+/// memoisable.
 class ConditionalMutingTransform extends MidiTransform {
   const ConditionalMutingTransform({
-    required this.predicate,
+    required this.condition,
     required this.label,
     this.active = true,
   });
 
-  /// Notes for which this returns `false` are dropped.
-  final NotePredicate predicate;
+  /// Declarative predicate over a note's fields. Notes that match it are muted.
+  final NoteCondition condition;
 
   @override
   final String label;
@@ -36,15 +46,27 @@ class ConditionalMutingTransform extends MidiTransform {
   @override
   MidiTransformKind get kind => MidiTransformKind.struct;
 
-  @override
-  List<MidiNote> apply(List<MidiNote> input) =>
-      input.where(predicate).toList(growable: false);
+  /// The evaluated keep-form of [condition]: a note survives unless it matches.
+  /// Exposed so a caller wanting the plain `List.where` predicate — the old
+  /// callback seam — still has one.
+  NotePredicate get predicate =>
+      (note) => !condition.matches(note);
 
   @override
-  ConditionalMutingTransform copyWith({bool? active, String? label}) =>
-      ConditionalMutingTransform(
-        predicate: predicate,
-        label: label ?? this.label,
-        active: active ?? this.active,
-      );
+  List<MidiNote> apply(List<MidiNote> input) =>
+      input.where((n) => !condition.matches(n)).toList(growable: false);
+
+  /// Carries [condition] alongside the base [active]/[label] so the typed
+  /// predicate editor (issue #109) can reshape the predicate in place without
+  /// losing the chip's toggle or name.
+  @override
+  ConditionalMutingTransform copyWith({
+    bool? active,
+    String? label,
+    NoteCondition? condition,
+  }) => ConditionalMutingTransform(
+    condition: condition ?? this.condition,
+    label: label ?? this.label,
+    active: active ?? this.active,
+  );
 }

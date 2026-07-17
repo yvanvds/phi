@@ -51,9 +51,9 @@ class _TransformChainPanelState extends State<TransformChainPanel> {
       Rect.fromPoints(globalPosition, globalPosition),
       Offset.zero & overlay.size,
     );
-    // "edit parameters…" greys out only for chips with nothing to edit — the
-    // two still-callback-driven transforms (#108/#109). A transform is editable
-    // if it exposes scalar params or has a dedicated typed editor (issue #95).
+    // "edit parameters…" greys out only for chips with nothing to edit (e.g. a
+    // parameterless stub). A transform is editable if it exposes scalar params
+    // or has a dedicated typed editor (issue #95).
     final transform = index < widget.chain.transforms.length
         ? widget.chain.transforms[index]
         : null;
