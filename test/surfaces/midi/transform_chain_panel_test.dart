@@ -8,9 +8,9 @@ import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/midi_transform.dart';
 import 'package:phi/domain/midi/midi_transform_chain.dart';
 import 'package:phi/domain/midi/midi_transform_kind.dart';
-import 'package:phi/domain/midi/transforms/conditional_muting_transform.dart';
 import 'package:phi/domain/midi/transforms/loop_transform.dart';
 import 'package:phi/domain/midi/transforms/quantization_transform.dart';
+import 'package:phi/domain/midi/transforms/stub_transform.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/surfaces/midi/midi_surface.dart';
@@ -21,8 +21,6 @@ import '../../engine/test_doubles/fake_yse_gateway.dart';
 
 List<DslNote> _octaveUp(List<DslNote> notes) =>
     notes.map((n) => n.copyWith(pitch: n.pitch + 12)).toList();
-
-bool _keepAll(MidiNote note) => true;
 
 void main() {
   late FakeYseGateway gateway;
@@ -377,12 +375,14 @@ void main() {
       chain.dispose();
     });
 
-    testWidgets('edit parameters is greyed out for callback-driven chips', (
+    testWidgets('edit parameters is greyed out for a parameterless stub', (
       tester,
     ) async {
+      // With #108/#109 landed, no transform is callback-driven; a plain stub
+      // with no scalar params and no typed editor is what still greys out.
       final chain = oneNoteChain(
         transforms: const [
-          ConditionalMutingTransform(predicate: _keepAll, label: 'mute'),
+          StubTransform(kind: MidiTransformKind.struct, label: 'branch'),
         ],
       );
       await pump(tester, chain);

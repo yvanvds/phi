@@ -5,16 +5,19 @@ import 'package:phi/domain/midi/midi_clip.dart';
 import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/midi_transform.dart';
 import 'package:phi/domain/midi/midi_transform_chain.dart';
+import 'package:phi/domain/midi/midi_transform_kind.dart';
 import 'package:phi/domain/midi/music_scale.dart';
 import 'package:phi/domain/midi/scale_tuning.dart';
 import 'package:phi/domain/midi/spawn_axis.dart';
 import 'package:phi/domain/midi/spawn_source.dart';
 import 'package:phi/domain/midi/transforms/agent_spawn_transform.dart';
 import 'package:phi/domain/midi/transforms/conditional_muting_transform.dart';
+import 'package:phi/domain/midi/transforms/note_condition.dart';
 import 'package:phi/domain/midi/transforms/scale_conformance_transform.dart';
 import 'package:phi/domain/midi/transforms/spectral_mapping_transform.dart';
 import 'package:phi/domain/midi/transforms/split_voice.dart';
 import 'package:phi/domain/midi/transforms/splitting_transform.dart';
+import 'package:phi/domain/midi/transforms/stub_transform.dart';
 import 'package:phi/domain/midi/transforms/velocity_curve.dart';
 import 'package:phi/domain/midi/transforms/velocity_curve_shape.dart';
 import 'package:phi/domain/midi/transforms/velocity_to_parameter_transform.dart';
@@ -330,11 +333,101 @@ void main() {
     chain.dispose();
   });
 
-  testWidgets('muting chip stays disabled until its model lands (#109)', (
+  testWidgets('muting: adding and editing a condition mutes notes live', (
     tester,
   ) async {
     final chain = oneNoteChain(const [
-      ConditionalMutingTransform(predicate: _keepAll, label: 'mute · if'),
+      ConditionalMutingTransform(
+        condition: NoteConditionGroup.empty(),
+        label: 'mute · if',
+      ),
+    ]);
+    await pump(tester, chain);
+    await openEditor(tester);
+
+    ConditionalMutingTransform mute() =>
+        chain.transforms.single as ConditionalMutingTransform;
+
+    // Empty keep-all default: the one note plays.
+    expect(chain.output, hasLength(1));
+
+    // Add a condition — default `velocity < 0.5`. The note's velocity is 1, so
+    // it still plays: the model landed but doesn't yet catch this note.
+    await tester.tap(find.text('+ add condition'));
+    await tester.pumpAndSettle();
+    expect(chain.output, hasLength(1));
+    expect(mute().condition, isA<NoteConditionGroup>());
+
+    // Widen the threshold so `velocity < 2` catches the note → muted live.
+    await tester.enterText(dialogFields().at(0), '2');
+    await tester.pump();
+    expect(chain.output, isEmpty);
+
+    // Flip the comparison to ≥: `velocity ≥ 2` is false for vel 1 → plays again.
+    await tester.tap(find.text('<'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('≥').last);
+    await tester.pumpAndSettle();
+    expect(chain.output, hasLength(1));
+
+    chain.dispose();
+  });
+
+  testWidgets('muting: switching the field re-gates, combinator persists', (
+    tester,
+  ) async {
+    final chain = oneNoteChain(const [
+      ConditionalMutingTransform(
+        condition: NoteConditionGroup.empty(),
+        label: 'mute · if',
+      ),
+    ]);
+    await pump(tester, chain);
+    await openEditor(tester);
+
+    ConditionalMutingTransform mute() =>
+        chain.transforms.single as ConditionalMutingTransform;
+
+    await tester.tap(find.text('+ add condition'));
+    await tester.pumpAndSettle();
+
+    // Switch the field velocity → pitch, comparison < → ≥, threshold 60:
+    // the note's pitch is 60, so `pitch ≥ 60` catches it → muted.
+    await tester.tap(find.text('velocity'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('pitch').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('<'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('≥').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(dialogFields().at(0), '60');
+    await tester.pump();
+    expect(chain.output, isEmpty);
+
+    final condition = mute().condition as NoteConditionGroup;
+    expect(condition.conditions.single, isA<NoteFieldCondition>());
+
+    // The combinator picker carries into the model.
+    await tester.tap(find.text('any'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('all').last);
+    await tester.pumpAndSettle();
+    expect(
+      (mute().condition as NoteConditionGroup).combinator,
+      NoteConditionCombinator.all,
+    );
+
+    chain.dispose();
+  });
+
+  testWidgets('a parameterless stub chip greys out edit parameters', (
+    tester,
+  ) async {
+    // With #108/#109 landed, no transform is callback-driven; a plain stub with
+    // no scalar params and no typed editor is what still greys out.
+    final chain = oneNoteChain(const [
+      StubTransform(kind: MidiTransformKind.struct, label: 'branch · state'),
     ]);
     await pump(tester, chain);
 
@@ -348,18 +441,16 @@ void main() {
               ),
             )
             as PopupMenuItem;
-    // The one still-callback-driven transform has no typed editor, so its
-    // "edit parameters…" stays greyed out.
     expect(item.enabled, isFalse);
 
     chain.dispose();
   });
 
-  testWidgets('callback-driven chips still fall back / stay disabled', (
+  testWidgets('a data-model chip is editable (dispatch diverts it)', (
     tester,
   ) async {
-    // A scalar transform still opens the generic editor (no typed dialog),
-    // proving the dispatch only diverts the five data-model families.
+    // A split transform opens its typed dialog, proving the dispatch diverts the
+    // data-model families rather than greying them out.
     final chain = oneNoteChain(const [
       SplittingTransform(voices: [SplitVoice()], label: 'split'),
     ]);
@@ -375,12 +466,8 @@ void main() {
               ),
             )
             as PopupMenuItem;
-    // A data-model chip is now editable where before it greyed out.
     expect(item.enabled, isTrue);
 
     chain.dispose();
   });
 }
-
-/// Keep-everything predicate for the muting chip's passthrough default.
-bool _keepAll(MidiNote note) => true;

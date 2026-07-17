@@ -128,10 +128,13 @@ main + app          (orchestration)
   repeat count or fill-to-length, with a phase offset — wired into the
   default chain as `loop · 4 bars`), `ReverseTransform` (mirrors start times
   within a fixed window, preserving duration), and
-  `ConditionalMutingTransform` (drops notes that fail a pure `NotePredicate`
-  — the same caller-supplied-callback seam as `VelocityCurve`, standing in
-  for the future state-machine/scene-volume/code-variable read) as library
-  code awaiting UI. The `spawn · agent @ p,v` chip is real as of issue #37:
+  `ConditionalMutingTransform` (drops notes matching a declarative
+  `NoteCondition` — a leaf `NoteFieldCondition` (field · comparison ·
+  threshold over pitch/velocity/channel/start) or an `all`/`any`
+  `NoteConditionGroup` of them; issue #109 replaced the bare `NotePredicate`
+  callback with this serialisable model, keeping `NotePredicate` only as the
+  evaluated keep-form, and still standing in for the future
+  state-machine/scene-volume/code-variable read). The `spawn · agent @ p,v` chip is real as of issue #37:
   `AgentSpawnTransform` (voice-family) maps each note onto an `AgentSpawn`
   (position + voice + lifetime) while passing notes through untouched — the
   same control-vs-note seam as `VelocityToParameterTransform`. Position is
@@ -222,8 +225,12 @@ main + app          (orchestration)
   / stepped) and an output range `[valueAt0, valueAt1]`, evaluated in
   `eventsFor`; a `VelocityCurveEditor` reshapes it live from the chip menu, so
   the catalogue's identity-curve default becomes meaningful through editing
-  alone. Only the muting predicate stays callback-driven and greyed out until
-  its own declarative model lands (#109). Real Python is still
+  alone. Issue #109 did the same for the muting predicate: its bare
+  `NotePredicate` callback is now a declarative `NoteCondition`
+  (`lib/domain/midi/transforms/note_condition.dart`) — a leaf
+  `NoteFieldCondition` or an `all`/`any` `NoteConditionGroup` — and a
+  `NotePredicateEditor` builds it live from the chip menu, so no transform is
+  callback-driven any more. Real Python is still
   a `NoOpCodeEvaluator`
   (issue #9's kernel decision is open), so the live-coding→registration
   handshake runs through `FakeCodeEvaluator` (now carrying an `onEvaluate`

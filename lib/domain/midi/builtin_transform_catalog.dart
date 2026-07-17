@@ -1,6 +1,5 @@
 import 'package:vector_math/vector_math_64.dart';
 
-import 'midi_note.dart';
 import 'midi_transform.dart';
 import 'midi_transform_kind.dart';
 import 'music_scale.dart';
@@ -11,6 +10,7 @@ import 'transforms/conditional_muting_transform.dart';
 import 'transforms/humanization_transform.dart';
 import 'transforms/inversion_transform.dart';
 import 'transforms/loop_transform.dart';
+import 'transforms/note_condition.dart';
 import 'transforms/probabilistic_skip_repeat_transform.dart';
 import 'transforms/quantization_transform.dart';
 import 'transforms/reverse_transform.dart';
@@ -36,9 +36,10 @@ import 'transforms/voice_routing_transform.dart';
 /// parameter editor (issue #95). [VelocityToParameterTransform] joined them once
 /// its declarative [VelocityCurve] model landed (issue #108): its
 /// [VelocityCurve.identity] default emits identity control events but never
-/// touches notes, so it too stays passthrough until the curve is edited. The one
-/// still-callback-driven transform ([ConditionalMutingTransform]) stays
-/// passthrough until its declarative model lands (#109).
+/// touches notes, so it too stays passthrough until the curve is edited.
+/// [ConditionalMutingTransform] joined them last (issue #109): its
+/// [NoteConditionGroup.empty] default matches no note, so it mutes nothing until
+/// the performer adds a condition through the chip's typed predicate editor.
 class BuiltinTransform {
   const BuiltinTransform({
     required this.name,
@@ -179,7 +180,7 @@ abstract final class BuiltinTransformCatalog {
       name: 'mute · if',
       kind: MidiTransformKind.struct,
       build: () => const ConditionalMutingTransform(
-        predicate: _keepAll,
+        condition: NoteConditionGroup.empty(),
         label: 'mute · if',
       ),
     ),
@@ -189,7 +190,3 @@ abstract final class BuiltinTransformCatalog {
   static List<BuiltinTransform> forKind(MidiTransformKind kind) =>
       entries.where((e) => e.kind == kind).toList(growable: false);
 }
-
-/// Keep-everything predicate — the passthrough default for a fresh
-/// [ConditionalMutingTransform].
-bool _keepAll(MidiNote note) => true;
