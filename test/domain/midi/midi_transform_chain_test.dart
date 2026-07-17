@@ -15,6 +15,7 @@ import 'package:phi/domain/midi/transforms/split_voice.dart';
 import 'package:phi/domain/midi/transforms/splitting_transform.dart';
 import 'package:phi/domain/midi/transforms/stub_transform.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
+import 'package:phi/domain/midi/transforms/velocity_curve.dart';
 import 'package:phi/domain/midi/transforms/velocity_to_parameter_transform.dart';
 import 'package:phi/domain/midi/transforms/voice_routing_rule.dart';
 import 'package:phi/domain/midi/transforms/voice_routing_transform.dart';
@@ -226,9 +227,9 @@ void main() {
         ]),
         transforms: [
           const TransposeTransform(semitones: 2, label: '+2'),
-          VelocityToParameterTransform(
+          const VelocityToParameterTransform(
             parameter: 'filter.cutoff',
-            curve: (v) => v * 100,
+            curve: VelocityCurve(valueAt0: 0, valueAt1: 100),
             label: 'v → cutoff',
           ),
         ],

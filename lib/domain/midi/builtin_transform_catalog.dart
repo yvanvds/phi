@@ -20,6 +20,7 @@ import 'transforms/split_voice.dart';
 import 'transforms/splitting_transform.dart';
 import 'transforms/stretch_transform.dart';
 import 'transforms/transpose_transform.dart';
+import 'transforms/velocity_curve.dart';
 import 'transforms/velocity_to_parameter_transform.dart';
 import 'transforms/voice_routing_transform.dart';
 
@@ -32,9 +33,12 @@ import 'transforms/voice_routing_transform.dart';
 /// [ScaleConformanceTransform]) have no meaningful zero-config behaviour, so
 /// their default is a **passthrough**: the chip appears and toggles, but leaves
 /// the clip unchanged until the performer edits it through the chip's typed
-/// parameter editor (issue #95). The two still-callback-driven transforms
-/// ([VelocityToParameterTransform], [ConditionalMutingTransform]) stay
-/// passthrough until their declarative models land (#108/#109).
+/// parameter editor (issue #95). [VelocityToParameterTransform] joined them once
+/// its declarative [VelocityCurve] model landed (issue #108): its
+/// [VelocityCurve.identity] default emits identity control events but never
+/// touches notes, so it too stays passthrough until the curve is edited. The one
+/// still-callback-driven transform ([ConditionalMutingTransform]) stays
+/// passthrough until its declarative model lands (#109).
 class BuiltinTransform {
   const BuiltinTransform({
     required this.name,
@@ -136,7 +140,7 @@ abstract final class BuiltinTransformCatalog {
       kind: MidiTransformKind.voice,
       build: () => const VelocityToParameterTransform(
         parameter: 'filter.cutoff',
-        curve: _identityCurve,
+        curve: VelocityCurve.identity(),
         label: 'vel → param',
       ),
     ),
@@ -185,11 +189,6 @@ abstract final class BuiltinTransformCatalog {
   static List<BuiltinTransform> forKind(MidiTransformKind kind) =>
       entries.where((e) => e.kind == kind).toList(growable: false);
 }
-
-/// Identity velocity curve — the passthrough default for a fresh
-/// [VelocityToParameterTransform] (it emits control events but never touches
-/// notes, so the clip is unchanged until the curve is edited).
-double _identityCurve(double velocity) => velocity;
 
 /// Keep-everything predicate — the passthrough default for a fresh
 /// [ConditionalMutingTransform].

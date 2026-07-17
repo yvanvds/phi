@@ -214,9 +214,16 @@ main + app          (orchestration)
   `editor_fields.dart`, one dialog per family, dispatched by
   `typed_param_editors.dart`); each mutates the chip in place through the
   transform's own `copyWith({…data field…})` — again live via
-  `MidiTransformChain.replaceAt`. The two still-callback-driven transforms
-  (velocity curve, muting predicate) stay greyed out until their declarative
-  models land (#108/#109). Real Python is still
+  `MidiTransformChain.replaceAt`. Issue #108 graduated the velocity→parameter
+  transform into that same typed-editor set: its bare `double Function(double)`
+  callback is now a declarative, serialisable `VelocityCurve`
+  (`lib/domain/midi/transforms/velocity_curve.dart`) — a pure, immutable
+  value-type carrying a `VelocityCurveShape` (linear / exponential / logarithmic
+  / stepped) and an output range `[valueAt0, valueAt1]`, evaluated in
+  `eventsFor`; a `VelocityCurveEditor` reshapes it live from the chip menu, so
+  the catalogue's identity-curve default becomes meaningful through editing
+  alone. Only the muting predicate stays callback-driven and greyed out until
+  its own declarative model lands (#109). Real Python is still
   a `NoOpCodeEvaluator`
   (issue #9's kernel decision is open), so the live-coding→registration
   handshake runs through `FakeCodeEvaluator` (now carrying an `onEvaluate`

@@ -83,6 +83,6 @@ class DslNote {
 /// This is the shape a live-coded `def my_transform(notes): ...` presents once
 /// the Python kernel bridges it into Phi (issue #38 / #9). Today a plain Dart
 /// callback stands behind it — the same "caller supplies the function" seam as
-/// `VelocityCurve` and `NotePredicate`. Like every transform it must be pure —
-/// same input list, same output list — so the chain stays memoisable.
+/// `NotePredicate`. Like every transform it must be pure — same input list, same
+/// output list — so the chain stays memoisable.
 typedef DslTransform = List<DslNote> Function(List<DslNote> notes);
