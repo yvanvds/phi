@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../design/tokens/phi_colors.dart';
 import '../domain/midi/clip_editor.dart';
 import '../domain/midi/custom_transform_registry.dart';
 import '../domain/midi/midi_clip_seed.dart';
 import '../domain/midi/midi_transform_chain.dart';
+import '../domain/project/undo_scopes.dart';
 import '../domain/session/session_state.dart';
 import '../engine/bridge/code_evaluator.dart';
 import '../engine/bridge/no_op_code_evaluator.dart';
@@ -77,6 +79,13 @@ class _WorkstationState extends State<Workstation> {
   late final ClipEditor _midiEditor;
   late final bool _ownsMidiState;
 
+  /// Per-surface undo stacks with a focused one — *undo follows focus* (#119).
+  /// The shell routes Ctrl+Z/Y here (see [build]) and points the focus at the
+  /// active surface's scope in [_onSelect], so an undo never yanks an edit from
+  /// a surface you're not looking at. The MIDI editor is the first (and, today,
+  /// only) registered scope.
+  final UndoScopes _undoScopes = UndoScopes();
+
   @override
   void initState() {
     super.initState();
@@ -92,6 +101,9 @@ class _WorkstationState extends State<Workstation> {
     _midiChain = midi?.chain ?? defaultDemoChain();
     _midiEditor = midi?.editor ?? ClipEditor(_midiChain.source);
 
+    _undoScopes.register(_midiEditor.undoScope);
+    _undoScopes.focus(_scopeIdFor(_selected));
+
     // The app boots on Mix, so the Scene surface starts offstage — tell the
     // renderer to keep its ticker paused until Scene is first selected.
     _syncSceneVisibility();
@@ -106,6 +118,9 @@ class _WorkstationState extends State<Workstation> {
   void dispose() {
     widget.session.transport.removeListener(_onTransport);
     widget.session.tempo.removeListener(_onTempo);
+    // The router only references scopes; it never owns them, so disposing it
+    // won't touch the MIDI editor's scope (disposed with the editor below).
+    _undoScopes.dispose();
     // Only dispose what the shell owns; injected doubles are the test's to own.
     if (_ownsCodeEvaluator) _codeEvaluator.dispose();
     if (_ownsCustomTransforms) _customTransforms.dispose();
@@ -133,7 +148,14 @@ class _WorkstationState extends State<Workstation> {
   void _onSelect(SurfaceId id) {
     setState(() => _selected = id);
     _syncSceneVisibility();
+    // Undo follows focus: point Ctrl+Z/Y at the newly active surface's stack.
+    _undoScopes.focus(_scopeIdFor(id));
   }
+
+  /// The undo-scope id owned by surface [id], or `null` for surfaces that have
+  /// no undo stack yet. Only the MIDI surface has one today.
+  String? _scopeIdFor(SurfaceId id) =>
+      id == SurfaceId.midi ? _midiEditor.undoScope.id : null;
 
   /// Pause macbear's render ticker whenever Scene is offstage; resume it when
   /// Scene is the selected surface. Keeps the shell renderer-agnostic — the
@@ -144,22 +166,42 @@ class _WorkstationState extends State<Workstation> {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: PhiColors.bg0,
-      child: Column(
-        children: [
-          TopToolbar(session: widget.session),
-          Expanded(
-            child: Row(
-              children: [
-                LeftRail(selected: _selected, onSelect: _onSelect),
-                Expanded(child: _buildCentre()),
-                RightInspector(engine: widget.engine, session: widget.session),
-              ],
+    // Ctrl+Z/Y route to the focused surface's undo stack (#119). These bindings
+    // sit above every surface, so a key a focused widget (a piano roll, a text
+    // field) leaves unhandled bubbles up to here; a text field's own undo still
+    // wins because it consumes the combo first.
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyZ, control: true):
+            _undoScopes.undo,
+        const SingleActivator(
+          LogicalKeyboardKey.keyZ,
+          control: true,
+          shift: true,
+        ): _undoScopes.redo,
+        const SingleActivator(LogicalKeyboardKey.keyY, control: true):
+            _undoScopes.redo,
+      },
+      child: Material(
+        color: PhiColors.bg0,
+        child: Column(
+          children: [
+            TopToolbar(session: widget.session),
+            Expanded(
+              child: Row(
+                children: [
+                  LeftRail(selected: _selected, onSelect: _onSelect),
+                  Expanded(child: _buildCentre()),
+                  RightInspector(
+                    engine: widget.engine,
+                    session: widget.session,
+                  ),
+                ],
+              ),
             ),
-          ),
-          BottomStatus(engine: widget.engine, session: widget.session),
-        ],
+            BottomStatus(engine: widget.engine, session: widget.session),
+          ],
+        ),
       ),
     );
   }

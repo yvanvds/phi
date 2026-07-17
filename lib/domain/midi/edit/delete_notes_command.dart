@@ -1,4 +1,3 @@
-import '../midi_clip.dart';
 import '../midi_note.dart';
 import 'clip_edit_command.dart';
 
@@ -9,17 +8,21 @@ import 'clip_edit_command.dart';
 /// stay valid mid-loop; reinsertion runs low-index-first so each note lands
 /// back exactly where it came from.
 class DeleteNotesCommand extends ClipEditCommand {
-  DeleteNotesCommand(Iterable<int> indices)
+  DeleteNotesCommand(super.clip, Iterable<int> indices, {super.clipAddress})
     : _indices = (indices.toList()..sort());
 
   final List<int> _indices;
   final List<MidiNote> _removed = [];
 
   @override
+  String get label =>
+      _indices.length == 1 ? 'delete note' : 'delete ${_indices.length} notes';
+
+  @override
   Set<int> get affectedIndices => const {};
 
   @override
-  void applyTo(MidiClip clip) {
+  void apply() {
     _removed
       ..clear()
       ..addAll(_indices.map((i) => clip.notes[i]));
@@ -30,10 +33,16 @@ class DeleteNotesCommand extends ClipEditCommand {
   }
 
   @override
-  void revert(MidiClip clip) {
+  void revert() {
     for (var k = 0; k < _indices.length; k++) {
       clip.notes.insert(_indices[k], _removed[k]);
     }
     clip.touch();
   }
+
+  @override
+  Map<String, Object?> toJson() => {
+    'type': 'delete_notes',
+    'indices': List<int>.of(_indices),
+  };
 }

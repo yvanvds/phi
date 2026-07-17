@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../project/entity_address.dart';
+import '../project/undo_scope.dart';
 import 'edit/add_note_command.dart';
 import 'edit/clip_edit_command.dart';
 import 'edit/delete_notes_command.dart';
@@ -10,9 +12,16 @@ import 'midi_note.dart';
 /// Authoring controller for a single [MidiClip].
 ///
 /// Owns the editable clip, the current selection (a set of note **indices**
-/// into [MidiClip.notes]), and the undo/redo stacks. Every mutation is a
-/// [ClipEditCommand] so it can be undone; gestures build a net edit and hand
+/// into [MidiClip.notes]), and an [UndoScope] of [ClipEditCommand]s. Every
+/// mutation is a command so it can be undone; gestures build a net edit and hand
 /// it here, never poking the note list directly.
+///
+/// Since issue #119 the undo/redo stack is a shared [UndoScope] — the MIDI
+/// surface's scope in the *undo-follows-focus* router (design §6). The editor
+/// listens to that scope, so an undo triggered directly (`undo()`) or routed
+/// through the shell's Ctrl+Z both land here: on every scope change it updates
+/// the selection (redo reselects what the command touched; undo clears it) and
+/// repaints. Expose the scope via [undoScope] for the shell to register.
 ///
 /// Notifies (and bumps [revision]) on every edit *and* every selection change
 /// so the piano roll repaints both the notes and the highlight. The editor
@@ -25,7 +34,12 @@ class ClipEditor extends ChangeNotifier {
     this.gridDivision = 0.25,
     this.minPitch = 55,
     this.maxPitch = 76,
-  });
+    String undoScopeId = 'midi',
+    EntityAddress? clipAddress,
+  }) : _clipAddress = clipAddress,
+       _scope = UndoScope(id: undoScopeId, label: 'MIDI editor') {
+    _scope.addListener(_onScopeChanged);
+  }
 
   final MidiClip clip;
 
@@ -36,10 +50,14 @@ class ClipEditor extends ChangeNotifier {
   final int minPitch;
   final int maxPitch;
 
-  final List<ClipEditCommand> _undo = [];
-  final List<ClipEditCommand> _redo = [];
+  final EntityAddress? _clipAddress;
+  final UndoScope _scope;
   Set<int> _selection = const {};
   int _revision = 0;
+
+  /// This editor's undo/redo stack, exposed so the shell can register it as the
+  /// MIDI surface's scope in the undo-follows-focus router (#119).
+  UndoScope get undoScope => _scope;
 
   /// Monotonic repaint key — bumps on any edit or selection change.
   int get revision => _revision;
@@ -47,8 +65,8 @@ class ClipEditor extends ChangeNotifier {
   Set<int> get selection => Set.unmodifiable(_selection);
   bool isSelected(int index) => _selection.contains(index);
 
-  bool get canUndo => _undo.isNotEmpty;
-  bool get canRedo => _redo.isNotEmpty;
+  bool get canUndo => _scope.canUndo;
+  bool get canRedo => _scope.canRedo;
 
   // ── Selection ────────────────────────────────────────────────────────────
 
@@ -81,12 +99,12 @@ class ClipEditor extends ChangeNotifier {
       start: note.start < 0 ? 0 : note.start,
       duration: note.duration < gridDivision ? gridDivision : note.duration,
     );
-    _run(AddNoteCommand(clamped));
+    _run(AddNoteCommand(clip, clamped, clipAddress: _clipAddress));
   }
 
   void deleteSelection() {
     if (_selection.isEmpty) return;
-    _run(DeleteNotesCommand(_selection));
+    _run(DeleteNotesCommand(clip, _selection, clipAddress: _clipAddress));
   }
 
   /// Moves the selection by whole semitones and/or beats. Pitch clamps to the
@@ -129,31 +147,13 @@ class ClipEditor extends ChangeNotifier {
   ///
   /// Called after the underlying [clip] is rewritten out from under the editor
   /// (e.g. a file import via [MidiClip.replaceWith]): the old commands index
-  /// into note positions that no longer exist, so they can't be replayed.
-  void reset() {
-    _undo.clear();
-    _redo.clear();
-    _selection = const {};
-    _bump();
-  }
+  /// into note positions that no longer exist, so they can't be replayed. The
+  /// scope's notification clears the selection and repaints.
+  void reset() => _scope.clear();
 
-  void undo() {
-    if (_undo.isEmpty) return;
-    final cmd = _undo.removeLast();
-    cmd.revert(clip);
-    _redo.add(cmd);
-    _selection = const {};
-    _bump();
-  }
+  void undo() => _scope.undo();
 
-  void redo() {
-    if (_redo.isEmpty) return;
-    final cmd = _redo.removeLast();
-    cmd.applyTo(clip);
-    _undo.add(cmd);
-    _selection = cmd.affectedIndices;
-    _bump();
-  }
+  void redo() => _scope.redo();
 
   // ── Internals ──────────────────────────────────────────────────────────
 
@@ -172,20 +172,40 @@ class ClipEditor extends ChangeNotifier {
 
   void _commit(Map<int, MidiNote> before, Map<int, MidiNote> after) {
     if (_mapEquals(before, after)) return;
-    _run(EditNotesCommand(before: before, after: after));
+    _run(
+      EditNotesCommand(
+        clip,
+        before: before,
+        after: after,
+        clipAddress: _clipAddress,
+      ),
+    );
   }
 
-  void _run(ClipEditCommand command) {
-    command.applyTo(clip);
-    _undo.add(command);
-    _redo.clear();
-    _selection = command.affectedIndices;
+  void _run(ClipEditCommand command) => _scope.run(command);
+
+  /// Mirrors the scope's state into the selection and repaints. A forward
+  /// apply (`run`/`redo`) reselects the notes the command touched; an undo or a
+  /// [reset] clears the selection.
+  void _onScopeChanged() {
+    final command = _scope.lastCommand;
+    _selection =
+        _scope.lastEvent == UndoEvent.applied && command is ClipEditCommand
+        ? command.affectedIndices
+        : const {};
     _bump();
   }
 
   void _bump() {
     _revision++;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _scope.removeListener(_onScopeChanged);
+    _scope.dispose();
+    super.dispose();
   }
 
   double _floor0(double v) => v < 0 ? 0 : v;
