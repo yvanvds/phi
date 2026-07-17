@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 
+import 'back_reference_index.dart';
+import 'delete_impact.dart';
 import 'entity_address.dart';
+import 'reference_source.dart';
 import 'registry_entity.dart';
 import 'registry_error.dart';
 import 'registry_exception.dart';
@@ -17,17 +20,27 @@ import 'registry_node.dart';
 /// core knows nothing about what a clip or a mix bus *is* — only names,
 /// addresses, and tree shape.
 ///
+/// **References and refactoring (§4).** Entities point at one another by address
+/// (`voice.bells` → `mix.perc`); the registry maintains a [BackReferenceIndex]
+/// so it always knows who points at whom. That index powers two things:
+/// [move]/rename rewrites every referent as one operation ("rename = refactor"),
+/// and [impactOfRemoving] lists the referents a delete would strand ("delete
+/// warnings"). An entity declares its edges through its payload (when the
+/// payload is a [ReferenceSource]) or explicitly at [createEntity].
+///
 /// **A [ChangeNotifier]**, so surfaces watch it: every structural mutation
 /// bumps [version] and notifies. **No persistence and no engine knowledge** —
 /// those seams (`ProjectStore`, `RegistryMirror`) arrive in later epic issues.
 ///
 /// Queries ([nodeAt], [entityAt], [groupAt], [contains], [childrenOfKind],
-/// [childrenOfGroup]) never throw — a missing target is `null`/empty. Mutations
-/// ([createEntity], [createGroup], [move], [remove]) throw a [RegistryException]
+/// [childrenOfGroup], [referrersOf], [referencesOf], [impactOfRemoving]) never
+/// throw — a missing target is `null`/empty. Mutations ([createEntity],
+/// [createGroup], [move], [remove], [setReferences]) throw a [RegistryException]
 /// on a broken invariant and are transactional: a throw leaves the tree
 /// unchanged.
 class ProjectRegistry extends ChangeNotifier {
   final Map<String, RegistryGroup> _roots = {};
+  final BackReferenceIndex _backrefs = BackReferenceIndex();
   int _version = 0;
 
   /// Bumps on every notify — a cheap change signal for listeners and painters.
@@ -69,14 +82,54 @@ class ProjectRegistry extends ChangeNotifier {
   List<RegistryNode> childrenOfGroup(EntityAddress group) =>
       groupAt(group)?.children.toList(growable: false) ?? const [];
 
-  /// Creates and returns a new entity at [address], carrying [payload].
+  /// The entities that reference [target] — the input to a delete warning and
+  /// the set a rename rewrites. Empty when nothing points at it. A defensive
+  /// copy, safe to iterate while mutating.
+  Set<EntityAddress> referrersOf(EntityAddress target) =>
+      _backrefs.referrersOf(target);
+
+  /// The addresses the entity at [source] points at, or an empty set when
+  /// [source] holds no entity or references nothing.
+  Set<EntityAddress> referencesOf(EntityAddress source) =>
+      entityAt(source)?.references ?? const <EntityAddress>{};
+
+  /// What removing the node at [address] would strand: the external entities
+  /// left pointing at it (or, for a group, at anything inside it). The delete
+  /// warning of design §4 — consult it before calling [remove]. A missing
+  /// target yields a safe (empty) impact.
+  DeleteImpact impactOfRemoving(EntityAddress address) {
+    final node = nodeAt(address);
+    final referrers = <EntityAddress>{};
+    if (node != null) {
+      for (final target in _subtreeAddresses(node, address)) {
+        for (final referrer in _backrefs.referrersOf(target)) {
+          if (referrer == address || referrer.isDescendantOf(address)) continue;
+          referrers.add(referrer);
+        }
+      }
+    }
+    final sorted = referrers.toList()
+      ..sort((a, b) => a.format().compareTo(b.format()));
+    return DeleteImpact(address, sorted);
+  }
+
+  /// Creates and returns a new entity at [address], carrying [payload] and
+  /// declaring [references] (the addresses it points at).
+  ///
+  /// When [payload] is a [ReferenceSource] its own references win and
+  /// [references] is ignored; otherwise the explicit set is used. The entity's
+  /// edges enter the back-reference index immediately.
   ///
   /// Any missing ancestor groups on the path are created first (`mkdir -p`).
   /// Throws a [RegistryException] if an ancestor exists as an entity
   /// ([RegistryError.groupEntityClash]) or the target name is already taken by
   /// a group ([RegistryError.groupEntityClash]) or entity
   /// ([RegistryError.duplicateName]). Notifies on success.
-  RegistryEntity createEntity(EntityAddress address, {Object? payload}) {
+  RegistryEntity createEntity(
+    EntityAddress address, {
+    Object? payload,
+    Set<EntityAddress> references = const {},
+  }) {
     final parent = _ensureGroupPath(address.kind, address.groupPath);
     final existing = parent.child(address.name);
     if (existing != null) {
@@ -86,8 +139,12 @@ class ProjectRegistry extends ChangeNotifier {
       name: address.name,
       kind: address.kind,
       payload: payload,
+      references: references,
     );
     parent.put(entity);
+    if (entity.references.isNotEmpty) {
+      _backrefs.add(address, entity.references);
+    }
     _bumpAndNotify();
     return entity;
   }
@@ -110,19 +167,60 @@ class ProjectRegistry extends ChangeNotifier {
     return group;
   }
 
+  /// Replaces the outgoing [references] of the entity at [address] and updates
+  /// the back-reference index — the hook a future edit command uses so the
+  /// index stays current when an entity is re-routed in place.
+  ///
+  /// When the entity's payload is a [ReferenceSource] its references are
+  /// authoritative and [references] is ignored (edit the payload instead).
+  /// Throws [RegistryError.notFound] when no entity sits at [address]. Notifies.
+  void setReferences(EntityAddress address, Set<EntityAddress> references) {
+    final parent = _resolveGroup(address.kind, address.groupPath);
+    final existing = parent?.child(address.name);
+    if (existing is! RegistryEntity) {
+      throw RegistryException(
+        RegistryError.notFound,
+        'Cannot set references on "$address": no entity is there.',
+      );
+    }
+    parent!.put(
+      RegistryEntity(
+        name: existing.name,
+        kind: existing.kind,
+        payload: existing.payload,
+        references: references,
+      ),
+    );
+    _backrefs.removeSource(address);
+    final resolved = entityAt(address)!.references;
+    if (resolved.isNotEmpty) _backrefs.add(address, resolved);
+    _bumpAndNotify();
+  }
+
   /// Removes the node at [address] — for a group, its whole subtree — and
   /// returns whether anything was removed. Tolerant: a missing target is a
   /// no-op that returns `false` and does not notify.
+  ///
+  /// Removes the subtree's *outgoing* edges from the index; entities that
+  /// pointed *at* the removed node keep their (now dangling) reference — which
+  /// is exactly what [impactOfRemoving] warned about. Notifies on success.
   bool remove(EntityAddress address) {
     final parent = _resolveGroup(address.kind, address.groupPath);
     if (parent == null) return false;
-    if (parent.remove(address.name) == null) return false;
+    final removed = parent.remove(address.name);
+    if (removed == null) return false;
+    _deindexSubtree(removed, address);
     _bumpAndNotify();
     return true;
   }
 
   /// Moves the node at [from] to [to] — reparenting it, and renaming it when
-  /// `to.name` differs from `from.name`. A group carries its whole subtree.
+  /// `to.name` differs from `from.name` — and **rewrites every referent** so the
+  /// project's references follow the address (design §4: rename = refactor). A
+  /// group carries its whole subtree, so a move that shifts many addresses at
+  /// once rewrites references to *and* between the moved entities. Returns the
+  /// addresses of the external entities whose references were rewritten (their
+  /// files are now dirty); empty for a no-op move.
   ///
   /// Missing ancestor groups at the destination are created. Throws a
   /// [RegistryException] when: the kinds differ
@@ -131,7 +229,7 @@ class ProjectRegistry extends ChangeNotifier {
   /// subtree ([RegistryError.moveIntoDescendant]); or the destination name is
   /// taken ([RegistryError.duplicateName] / [RegistryError.groupEntityClash]).
   /// Moving a node onto its own address is a no-op. Notifies on success.
-  void move(EntityAddress from, EntityAddress to) {
+  Set<EntityAddress> move(EntityAddress from, EntityAddress to) {
     if (from.kind != to.kind) {
       throw RegistryException(
         RegistryError.crossKindMove,
@@ -139,7 +237,7 @@ class ProjectRegistry extends ChangeNotifier {
         '("${from.kind}" → "${to.kind}").',
       );
     }
-    if (from == to) return;
+    if (from == to) return const {};
 
     final node = nodeAt(from);
     if (node == null) {
@@ -163,14 +261,182 @@ class ProjectRegistry extends ChangeNotifier {
       throw _clashFor(destOccupant, to, creatingGroup: node is RegistryGroup);
     }
 
-    // Detach, then reattach. Reuse the node object on a pure reparent; rebuild
-    // it under the new name on a rename (node.name is immutable), reusing the
-    // subtree's descendants either way.
+    // Every address this move changes: the node itself plus every descendant.
+    final remap = _buildRemap(node, from, to);
+
+    // Refactor referents that live *outside* the moved subtree, rewriting each
+    // in place before the tree changes (their own addresses do not move).
+    final external = _externalReferrers(remap, from);
+    for (final referrer in external) {
+      final entity = entityAt(referrer);
+      if (entity == null) continue;
+      final rewritten = _rewriteReferences(entity, remap);
+      if (!identical(rewritten, entity)) {
+        _resolveGroup(referrer.kind, referrer.groupPath)!.put(rewritten);
+      }
+    }
+
+    // Detach, rewrite the subtree's internal references, then reattach —
+    // renaming the root when its leaf name changed.
     _resolveGroup(from.kind, from.groupPath)!.remove(from.name);
+    final relocated = _relocate(node, remap);
     final parent = _ensureGroupPath(to.kind, to.groupPath);
-    parent.put(to.name == from.name ? node : _renamed(node, to.name));
+    parent.put(
+      to.name == from.name ? relocated : _renamedNode(relocated, to.name),
+    );
+
+    // Addresses shifted throughout the subtree, so rebuild the index from the
+    // tree rather than trying to patch every moved key incrementally.
+    _reindex();
     _bumpAndNotify();
+    return external;
   }
+
+  // --- reference / index helpers ------------------------------------------
+
+  /// The external entities (outside the [from] subtree) that reference any
+  /// remapped address, read from the pre-move index.
+  Set<EntityAddress> _externalReferrers(
+    Map<EntityAddress, EntityAddress> remap,
+    EntityAddress from,
+  ) {
+    final external = <EntityAddress>{};
+    for (final old in remap.keys) {
+      for (final referrer in _backrefs.referrersOf(old)) {
+        if (referrer == from || referrer.isDescendantOf(from)) continue;
+        external.add(referrer);
+      }
+    }
+    return external;
+  }
+
+  /// old → new address for the node at [from] moving to [to] and every
+  /// descendant, so both references *to* the subtree and *between* its members
+  /// can be repointed.
+  Map<EntityAddress, EntityAddress> _buildRemap(
+    RegistryNode node,
+    EntityAddress from,
+    EntityAddress to,
+  ) {
+    final remap = <EntityAddress, EntityAddress>{from: to};
+    if (node is RegistryGroup) _mapChildren(node, from, to, remap);
+    return remap;
+  }
+
+  void _mapChildren(
+    RegistryGroup group,
+    EntityAddress fromBase,
+    EntityAddress toBase,
+    Map<EntityAddress, EntityAddress> remap,
+  ) {
+    for (final child in group.children) {
+      final childFrom = fromBase.child(child.name);
+      final childTo = toBase.child(child.name);
+      remap[childFrom] = childTo;
+      if (child is RegistryGroup) {
+        _mapChildren(child, childFrom, childTo, remap);
+      }
+    }
+  }
+
+  /// Rewrites the internal references of every entity in [node]'s subtree,
+  /// reusing nodes untouched by [remap]. Returns [node] itself when nothing in
+  /// the subtree references a remapped address.
+  RegistryNode _relocate(
+    RegistryNode node,
+    Map<EntityAddress, EntityAddress> remap,
+  ) {
+    if (node is RegistryEntity) return _rewriteReferences(node, remap);
+    final group = node as RegistryGroup;
+    for (final child in group.children.toList()) {
+      final relocated = _relocate(child, remap);
+      if (!identical(relocated, child)) group.put(relocated);
+    }
+    return group;
+  }
+
+  /// A copy of [entity] with every reference the [remap] covers repointed —
+  /// rewriting the payload too when it is a [ReferenceSource]. Returns the same
+  /// instance when no reference is affected, so identity is preserved on a plain
+  /// reparent.
+  RegistryEntity _rewriteReferences(
+    RegistryEntity entity,
+    Map<EntityAddress, EntityAddress> remap,
+  ) {
+    final hits = entity.references.where(remap.containsKey).toList();
+    if (hits.isEmpty) return entity;
+    var payload = entity.payload;
+    if (payload is ReferenceSource) {
+      var rewritten = payload;
+      for (final old in hits) {
+        rewritten = rewritten.withReferenceUpdated(old, remap[old]!);
+      }
+      payload = rewritten;
+    }
+    return RegistryEntity(
+      name: entity.name,
+      kind: entity.kind,
+      payload: payload,
+      references: entity.references.map((r) => remap[r] ?? r).toSet(),
+    );
+  }
+
+  RegistryNode _renamedNode(RegistryNode node, String newName) {
+    if (node is RegistryEntity) {
+      return RegistryEntity(
+        name: newName,
+        kind: node.kind,
+        payload: node.payload,
+        references: node.references,
+      );
+    }
+    return RegistryGroup(newName)..adoptChildrenFrom(node as RegistryGroup);
+  }
+
+  void _deindexSubtree(RegistryNode node, EntityAddress address) {
+    if (node is RegistryEntity) {
+      _backrefs.removeSource(address);
+    } else if (node is RegistryGroup) {
+      for (final child in node.children) {
+        _deindexSubtree(child, address.child(child.name));
+      }
+    }
+  }
+
+  Set<EntityAddress> _subtreeAddresses(RegistryNode node, EntityAddress at) {
+    final result = <EntityAddress>{at};
+    if (node is RegistryGroup) {
+      for (final child in node.children) {
+        result.addAll(_subtreeAddresses(child, at.child(child.name)));
+      }
+    }
+    return result;
+  }
+
+  void _reindex() {
+    _backrefs.clear();
+    for (final entry in _roots.entries) {
+      _indexGroup(entry.key, entry.value, const []);
+    }
+  }
+
+  void _indexGroup(String kind, RegistryGroup group, List<String> prefix) {
+    for (final child in group.children) {
+      final segments = [...prefix, child.name];
+      if (child is RegistryEntity) {
+        if (child.references.isNotEmpty) {
+          _backrefs.add(
+            EntityAddress(kind: kind, segments: segments),
+            child.references,
+          );
+        }
+      } else if (child is RegistryGroup) {
+        _indexGroup(kind, child, segments);
+      }
+    }
+  }
+
+  // --- tree helpers --------------------------------------------------------
 
   /// Walks (and creates) the group path [groupSegments] under [kind], returning
   /// the group the leaf should hang from. Throws [RegistryError.groupEntityClash]
@@ -230,17 +496,6 @@ class ProjectRegistry extends ChangeNotifier {
       current = child;
     }
     return current;
-  }
-
-  RegistryNode _renamed(RegistryNode node, String newName) {
-    if (node is RegistryEntity) {
-      return RegistryEntity(
-        name: newName,
-        kind: node.kind,
-        payload: node.payload,
-      );
-    }
-    return RegistryGroup(newName)..adoptChildrenFrom(node as RegistryGroup);
   }
 
   RegistryException _clashFor(

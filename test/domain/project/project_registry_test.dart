@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/project/project_registry.dart';
+import 'package:phi/domain/project/reference_source.dart';
 import 'package:phi/domain/project/registry_entity.dart';
 import 'package:phi/domain/project/registry_error.dart';
 import 'package:phi/domain/project/registry_exception.dart';
@@ -10,6 +11,26 @@ EntityAddress addr(String dotted) => EntityAddress.parse(dotted);
 
 Matcher throwsRegistry(RegistryError error) =>
     throwsA(isA<RegistryException>().having((e) => e.error, 'error', error));
+
+/// A payload that references others by address and rewrites them structurally —
+/// the stand-in for a real voice/mix payload until kinds carry their own
+/// (design §4). Records how many times a rewrite occurred so tests can assert
+/// the registry actually rewrote the payload, not just the declared set.
+class _RefBox implements ReferenceSource {
+  _RefBox(this.references, {this.rewrites = 0});
+
+  @override
+  final Set<EntityAddress> references;
+
+  final int rewrites;
+
+  @override
+  ReferenceSource withReferenceUpdated(EntityAddress from, EntityAddress to) =>
+      _RefBox(
+        references.map((r) => r == from ? to : r).toSet(),
+        rewrites: rewrites + 1,
+      );
+}
 
 void main() {
   late ProjectRegistry registry;
@@ -320,6 +341,221 @@ void main() {
       final children = registry.childrenOfKind('clip');
       expect(children.whereType<RegistryGroup>().map((g) => g.name), ['drums']);
       expect(children.whereType<RegistryEntity>().map((e) => e.name), ['lead']);
+    });
+  });
+
+  group('back-reference index', () {
+    test('createEntity with declared references populates the index', () {
+      registry.createEntity(addr('mix.perc'));
+      registry.createEntity(
+        addr('voice.bells'),
+        references: {addr('mix.perc')},
+      );
+      expect(registry.referrersOf(addr('mix.perc')), {addr('voice.bells')});
+      expect(registry.referencesOf(addr('voice.bells')), {addr('mix.perc')});
+    });
+
+    test('a ReferenceSource payload supplies the references', () {
+      registry.createEntity(
+        addr('voice.bells'),
+        payload: _RefBox({addr('mix.perc'), addr('synth.fm_bells')}),
+      );
+      expect(registry.referencesOf(addr('voice.bells')), {
+        addr('mix.perc'),
+        addr('synth.fm_bells'),
+      });
+      expect(registry.referrersOf(addr('mix.perc')), {addr('voice.bells')});
+    });
+
+    test('removing a referrer clears its outgoing edges', () {
+      registry.createEntity(
+        addr('voice.bells'),
+        references: {addr('mix.perc')},
+      );
+      registry.remove(addr('voice.bells'));
+      expect(registry.referrersOf(addr('mix.perc')), isEmpty);
+    });
+
+    test('removing a target leaves the (now dangling) incoming edge', () {
+      registry.createEntity(
+        addr('voice.bells'),
+        references: {addr('mix.perc')},
+      );
+      registry.remove(addr('mix.perc'));
+      // voice.bells still declares a reference to the missing mix.perc.
+      expect(registry.referrersOf(addr('mix.perc')), {addr('voice.bells')});
+    });
+
+    test('setReferences replaces edges and reindexes', () {
+      registry.createEntity(
+        addr('voice.bells'),
+        references: {addr('mix.perc')},
+      );
+      registry.setReferences(addr('voice.bells'), {addr('mix.master')});
+      expect(registry.referrersOf(addr('mix.perc')), isEmpty);
+      expect(registry.referrersOf(addr('mix.master')), {addr('voice.bells')});
+    });
+
+    test('setReferences throws when no entity is there', () {
+      expect(
+        () => registry.setReferences(addr('voice.ghost'), const {}),
+        throwsRegistry(RegistryError.notFound),
+      );
+    });
+  });
+
+  group('rename / move = refactor', () {
+    test('renaming a target rewrites every referent', () {
+      registry.createEntity(addr('mix.perc'));
+      registry.createEntity(
+        addr('voice.bells'),
+        references: {addr('mix.perc')},
+      );
+      registry.createEntity(addr('voice.tom'), references: {addr('mix.perc')});
+
+      final rewritten = registry.move(addr('mix.perc'), addr('mix.percussion'));
+
+      expect(rewritten, {addr('voice.bells'), addr('voice.tom')});
+      expect(registry.referencesOf(addr('voice.bells')), {
+        addr('mix.percussion'),
+      });
+      expect(registry.referencesOf(addr('voice.tom')), {
+        addr('mix.percussion'),
+      });
+      expect(registry.referrersOf(addr('mix.perc')), isEmpty);
+      expect(registry.referrersOf(addr('mix.percussion')), {
+        addr('voice.bells'),
+        addr('voice.tom'),
+      });
+    });
+
+    test('a ReferenceSource referent has its payload rewritten', () {
+      registry.createEntity(addr('mix.perc'));
+      registry.createEntity(
+        addr('voice.bells'),
+        payload: _RefBox({addr('mix.perc')}),
+      );
+
+      registry.move(addr('mix.perc'), addr('mix.percussion'));
+
+      final payload = registry.entityAt(addr('voice.bells'))!.payload;
+      expect(payload, isA<_RefBox>());
+      final box = payload! as _RefBox;
+      expect(box.references, {addr('mix.percussion')});
+      expect(
+        box.rewrites,
+        1,
+      ); // the registry rewrote the payload, not just refs
+    });
+
+    test('moving a group rewrites references to and between its members', () {
+      // clip.drums.kick references its sibling clip.drums.snare (internal), and
+      // voice.beat references clip.drums.kick (external).
+      registry.createEntity(addr('clip.drums.snare'));
+      registry.createEntity(
+        addr('clip.drums.kick'),
+        references: {addr('clip.drums.snare')},
+      );
+      registry.createEntity(
+        addr('voice.beat'),
+        references: {addr('clip.drums.kick')},
+      );
+
+      registry.move(addr('clip.drums'), addr('clip.percussion.drums'));
+
+      // External referent now points at the moved address …
+      expect(registry.referencesOf(addr('voice.beat')), {
+        addr('clip.percussion.drums.kick'),
+      });
+      // … and the internal reference followed the sibling too.
+      expect(registry.referencesOf(addr('clip.percussion.drums.kick')), {
+        addr('clip.percussion.drums.snare'),
+      });
+      expect(registry.referrersOf(addr('clip.percussion.drums.kick')), {
+        addr('voice.beat'),
+      });
+    });
+
+    test('renaming does not rewrite references from inside the moved subtree '
+        'that point outward', () {
+      registry.createEntity(addr('mix.master'));
+      registry.createEntity(
+        addr('clip.solo'),
+        references: {addr('mix.master')},
+      );
+      registry.move(addr('clip.solo'), addr('clip.lead'));
+      // The moved entity still references the untouched external target.
+      expect(registry.referencesOf(addr('clip.lead')), {addr('mix.master')});
+    });
+
+    test('a pure reparent with no references reuses the node object', () {
+      final original = registry.createEntity(addr('clip.a'));
+      registry.createGroup(addr('clip.drums'));
+      registry.move(addr('clip.a'), addr('clip.drums.a'));
+      expect(registry.entityAt(addr('clip.drums.a')), same(original));
+    });
+
+    test('the refactor round-trips: moving back restores every reference', () {
+      registry.createEntity(addr('mix.perc'));
+      registry.createEntity(
+        addr('voice.bells'),
+        references: {addr('mix.perc')},
+      );
+      registry.move(addr('mix.perc'), addr('mix.percussion'));
+      registry.move(addr('mix.percussion'), addr('mix.perc'));
+      expect(registry.referencesOf(addr('voice.bells')), {addr('mix.perc')});
+      expect(registry.referrersOf(addr('mix.perc')), {addr('voice.bells')});
+    });
+  });
+
+  group('delete warnings (impactOfRemoving)', () {
+    test('lists external referents of an entity, sorted', () {
+      registry.createEntity(addr('mix.perc'));
+      registry.createEntity(addr('voice.tom'), references: {addr('mix.perc')});
+      registry.createEntity(
+        addr('voice.bells'),
+        references: {addr('mix.perc')},
+      );
+
+      final impact = registry.impactOfRemoving(addr('mix.perc'));
+      expect(impact.target, addr('mix.perc'));
+      expect(impact.hasReferrers, isTrue);
+      expect(impact.isSafe, isFalse);
+      expect(impact.referrers, [addr('voice.bells'), addr('voice.tom')]);
+    });
+
+    test('is safe when nothing points at the target', () {
+      registry.createEntity(addr('mix.perc'));
+      final impact = registry.impactOfRemoving(addr('mix.perc'));
+      expect(impact.isSafe, isTrue);
+      expect(impact.referrers, isEmpty);
+    });
+
+    test('a group lists external referents of anything inside it', () {
+      registry.createEntity(addr('clip.drums.kick'));
+      registry.createEntity(
+        addr('voice.beat'),
+        references: {addr('clip.drums.kick')},
+      );
+      final impact = registry.impactOfRemoving(addr('clip.drums'));
+      expect(impact.referrers, [addr('voice.beat')]);
+    });
+
+    test('excludes referents that live inside the deleted subtree', () {
+      // snare points at kick; both are inside clip.drums, so deleting the group
+      // strands nothing external.
+      registry.createEntity(addr('clip.drums.kick'));
+      registry.createEntity(
+        addr('clip.drums.snare'),
+        references: {addr('clip.drums.kick')},
+      );
+      final impact = registry.impactOfRemoving(addr('clip.drums'));
+      expect(impact.isSafe, isTrue);
+    });
+
+    test('a missing target has a safe, empty impact', () {
+      final impact = registry.impactOfRemoving(addr('clip.ghost'));
+      expect(impact.isSafe, isTrue);
     });
   });
 }

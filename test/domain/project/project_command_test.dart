@@ -38,6 +38,23 @@ void main() {
       });
       expect(cmd.label, 'create clip.lead');
     });
+
+    test('carries declared references into the index; revert clears them', () {
+      final cmd = CreateEntityCommand(
+        registry,
+        addr('voice.bells'),
+        references: {addr('mix.perc')},
+      );
+      cmd.apply();
+      expect(registry.referrersOf(addr('mix.perc')), {addr('voice.bells')});
+      expect(cmd.toJson(), {
+        'type': 'create_entity',
+        'address': 'voice.bells',
+        'references': ['mix.perc'],
+      });
+      cmd.revert();
+      expect(registry.referrersOf(addr('mix.perc')), isEmpty);
+    });
   });
 
   group('RemoveEntityCommand', () {
@@ -55,6 +72,18 @@ void main() {
       cmd.apply();
       cmd.revert();
       expect(registry.contains(addr('clip.ghost')), isFalse);
+    });
+
+    test('revert restores the entity with its references in the index', () {
+      registry.createEntity(
+        addr('voice.bells'),
+        references: {addr('mix.perc')},
+      );
+      final cmd = RemoveEntityCommand(registry, addr('voice.bells'));
+      cmd.apply();
+      expect(registry.referrersOf(addr('mix.perc')), isEmpty);
+      cmd.revert();
+      expect(registry.referrersOf(addr('mix.perc')), {addr('voice.bells')});
     });
 
     test('toJson carries type and address', () {
@@ -83,6 +112,33 @@ void main() {
     test('toJson carries from and to', () {
       final cmd = MoveEntityCommand(registry, addr('clip.a'), addr('clip.b'));
       expect(cmd.toJson(), {'type': 'move', 'from': 'clip.a', 'to': 'clip.b'});
+    });
+
+    test('rename refactors referents; entitiesTouched names them', () {
+      registry.createEntity(addr('mix.perc'));
+      registry.createEntity(
+        addr('voice.bells'),
+        references: {addr('mix.perc')},
+      );
+      final cmd = MoveEntityCommand(
+        registry,
+        addr('mix.perc'),
+        addr('mix.percussion'),
+      );
+
+      cmd.apply();
+      expect(registry.referencesOf(addr('voice.bells')), {
+        addr('mix.percussion'),
+      });
+      // The rewritten referent joins the two endpoints for dirty-tracking.
+      expect(cmd.entitiesTouched, {
+        addr('mix.perc'),
+        addr('mix.percussion'),
+        addr('voice.bells'),
+      });
+
+      cmd.revert();
+      expect(registry.referencesOf(addr('voice.bells')), {addr('mix.perc')});
     });
   });
 
@@ -123,6 +179,32 @@ void main() {
 
       scope.redo(); // redo the create
       expect(registry.entityAt(addr('clip.a'))?.payload, 1);
+    });
+
+    test('a rename-refactor is one undoable step across referents', () {
+      final scope = UndoScope(id: 'test');
+      addTearDown(scope.dispose);
+
+      registry.createEntity(addr('mix.perc'));
+      registry.createEntity(
+        addr('voice.bells'),
+        references: {addr('mix.perc')},
+      );
+
+      scope.run(
+        MoveEntityCommand(registry, addr('mix.perc'), addr('mix.percussion')),
+      );
+      expect(registry.referencesOf(addr('voice.bells')), {
+        addr('mix.percussion'),
+      });
+
+      scope.undo(); // one step undoes the whole refactor
+      expect(registry.referencesOf(addr('voice.bells')), {addr('mix.perc')});
+
+      scope.redo();
+      expect(registry.referencesOf(addr('voice.bells')), {
+        addr('mix.percussion'),
+      });
     });
   });
 }
