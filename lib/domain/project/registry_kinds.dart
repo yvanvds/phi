@@ -1,0 +1,17 @@
+/// The registry namespace names the v1 migration populates (design
+/// `docs/design/project-registry.md` §2, entity-kinds table).
+///
+/// The registry core is kind-generic — it never hard-codes these — but the
+/// migration layer (seeding, the per-kind codec map, the engine's channel sync)
+/// needs a single, spelled-once home for the strings so `mix`, `clip` and
+/// `domain` are never re-typed as literals scattered across files.
+abstract final class RegistryKinds {
+  /// MIDI clips — the demo clip migrates here in v1.
+  static const String clip = 'clip';
+
+  /// Mix buses / channels — the current strips migrate here in v1.
+  static const String mix = 'mix';
+
+  /// Time domains — `TimeDomainRegistry` migrates here in v1.
+  static const String domain = 'domain';
+}

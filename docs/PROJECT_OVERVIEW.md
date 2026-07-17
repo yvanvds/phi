@@ -516,6 +516,33 @@ main + app          (orchestration)
   (controller + `AppSettings` + real-FS settings round-trip), widget (menu, dirty
   indicator, close guard), and an end-to-end `project_lifecycle` integration test
   (menu save clears the dirty dot; a dirty journal offers recovery on launch).
+  Issue #124 migrates the app's existing singletons into the registry as the v1
+  entity kinds (design §2, §8, review decision §12.1). Each migrated kind gets a
+  typed payload + versioned `EntityPayloadCodec` wired onto every `ProjectStore`
+  through `defaultEntityCodecs()`: `mix.` strips carry a `MixStrip`
+  (`lib/domain/mix/`, a JSON-map payload — a strip is minted through the ordinary
+  registry command layer, whose journal lines must be JSON), `clip.` carries the
+  source `MidiClip` (`MidiClipCodec` — notes + meter; the transform chain/graph is
+  a deferred serialisation surface), and `domain.` carries a `TimeDomain`
+  (`TimeDomainCodec`). A fresh project is populated by `seedDefaultProject`
+  (`lib/domain/project/registry_seed.dart`) — the demo clip (`clip.phrase_a`) and
+  the demo time domains (`domain.drum`) created directly (initial state, not
+  journaled); display names are slugged into valid addresses by `NameSlug`
+  (`lib/domain/project/name_slug.dart`). **`PhiEngine` now consumes the registry
+  as the channel source of truth (design §8, "channels first"):** it holds a
+  bindable `mixRegistry`, materialises one `MixerChannel` per `mix.` entity
+  (keyed by address so identity + live volume/peak survive a re-sync), and routes
+  `addChannel`/`removeChannel` through `CreateEntityCommand`/`RemoveEntityCommand`
+  recorded via `ProjectController.recordCommand` (dirty-tracking + journal). A
+  bare engine (Phase-1 tests, no controller) owns a private empty registry so it
+  still adds channels — they just live nowhere persisted. `Workstation` binds the
+  engine to the controller's registry and rebinds when New/Open swaps it; the
+  controller gained an injected `seedRegistry` hook. Live volume/mute/solo stay
+  engine-side performance state (persisting them, with gesture-coalesced fader
+  commands, is the mix epic's job). Covered by unit tests (payloads, codecs,
+  `NameSlug`, seed, registry-backed engine channels, store round-trip) plus an
+  end-to-end `registry_migration` integration test (add a channel through the Mix
+  surface → save → a second launch restores the channel, clip and domain).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

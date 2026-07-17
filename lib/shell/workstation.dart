@@ -150,20 +150,40 @@ class _WorkstationState extends State<Workstation> {
     _setUpProject();
   }
 
-  /// Wires the project menu, the confirm-on-close guard, and (when asked) the
-  /// launch-time restore + recovery flow. No-op unless a controller + picker
-  /// were injected.
+  /// Wires the engine's registry-backed channel sync, the project menu, the
+  /// confirm-on-close guard, and (when asked) the launch-time restore + recovery
+  /// flow. No-op unless a project controller was injected.
   void _setUpProject() {
     final controller = widget.projectController;
+    if (controller == null) return;
+    // The engine consumes the registry as its channel source of truth (design
+    // §8): bind it to the controller's registry now, and rebind whenever New /
+    // Open swaps the registry instance (the controller notifies on that).
+    _bindEngineRegistry();
+    controller.addListener(_bindEngineRegistry);
+
     final picker = widget.directoryPicker;
-    if (controller == null || picker == null) return;
-    _actions = ProjectActions(controller: controller, picker: picker);
-    _exitListener = AppLifecycleListener(onExitRequested: _onExitRequested);
+    if (picker != null) {
+      _actions = ProjectActions(controller: controller, picker: picker);
+      _exitListener = AppLifecycleListener(onExitRequested: _onExitRequested);
+    }
     if (widget.autoStartProject) {
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => unawaited(_startProject()),
       );
     }
+  }
+
+  /// Points the engine at the controller's current registry. `bindProject`
+  /// early-returns when it is already the bound one, so this is cheap to call on
+  /// every controller notification.
+  void _bindEngineRegistry() {
+    final controller = widget.projectController;
+    if (controller == null) return;
+    widget.engine.bindProject(
+      controller.registry,
+      recordCommand: controller.recordCommand,
+    );
   }
 
   /// Loads settings and restores the most-recent project (offering recovery if
@@ -207,6 +227,7 @@ class _WorkstationState extends State<Workstation> {
 
   @override
   void dispose() {
+    widget.projectController?.removeListener(_bindEngineRegistry);
     _exitListener?.dispose();
     widget.session.transport.removeListener(_onTransport);
     widget.session.tempo.removeListener(_onTempo);

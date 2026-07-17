@@ -7,8 +7,10 @@ import 'domain/midi/custom_transform_registry.dart';
 import 'domain/project/app_settings/real_app_settings_store.dart';
 import 'domain/project/lifecycle/project_controller.dart';
 import 'domain/project/lifecycle/project_directory_picker.dart';
+import 'domain/project/registry_seed.dart';
 import 'domain/project/store/real_journal_store.dart';
 import 'domain/project/store/real_project_store.dart';
+import 'domain/project/store/registry_codecs.dart';
 import 'domain/session/session_state.dart';
 import 'engine/bridge/code_evaluator.dart';
 import 'engine/engine.dart';
@@ -108,9 +110,13 @@ class _PhiAppState extends State<PhiApp> {
       _projectController = ProjectController(
         session: _session,
         settingsStore: RealAppSettingsStore(),
-        storeFactory: (directory) => RealProjectStore(Directory(directory)),
+        storeFactory: (directory) => RealProjectStore(
+          Directory(directory),
+          codecs: defaultEntityCodecs(),
+        ),
         journalStoreFactory: (directory) =>
             RealJournalStore(Directory(directory)),
+        seedRegistry: seedDefaultProject,
       );
       _ownsProjectController = true;
     }

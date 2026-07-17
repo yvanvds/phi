@@ -50,12 +50,14 @@ class ProjectController extends ChangeNotifier {
     required ProjectStore Function(String directory) storeFactory,
     required JournalStore Function(String directory) journalStoreFactory,
     RegistryCommandCodec codec = const RegistryCommandCodec(),
+    void Function(ProjectRegistry registry)? seedRegistry,
     Duration? autosaveIntervalOverride,
   }) : _session = session,
        _settingsStore = settingsStore,
        _storeFactory = storeFactory,
        _journalStoreFactory = journalStoreFactory,
        _codec = codec,
+       _seedRegistry = seedRegistry,
        _autosaveIntervalOverride = autosaveIntervalOverride {
     _session.sceneName.addListener(_onSessionChanged);
     _session.tempo.addListener(_onSessionChanged);
@@ -66,6 +68,11 @@ class ProjectController extends ChangeNotifier {
   final ProjectStore Function(String directory) _storeFactory;
   final JournalStore Function(String directory) _journalStoreFactory;
   final RegistryCommandCodec _codec;
+
+  /// Populates a fresh project's registry with the app's default entities (the
+  /// demo clip, the time domains) — the v1 migration seed (issue #124). `null`
+  /// leaves a new project empty, the pre-migration behaviour.
+  final void Function(ProjectRegistry registry)? _seedRegistry;
   final Duration? _autosaveIntervalOverride;
 
   /// The project name, mirrored by the `<name>.phi` folder and written to the
@@ -122,7 +129,9 @@ class ProjectController extends ChangeNotifier {
   /// defaults without marking anything dirty.
   void newProject({String projectName = 'untitled'}) {
     _unbind();
-    _replaceRegistry(ProjectRegistry());
+    final registry = ProjectRegistry();
+    _seedRegistry?.call(registry);
+    _replaceRegistry(registry);
     _groupMetadata = const {};
     _dirtyEntities.clear();
     _applyManifest(ProjectManifest(name: projectName));

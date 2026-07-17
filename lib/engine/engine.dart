@@ -3,6 +3,15 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../domain/midi/midi_clip_seed.dart';
+import '../domain/mix/mix_strip.dart';
+import '../domain/project/commands/create_entity_command.dart';
+import '../domain/project/commands/remove_entity_command.dart';
+import '../domain/project/entity_address.dart';
+import '../domain/project/name_slug.dart';
+import '../domain/project/project_command.dart';
+import '../domain/project/project_registry.dart';
+import '../domain/project/registry_entity.dart';
+import '../domain/project/registry_kinds.dart';
 import '../domain/runtime/runtime_variable_registry.dart';
 import 'bridge/macbear_scene_renderer.dart';
 import 'bridge/midi_gateway.dart';
@@ -33,7 +42,14 @@ class PhiEngine {
   }) : _sceneRenderer = sceneRenderer,
        _patcherGateway = patcherGateway,
        _midiGateway = midiGateway,
-       _telemetryInterval = telemetryInterval;
+       _telemetryInterval = telemetryInterval {
+    // The registry is the source of truth for the channel set (design §8): the
+    // engine materialises its `MixerChannel`s from `mix.` entities and re-syncs
+    // whenever the tree changes. Until [bindProject] points it at the project's
+    // registry it owns a private empty one, so a bare engine (Phase-1 tests)
+    // still adds channels — they just live in a registry nobody persists.
+    _mixRegistry.addListener(_syncChannelsFromRegistry);
+  }
 
   /// Production constructor — wires the real `package:yse` gateway and,
   /// by default, the macbear-backed Scene renderer + the real patcher and
@@ -139,6 +155,22 @@ class PhiEngine {
   final ValueNotifier<double> _masterVolume = ValueNotifier<double>(1);
 
   final MixerChannel _masterChannel = MixerChannel.master();
+
+  /// The mix source of truth (design §8). Defaults to a private empty registry
+  /// the engine owns until [bindProject] hands it the project's registry.
+  ProjectRegistry _mixRegistry = ProjectRegistry();
+  bool _ownsMixRegistry = true;
+
+  /// Records structural channel commands (create/remove) for dirty-tracking and
+  /// the recovery journal — wired to `ProjectController.recordCommand`. `null`
+  /// for a bare engine, which then makes registry edits without journaling them.
+  void Function(ProjectCommand)? _recordCommand;
+
+  /// The live `MixerChannel` materialised for each `mix.` entity, keyed by
+  /// address so a re-sync preserves channel identity (and its live volume/peak).
+  final Map<EntityAddress, MixerChannel> _channelsByAddress = {};
+
+  /// The materialised user channels in registry order — rebuilt on every sync.
   final List<MixerChannel> _userChannels = [];
   final ValueNotifier<List<MixerChannel>> _channels =
       ValueNotifier<List<MixerChannel>>(const []);
@@ -173,6 +205,34 @@ class PhiEngine {
   /// added or removed; per-channel state changes (volume, mute, solo, peak)
   /// fire on the individual [MixerChannel] instead.
   ValueListenable<List<MixerChannel>> get channels => _channels;
+
+  /// The registry the engine currently syncs its channels from — its own private
+  /// one until [bindProject] rebinds it.
+  ProjectRegistry get mixRegistry => _mixRegistry;
+
+  /// Points the engine at the project's [registry] as the channel source of
+  /// truth, recording structural channel commands through [recordCommand]
+  /// (design §8). Channels materialised from the previous registry are torn down
+  /// and rebuilt from [registry] — so opening a project re-creates its saved
+  /// strips, and starting a new one clears them. Idempotent when [registry] is
+  /// already bound (it only refreshes [recordCommand]).
+  void bindProject(
+    ProjectRegistry registry, {
+    void Function(ProjectCommand)? recordCommand,
+  }) {
+    if (identical(registry, _mixRegistry)) {
+      _recordCommand = recordCommand;
+      return;
+    }
+    _mixRegistry.removeListener(_syncChannelsFromRegistry);
+    if (_ownsMixRegistry) _mixRegistry.dispose();
+    _mixRegistry = registry;
+    _ownsMixRegistry = false;
+    _recordCommand = recordCommand;
+    _mixRegistry.addListener(_syncChannelsFromRegistry);
+    _teardownChannels();
+    _syncChannelsFromRegistry();
+  }
 
   /// Initialise the engine, start the update loop, begin emitting telemetry.
   void start() {
@@ -226,6 +286,10 @@ class PhiEngine {
     _telemetryTimer = Timer.periodic(_telemetryInterval, _emit);
     _started = true;
     _masterVolume.value = _gateway.masterVolume;
+    // Materialise any channels the bound registry already holds (e.g. a project
+    // restored before start, or a re-start after stop). No-op for the default
+    // empty registry.
+    _syncChannelsFromRegistry();
   }
 
   /// Stop telemetry, close the engine.
@@ -242,7 +306,7 @@ class PhiEngine {
       _runtimeVariables = null;
       _midi?.dispose();
       _midi = null;
-      _disposeUserChannels();
+      _teardownChannels();
       _gateway.close();
       _sceneRenderer?.dispose();
       _started = false;
@@ -250,12 +314,70 @@ class PhiEngine {
     _testSignal.value = false;
   }
 
-  void _disposeUserChannels() {
-    for (final ch in _userChannels) {
+  /// Tears down every materialised channel (disposing its `MixerChannel` and
+  /// destroying its gateway channel while the engine is running), leaving the
+  /// registry untouched. A later [_syncChannelsFromRegistry] rebuilds from the
+  /// tree.
+  void _teardownChannels() {
+    for (final ch in _channelsByAddress.values) {
+      if (_started) _gateway.destroyChannel(ch.id);
       ch.dispose();
     }
+    _channelsByAddress.clear();
     _userChannels.clear();
     _channels.value = const [];
+  }
+
+  /// Reconciles the materialised channels with the `mix.` entities in
+  /// [_mixRegistry]: creates a gateway channel + `MixerChannel` for each new
+  /// entity, drops those whose entity is gone, and reorders to match the tree —
+  /// the "engine consumes the registry" half of design §8. Preserves the
+  /// `MixerChannel` for an entity that persists, so its live volume/mute/solo/
+  /// peak survive an unrelated tree change. No-op before [start] (no gateway to
+  /// create channels on) and while applying nothing changes.
+  void _syncChannelsFromRegistry() {
+    if (!_started) return;
+    final desired = <EntityAddress>[];
+    for (final node in _mixRegistry.childrenOfKind(RegistryKinds.mix)) {
+      if (node is! RegistryEntity) continue;
+      desired.add(
+        EntityAddress(kind: RegistryKinds.mix, segments: [node.name]),
+      );
+    }
+
+    // Drop channels whose entity no longer exists.
+    final gone = _channelsByAddress.keys
+        .where((address) => !desired.contains(address))
+        .toList();
+    for (final address in gone) {
+      final ch = _channelsByAddress.remove(address)!;
+      _gateway.destroyChannel(ch.id);
+      ch.dispose();
+    }
+
+    // Create channels for new entities, in registry order.
+    for (final address in desired) {
+      if (_channelsByAddress.containsKey(address)) continue;
+      final strip = MixStrip.fromJson(
+        (_mixRegistry.entityAt(address)!.payload as Map)
+            .cast<String, Object?>(),
+      );
+      final id = _gateway.createChannel(strip.name);
+      _channelsByAddress[address] = MixerChannel.user(
+        id: id,
+        name: strip.name,
+        voice: strip.voice,
+      );
+    }
+
+    _userChannels
+      ..clear()
+      ..addAll([for (final address in desired) _channelsByAddress[address]!]);
+    _channels.value = List<MixerChannel>.unmodifiable(_userChannels);
+    // Solo is global, so re-push effective volume across the whole set.
+    for (final ch in _userChannels) {
+      _pushEffectiveVolume(ch);
+    }
   }
 
   /// Turn the engine's built-in audio test signal on or off.
@@ -275,8 +397,12 @@ class PhiEngine {
     _masterChannel.applyVolume(clamped);
   }
 
-  /// Append a new user channel. Picks the next voice slot in `[1, 6]`,
-  /// wrapping. No-op before [start]. Returns the created [MixerChannel].
+  /// Adds a user channel by creating a `mix.` entity in the registry — the
+  /// registry is the source of truth, so the [MixerChannel] is materialised by
+  /// the ensuing sync rather than appended directly (design §8). Picks the next
+  /// voice slot in `[1, 6]`, wrapping, and slugs [name] into a unique address.
+  /// The create is recorded for dirty-tracking + journaling. No-op before
+  /// [start]. Returns the materialised [MixerChannel].
   MixerChannel addChannel({String? name}) {
     if (!_started) {
       throw StateError('PhiEngine.addChannel called before start()');
@@ -284,21 +410,52 @@ class PhiEngine {
     final voice = _voiceCursor;
     _voiceCursor = (_voiceCursor % 6) + 1;
     final resolvedName = name ?? 'ch ${_userChannels.length + 1}';
-    final id = _gateway.createChannel(resolvedName);
-    final ch = MixerChannel.user(id: id, name: resolvedName, voice: voice);
-    _userChannels.add(ch);
-    _channels.value = List<MixerChannel>.unmodifiable(_userChannels);
-    return ch;
+    final address = _uniqueMixAddress(resolvedName);
+    final command = CreateEntityCommand(
+      _mixRegistry,
+      address,
+      payload: MixStrip(name: resolvedName, voice: voice).toJson(),
+    );
+    command.apply(); // notifies → _syncChannelsFromRegistry materialises it
+    _recordCommand?.call(command);
+    return _channelsByAddress[address]!;
   }
 
-  /// Remove a user channel. No-op for the master channel or an unknown
-  /// instance. Disposes the [MixerChannel]'s listeners.
+  /// Removes a user channel by removing its `mix.` entity; the ensuing sync
+  /// destroys the gateway channel and disposes the [MixerChannel]. No-op for the
+  /// master channel or an instance the engine no longer holds. The removal is
+  /// recorded for dirty-tracking + journaling.
   void removeChannel(MixerChannel channel) {
     if (channel.isMaster) return;
-    if (!_userChannels.remove(channel)) return;
-    _gateway.destroyChannel(channel.id);
-    _channels.value = List<MixerChannel>.unmodifiable(_userChannels);
-    channel.dispose();
+    final address = _addressOf(channel);
+    if (address == null) return;
+    final command = RemoveEntityCommand(_mixRegistry, address);
+    command.apply(); // notifies → _syncChannelsFromRegistry tears it down
+    _recordCommand?.call(command);
+  }
+
+  /// The registry address of a materialised [channel], or `null` when the engine
+  /// no longer holds it.
+  EntityAddress? _addressOf(MixerChannel channel) {
+    for (final entry in _channelsByAddress.entries) {
+      if (identical(entry.value, channel)) return entry.key;
+    }
+    return null;
+  }
+
+  /// A free top-level `mix.` address for a channel named [displayName] — the
+  /// slug of the name, suffixed `_2`, `_3`, … until it is unused.
+  EntityAddress _uniqueMixAddress(String displayName) {
+    final base = NameSlug.of(displayName, fallback: 'channel');
+    var segment = base;
+    var n = 2;
+    while (_mixRegistry.contains(
+      EntityAddress(kind: RegistryKinds.mix, segments: [segment]),
+    )) {
+      segment = '${base}_$n';
+      n++;
+    }
+    return EntityAddress(kind: RegistryKinds.mix, segments: [segment]);
   }
 
   /// Set a channel's user-facing volume. Clamped to `[0.0, 1.0]`. Routes
@@ -378,6 +535,8 @@ class PhiEngine {
   /// is permanently torn down (e.g. app dispose).
   Future<void> dispose() async {
     stop();
+    _mixRegistry.removeListener(_syncChannelsFromRegistry);
+    if (_ownsMixRegistry) _mixRegistry.dispose();
     _testSignal.dispose();
     _masterVolume.dispose();
     _masterChannel.dispose();
