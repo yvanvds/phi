@@ -442,7 +442,26 @@ main + app          (orchestration)
   `impactOfRemoving` returns a `DeleteImpact` listing the external entities a
   delete would strand. The `ReferenceSource` hook is structural today but does
   not preclude the deferred textual refactor of `code.` sources (live-coding
-  epic).
+  epic). Issue #121 adds the persistence seam (design §5, §8) in
+  `lib/domain/project/store/`: a project is a `.phi` folder whose `project.json`
+  is a `ProjectManifest` (format version + name + tempo + scene name) and whose
+  every entity is one pretty-printed JSON file (`kind` · `version` · `name` ·
+  `references` · `payload`) at a path that mirrors its address — folders are
+  groups, with an optional `_group.json` per group (display order + cosmetic
+  colour, `GroupMetadata`) and a reserved `assets/` folder. A `ProjectStore`
+  interface has the same Real/Fake split as `YseGateway`: `RealProjectStore`
+  (`dart:io`) reads/writes the folder, an in-memory `FakeProjectStore`
+  (`test/domain/project/test_doubles/`) backs the same bytes onto a map, and both
+  delegate every byte of format logic to a pure `ProjectSerializer` (snapshot ↔
+  flat path→contents map). Save writes **dirty entities only** (the command
+  layer's `entitiesTouched` — a removed address deletes its file, or a removed
+  group its whole subtree; a full save mirrors the registry by pruning stale
+  files); a load rebuilds a fresh registry (references and their back-index
+  restored) in each group's authored order. Opaque payloads (de)serialise through
+  a per-kind `EntityPayloadCodec` — the `version` field is the migration seam —
+  defaulting to a `JsonPassthroughCodec` until kinds carry real payloads (the v1
+  migration epic). No lifecycle UI yet (later epic issue); the seam is
+  domain-only and exercised by unit + real-filesystem round-trip tests.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
