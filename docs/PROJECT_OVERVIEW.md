@@ -462,6 +462,30 @@ main + app          (orchestration)
   defaulting to a `JsonPassthroughCodec` until kinds carry real payloads (the v1
   migration epic). No lifecycle UI yet (later epic issue); the seam is
   domain-only and exercised by unit + real-filesystem round-trip tests.
+  Issue #122 adds the command journal + crash recovery (design §7). A new
+  `JournalStore` I/O seam (`lib/domain/project/store/`, `RealJournalStore` over
+  `dart:io` + in-memory fake) owns the project's `.recovery/` corner:
+  `journal.jsonl` (one JSON line per applied command, **fsynced per command** —
+  review decision 4) and the `recovering` sentinel. Over it,
+  `lib/domain/project/recovery/` holds the domain logic: `CommandJournal`
+  (records a command's `toJson` as one line, `truncate` on save, sentinel
+  passthrough), a `RegistryCommandCodec` that reconstructs each of the four
+  registry commands from its journaled JSON (forward-only — replay never calls
+  `revert`), and `CrashRecovery`, which on launch `detect`s a dirty journal
+  (returning a `RecoveryOffer` with the unsaved count + a crash-loop flag when
+  the sentinel is still set) and `recover`s by **domain-only replay**: load the
+  last clean save → re-apply the journal onto the pure-Dart registry → hand back
+  the snapshot for the engine to boot once, exactly as a normal load. The three
+  options are `RecoveryChoice.replayAll` / `replayToPrevious` (walk back over a
+  poison edit) / `skipJournal`; `recover` marks the sentinel for the duration so
+  a crash mid-replay is caught next launch, and `resolve` truncates the journal +
+  clears the sentinel after a clean re-save. The launch prompt is a
+  `RecoveryDialog` (`lib/shell/recovery/` — shell, not the domain-agnostic design
+  layer, since it reads a domain `RecoveryOffer`). Journaling of undo/redo (the
+  inverse recorded as its own forward line) and the actual launch wiring land
+  with the project-lifecycle UI (#123); this seam is domain-only and exercised by
+  unit + real-filesystem recovery round-trip tests (the epic's persistence-leg
+  "Done when") + a `RecoveryDialog` widget test.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
