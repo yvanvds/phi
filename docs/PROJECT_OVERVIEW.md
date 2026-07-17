@@ -543,6 +543,23 @@ main + app          (orchestration)
   `NameSlug`, seed, registry-backed engine channels, store round-trip) plus an
   end-to-end `registry_migration` integration test (add a channel through the Mix
   surface → save → a second launch restores the channel, clip and domain).
+  Issue #125 adds the **`RegistryMirror` seam** (design §8), the engine-bridge
+  counterpart that will later mirror registry state into the engine's embedded
+  Python namespace for the live-coding epic. Two halves: the domain
+  `ProjectRegistry` now emits a fine-grained `Stream<RegistryEvent>` alongside its
+  `ChangeNotifier` bump — one `RegistryEntityCreated` / `RegistryEntityMoved` /
+  `RegistryEntityDeleted` per structural mutation (`setReferences` emits none;
+  edges are not namespace) — and `lib/engine/bridge/` gains the `RegistryMirror`
+  interface (`onCreate` / `onRename` / `onRegroup` / `onDelete`) with its
+  production `NoOpRegistryMirror` and a `RegistryMirrorBinder` that forwards the
+  event stream onto it, classifying a move into a rename (same parent group) or a
+  regroup (new parent). `PhiEngine` owns the binder and rebinds it alongside its
+  channel registry on every `bindProject`, so the no-op mirror is live in the
+  running app. **No user-visible behaviour yet** — the seam exists so the
+  live-coding epic plugs a real mirror in without re-plumbing the registry.
+  Covered by unit tests (registry event emission, binder forwarding + move
+  classification, no-op) plus an engine-level wiring test (channel add/remove and
+  a project swap reach the injected mirror).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
