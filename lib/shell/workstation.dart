@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:ui' show AppExitResponse;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -6,6 +9,8 @@ import '../domain/midi/clip_editor.dart';
 import '../domain/midi/custom_transform_registry.dart';
 import '../domain/midi/midi_clip_seed.dart';
 import '../domain/midi/midi_transform_chain.dart';
+import '../domain/project/lifecycle/project_controller.dart';
+import '../domain/project/lifecycle/project_directory_picker.dart';
 import '../domain/project/undo_scopes.dart';
 import '../domain/session/session_state.dart';
 import '../engine/bridge/code_evaluator.dart';
@@ -21,6 +26,10 @@ import '../surfaces/state/state_surface.dart';
 import 'bottom_status/bottom_status.dart';
 import 'left_rail/left_rail.dart';
 import 'left_rail/surface_id.dart';
+import 'project/close_confirm_dialog.dart';
+import 'project/close_decision.dart';
+import 'project/close_guard.dart';
+import 'project/project_actions.dart';
 import 'right_inspector/right_inspector.dart';
 import 'top_toolbar/top_toolbar.dart';
 
@@ -31,6 +40,9 @@ class Workstation extends StatefulWidget {
   const Workstation({
     required this.engine,
     required this.session,
+    this.projectController,
+    this.directoryPicker,
+    this.autoStartProject = false,
     this.midiFileIo,
     this.codeEvaluator,
     this.customTransformRegistry,
@@ -39,6 +51,20 @@ class Workstation extends StatefulWidget {
 
   final PhiEngine engine;
   final SessionState session;
+
+  /// The project lifecycle controller. When present (with [directoryPicker]),
+  /// the toolbar shows the project menu + dirty indicator, Ctrl+S saves, and the
+  /// app confirms-on-close while dirty. `null` in the bare Phase-1 tests that
+  /// don't exercise the project stack.
+  final ProjectController? projectController;
+
+  /// The folder picker backing the project menu's Open/Save-location dialogs.
+  final ProjectDirectoryPicker? directoryPicker;
+
+  /// Whether to restore the last project (and offer recovery) on first frame.
+  /// The production entry point sets this; tests opt in with a controller wired
+  /// to fakes so launch recovery is driven deterministically.
+  final bool autoStartProject;
 
   /// File-dialog backend for the MIDI surface's SMF import/export. `null` in
   /// production (the surface falls back to the real `file_selector` backend);
@@ -86,6 +112,14 @@ class _WorkstationState extends State<Workstation> {
   /// only) registered scope.
   final UndoScopes _undoScopes = UndoScopes();
 
+  /// The project-menu action orchestrator, present only when a project
+  /// controller + picker were wired. Shared by the menu and the Ctrl+S shortcut.
+  ProjectActions? _actions;
+
+  /// Listens for OS exit requests so a dirty project can confirm-on-close
+  /// (design §9). Present only when the project stack is wired.
+  AppLifecycleListener? _exitListener;
+
   @override
   void initState() {
     super.initState();
@@ -112,10 +146,68 @@ class _WorkstationState extends State<Workstation> {
     // changes mid-play take effect on the next tick.
     widget.session.transport.addListener(_onTransport);
     widget.session.tempo.addListener(_onTempo);
+
+    _setUpProject();
+  }
+
+  /// Wires the project menu, the confirm-on-close guard, and (when asked) the
+  /// launch-time restore + recovery flow. No-op unless a controller + picker
+  /// were injected.
+  void _setUpProject() {
+    final controller = widget.projectController;
+    final picker = widget.directoryPicker;
+    if (controller == null || picker == null) return;
+    _actions = ProjectActions(controller: controller, picker: picker);
+    _exitListener = AppLifecycleListener(onExitRequested: _onExitRequested);
+    if (widget.autoStartProject) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => unawaited(_startProject()),
+      );
+    }
+  }
+
+  /// Loads settings and restores the most-recent project (offering recovery if
+  /// its journal is dirty), or starts a fresh project when there are no recents.
+  Future<void> _startProject() async {
+    final controller = widget.projectController;
+    final actions = _actions;
+    if (controller == null || actions == null) return;
+    await controller.loadSettings();
+    if (!mounted) return;
+    final recents = controller.recentProjects.value;
+    if (recents.isEmpty) {
+      controller.newProject();
+    } else {
+      await actions.openRecent(context, recents.first);
+    }
+  }
+
+  /// Vetoes an OS close while the project is dirty, offering to save/discard/
+  /// keep working (design §9). Delegates the decision to a widget-free
+  /// [CloseGuard] so the mapping is unit-testable.
+  Future<AppExitResponse> _onExitRequested() async {
+    final controller = widget.projectController;
+    final actions = _actions;
+    if (controller == null || actions == null) return AppExitResponse.exit;
+    final guard = CloseGuard(
+      isDirty: () => controller.isDirty.value,
+      confirm: () async {
+        if (!mounted) return CloseDecision.discard;
+        return CloseConfirmDialog.show(context);
+      },
+      save: () => actions.save(context),
+    );
+    return guard.onExitRequested();
+  }
+
+  void _onSaveShortcut() {
+    final actions = _actions;
+    if (actions != null) unawaited(actions.save(context));
   }
 
   @override
   void dispose() {
+    _exitListener?.dispose();
     widget.session.transport.removeListener(_onTransport);
     widget.session.tempo.removeListener(_onTempo);
     // The router only references scopes; it never owns them, so disposing it
@@ -181,12 +273,19 @@ class _WorkstationState extends State<Workstation> {
         ): _undoScopes.redo,
         const SingleActivator(LogicalKeyboardKey.keyY, control: true):
             _undoScopes.redo,
+        // Ctrl+S saves the project (choosing a location first if it is new).
+        const SingleActivator(LogicalKeyboardKey.keyS, control: true):
+            _onSaveShortcut,
       },
       child: Material(
         color: PhiColors.bg0,
         child: Column(
           children: [
-            TopToolbar(session: widget.session),
+            TopToolbar(
+              session: widget.session,
+              projectController: widget.projectController,
+              directoryPicker: widget.directoryPicker,
+            ),
             Expanded(
               child: Row(
                 children: [

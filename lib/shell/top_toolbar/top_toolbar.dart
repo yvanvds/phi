@@ -6,8 +6,12 @@ import '../../design/tokens/phi_type.dart';
 import '../../design/widgets/inline_editable_text/inline_editable_text.dart';
 import '../../design/widgets/toggle/phi_toggle.dart';
 import '../../design/widgets/transport_button/transport_button.dart';
+import '../../domain/project/lifecycle/project_controller.dart';
+import '../../domain/project/lifecycle/project_directory_picker.dart';
 import '../../domain/session/session_state.dart';
 import '../../domain/session/transport_state.dart';
+import '../project/dirty_indicator.dart';
+import '../project/project_menu.dart';
 
 /// Top toolbar — 36px strip.
 ///
@@ -18,12 +22,30 @@ import '../../domain/session/transport_state.dart';
 /// exists (see phi#5+). The projection toggle's only Phase-1 wiring is the
 /// `LIVE` dot in the bottom status — see `BottomStatus`.
 class TopToolbar extends StatelessWidget {
-  const TopToolbar({required this.session, super.key});
+  const TopToolbar({
+    required this.session,
+    this.projectController,
+    this.directoryPicker,
+    super.key,
+  });
 
   final SessionState session;
 
+  /// The project lifecycle controller. When present (and [directoryPicker] is
+  /// too), the toolbar shows the project menu and the dirty indicator ahead of
+  /// the scene name; when `null` the toolbar keeps its bare Phase-1 layout so a
+  /// standalone widget test can pump it without the project stack.
+  final ProjectController? projectController;
+
+  /// The folder picker the project menu opens native dialogs through. Required
+  /// alongside [projectController] to show the menu.
+  final ProjectDirectoryPicker? directoryPicker;
+
   @override
   Widget build(BuildContext context) {
+    final controller = projectController;
+    final picker = directoryPicker;
+    final showProject = controller != null && picker != null;
     return Container(
       height: PhiSpacing.topToolbarHeight,
       decoration: const BoxDecoration(
@@ -34,6 +56,12 @@ class TopToolbar extends StatelessWidget {
       child: Row(
         children: [
           _Wordmark(),
+          if (showProject) ...[
+            const SizedBox(width: PhiSpacing.s3),
+            ProjectMenu(controller: controller, picker: picker),
+            const SizedBox(width: PhiSpacing.s2),
+            DirtyIndicator(isDirty: controller.isDirty),
+          ],
           const SizedBox(width: PhiSpacing.s3),
           Text('/', style: PhiType.caption().copyWith(color: PhiColors.fg3)),
           const SizedBox(width: PhiSpacing.s3),

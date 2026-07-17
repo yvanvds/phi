@@ -486,6 +486,36 @@ main + app          (orchestration)
   with the project-lifecycle UI (#123); this seam is domain-only and exercised by
   unit + real-filesystem recovery round-trip tests (the epic's persistence-leg
   "Done when") + a `RecoveryDialog` widget test.
+  Issue #123 wires all of the above into a running lifecycle (design §9). A
+  pure-Dart `ProjectController` (`lib/domain/project/lifecycle/`, ChangeNotifier)
+  ties the registry, a location-bound `ProjectStore` + `CommandJournal` (built
+  lazily through injected factories, so the controller itself touches no
+  filesystem), `SessionState` (tempo + scene name live in the manifest),
+  `CrashRecovery`, and an `AppSettings` store together — exposing New / Open /
+  Save / Save-As-Duplicate / Rename, a `ValueNotifier<bool> isDirty`, a
+  recent-projects list, and an autosave timer (default 60 s, cadence in settings,
+  which keeps running while the transport plays). `AppSettings` (recent projects +
+  autosave cadence) persists to `%APPDATA%/phi/settings.json` through a Real/Fake
+  `AppSettingsStore` seam (`lib/domain/project/app_settings/`); a
+  `ProjectDirectoryPicker` seam (real `file_selector` folder dialogs, faked in
+  tests) fronts the Open/Save-location pick. Open replays a dirty journal through
+  `CrashRecovery` behind the existing `RecoveryDialog`, then re-saves + resolves;
+  save/autosave write the manifest (always) plus the dirty entities and truncate
+  the journal; a Save-As names the project after the chosen `<name>.phi` folder.
+  The shell adds the toolbar `ProjectMenu` + `DirtyIndicator`, a Ctrl+S save
+  shortcut, and confirm-on-close via an `AppLifecycleListener` → widget-free
+  `CloseGuard` (save / discard / keep-working) — all in `lib/shell/project/`,
+  shared through a `ProjectActions` orchestrator. Production restores the
+  most-recent project (and its recovery prompt) on launch via
+  `Workstation.autoStartProject`; `PhiApp` owns the real controller + picker and
+  passes an injected pair in tests. Dirty tracking is driven today by
+  manifest-level changes (scene name, tempo — both persisted); registry-command
+  journaling of undo/redo and clip-edit dirty tracking wait on the entity
+  migration (#124), when the registry actually carries the clip/mix/domain
+  entities, and hook into `ProjectController.recordCommand`. Covered by unit
+  (controller + `AppSettings` + real-FS settings round-trip), widget (menu, dirty
+  indicator, close guard), and an end-to-end `project_lifecycle` integration test
+  (menu save clears the dirty dot; a dirty journal offers recovery on launch).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
