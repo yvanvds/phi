@@ -14,6 +14,9 @@ dependencies:
     path: ../dart-yse
   google_fonts: ^6.2.1
   vector_math: ^2.1.4
+  # Cross-platform path joining for the `.phi` project folder (#121):
+  # RealProjectStore maps registry addresses to on-disk paths and back.
+  path: ^1.9.0
   # Pinned to our fork (yvanvds/macbear_3d) at the remount-safety fix
   # (phi#19 / fork#2). Upstream 0.9.x tears down the process-wide
   # `M3AppEngine` singleton when an `M3View` unmounts but never resets its
