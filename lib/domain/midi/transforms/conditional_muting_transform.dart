@@ -2,10 +2,12 @@ import '../midi_note.dart';
 import '../midi_transform.dart';
 import '../midi_transform_kind.dart';
 
-/// Gates a note through or drops it. The signature is deliberately minimal —
-/// mirrors the `VelocityCurve` seam in `velocity_to_parameter_transform.dart`
-/// — so a state-machine read, a scene-volume check, or a live-coded variable
-/// can stand behind it later without this transform changing.
+/// Gates a note through or drops it. The signature is deliberately minimal — a
+/// bare caller-supplied callback — so a state-machine read, a scene-volume
+/// check, or a live-coded variable can stand behind it later without this
+/// transform changing. (`VelocityToParameterTransform` started from the same
+/// callback seam before issue #108 gave it a declarative `VelocityCurve` model;
+/// this predicate's own model is #109.)
 typedef NotePredicate = bool Function(MidiNote note);
 
 /// Drops notes that fail [predicate], keeping everything else in place.
@@ -13,9 +15,8 @@ typedef NotePredicate = bool Function(MidiNote note);
 /// This is the boolean seed for what the vision calls conditional muting:
 /// gating notes by state-machine state, scene volume, or a code variable.
 /// None of that plumbing exists yet, so [predicate] starts as a plain Dart
-/// callback the caller supplies directly — same as `VelocityCurve`. Like
-/// every transform, it must be pure (same note, same verdict) so the chain
-/// stays memoisable.
+/// callback the caller supplies directly. Like every transform, it must be pure
+/// (same note, same verdict) so the chain stays memoisable.
 class ConditionalMutingTransform extends MidiTransform {
   const ConditionalMutingTransform({
     required this.predicate,

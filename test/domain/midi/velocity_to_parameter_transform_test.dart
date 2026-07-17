@@ -2,15 +2,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/midi_transform_kind.dart';
 import 'package:phi/domain/midi/parameter_event.dart';
+import 'package:phi/domain/midi/transforms/velocity_curve.dart';
+import 'package:phi/domain/midi/transforms/velocity_curve_shape.dart';
 import 'package:phi/domain/midi/transforms/velocity_to_parameter_transform.dart';
-
-double _cutoffCurve(double velocity) => 200 + velocity * 8000;
 
 void main() {
   group('VelocityToParameterTransform', () {
+    // Linear 200 → 8200: value = 200 + velocity * 8000.
     const t = VelocityToParameterTransform(
       parameter: 'filter.cutoff',
-      curve: _cutoffCurve,
+      curve: VelocityCurve(valueAt0: 200, valueAt1: 8200),
       label: 'v → cutoff',
     );
 
@@ -52,8 +53,48 @@ void main() {
 
       expect(off.active, isFalse);
       expect(off.parameter, 'filter.cutoff');
-      expect(off.curve, same(t.curve));
+      expect(off.curve, t.curve);
       expect(off.label, t.label);
+    });
+
+    test('copyWith reshapes the curve in place, keeping toggle and name', () {
+      final steeper = t.copyWith(
+        curve: const VelocityCurve(
+          shape: VelocityCurveShape.exponential,
+          valueAt0: 0,
+          valueAt1: 100,
+        ),
+      );
+
+      // A soft note now maps low on the ease-in curve, the accent stays high.
+      expect(
+        steeper
+            .eventsFor(const [
+              MidiNote(pitch: 60, start: 0, duration: 1, velocity: 0.5),
+            ])
+            .single
+            .value,
+        25,
+      ); // 0.5² * 100
+      // Toggle and label survive the reshape.
+      expect(steeper.active, t.active);
+      expect(steeper.label, t.label);
+    });
+
+    test('copyWith retargets the parameter path', () {
+      final retargeted = t.copyWith(parameter: 'fm.index');
+
+      expect(retargeted.parameter, 'fm.index');
+      expect(retargeted.curve, t.curve);
+      expect(
+        retargeted
+            .eventsFor(const [
+              MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1),
+            ])
+            .single
+            .parameter,
+        'fm.index',
+      );
     });
   });
 

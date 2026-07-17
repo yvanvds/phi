@@ -9,12 +9,13 @@
 ///
 /// Only the two numeric shapes exist here, which covers every scalar
 /// transform. The transforms whose behaviour lives in a table or rule-list
-/// (spectral map, routing rules, split voices, spawn axes, scale tuning) are
-/// edited by dedicated typed editor widgets instead (issue #95), mutating in
-/// place through each transform's own `copyWith` rather than this scalar seam.
-/// The two callback-driven transforms (velocity curve #108, muting predicate
-/// #109) first need a serialisable data model before they can be edited at
-/// all, so they expose no params yet.
+/// (spectral map, routing rules, split voices, spawn axes, scale tuning, and —
+/// since issue #108 — the velocity→parameter curve) are edited by dedicated
+/// typed editor widgets instead (issues #95/#108), mutating in place through
+/// each transform's own `copyWith` rather than this scalar seam. The one
+/// remaining callback-driven transform (muting predicate #109) first needs a
+/// serialisable data model before it can be edited at all, so it exposes no
+/// params yet.
 ///
 /// The subtypes are sealed variants of one concept, so they share this file
 /// (`sealed` requires a single library) — the same bundling exception

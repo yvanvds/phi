@@ -2,12 +2,7 @@ import '../midi_note.dart';
 import '../midi_transform.dart';
 import '../midi_transform_kind.dart';
 import '../parameter_event.dart';
-
-/// Maps a normalised velocity in `[0, 1]` onto a parameter value. The
-/// signature is deliberately minimal so a live-coded Python function can
-/// stand behind it later: the `CodeEvaluator` side only has to produce
-/// something callable as `double → double`.
-typedef VelocityCurve = double Function(double velocity);
+import 'velocity_curve.dart';
 
 /// Turns each note's velocity into a [ParameterEvent] for one engine
 /// [parameter] — filter cutoff tracking accents, FM index opening up with
@@ -18,11 +13,11 @@ typedef VelocityCurve = double Function(double velocity);
 /// roll. Consumers pull the control stream with [eventsFor], feeding it the
 /// same note list the chain handed to this stage.
 ///
-/// [curve] is the mapping seam. It is a plain Dart callback today; the
-/// vision is that a `CodeEvaluator`-hosted function slots in behind the
-/// same [VelocityCurve] shape without this class changing. Like every
-/// transform, the curve must be pure — same velocity, same value — so the
-/// chain stays memoisable.
+/// [curve] is the mapping seam. It used to be a bare `double Function(double)`
+/// callback, which nothing could edit or serialise; issue #108 replaces it with
+/// a declarative [VelocityCurve] — a pure, immutable value model the typed curve
+/// editor mutates in place. Like every transform the mapping stays pure — same
+/// velocity, same value — so the chain stays memoisable.
 class VelocityToParameterTransform extends MidiTransform {
   const VelocityToParameterTransform({
     required this.parameter,
@@ -34,7 +29,7 @@ class VelocityToParameterTransform extends MidiTransform {
   /// Engine parameter path this mapping drives (e.g. `filter.cutoff`).
   final String parameter;
 
-  /// Pure velocity-to-value mapping; see [VelocityCurve].
+  /// Declarative velocity-to-value mapping; see [VelocityCurve].
   final VelocityCurve curve;
 
   @override
@@ -49,14 +44,21 @@ class VelocityToParameterTransform extends MidiTransform {
   @override
   List<MidiNote> apply(List<MidiNote> input) => input;
 
+  /// Carries [parameter] and [curve] alongside the base [active]/[label] so the
+  /// typed curve editor (issue #108) can retarget the parameter or reshape the
+  /// curve in place without losing the chip's toggle or name.
   @override
-  VelocityToParameterTransform copyWith({bool? active, String? label}) =>
-      VelocityToParameterTransform(
-        parameter: parameter,
-        curve: curve,
-        label: label ?? this.label,
-        active: active ?? this.active,
-      );
+  VelocityToParameterTransform copyWith({
+    bool? active,
+    String? label,
+    String? parameter,
+    VelocityCurve? curve,
+  }) => VelocityToParameterTransform(
+    parameter: parameter ?? this.parameter,
+    curve: curve ?? this.curve,
+    label: label ?? this.label,
+    active: active ?? this.active,
+  );
 
   /// One [ParameterEvent] per note, at the note's start beat, in input
   /// order. The caller decides what "input" means — typically the note list
@@ -66,7 +68,7 @@ class VelocityToParameterTransform extends MidiTransform {
         (n) => ParameterEvent(
           parameter: parameter,
           beat: n.start,
-          value: curve(n.velocity),
+          value: curve.valueAt(n.velocity),
         ),
       )
       .toList(growable: false);
