@@ -185,5 +185,41 @@ void main() {
       expect(unpinned.recentProjects, contains('a.phi'));
       expect(unpinned.recentProjects, contains('b.phi'));
     });
+
+    test('withAudio replaces the audio section and keeps everything else', () {
+      const settings = AppSettings(
+        recentProjects: ['a.phi'],
+        pinnedProjects: ['b.phi'],
+        autosaveInterval: Duration(seconds: 30),
+        midi: MidiSettings(outputPort: 'loopMIDI'),
+      );
+      const audio = AudioSettings(
+        outputHost: 'ASIO',
+        outputDevice: 'Fireface UCX',
+        sampleRate: 96000,
+        bufferSize: 128,
+        layout: SpeakerLayout.quad,
+      );
+
+      final next = settings.withAudio(audio);
+
+      expect(next.audio, audio);
+      // Everything outside the audio section is carried through unchanged.
+      expect(next.recentProjects, settings.recentProjects);
+      expect(next.pinnedProjects, settings.pinnedProjects);
+      expect(next.autosaveInterval, settings.autosaveInterval);
+      expect(next.midi, settings.midi);
+      expect(next.version, settings.version);
+    });
+
+    test('withAudio round-trips through toJson/fromJson', () {
+      const audio = AudioSettings(
+        outputHost: 'WASAPI',
+        outputDevice: 'Speakers',
+        bufferSize: 512,
+      );
+      final next = const AppSettings().withAudio(audio);
+      expect(AppSettings.fromJson(next.toJson()), next);
+    });
   });
 }

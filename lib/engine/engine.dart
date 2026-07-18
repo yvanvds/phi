@@ -23,7 +23,9 @@ import '../domain/runtime/runtime_variable_registry.dart';
 import '../domain/time_domains/time_domain.dart';
 import '../domain/time_domains/time_domain_registry.dart';
 import 'bridge/audio_device_coordinator.dart';
+import 'bridge/audio_device_descriptor.dart';
 import 'bridge/audio_device_notice.dart';
+import 'bridge/audio_device_state.dart';
 import 'bridge/macbear_scene_renderer.dart';
 import 'bridge/midi_gateway.dart';
 import 'bridge/no_op_registry_mirror.dart';
@@ -551,6 +553,21 @@ class PhiEngine {
   /// live switch reverts to. Reads the coordinator's live state, not the stored
   /// preference (they can differ after a boot fallback, design §5).
   AudioSettings get activeAudioSettings => _audio.current;
+
+  /// The audio devices the engine can currently see, as pure FFI-free
+  /// [AudioDeviceDescriptor]s (design §4) — the list the settings dialog's AUDIO
+  /// section builds its output-device / rate / buffer pickers from. Empty before
+  /// [start] (no device surface yet); the shell never touches the gateway, so
+  /// this façade method is the only way above the bridge to enumerate devices.
+  List<AudioDeviceDescriptor> audioDevices() =>
+      _started ? _gateway.audioDevices() : const [];
+
+  /// The live state of whichever device is open — active sample rate, buffer, and
+  /// output latency (design §4) — the settings dialog's read-back line. Reads the
+  /// device, not the stored settings (they can differ). [AudioDeviceState.none]
+  /// before [start] or when no device is open.
+  AudioDeviceState activeAudioState() =>
+      _started ? _gateway.activeAudioState() : AudioDeviceState.none;
 
   /// The most recent non-blocking audio notice — a boot fallback or a reverted
   /// live switch (design §5, §9.3) — or `null` when none has been raised.
