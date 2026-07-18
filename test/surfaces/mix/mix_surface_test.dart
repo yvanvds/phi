@@ -68,5 +68,60 @@ void main() {
 
       expect(find.text('MIX · 3 CHANNELS'), findsOneWidget);
     });
+
+    testWidgets('the master strip has no remove control', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: MixSurface(engine: engine)),
+        ),
+      );
+
+      // Only the master is present and it is never removable.
+      expect(find.byType(ChannelStrip), findsOneWidget);
+      expect(find.byKey(ChannelStrip.removeButtonKey), findsNothing);
+    });
+
+    testWidgets('removing a user strip drops it from the rack', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: MixSurface(engine: engine)),
+        ),
+      );
+
+      await tester.tap(find.text('+'));
+      await tester.pump();
+      expect(engine.channels.value, hasLength(1));
+      expect(find.byType(ChannelStrip), findsNWidgets(2));
+
+      await tester.tap(find.byKey(ChannelStrip.removeButtonKey));
+      await tester.pump();
+
+      expect(engine.channels.value, isEmpty);
+      expect(find.byType(ChannelStrip), findsOneWidget); // master only
+    });
+
+    testWidgets('inline-renaming a user strip renames the channel', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: MixSurface(engine: engine)),
+        ),
+      );
+
+      await tester.tap(find.text('+'));
+      await tester.pump();
+      expect(engine.channels.value.single.name, 'ch 1');
+
+      // Tap the strip's name to edit, type a new one, commit with Enter.
+      await tester.tap(find.text('ch 1'));
+      await tester.pump();
+      await tester.enterText(find.byType(TextField), 'lead');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+
+      expect(engine.channels.value.single.name, 'lead');
+      expect(find.text('lead'), findsOneWidget);
+    });
   });
 }

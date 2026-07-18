@@ -61,7 +61,9 @@ main + app          (orchestration)
 - Mix surface: horizontal rack of `ChannelStrip` widgets (master pinned
   right, user strips left). Header has a `+` to add channels and the
   `System.audioTest` toggle. Each strip carries voice-swatch + name + fader
-  with overlaid peak meter + mute/solo buttons.
+  with overlaid peak meter + mute/solo buttons. A user strip's header name is
+  inline-editable and carries a `×` remove control (issue #141) — the master
+  strip has neither.
 - Scene surface: renderer-agnostic `SceneRenderer` bridge in
   `lib/engine/bridge/`, backed in production by `MacbearSceneRenderer`
   (`macbear_3d` on ANGLE). Renders one placeholder agent as a

@@ -174,6 +174,10 @@ class _BoundStrip extends StatelessWidget {
         onSoloToggle: channel.isMaster
             ? null
             : () => engine.setChannelSoloed(channel, soloed: !channel.soloed),
+        onRename: channel.isMaster
+            ? null
+            : (name) => engine.renameChannel(channel, name),
+        onRemove: channel.isMaster ? null : () => engine.removeChannel(channel),
       ),
     );
   }

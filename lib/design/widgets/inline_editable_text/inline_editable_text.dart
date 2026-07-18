@@ -10,6 +10,7 @@ class InlineEditableText extends StatefulWidget {
     required this.onChanged,
     this.style,
     this.maxWidth = 240,
+    this.overflow,
     super.key,
   });
 
@@ -17,6 +18,13 @@ class InlineEditableText extends StatefulWidget {
   final ValueChanged<String> onChanged;
   final TextStyle? style;
   final double maxWidth;
+
+  /// How the *display* (not-editing) text handles running out of room. When
+  /// non-null the label is kept to a single line and clipped/ellipsised
+  /// accordingly — used where the label sits in a tight, bounded slot (a mix
+  /// strip header). Defaults to null: the label wraps freely, as the toolbar
+  /// scene name does.
+  final TextOverflow? overflow;
 
   @override
   State<InlineEditableText> createState() => _InlineEditableTextState();
@@ -104,7 +112,13 @@ class _InlineEditableTextState extends State<InlineEditableText> {
       cursor: SystemMouseCursors.text,
       child: GestureDetector(
         onTap: _startEditing,
-        child: Text(widget.value, style: style),
+        child: Text(
+          widget.value,
+          style: style,
+          overflow: widget.overflow,
+          maxLines: widget.overflow == null ? null : 1,
+          softWrap: widget.overflow == null,
+        ),
       ),
     );
   }

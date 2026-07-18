@@ -9,6 +9,7 @@ import '../domain/midi/store/clip_document.dart';
 import '../domain/midi/store/midi_transform_codec.dart';
 import '../domain/mix/mix_strip.dart';
 import '../domain/project/commands/create_entity_command.dart';
+import '../domain/project/commands/move_entity_command.dart';
 import '../domain/project/commands/remove_entity_command.dart';
 import '../domain/project/commands/update_entity_payload_command.dart';
 import '../domain/project/entity_address.dart';
@@ -570,6 +571,54 @@ class PhiEngine {
     final command = RemoveEntityCommand(_mixRegistry, address);
     command.apply(); // notifies → _syncChannelsFromRegistry tears it down
     _recordCommand?.call(command);
+  }
+
+  /// Renames a user channel: updates its display name in the `mix.` payload and,
+  /// when the new name slugs to a different address, **moves** the entity to that
+  /// slug so the address follows the name — "rename = refactor" (design §4), which
+  /// rewrites any back-references to the channel as one journaled command. No-op
+  /// for the master channel, an instance the engine no longer holds, or a blank /
+  /// unchanged name. The live volume/mute/solo survive the move (they ride the
+  /// payload the strip is rematerialised from). Both the payload update and the
+  /// move are recorded for dirty-tracking + journaling.
+  void renameChannel(MixerChannel channel, String name) {
+    if (!_started || channel.isMaster) return;
+    if (!_userChannels.contains(channel)) return;
+    final address = _addressOf(channel);
+    if (address == null) return;
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || trimmed == channel.name) return;
+
+    // Snapshot the live state onto the renamed strip so a move (which tears the
+    // channel down and rematerialises it from this payload) preserves the fader
+    // value, mute and solo — not just the name.
+    final renamed = MixStrip(
+      name: trimmed,
+      voice: channel.voice,
+      volume: channel.volume,
+      muted: channel.muted,
+      soloed: channel.soloed,
+    ).toJson();
+
+    // 1. Persist the new display name into the payload at the current address —
+    //    so if the address changes below, the rematerialised channel already
+    //    carries the new name.
+    final update = UpdateEntityPayloadCommand(_mixRegistry, address, renamed);
+    update.apply();
+    _recordCommand?.call(update);
+
+    // 2. Follow the name with the address slug when it actually changes.
+    final newSlug = NameSlug.of(trimmed, fallback: 'channel');
+    if (newSlug == address.name) {
+      // The slug is unchanged (only display casing/spacing differs), so the sync
+      // does not recreate the channel — push the new name onto the live one.
+      channel.applyName(trimmed);
+      return;
+    }
+    final newAddress = _uniqueMixAddress(trimmed);
+    final move = MoveEntityCommand(_mixRegistry, address, newAddress);
+    move.apply(); // notifies → sync rematerialises the channel at the new slug
+    _recordCommand?.call(move);
   }
 
   /// The registry address of a materialised [channel], or `null` when the engine
