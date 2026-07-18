@@ -145,6 +145,18 @@ class FakeYseGateway implements YseGateway {
     outputLatency: activeOutputLatencyValue,
   );
 
+  /// The last auto-reconnect configuration the engine pushed — `null` until
+  /// [setAutoReconnect] runs. Lets a test assert boot enabled it (design §4).
+  bool? autoReconnectOn;
+  int? autoReconnectDelayMs;
+
+  @override
+  void setAutoReconnect({required bool on, int delayMs = 1000}) {
+    calls.add('setAutoReconnect:$on:$delayMs');
+    autoReconnectOn = on;
+    autoReconnectDelayMs = delayMs;
+  }
+
   AudioDeviceDescriptor? _find(String name, String hostName) {
     for (final device in devices) {
       if (device.name == name && device.hostName == hostName) return device;

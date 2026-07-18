@@ -139,6 +139,10 @@ class RealYseGateway implements YseGateway {
     outputLatency: _system.activeOutputLatency,
   );
 
+  @override
+  void setAutoReconnect({required bool on, int delayMs = 1000}) =>
+      _system.setAutoReconnect(on: on, delayMs: delayMs);
+
   /// The engine [Device] matching [name] + [hostName] in the current device
   /// list, or `null` when none does (unplugged, renamed).
   Device? _findDevice(String name, String hostName) {

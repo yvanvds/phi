@@ -195,6 +195,11 @@ class _WorkstationState extends State<Workstation> {
     if (controller == null || actions == null) return;
     await controller.loadSettings();
     if (!mounted) return;
+    // Boot audio from the just-loaded settings (design §5): the engine came up
+    // on the platform default in `start()`; move it to the stored device now,
+    // reverting to the default (with a notice) if it is missing or refuses to
+    // open. A no-op when no device was chosen.
+    widget.engine.switchAudioDevice(controller.audioSettings);
     final recents = controller.recentProjects.value;
     if (recents.isEmpty) {
       controller.newProject();

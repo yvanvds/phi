@@ -49,6 +49,11 @@ abstract interface class YseGateway {
   /// two can legitimately differ. [AudioDeviceState.none] when none is open.
   AudioDeviceState activeAudioState();
 
+  /// Configure engine auto-reconnect (design §4): when [on], the engine re-opens
+  /// a device that disappears after [delayMs] ms. Enabled at boot (1 s) and not
+  /// exposed as a setting in v1. Safe to call after [init] / [initOffline].
+  void setAutoReconnect({required bool on, int delayMs});
+
   /// Begin the periodic engine-update timer at the given [interval].
   void startUpdateTimer([Duration interval]);
 
