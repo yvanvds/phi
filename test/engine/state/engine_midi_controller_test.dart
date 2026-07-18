@@ -682,4 +682,116 @@ void main() {
       });
     });
   });
+
+  group('EngineMidiController — output port by name (#151)', () {
+    test('a null port name opens the first port (the default)', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway()
+          ..deviceNames = const ['Port A', 'Port B'];
+        final controller = EngineMidiController(
+          chain: _twoBarChain(),
+          gateway: gateway,
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 20));
+        expect(gateway.calls, contains('open:0'));
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('a chosen port name resolves to its current index', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway()
+          ..deviceNames = const ['Port A', 'loopMIDI', 'Port C'];
+        final controller = EngineMidiController(
+          chain: _twoBarChain(),
+          gateway: gateway,
+          outputPortName: 'loopMIDI',
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 20));
+        // loopMIDI is at index 1, so that's the port opened — not the old 0.
+        expect(gateway.calls, contains('open:1'));
+        expect(gateway.calls, isNot(contains('open:0')));
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('the chosen name re-resolves after a replug reorders the ports', () {
+      fakeAsync((async) {
+        // Before: loopMIDI at index 1.
+        final gateway = FakeMidiGateway()
+          ..deviceNames = const ['Port A', 'loopMIDI'];
+        final controller = EngineMidiController(
+          chain: _twoBarChain(),
+          gateway: gateway,
+          outputPortName: 'loopMIDI',
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 20));
+        expect(gateway.calls, contains('open:1'));
+        controller.stop();
+        // A replug reindexes the ports: loopMIDI is now at index 2.
+        gateway
+          ..deviceNames = const ['New Thing', 'Port A', 'loopMIDI']
+          ..close();
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 20));
+        // Resolved afresh to the new index — the stored name still works.
+        expect(gateway.calls, contains('open:2'));
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('a name that matches no visible port opens nothing', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway()
+          ..deviceNames = const ['Port A', 'Port B'];
+        final controller = EngineMidiController(
+          chain: _twoBarChain(),
+          gateway: gateway,
+          outputPortName: 'Ghost Port',
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 20));
+        expect(gateway.calls.where((c) => c.startsWith('open:')), isEmpty);
+
+        controller.stop();
+        controller.dispose();
+      });
+    });
+
+    test('setting the port name while idle-open re-opens the resolved port', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway()
+          ..deviceNames = const ['Port A', 'loopMIDI'];
+        final controller = EngineMidiController(
+          chain: _twoBarChain(),
+          gateway: gateway,
+        );
+
+        controller.play();
+        async.elapse(const Duration(milliseconds: 20));
+        controller.stop(); // port stays open after stop
+        expect(gateway.isOpen, isTrue);
+
+        controller.outputPortName = 'loopMIDI';
+        // The open port is re-resolved to index 1 at once (idle, not playing).
+        expect(gateway.openPort, 1);
+
+        controller.dispose();
+      });
+    });
+  });
 }

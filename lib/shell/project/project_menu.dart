@@ -72,25 +72,43 @@ class ProjectMenu extends StatelessWidget {
   }
 
   Widget _recentSubmenu(BuildContext context, ProjectActions actions) {
+    // Pins float above recents and never age out (design §6). Listen to both
+    // notifiers so a pin/remove in the settings dialog updates the menu at once.
     return ValueListenableBuilder<List<String>>(
-      valueListenable: controller.recentProjects,
-      builder: (context, recents, _) => SubmenuButton(
-        menuChildren: recents.isEmpty
-            ? const [
-                MenuItemButton(
-                  onPressed: null,
-                  child: Text('no recent projects'),
+      valueListenable: controller.pinnedProjects,
+      builder: (context, pins, _) => ValueListenableBuilder<List<String>>(
+        valueListenable: controller.recentProjects,
+        builder: (context, recents, _) {
+          final children = <Widget>[
+            for (final path in pins)
+              MenuItemButton(
+                leadingIcon: const Icon(
+                  Icons.push_pin,
+                  size: 14,
+                  color: PhiColors.fg2,
                 ),
-              ]
-            : [
-                for (final path in recents)
-                  MenuItemButton(
-                    onPressed: () =>
-                        unawaited(actions.openRecent(context, path)),
-                    child: Text(p.basename(path)),
-                  ),
-              ],
-        child: const Text('Open Recent'),
+                onPressed: () => unawaited(actions.openRecent(context, path)),
+                child: Text(p.basename(path)),
+              ),
+            if (pins.isNotEmpty && recents.isNotEmpty) const Divider(height: 1),
+            for (final path in recents)
+              MenuItemButton(
+                onPressed: () => unawaited(actions.openRecent(context, path)),
+                child: Text(p.basename(path)),
+              ),
+          ];
+          return SubmenuButton(
+            menuChildren: children.isEmpty
+                ? const [
+                    MenuItemButton(
+                      onPressed: null,
+                      child: Text('no recent projects'),
+                    ),
+                  ]
+                : children,
+            child: const Text('Open Recent'),
+          );
+        },
       ),
     );
   }

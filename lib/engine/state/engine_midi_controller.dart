@@ -73,7 +73,7 @@ class EngineMidiController {
     StateGraph? stateGraph,
     RuntimeVariableRegistry? runtimeVariables,
     double bpm = 120,
-    int outputPort = 0,
+    String? outputPortName,
     bool microtonal = false,
     Duration tickInterval = const Duration(milliseconds: 16),
   }) : _chain = chain,
@@ -85,7 +85,7 @@ class EngineMidiController {
        editor = editor ?? ClipEditor(chain.source),
        graphController = MidiGraphController.seededFrom(chain),
        _bpm = bpm,
-       _outputPort = outputPort,
+       _outputPortName = outputPortName,
        _tickInterval = tickInterval {
     // The tempo-source seam (issue #104): the played tempo is the base rate
     // (subscription or session) bent by the sum of the stack's sources. The
@@ -136,8 +136,50 @@ class EngineMidiController {
   /// [AgentSpawnTransform], each note-on spawns a live `SceneAgent` and its
   /// note-off despawns it (issue #37). `null` in setups without a Scene.
   final SceneAgentSink? _agentSink;
-  final int _outputPort;
+
+  /// The chosen MIDI output port's **name**, resolved to a device index each
+  /// time the port is (re)opened so a replug keeps working (design §5). `null`
+  /// means "no explicit choice" — the first available port (index 0) is opened,
+  /// the pre-settings default. A name that matches no visible port opens nothing
+  /// (rather than dispatching to the wrong device).
+  String? _outputPortName;
   final Duration _tickInterval;
+
+  /// The chosen MIDI output port's name, or `null` for the default (first port).
+  String? get outputPortName => _outputPortName;
+
+  /// Choose the MIDI output port by [name] (design §5). Resolves to a device
+  /// index only when the port is (re)opened. When a port is already open and the
+  /// transport is idle, the change is applied at once (the open one is closed and
+  /// the new one opened, or closed when [name] resolves to nothing); a change
+  /// while playing takes effect on the next [play]. Setting the same name is a
+  /// no-op.
+  set outputPortName(String? name) {
+    if (_outputPortName == name) return;
+    _outputPortName = name;
+    if (_playing || !_gateway.isOpen) return;
+    final port = _resolveOutputPort();
+    if (port != null) {
+      _gateway.open(port); // closes the previous port, opens the resolved one
+    } else {
+      _gateway.close();
+    }
+  }
+
+  /// The current device index for [_outputPortName], resolved against the live
+  /// output-device list (design §5). A `null` name means the first port (index
+  /// `0`) when any exists; a name present in no visible port resolves to `null`
+  /// (open nothing).
+  int? _resolveOutputPort() {
+    final name = _outputPortName;
+    if (name == null) {
+      return _gateway.outputDeviceCount > 0 ? 0 : null;
+    }
+    for (var i = 0; i < _gateway.outputDeviceCount; i++) {
+      if (_gateway.outputDeviceName(i) == name) return i;
+    }
+    return null;
+  }
 
   /// Opt-in microtonal output (issue #36). When `true`, a note's fractional
   /// pitch is split into its nearest semitone (sent as the Note-On pitch) and
@@ -326,8 +368,9 @@ class EngineMidiController {
   /// playing.
   void play() {
     if (_playing) return;
-    if (!_gateway.isOpen && _gateway.outputDeviceCount > _outputPort) {
-      _gateway.open(_outputPort);
+    if (!_gateway.isOpen) {
+      final port = _resolveOutputPort();
+      if (port != null) _gateway.open(port);
     }
     _prevBeat = 0;
     _playhead.value = 0;

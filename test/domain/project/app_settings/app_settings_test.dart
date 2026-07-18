@@ -89,7 +89,7 @@ void main() {
 
     test('fromJson tolerates missing/invalid keys with defaults', () {
       final restored = AppSettings.fromJson(const {
-        'autosaveSeconds': 0,
+        'autosaveSeconds': -5,
         'pinnedProjects': 'not-a-list',
         'audio': 'not-a-map',
         'midi': 42,
@@ -97,12 +97,24 @@ void main() {
       });
       expect(restored.recentProjects, isEmpty);
       expect(restored.pinnedProjects, isEmpty);
-      // A non-positive cadence falls back to the default.
+      // A negative cadence falls back to the default.
       expect(restored.autosaveInterval, AppSettings.defaultAutosaveInterval);
       expect(restored.audio, const AudioSettings());
       expect(restored.midi, const MidiSettings());
       // A non-positive version falls back to the current schema version.
       expect(restored.version, AppSettings.schemaVersion);
+    });
+
+    test('an explicit 0 cadence loads as disabled and round-trips', () {
+      // "0 disables" (design §6) must survive a save/load — an explicit zero is
+      // honoured, unlike a missing/negative value which falls back to default.
+      final restored = AppSettings.fromJson(const {'autosaveSeconds': 0});
+      expect(restored.autosaveInterval, Duration.zero);
+      final settings = const AppSettings().withAutosaveInterval(Duration.zero);
+      expect(
+        AppSettings.fromJson(settings.toJson()).autosaveInterval,
+        Duration.zero,
+      );
     });
 
     test('value equality and hashCode by fields', () {
@@ -220,6 +232,51 @@ void main() {
       );
       final next = const AppSettings().withAudio(audio);
       expect(AppSettings.fromJson(next.toJson()), next);
+    });
+  });
+
+  group('AppSettings — MIDI / cadence / clear-recents (issue #151)', () {
+    test('withMidi replaces the midi section and keeps everything else', () {
+      const settings = AppSettings(
+        recentProjects: ['a.phi'],
+        pinnedProjects: ['b.phi'],
+        autosaveInterval: Duration(seconds: 30),
+        audio: AudioSettings(outputDevice: 'X'),
+      );
+      const midi = MidiSettings(
+        outputPort: 'loopMIDI',
+        inputPorts: ['Keystation 61'],
+      );
+
+      final next = settings.withMidi(midi);
+
+      expect(next.midi, midi);
+      expect(next.recentProjects, settings.recentProjects);
+      expect(next.pinnedProjects, settings.pinnedProjects);
+      expect(next.autosaveInterval, settings.autosaveInterval);
+      expect(next.audio, settings.audio);
+      expect(next.version, settings.version);
+    });
+
+    test('withAutosaveInterval replaces just the cadence', () {
+      const settings = AppSettings(
+        recentProjects: ['a.phi'],
+        midi: MidiSettings(outputPort: 'p'),
+      );
+      final next = settings.withAutosaveInterval(const Duration(seconds: 5));
+      expect(next.autosaveInterval, const Duration(seconds: 5));
+      expect(next.recentProjects, settings.recentProjects);
+      expect(next.midi, settings.midi);
+    });
+
+    test('withClearedRecents empties recents but keeps pins', () {
+      const settings = AppSettings(
+        recentProjects: ['a.phi', 'b.phi'],
+        pinnedProjects: ['pinned.phi'],
+      );
+      final next = settings.withClearedRecents();
+      expect(next.recentProjects, isEmpty);
+      expect(next.pinnedProjects, ['pinned.phi']);
     });
   });
 }

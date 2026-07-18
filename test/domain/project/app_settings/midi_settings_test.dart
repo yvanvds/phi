@@ -51,5 +51,31 @@ void main() {
       expect(a.hashCode, b.hashCode);
       expect(a, isNot(c));
     });
+
+    test('withOutputPort sets and clears the output port', () {
+      const midi = MidiSettings(inputPorts: ['A']);
+      final set = midi.withOutputPort('loopMIDI');
+      expect(set.outputPort, 'loopMIDI');
+      expect(set.inputPorts, ['A']); // inputs untouched
+      final cleared = set.withOutputPort(null);
+      expect(cleared.outputPort, isNull);
+      expect(cleared.inputPorts, ['A']);
+    });
+
+    test('withInput enables (appends, de-duplicated) and disables', () {
+      const midi = MidiSettings(outputPort: 'p', inputPorts: ['A']);
+      final added = midi.withInput('B', enabled: true);
+      expect(added.inputPorts, ['A', 'B']);
+      expect(added.outputPort, 'p'); // output untouched
+
+      // Enabling an already-enabled port is a no-op.
+      expect(added.withInput('B', enabled: true), added);
+
+      final removed = added.withInput('A', enabled: false);
+      expect(removed.inputPorts, ['B']);
+
+      // Disabling a port that isn't enabled is a no-op.
+      expect(removed.withInput('Z', enabled: false), removed);
+    });
   });
 }

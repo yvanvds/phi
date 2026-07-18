@@ -49,7 +49,10 @@ class AppSettings {
     return AppSettings(
       recentProjects: List.unmodifiable(recents),
       pinnedProjects: List.unmodifiable(pinned),
-      autosaveInterval: seconds is num && seconds > 0
+      // An explicit non-negative cadence is honoured — including `0`, which
+      // disables autosave (design §6) and must survive a round-trip. A missing,
+      // negative, or non-numeric value falls back to the default.
+      autosaveInterval: seconds is num && seconds >= 0
           ? Duration(seconds: seconds.toInt())
           : defaultAutosaveInterval,
       audio: audioJson is Map<String, Object?>
@@ -162,6 +165,44 @@ class AppSettings {
   /// audio edit never disturbs the rest of the file.
   AppSettings withAudio(AudioSettings audio) => AppSettings(
     recentProjects: recentProjects,
+    pinnedProjects: pinnedProjects,
+    autosaveInterval: autosaveInterval,
+    audio: audio,
+    midi: midi,
+    version: version,
+  );
+
+  /// A copy with the [midi] section replaced — the single write the settings
+  /// dialog's MIDI section makes (design §6, §7). Everything else (recents,
+  /// pins, cadence, audio, version) is carried through unchanged, so persisting a
+  /// MIDI edit never disturbs the rest of the file.
+  AppSettings withMidi(MidiSettings midi) => AppSettings(
+    recentProjects: recentProjects,
+    pinnedProjects: pinnedProjects,
+    autosaveInterval: autosaveInterval,
+    audio: audio,
+    midi: midi,
+    version: version,
+  );
+
+  /// A copy with the autosave [interval] replaced — the PROJECTS section's
+  /// cadence field (design §6). A zero (or negative) interval disables autosave;
+  /// the change takes effect on the next timer arm (design §5). Everything else
+  /// is carried through unchanged.
+  AppSettings withAutosaveInterval(Duration interval) => AppSettings(
+    recentProjects: recentProjects,
+    pinnedProjects: pinnedProjects,
+    autosaveInterval: interval,
+    audio: audio,
+    midi: midi,
+    version: version,
+  );
+
+  /// A copy with the recents list emptied — the PROJECTS section's "clear all"
+  /// (design §6, §9.2). Pins are left intact: they are managed separately and
+  /// never age out, so clearing recents leaves the pinned projects standing.
+  AppSettings withClearedRecents() => AppSettings(
+    recentProjects: const [],
     pinnedProjects: pinnedProjects,
     autosaveInterval: autosaveInterval,
     audio: audio,

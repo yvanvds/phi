@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:yse/yse.dart';
 
@@ -41,6 +42,15 @@ class RealYseGateway implements YseGateway {
     _closeMidiInputs();
     _destroyAllChannels();
     _system.close();
+  }
+
+  @override
+  String get engineVersion => System.version;
+
+  @override
+  String? get libraryPath {
+    final path = Platform.environment['YSE_DLL_PATH'];
+    return (path != null && path.isNotEmpty) ? path : null;
   }
 
   @override

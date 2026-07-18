@@ -9,6 +9,7 @@ import '../domain/midi/store/clip_document.dart';
 import '../domain/midi/store/midi_transform_codec.dart';
 import '../domain/mix/mix_strip.dart';
 import '../domain/project/app_settings/audio_settings.dart';
+import '../domain/project/app_settings/midi_settings.dart';
 import '../domain/project/commands/create_entity_command.dart';
 import '../domain/project/commands/move_entity_command.dart';
 import '../domain/project/commands/remove_entity_command.dart';
@@ -585,6 +586,66 @@ class PhiEngine {
     if (!_started) return false;
     return _audio.switchTo(desired);
   }
+
+  // ─── MIDI ports (design §5, §6) ──────────────────────────────────────────
+  //
+  // The settings dialog's MIDI section reaches the hardware only through these
+  // façade methods — the shell never touches the MIDI gateway directly. Output
+  // and input ports are addressed by **name**; a stored name resolves to the
+  // current device index each time a port is opened, so a replug keeps working.
+
+  /// The MIDI output ports the engine can currently see, by name — the list the
+  /// settings dialog's output-port picker is built from. Empty when no MIDI
+  /// gateway was wired (tests that don't exercise MIDI).
+  List<String> midiOutputPorts() {
+    final mg = _midiGateway;
+    if (mg == null) return const [];
+    return [
+      for (var i = 0; i < mg.outputDeviceCount; i++) mg.outputDeviceName(i),
+    ];
+  }
+
+  /// The MIDI input ports the engine can currently see, by name — the settings
+  /// dialog's input checklist. Empty when no MIDI gateway was wired.
+  List<String> midiInputPorts() => _midiGateway?.inputDeviceNames() ?? const [];
+
+  /// The names of the MIDI input ports currently open. Empty when none are open
+  /// or no MIDI gateway was wired.
+  List<String> openMidiInputs() => _midiGateway?.openInputNames ?? const [];
+
+  /// The chosen MIDI output port's name, or `null` for the default (first port).
+  /// `null` before [start] or when no MIDI gateway was wired.
+  String? get midiOutputPort => _midi?.outputPortName;
+
+  /// Broadcast of the **port name** on every MIDI message received on an open
+  /// input port — the settings dialog flashes that port's activity dot (design
+  /// §6). An empty stream when no MIDI gateway was wired.
+  Stream<String> get midiInputActivity =>
+      _midiGateway?.inputActivity ?? const Stream<String>.empty();
+
+  /// Applies [settings] to the MIDI subsystem (design §5): sets the output port
+  /// by name (resolved to an index at open time, so a replug keeps working) and
+  /// opens exactly the enabled input ports, closing any others. The output port
+  /// no-ops before [start] (no player yet); input ports open through the gateway
+  /// regardless. Nothing is *routed* from the inputs yet — this only remembers
+  /// and opens the hardware (design §8).
+  void applyMidiSettings(MidiSettings settings) {
+    _midi?.outputPortName = settings.outputPort;
+    _midiGateway?.openInputs(settings.inputPorts);
+  }
+
+  // ─── Diagnostics (design §6) ─────────────────────────────────────────────
+
+  /// The libYSE library version string — a read-only diagnostics fact.
+  String get engineVersion => _gateway.engineVersion;
+
+  /// The resolved engine-library path (`YSE_DLL_PATH`), or `null` when unset —
+  /// a read-only diagnostics fact.
+  String? get engineLibraryPath => _gateway.libraryPath;
+
+  /// The count of audio callbacks that failed to complete on time — the
+  /// diagnostics "drop counter". `0` before [start].
+  int get missedCallbacks => _started ? _gateway.missedCallbacks : 0;
 
   /// Set the master-channel volume. Clamped to `[0.0, 1.0]`. No-op before
   /// [start].

@@ -78,10 +78,10 @@ void main() {
     await tester.tap(find.text('MIDI'));
     await tester.pumpAndSettle();
 
-    // The AUDIO fields are gone and the placeholder for the pending section
-    // shows instead.
+    // The AUDIO fields are gone and the MIDI section's fields show instead.
     expect(find.text('OUTPUT DEVICE'), findsNothing);
-    expect(find.textContaining('MIDI settings'), findsOneWidget);
+    expect(find.text('OUTPUT PORT'), findsOneWidget);
+    expect(find.text('INPUT PORTS'), findsOneWidget);
   });
 
   testWidgets('the close button dismisses the dialog', (tester) async {
