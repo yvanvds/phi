@@ -681,6 +681,28 @@ main + app          (orchestration)
   tests (the fader brackets its changes with start/end), and an end-to-end
   `mix_persistence` integration test (add a channel → mute + solo + drag its fader
   → save → reload restores volume/mute/solo).
+  Issue #165 opens the mix epic (design `docs/design/mix.md` §3) with
+  **kind-declared group payloads** — the registry seam that lets a `mix.` group
+  *be a bus*. A `RegistryGroup` now carries an optional `payload` + `references`
+  (the same shape an entity does, mutable in place since a group is a container),
+  so a group bus has its own fader/sends. Which kinds' groups *persist* a payload
+  is a store-level declaration (`defaultGroupPayloadKinds()` → `{mix}`); for a
+  declared kind the group's `_group.json` gains a `kind`/`version`/`name`/
+  `references`/`payload` envelope beside the existing order/colour metadata,
+  encoded by the same per-kind `EntityPayloadCodec`, while an undeclared kind
+  (`clip.`) is byte-for-byte unchanged. Group payloads join the ordinary command
+  layer — `createGroup(payload:, references:)` (via `CreateGroupCommand`) and a
+  new `UpdateGroupPayloadCommand`/`ProjectRegistry.updateGroupPayload`, both
+  journalled and replayed by `RegistryCommandCodec` — and the **back-reference
+  index** now indexes a group bus's own edges, so delete-impact warns when a
+  return still has a group sending to it and rename-refactor rewrites a group
+  bus's sends (a `ReferenceSource` payload via `withReferenceUpdated`, or its
+  declared set). No surface wiring yet — a group bus is created only through the
+  domain layer until the grouped rack lands (#169); `MixStrip` grows real `sends`
+  in #166. Covered by domain unit tests (registry create/update/delete-impact/
+  rename-refactor over group payloads, the two commands, journal replay) plus
+  in-memory and real-filesystem store round-trips (`_group.json` payload
+  envelope; `clip.` groups unchanged).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

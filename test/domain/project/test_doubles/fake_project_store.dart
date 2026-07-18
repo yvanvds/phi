@@ -13,10 +13,16 @@ import 'package:phi/domain/project/store/project_store.dart';
 /// without touching the filesystem. [saveCount] lets tests assert autosave
 /// cadence, and [files] is exposed so a test can inspect the exact bytes written.
 class FakeProjectStore implements ProjectStore {
-  /// Builds a fake store. [codecs] supplies per-kind payload (de)serialisers,
+  /// Builds a fake store. [codecs] supplies per-kind payload (de)serialisers and
+  /// [groupPayloadKinds] the kinds whose groups persist a payload (issue #165),
   /// mirroring `RealProjectStore`.
-  FakeProjectStore({Map<String, EntityPayloadCodec> codecs = const {}})
-    : _serializer = ProjectSerializer(codecs: codecs);
+  FakeProjectStore({
+    Map<String, EntityPayloadCodec> codecs = const {},
+    Set<String> groupPayloadKinds = const {},
+  }) : _serializer = ProjectSerializer(
+         codecs: codecs,
+         groupPayloadKinds: groupPayloadKinds,
+       );
 
   /// The in-memory folder: relative path → pretty-printed JSON contents.
   final Map<String, String> files = {};

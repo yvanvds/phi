@@ -35,3 +35,17 @@ abstract interface class ReferenceSource {
   /// undo to round-trip; a plain address substitution satisfies this.
   ReferenceSource withReferenceUpdated(EntityAddress from, EntityAddress to);
 }
+
+/// Resolves the outgoing reference set for a registry node from its [payload]
+/// and an explicitly [declared] set: a [ReferenceSource] payload is
+/// authoritative (its own references win and [declared] is ignored), otherwise
+/// the [declared] set is used. The result is unmodifiable.
+///
+/// Shared by [RegistryEntity] and the payload-carrying [RegistryGroup] so a
+/// node's edges are derived identically whether it is a leaf or a group bus.
+Set<EntityAddress> resolveReferences(
+  Object? payload,
+  Set<EntityAddress> declared,
+) => payload is ReferenceSource
+    ? Set<EntityAddress>.unmodifiable(payload.references)
+    : Set<EntityAddress>.unmodifiable(declared);

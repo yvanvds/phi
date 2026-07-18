@@ -121,6 +121,7 @@ class _PhiAppState extends State<PhiApp> {
         storeFactory: (directory) => RealProjectStore(
           Directory(directory),
           codecs: defaultEntityCodecs(),
+          groupPayloadKinds: defaultGroupPayloadKinds(),
         ),
         journalStoreFactory: (directory) =>
             RealJournalStore(Directory(directory)),

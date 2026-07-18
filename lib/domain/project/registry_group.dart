@@ -1,3 +1,5 @@
+import 'entity_address.dart';
+import 'reference_source.dart';
 import 'registry_node.dart';
 
 /// A named folder in the registry tree — a [RegistryGroup] nests other groups
@@ -10,14 +12,55 @@ import 'registry_node.dart';
 /// already lowercase — case-insensitive sibling uniqueness reduces to plain key
 /// uniqueness. Insertion order is preserved so listings are stable.
 ///
+/// **Kind-declared group payloads (issue #165).** A group may itself carry an
+/// entity [payload] — the "groups are buses" model of `docs/design/mix.md` §3,
+/// where a `mix.` group *is* a bus with its own fader and sends. A plain
+/// structural folder (a `clip.` group, an auto-created ancestor) leaves it
+/// `null` and is unaffected. When a group carries a payload it also carries the
+/// outgoing [references] that payload declares, so a group bus's sends feed the
+/// back-reference index exactly like an entity's edges (delete-impact and
+/// rename-refactor then cover them). Whether a payload is *persisted* is a
+/// per-kind declaration the store owns; the tree stays kind-generic.
+///
 /// This node models the *shape* of the tree; enforcing the rules on mutation is
 /// the [ProjectRegistry]'s job, so the setters here are intentionally low-level
 /// and unchecked. Callers outside the registry should treat a group as
 /// read-only.
 class RegistryGroup extends RegistryNode {
-  RegistryGroup(super.name);
+  /// Builds a group, optionally carrying [payload] and the [references] it
+  /// declares. A [ReferenceSource] payload's own references win; otherwise the
+  /// explicit [references] are used (the same rule as [RegistryEntity]).
+  RegistryGroup(
+    super.name, {
+    Object? payload,
+    Set<EntityAddress> references = const {},
+  }) : _payload = payload,
+       _references = resolveReferences(payload, references);
 
   final Map<String, RegistryNode> _children = {};
+  Object? _payload;
+  Set<EntityAddress> _references;
+
+  /// This group's own payload (a group bus's fader/sends for kinds that declare
+  /// group payloads), or `null` for a plain structural folder. Opaque to the
+  /// registry, exactly like an entity's payload.
+  Object? get payload => _payload;
+
+  /// The addresses this group's payload points at — the group's outgoing edges
+  /// in the back-reference index. Unmodifiable; empty when the group carries no
+  /// payload or references nothing.
+  Set<EntityAddress> get references => _references;
+
+  /// Replaces this group's [payload] and its resolved [references] in place,
+  /// keeping the group's children and its position among its siblings. Used by
+  /// the registry for an in-place payload edit and when a refactor rewrites the
+  /// group's references. Re-derives the edge set from a [ReferenceSource]
+  /// payload, else from [references]. Low-level: the registry keeps the
+  /// back-reference index in step around this call.
+  void assign(Object? payload, {Set<EntityAddress> references = const {}}) {
+    _payload = payload;
+    _references = resolveReferences(payload, references);
+  }
 
   /// The direct children — groups and entities — in insertion order. Callers
   /// must not mutate the returned view.

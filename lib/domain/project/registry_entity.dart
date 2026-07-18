@@ -26,14 +26,11 @@ class RegistryEntity extends RegistryNode {
     Object? payload,
     Set<EntityAddress> references = const {},
   }) {
-    final resolved = payload is ReferenceSource
-        ? Set<EntityAddress>.unmodifiable(payload.references)
-        : Set<EntityAddress>.unmodifiable(references);
     return RegistryEntity._(
       name: name,
       kind: kind,
       payload: payload,
-      references: resolved,
+      references: resolveReferences(payload, references),
     );
   }
 

@@ -4,6 +4,7 @@ import 'package:phi/domain/project/commands/create_group_command.dart';
 import 'package:phi/domain/project/commands/move_entity_command.dart';
 import 'package:phi/domain/project/commands/remove_entity_command.dart';
 import 'package:phi/domain/project/commands/update_entity_payload_command.dart';
+import 'package:phi/domain/project/commands/update_group_payload_command.dart';
 import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/project/project_registry.dart';
 import 'package:phi/domain/project/recovery/registry_command_codec.dart';
@@ -57,6 +58,43 @@ void main() {
     codec.decode(journaled, registry).apply();
 
     expect(registry.groupAt(addr('clip.drums')), isNotNull);
+  });
+
+  test('decoded create_group replays a group bus payload and sends', () {
+    // A group bus (issue #165) is journaled with its payload and references.
+    final original = ProjectRegistry();
+    original.createEntity(addr('mix.verb'));
+    final journaled = CreateGroupCommand(
+      original,
+      addr('mix.drums'),
+      payload: {'name': 'drums', 'volume': 0.5},
+      references: {addr('mix.verb')},
+    ).toJson();
+
+    final registry = ProjectRegistry();
+    registry.createEntity(addr('mix.verb'));
+    codec.decode(journaled, registry).apply();
+
+    expect(registry.groupAt(addr('mix.drums'))!.payload, {
+      'name': 'drums',
+      'volume': 0.5,
+    });
+    expect(registry.referrersOf(addr('mix.verb')), {addr('mix.drums')});
+  });
+
+  test('decoded update_group_payload replays the bus payload change', () {
+    final original = ProjectRegistry();
+    original.createGroup(addr('mix.drums'), payload: {'volume': 1.0});
+    final journaled = UpdateGroupPayloadCommand(original, addr('mix.drums'), {
+      'volume': 0.2,
+    }).toJson();
+    expect(journaled['type'], 'update_group_payload');
+
+    final registry = ProjectRegistry();
+    registry.createGroup(addr('mix.drums'), payload: {'volume': 1.0});
+    codec.decode(journaled, registry).apply();
+
+    expect(registry.groupAt(addr('mix.drums'))!.payload, {'volume': 0.2});
   });
 
   test('decoded move replays the relocation and refactor', () {

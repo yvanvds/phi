@@ -104,10 +104,15 @@ class ProjectRegistry extends ChangeNotifier {
   Set<EntityAddress> referrersOf(EntityAddress target) =>
       _backrefs.referrersOf(target);
 
-  /// The addresses the entity at [source] points at, or an empty set when
-  /// [source] holds no entity or references nothing.
-  Set<EntityAddress> referencesOf(EntityAddress source) =>
-      entityAt(source)?.references ?? const <EntityAddress>{};
+  /// The addresses the node at [source] points at, or an empty set when
+  /// [source] is absent or references nothing. Covers both entities and
+  /// payload-carrying group buses (issue #165).
+  Set<EntityAddress> referencesOf(EntityAddress source) {
+    final node = nodeAt(source);
+    if (node is RegistryEntity) return node.references;
+    if (node is RegistryGroup) return node.references;
+    return const <EntityAddress>{};
+  }
 
   /// What removing the node at [address] would strand: the external entities
   /// left pointing at it (or, for a group, at anything inside it). The delete
@@ -167,19 +172,49 @@ class ProjectRegistry extends ChangeNotifier {
   }
 
   /// Creates the group at [address], plus any missing ancestor groups, and
-  /// returns it. Idempotent: if a group already exists at [address] it is
-  /// returned unchanged (and nothing notifies). Throws a [RegistryException]
-  /// ([RegistryError.groupEntityClash]) if an entity already occupies [address]
-  /// or any ancestor on the path. Notifies only when a group is actually added.
-  RegistryGroup createGroup(EntityAddress address) {
+  /// returns it — optionally carrying an entity [payload] and the [references]
+  /// it declares (a group bus's fader/sends, design `docs/design/mix.md` §3).
+  ///
+  /// Idempotent: if a group already exists at [address] and no [payload] or
+  /// [references] are supplied, it is returned unchanged (nothing notifies) —
+  /// the `mkdir -p` behaviour ancestor creation relies on. Supplying a payload
+  /// for an already-existing group (e.g. one an entity create auto-materialised
+  /// as a bare ancestor) *establishes* that payload on it, reindexing its edges
+  /// and notifying, but emits no create event since the group already existed.
+  ///
+  /// When [payload] is a [ReferenceSource] its own references win and
+  /// [references] is ignored; otherwise the explicit set is used. Throws a
+  /// [RegistryException] ([RegistryError.groupEntityClash]) if an entity already
+  /// occupies [address] or any ancestor on the path.
+  RegistryGroup createGroup(
+    EntityAddress address, {
+    Object? payload,
+    Set<EntityAddress> references = const {},
+  }) {
     final parent = _ensureGroupPath(address.kind, address.groupPath);
     final existing = parent.child(address.name);
-    if (existing is RegistryGroup) return existing;
     if (existing is RegistryEntity) {
       throw _clashFor(existing, address, creatingGroup: true);
     }
-    final group = RegistryGroup(address.name);
+    if (existing is RegistryGroup) {
+      if (payload == null && references.isEmpty) return existing;
+      _backrefs.removeSource(address);
+      existing.assign(payload, references: references);
+      if (existing.references.isNotEmpty) {
+        _backrefs.add(address, existing.references);
+      }
+      _bumpAndNotify();
+      return existing;
+    }
+    final group = RegistryGroup(
+      address.name,
+      payload: payload,
+      references: references,
+    );
     parent.put(group);
+    if (group.references.isNotEmpty) {
+      _backrefs.add(address, group.references);
+    }
     _bumpAndNotify();
     _emit(RegistryEntityCreated(address));
     return group;
@@ -245,6 +280,38 @@ class ProjectRegistry extends ChangeNotifier {
     _backrefs.removeSource(address);
     final resolved = entityAt(address)!.references;
     if (resolved.isNotEmpty) _backrefs.add(address, resolved);
+    _bumpAndNotify();
+  }
+
+  /// Replaces the [payload] of the *group* at [address] in place, keeping its
+  /// name, position and children — the group-bus counterpart of
+  /// [updateEntityPayload] (issue #165). This is the hook a group-payload edit
+  /// (a group bus's fader/mute/solo) publishes through the command layer so the
+  /// change is dirty-tracked and journaled like any other.
+  ///
+  /// References follow the new payload when it is a [ReferenceSource]; otherwise
+  /// the group's existing declared references are kept (a plain-map payload edit
+  /// does not by itself re-route sends). The back-reference index is updated to
+  /// match. Throws [RegistryError.notFound] when no group sits at [address].
+  /// Notifies, but emits **no** lifecycle event — a payload change is not a
+  /// structural (namespace) mutation, mirroring [updateEntityPayload].
+  void updateGroupPayload(EntityAddress address, Object? payload) {
+    final parent = _resolveGroup(address.kind, address.groupPath);
+    final existing = parent?.child(address.name);
+    if (existing is! RegistryGroup) {
+      throw RegistryException(
+        RegistryError.notFound,
+        'Cannot update the payload of "$address": no group is there.',
+      );
+    }
+    _backrefs.removeSource(address);
+    final references = payload is ReferenceSource
+        ? payload.references.toSet()
+        : existing.references;
+    existing.assign(payload, references: references);
+    if (existing.references.isNotEmpty) {
+      _backrefs.add(address, existing.references);
+    }
     _bumpAndNotify();
   }
 
@@ -317,14 +384,18 @@ class ProjectRegistry extends ChangeNotifier {
     final remap = _buildRemap(node, from, to);
 
     // Refactor referents that live *outside* the moved subtree, rewriting each
-    // in place before the tree changes (their own addresses do not move).
+    // in place before the tree changes (their own addresses do not move). A
+    // referent may be an entity or a payload-carrying group bus (issue #165).
     final external = _externalReferrers(remap, from);
     for (final referrer in external) {
-      final entity = entityAt(referrer);
-      if (entity == null) continue;
-      final rewritten = _rewriteReferences(entity, remap);
-      if (!identical(rewritten, entity)) {
-        _resolveGroup(referrer.kind, referrer.groupPath)!.put(rewritten);
+      final node = nodeAt(referrer);
+      if (node is RegistryEntity) {
+        final rewritten = _rewriteReferences(node, remap);
+        if (!identical(rewritten, node)) {
+          _resolveGroup(referrer.kind, referrer.groupPath)!.put(rewritten);
+        }
+      } else if (node is RegistryGroup) {
+        _rewriteGroupReferencesInPlace(node, remap);
       }
     }
 
@@ -411,6 +482,9 @@ class ProjectRegistry extends ChangeNotifier {
   ) {
     if (node is RegistryEntity) return _rewriteReferences(node, remap);
     final group = node as RegistryGroup;
+    // A group bus in the moved subtree may itself reference a remapped address
+    // (its sends), so rewrite its own edges before descending (issue #165).
+    _rewriteGroupReferencesInPlace(group, remap);
     for (final child in group.children.toList()) {
       final relocated = _relocate(child, remap);
       if (!identical(relocated, child)) group.put(relocated);
@@ -444,6 +518,32 @@ class ProjectRegistry extends ChangeNotifier {
     );
   }
 
+  /// Rewrites a payload-carrying group's own references in place, keeping its
+  /// children — the group counterpart of [_rewriteReferences] (issue #165). A
+  /// [ReferenceSource] payload is repointed through [ReferenceSource.withReferenceUpdated];
+  /// a plain payload keeps its value and only the declared reference set is
+  /// remapped. A no-op when nothing in the group's edges is affected.
+  void _rewriteGroupReferencesInPlace(
+    RegistryGroup group,
+    Map<EntityAddress, EntityAddress> remap,
+  ) {
+    final hits = group.references.where(remap.containsKey).toList();
+    if (hits.isEmpty) return;
+    final payload = group.payload;
+    if (payload is ReferenceSource) {
+      var rewritten = payload;
+      for (final old in hits) {
+        rewritten = rewritten.withReferenceUpdated(old, remap[old]!);
+      }
+      group.assign(rewritten);
+    } else {
+      group.assign(
+        payload,
+        references: group.references.map((r) => remap[r] ?? r).toSet(),
+      );
+    }
+  }
+
   RegistryNode _renamedNode(RegistryNode node, String newName) {
     if (node is RegistryEntity) {
       return RegistryEntity(
@@ -453,13 +553,20 @@ class ProjectRegistry extends ChangeNotifier {
         references: node.references,
       );
     }
-    return RegistryGroup(newName)..adoptChildrenFrom(node as RegistryGroup);
+    final group = node as RegistryGroup;
+    return RegistryGroup(
+      newName,
+      payload: group.payload,
+      references: group.references,
+    )..adoptChildrenFrom(group);
   }
 
   void _deindexSubtree(RegistryNode node, EntityAddress address) {
     if (node is RegistryEntity) {
       _backrefs.removeSource(address);
     } else if (node is RegistryGroup) {
+      // Drop the group bus's own outgoing edges too (issue #165), then recurse.
+      _backrefs.removeSource(address);
       for (final child in node.children) {
         _deindexSubtree(child, address.child(child.name));
       }
@@ -484,6 +591,14 @@ class ProjectRegistry extends ChangeNotifier {
   }
 
   void _indexGroup(String kind, RegistryGroup group, List<String> prefix) {
+    // Index this group bus's own edges (issue #165). Skipped for the kind root,
+    // which has no address (an empty prefix) and never carries a payload.
+    if (prefix.isNotEmpty && group.references.isNotEmpty) {
+      _backrefs.add(
+        EntityAddress(kind: kind, segments: prefix),
+        group.references,
+      );
+    }
     for (final child in group.children) {
       final segments = [...prefix, child.name];
       if (child is RegistryEntity) {

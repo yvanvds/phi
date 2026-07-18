@@ -3,6 +3,7 @@ import '../commands/create_group_command.dart';
 import '../commands/move_entity_command.dart';
 import '../commands/remove_entity_command.dart';
 import '../commands/update_entity_payload_command.dart';
+import '../commands/update_group_payload_command.dart';
 import '../entity_address.dart';
 import '../project_command.dart';
 import '../project_registry.dart';
@@ -46,7 +47,12 @@ class RegistryCommandCodec {
           references: _references(json),
         );
       case 'create_group':
-        return CreateGroupCommand(registry, _address(json, 'address'));
+        return CreateGroupCommand(
+          registry,
+          _address(json, 'address'),
+          payload: json['payload'],
+          references: _references(json),
+        );
       case 'move':
         return MoveEntityCommand(
           registry,
@@ -57,6 +63,12 @@ class RegistryCommandCodec {
         return RemoveEntityCommand(registry, _address(json, 'address'));
       case 'update_payload':
         return UpdateEntityPayloadCommand(
+          registry,
+          _address(json, 'address'),
+          json['payload'],
+        );
+      case 'update_group_payload':
+        return UpdateGroupPayloadCommand(
           registry,
           _address(json, 'address'),
           json['payload'],
