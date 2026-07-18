@@ -2,6 +2,10 @@ import 'dart:async';
 
 import 'package:yse/yse.dart';
 
+import '../../domain/project/app_settings/speaker_layout.dart';
+import 'audio_device_descriptor.dart';
+import 'audio_device_exception.dart';
+import 'audio_device_state.dart';
 import 'yse_gateway.dart';
 
 /// Production [YseGateway] that forwards every call to `System.instance`.
@@ -23,6 +27,12 @@ class RealYseGateway implements YseGateway {
   @override
   void init() {
     _system.init();
+    _openMidiInputs();
+  }
+
+  @override
+  void initOffline() {
+    _system.initOffline();
     _openMidiInputs();
   }
 
@@ -66,6 +76,96 @@ class RealYseGateway implements YseGateway {
 
   @override
   int get activeOutputLatency => _system.activeOutputLatency;
+
+  @override
+  List<AudioDeviceDescriptor> audioDevices() => [
+    for (final device in _system.devices)
+      AudioDeviceDescriptor(
+        name: device.name,
+        hostName: device.hostName,
+        inputChannelNames: device.inputChannelNames,
+        outputChannelNames: device.outputChannelNames,
+        sampleRates: device.sampleRates,
+        bufferSizes: device.bufferSizes,
+        defaultBufferSize: device.defaultBufferSize,
+        outputLatency: device.outputLatency,
+        inputLatency: device.inputLatency,
+      ),
+  ];
+
+  @override
+  void openAudioDevice(
+    AudioDeviceDescriptor? descriptor, {
+    double? rate,
+    int? buffer,
+    SpeakerLayout layout = SpeakerLayout.auto,
+  }) {
+    // Resolve the target against the *current* device list by name + host, so a
+    // stored choice follows the hardware across a replug/reindex (design §3).
+    // A null descriptor means the platform default.
+    final device = descriptor == null
+        ? _defaultDevice()
+        : _findDevice(descriptor.name, descriptor.hostName);
+    if (device == null) {
+      throw AudioDeviceException(
+        descriptor == null
+            ? 'no platform-default audio device is available'
+            : 'no audio device named "${descriptor.name}" on '
+                  '"${descriptor.hostName}" is available',
+      );
+    }
+    final setup = DeviceSetup()..output = device;
+    if (rate != null) setup.sampleRate = rate;
+    if (buffer != null) setup.bufferSize = buffer;
+    try {
+      _system.closeCurrentDevice();
+      _system.openDevice(setup, layout: _channelType(layout));
+    } on YseException catch (e) {
+      // Keep the FFI exception type inside the bridge (project boundary): the
+      // caller only ever sees the bridge-level failure.
+      throw AudioDeviceException(
+        'engine failed to open "${device.name}" on "${device.hostName}": '
+        '${e.message}',
+      );
+    } finally {
+      setup.dispose();
+    }
+  }
+
+  @override
+  AudioDeviceState activeAudioState() => AudioDeviceState(
+    sampleRate: _system.activeSampleRate,
+    bufferSize: _system.activeBufferSize,
+    outputLatency: _system.activeOutputLatency,
+  );
+
+  /// The engine [Device] matching [name] + [hostName] in the current device
+  /// list, or `null` when none does (unplugged, renamed).
+  Device? _findDevice(String name, String hostName) {
+    for (final device in _system.devices) {
+      if (device.name == name && device.hostName == hostName) return device;
+    }
+    return null;
+  }
+
+  /// The platform-default output device, resolved by the engine's reported
+  /// default name + host, or `null` when it can't be found.
+  Device? _defaultDevice() =>
+      _findDevice(_system.defaultDevice, _system.defaultHost);
+
+  /// Maps the domain-owned [SpeakerLayout] to yse's `ChannelType`. The mapping
+  /// stays here in the bridge so the domain never imports `package:yse`
+  /// (design §7).
+  ChannelType _channelType(SpeakerLayout layout) => switch (layout) {
+    SpeakerLayout.auto => ChannelType.auto,
+    SpeakerLayout.mono => ChannelType.mono,
+    SpeakerLayout.stereo => ChannelType.stereo,
+    SpeakerLayout.quad => ChannelType.quad,
+    SpeakerLayout.surround51 => ChannelType.surround51,
+    SpeakerLayout.surround51Side => ChannelType.surround51Side,
+    SpeakerLayout.surround61 => ChannelType.surround61,
+    SpeakerLayout.surround71 => ChannelType.surround71,
+  };
 
   @override
   Stream<void> get midiActivity => _midiActivity.stream;

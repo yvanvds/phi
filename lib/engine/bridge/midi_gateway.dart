@@ -20,6 +20,45 @@ abstract interface class MidiGateway {
   /// Name of the output device at [id]. Pair with [open].
   String outputDeviceName(int id);
 
+  // ─── MIDI input (design §4, §5) ─────────────────────────────────────────────
+  //
+  // Enumeration + open/close of the enabled input ports, plus an activity tick
+  // for the UI dot. Ports are addressed by **name**, never by index — the
+  // stored name resolves to the current index each open, so replugging keeps
+  // working (design §5). Nothing is *routed* anywhere yet; consuming MIDI-in
+  // belongs to the racks & voices epic (design §8). This epic only remembers
+  // and opens the hardware and shows that it is receiving.
+
+  /// Number of MIDI input devices visible to the engine. `0` when none are
+  /// present or the platform has no MIDI support.
+  int get inputDeviceCount;
+
+  /// Name of the input device at [id]. Pair with [openInputs].
+  String inputDeviceName(int id);
+
+  /// The names of every visible MIDI input port, in listing order — the
+  /// enumerated set the settings window presents as an input checklist.
+  List<String> inputDeviceNames();
+
+  /// Open exactly the input ports whose names are in [names], closing any
+  /// currently-open input whose name is not in the set. Names are resolved to
+  /// the current device index on each call, so a replug keeps working; a name
+  /// that matches no visible port is skipped. Messages received on an open port
+  /// pulse [inputActivity]. Idempotent for an unchanged [names] set.
+  void openInputs(List<String> names);
+
+  /// Close every open input port. Idempotent.
+  void closeInputs();
+
+  /// The names of the input ports currently open, in the order they were
+  /// opened. Empty when none are open.
+  List<String> get openInputNames;
+
+  /// Broadcast stream that emits the **port name** on every MIDI message
+  /// received on an open input port — the settings window flashes that port's
+  /// activity dot (design §6). Each emission is a received-message tick.
+  Stream<String> get inputActivity;
+
   /// Open the output device at [port]. A second call closes the previous
   /// port and opens the new one. No-op for an out-of-range [port].
   void open(int port);
