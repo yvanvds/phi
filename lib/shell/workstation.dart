@@ -31,6 +31,7 @@ import 'project/close_decision.dart';
 import 'project/close_guard.dart';
 import 'project/project_actions.dart';
 import 'right_inspector/right_inspector.dart';
+import 'settings/settings_dialog.dart';
 import 'top_toolbar/top_toolbar.dart';
 
 /// Phi workstation chrome — composes the four fixed regions (top toolbar,
@@ -231,6 +232,21 @@ class _WorkstationState extends State<Workstation> {
     if (actions != null) unawaited(actions.save(context));
   }
 
+  /// Opens the settings dialog (design `settings-and-devices.md` §6) over the
+  /// engine and the project's single settings owner. Wired only when a project
+  /// controller is present — the settings owner lives on it.
+  void _openSettings() {
+    final controller = widget.projectController;
+    if (controller == null) return;
+    unawaited(
+      SettingsDialog.show(
+        context,
+        engine: widget.engine,
+        settings: controller.settingsController,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     widget.projectController?.removeListener(_bindEngineRegistry);
@@ -312,6 +328,9 @@ class _WorkstationState extends State<Workstation> {
               session: widget.session,
               projectController: widget.projectController,
               directoryPicker: widget.directoryPicker,
+              onOpenSettings: widget.projectController != null
+                  ? _openSettings
+                  : null,
             ),
             Expanded(
               child: Row(

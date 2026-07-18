@@ -67,6 +67,24 @@ main + app          (orchestration)
   play/stop transport, time-domain placeholder, projection toggle), left
   rail (6 buttons, only Mix enabled), bottom status (LIVE dot, CPU + drops),
   right inspector (tap to expand 28→320px, hosts a master-volume fader)
+- Settings dialog (`lib/shell/settings/`, design `settings-and-devices.md`
+  §6, issue #154): a modal overlay (no rail button, no OS window) opened from
+  the File menu's `Settings…` item, with a left section list (AUDIO · MIDI ·
+  PROJECTS · DIAGNOSTICS) and no OK/Cancel — every control applies immediately.
+  Only the **AUDIO** section carries fields so far: `PhiSelect` pickers for
+  output device (grouped by host), sample rate + buffer size (populated from the
+  *selected* device's reported lists, "device default" first), and speaker
+  layout, plus a live read-back of the active rate / buffer / latency. Each
+  change goes through `PhiEngine.switchAudioDevice` (the live-switch path); on
+  success the new `AudioSettings` persists through the single `AppSettingsController`
+  (§7), and on failure the coordinator reverts to the previous working device and
+  the picker snaps back (§9.3). `PhiEngine` now also exposes `audioDevices()` and
+  `activeAudioState()` so the dialog reaches the device surface without touching
+  the gateway. The MIDI/PROJECTS/DIAGNOSTICS sections are placeholders until the
+  follow-up issue. Covered by unit (`AppSettings.withAudio`), widget (the AUDIO
+  section's apply/persist/revert + the dialog shell), and an end-to-end
+  `settings_dialog_audio` integration test (open from the File menu → switch the
+  device → persisted).
 - Mix surface: horizontal rack of `ChannelStrip` widgets (master pinned
   right, user strips left). Header has a `+` to add channels and the
   `System.audioTest` toggle. Each strip carries voice-swatch + name + fader

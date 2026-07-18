@@ -156,6 +156,19 @@ class AppSettings {
     ).withRecentProject(path);
   }
 
+  /// A copy with the [audio] section replaced — the single write the settings
+  /// dialog's AUDIO section makes (design §6, §7). Everything else (recents,
+  /// pins, cadence, MIDI, version) is carried through unchanged, so persisting an
+  /// audio edit never disturbs the rest of the file.
+  AppSettings withAudio(AudioSettings audio) => AppSettings(
+    recentProjects: recentProjects,
+    pinnedProjects: pinnedProjects,
+    autosaveInterval: autosaveInterval,
+    audio: audio,
+    midi: midi,
+    version: version,
+  );
+
   /// The settings as the JSON map written to `settings.json`.
   Map<String, Object?> toJson() => {
     'version': version,

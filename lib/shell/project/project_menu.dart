@@ -21,11 +21,16 @@ class ProjectMenu extends StatelessWidget {
   const ProjectMenu({
     required this.controller,
     required this.picker,
+    this.onOpenSettings,
     super.key,
   });
 
   final ProjectController controller;
   final ProjectDirectoryPicker picker;
+
+  /// Opens the settings dialog (design `settings-and-devices.md` §6). When set, a
+  /// "Settings…" item joins the menu; `null` (the bare Phase-1 path) omits it.
+  final VoidCallback? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +58,11 @@ class ProjectMenu extends StatelessWidget {
           onPressed: () => unawaited(actions.rename(context)),
           child: const Text('Rename…'),
         ),
+        if (onOpenSettings != null)
+          MenuItemButton(
+            onPressed: onOpenSettings,
+            child: const Text('Settings…'),
+          ),
       ],
       builder: (context, menu, _) => _MenuTrigger(
         name: controller.name,

@@ -26,6 +26,7 @@ class TopToolbar extends StatelessWidget {
     required this.session,
     this.projectController,
     this.directoryPicker,
+    this.onOpenSettings,
     super.key,
   });
 
@@ -40,6 +41,10 @@ class TopToolbar extends StatelessWidget {
   /// The folder picker the project menu opens native dialogs through. Required
   /// alongside [projectController] to show the menu.
   final ProjectDirectoryPicker? directoryPicker;
+
+  /// Opens the settings dialog from the project menu (design
+  /// `settings-and-devices.md` §6). `null` omits the "Settings…" item.
+  final VoidCallback? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +63,11 @@ class TopToolbar extends StatelessWidget {
           _Wordmark(),
           if (showProject) ...[
             const SizedBox(width: PhiSpacing.s3),
-            ProjectMenu(controller: controller, picker: picker),
+            ProjectMenu(
+              controller: controller,
+              picker: picker,
+              onOpenSettings: onOpenSettings,
+            ),
             const SizedBox(width: PhiSpacing.s2),
             DirtyIndicator(isDirty: controller.isDirty),
           ],

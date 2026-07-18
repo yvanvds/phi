@@ -127,6 +127,11 @@ class ProjectController extends ChangeNotifier {
   /// applies these to the engine at launch (design §5).
   AudioSettings get audioSettings => _settings.value.audio;
 
+  /// The single owner of the live app settings (design §7) — the object the
+  /// settings dialog reads the current sections from and writes edits back
+  /// through, so `settings.json` still has exactly one writer.
+  AppSettingsController get settingsController => _settings;
+
   /// Loads persisted settings (recents + autosave cadence) through the single
   /// settings owner and starts the autosave timer. Call once at launch. Safe to
   /// call before any project is open — autosave simply no-ops until one is bound.
