@@ -54,11 +54,18 @@ void main() {
     registry.dispose();
   });
 
-  test('mix strip payloads round-trip as normalised maps', () async {
+  test('mix strip payloads round-trip live state as normalised maps', () async {
     final registry = ProjectRegistry();
+    const strip = MixStrip(
+      name: 'drums',
+      voice: 3,
+      volume: 0.42,
+      muted: true,
+      soloed: true,
+    );
     registry.createEntity(
       EntityAddress(kind: RegistryKinds.mix, segments: ['drums']),
-      payload: const MixStrip(name: 'drums', voice: 3).toJson(),
+      payload: strip.toJson(),
     );
 
     final store = FakeProjectStore(codecs: defaultEntityCodecs());
@@ -69,11 +76,15 @@ void main() {
     final payload = loaded.registry
         .entityAt(EntityAddress(kind: RegistryKinds.mix, segments: ['drums']))!
         .payload;
-    expect(payload, {'name': 'drums', 'voice': 3});
-    expect(
-      MixStrip.fromJson((payload! as Map).cast()),
-      const MixStrip(name: 'drums', voice: 3),
-    );
+    expect(payload, {
+      'name': 'drums',
+      'voice': 3,
+      'volume': 0.42,
+      'muted': true,
+      'soloed': true,
+    });
+    // The live volume/mute/solo survive the save/reload (issue #136).
+    expect(MixStrip.fromJson((payload! as Map).cast()), strip);
 
     registry.dispose();
   });
@@ -100,7 +111,14 @@ void main() {
     final mixFile =
         jsonDecode(store.files['mix/pad.json']!) as Map<String, Object?>;
     expect(mixFile['kind'], 'mix');
-    expect(mixFile['payload'], {'name': 'pad', 'voice': 1});
+    expect(mixFile['version'], 2);
+    expect(mixFile['payload'], {
+      'name': 'pad',
+      'voice': 1,
+      'volume': 1.0,
+      'muted': false,
+      'soloed': false,
+    });
 
     registry.dispose();
   });

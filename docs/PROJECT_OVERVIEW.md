@@ -537,9 +537,9 @@ main + app          (orchestration)
   bare engine (Phase-1 tests, no controller) owns a private empty registry so it
   still adds channels — they just live nowhere persisted. `Workstation` binds the
   engine to the controller's registry and rebinds when New/Open swaps it; the
-  controller gained an injected `seedRegistry` hook. Live volume/mute/solo stay
-  engine-side performance state (persisting them, with gesture-coalesced fader
-  commands, is the mix epic's job). Covered by unit tests (payloads, codecs,
+  controller gained an injected `seedRegistry` hook. Live volume/mute/solo were
+  left as engine-side performance state at the migration; issue #136 persists them
+  (see below). Covered by unit tests (payloads, codecs,
   `NameSlug`, seed, registry-backed engine channels, store round-trip) plus an
   end-to-end `registry_migration` integration test (add a channel through the Mix
   surface → save → a second launch restores the channel, clip and domain).
@@ -584,6 +584,26 @@ main + app          (orchestration)
   graph, the document + v1 migration, the registry method + command + journal
   replay), an engine-level publisher test, and an end-to-end `clip_persistence`
   integration test (edit a note + toggle a chip → save → reload restores both).
+  Issue #136 finishes the `mix.` migration #124 bounded: a channel's **live mix
+  state** (user volume, mute, solo) now persists alongside its identity. `MixStrip`
+  gains `volume`/`muted`/`soloed` and `MixStripCodec` jumps to **schema v2**,
+  migrating a v1 (identity-only) payload forward with defaulted keys. The engine
+  restores that state when it materialises a channel from a `mix.` entity
+  (`applyVolume`/`applyMuted`/`applySoloed` before the solo-aware effective-volume
+  sweep), and publishes live changes back through the same
+  `UpdateEntityPayloadCommand` seam #135 built — **gesture-coalesced** (design §6):
+  a fader drag brackets its transient per-tick mutations between
+  `beginChannelVolumeGesture` / `endChannelVolumeGesture`, so the whole drag emits
+  **one** journaled `mix.` payload command on release instead of one per tick,
+  while discrete mute/solo toggles persist immediately (all de-duped by JSON so a
+  no-op change never dirties). `ChannelStrip` gained `onVolumeChangeStart` /
+  `onVolumeChangeEnd`, wired by the Mix surface to the engine's gesture boundary.
+  Covered by unit tests (strip + codec incl. v1→v2 migration, store round-trip),
+  engine tests (materialisation restores state; the coalescing contract — one
+  command per drag, immediate for taps/toggles, de-dupe, master no-op), widget
+  tests (the fader brackets its changes with start/end), and an end-to-end
+  `mix_persistence` integration test (add a channel → mute + solo + drag its fader
+  → save → reload restores volume/mute/solo).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

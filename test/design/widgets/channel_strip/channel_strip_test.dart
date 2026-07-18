@@ -13,6 +13,8 @@ void main() {
       bool soloed = false,
       bool isMaster = false,
       ValueChanged<double>? onVolumeChanged,
+      VoidCallback? onVolumeChangeStart,
+      VoidCallback? onVolumeChangeEnd,
       VoidCallback? onMuteToggle,
       VoidCallback? onSoloToggle,
     }) {
@@ -29,6 +31,8 @@ void main() {
               voiceGlow: PhiColors.voice1Soft,
               isMaster: isMaster,
               onVolumeChanged: onVolumeChanged ?? (_) {},
+              onVolumeChangeStart: onVolumeChangeStart,
+              onVolumeChangeEnd: onVolumeChangeEnd,
               onMuteToggle: onMuteToggle,
               onSoloToggle: onSoloToggle,
             ),
@@ -98,6 +102,60 @@ void main() {
 
       expect(emitted, isNotEmpty);
       expect(emitted.last, greaterThan(0.8));
+    });
+
+    testWidgets('a fader drag brackets the volume changes with start/end', (
+      tester,
+    ) async {
+      final events = <String>[];
+      await tester.pumpWidget(
+        host(
+          volume: 0.0,
+          onVolumeChanged: (v) => events.add('change'),
+          onVolumeChangeStart: () => events.add('start'),
+          onVolumeChangeEnd: () => events.add('end'),
+        ),
+      );
+
+      final faderRect = tester.getRect(
+        find.byKey(ChannelStrip.faderHitAreaKey),
+      );
+      final g = await tester.startGesture(
+        Offset(faderRect.center.dx, faderRect.bottom - 5),
+      );
+      await g.moveTo(Offset(faderRect.center.dx, faderRect.center.dy));
+      await g.moveTo(Offset(faderRect.center.dx, faderRect.top + 5));
+      await g.up();
+      await tester.pump();
+
+      // Exactly one start and one end bracket the (many) change events.
+      expect(events.first, 'start');
+      expect(events.last, 'end');
+      expect(events.where((e) => e == 'start'), hasLength(1));
+      expect(events.where((e) => e == 'end'), hasLength(1));
+      expect(events.where((e) => e == 'change'), isNotEmpty);
+    });
+
+    testWidgets('a click-to-set brackets its single change with start/end', (
+      tester,
+    ) async {
+      final events = <String>[];
+      await tester.pumpWidget(
+        host(
+          volume: 1.0,
+          onVolumeChanged: (v) => events.add('change'),
+          onVolumeChangeStart: () => events.add('start'),
+          onVolumeChangeEnd: () => events.add('end'),
+        ),
+      );
+
+      final faderRect = tester.getRect(
+        find.byKey(ChannelStrip.faderHitAreaKey),
+      );
+      await tester.tapAt(Offset(faderRect.center.dx, faderRect.bottom - 5));
+      await tester.pump();
+
+      expect(events, ['start', 'change', 'end']);
     });
 
     testWidgets('mute button calls onMuteToggle', (tester) async {

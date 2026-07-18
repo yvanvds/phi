@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
@@ -6,6 +7,7 @@ import '../domain/midi/midi_clip_seed.dart';
 import '../domain/mix/mix_strip.dart';
 import '../domain/project/commands/create_entity_command.dart';
 import '../domain/project/commands/remove_entity_command.dart';
+import '../domain/project/commands/update_entity_payload_command.dart';
 import '../domain/project/entity_address.dart';
 import '../domain/project/name_slug.dart';
 import '../domain/project/project_command.dart';
@@ -195,6 +197,13 @@ class PhiEngine {
       ValueNotifier<List<MixerChannel>>(const []);
   int _voiceCursor = 1;
 
+  /// The channel whose fader is mid-drag, or `null` when no volume gesture is
+  /// live. While set, [setChannelVolume] mutates transient state (the live
+  /// `MixerChannel` + the gateway) freely but defers the journal write, so a
+  /// drag emits **one** `mix.` payload command on [endChannelVolumeGesture]
+  /// rather than one per tick (design §6, the gesture-coalescing seam).
+  MixerChannel? _volumeGestureChannel;
+
   bool _started = false;
 
   /// Whether [start] has been called and [stop] has not.
@@ -377,6 +386,7 @@ class PhiEngine {
   /// registry untouched. A later [_syncChannelsFromRegistry] rebuilds from the
   /// tree.
   void _teardownChannels() {
+    _volumeGestureChannel = null;
     for (final ch in _channelsByAddress.values) {
       if (_started) _gateway.destroyChannel(ch.id);
       ch.dispose();
@@ -421,11 +431,14 @@ class PhiEngine {
             .cast<String, Object?>(),
       );
       final id = _gateway.createChannel(strip.name);
-      _channelsByAddress[address] = MixerChannel.user(
-        id: id,
-        name: strip.name,
-        voice: strip.voice,
-      );
+      // Restore the persisted live mix state (issue #136) onto the fresh
+      // channel; the effective gateway volume is pushed by the solo-aware sweep
+      // below, once every channel's soloed flag is known.
+      _channelsByAddress[address] =
+          MixerChannel.user(id: id, name: strip.name, voice: strip.voice)
+            ..applyVolume(strip.volume)
+            ..applyMuted(strip.muted)
+            ..applySoloed(strip.soloed);
     }
 
     _userChannels
@@ -529,16 +542,53 @@ class PhiEngine {
     if (!_userChannels.contains(channel)) return;
     channel.applyVolume(clamped);
     _pushEffectiveVolume(channel);
+    // Persist the new fader value — unless a drag gesture is live for this
+    // channel, in which case the write is coalesced into the single command
+    // [endChannelVolumeGesture] emits (design §6). A tap or a programmatic set
+    // has no gesture, so it persists immediately.
+    if (!identical(_volumeGestureChannel, channel)) {
+      _persistChannelState(channel);
+    }
+  }
+
+  /// Marks the start of a fader drag on [channel]: subsequent
+  /// [setChannelVolume] calls mutate transient state without journaling, so the
+  /// whole drag coalesces into one `mix.` payload command on
+  /// [endChannelVolumeGesture]. No-op for the master strip (not a persisted
+  /// `mix.` entity) or a channel the engine no longer holds. If a previous
+  /// gesture on another channel was never ended, it is flushed first so no edit
+  /// is lost.
+  void beginChannelVolumeGesture(MixerChannel channel) {
+    if (!_started || channel.isMaster) return;
+    if (!_userChannels.contains(channel)) return;
+    final pending = _volumeGestureChannel;
+    if (pending != null && !identical(pending, channel)) {
+      _volumeGestureChannel = null;
+      _persistChannelState(pending);
+    }
+    _volumeGestureChannel = channel;
+  }
+
+  /// Marks the end of a fader drag on [channel] and flushes the coalesced fader
+  /// value as one journaled `mix.` payload command. No-op when no gesture is
+  /// live for [channel].
+  void endChannelVolumeGesture(MixerChannel channel) {
+    if (!identical(_volumeGestureChannel, channel)) return;
+    _volumeGestureChannel = null;
+    if (!_started || channel.isMaster) return;
+    if (!_userChannels.contains(channel)) return;
+    _persistChannelState(channel);
   }
 
   /// Mute or unmute a user channel. Master mute is intentionally unsupported
   /// (use volume instead). Triggers a solo-aware re-evaluation across all
-  /// user channels.
+  /// user channels. Discrete, so it persists immediately (issue #136).
   void setChannelMuted(MixerChannel channel, {required bool muted}) {
     if (!_started || channel.isMaster) return;
     if (!_userChannels.contains(channel)) return;
     channel.applyMuted(muted);
     _pushEffectiveVolume(channel);
+    _persistChannelState(channel);
   }
 
   /// Toggle a channel's solo flag. When at least one user channel is
@@ -557,6 +607,9 @@ class PhiEngine {
     } else {
       _pushEffectiveVolume(channel);
     }
+    // Only the toggled channel's own soloed flag is persisted state; the effect
+    // on other channels is derived (effective volume), not saved.
+    _persistChannelState(channel);
   }
 
   void _pushEffectiveVolume(MixerChannel channel) {
@@ -564,6 +617,30 @@ class PhiEngine {
     final silenced = channel.muted || (anySoloed && !channel.soloed);
     final effective = silenced ? 0.0 : channel.volume;
     _gateway.setChannelVolume(channel.id, effective);
+  }
+
+  /// Publishes [channel]'s current live state (name, voice, volume, mute, solo)
+  /// into its `mix.` registry entity as a journaled [UpdateEntityPayloadCommand]
+  /// — the payload-edit path issue #135 built and #136 reuses for the mix epic.
+  /// De-duped by encoded JSON, so a set that lands on the already-stored value
+  /// (or restoring a strip to disk state) never dirties the project or bloats the
+  /// journal. No-op when the channel has no backing entity (e.g. the master).
+  void _persistChannelState(MixerChannel channel) {
+    final address = _addressOf(channel);
+    if (address == null) return;
+    final entity = _mixRegistry.entityAt(address);
+    if (entity == null) return;
+    final payload = MixStrip(
+      name: channel.name,
+      voice: channel.voice,
+      volume: channel.volume,
+      muted: channel.muted,
+      soloed: channel.soloed,
+    ).toJson();
+    if (jsonEncode(entity.payload) == jsonEncode(payload)) return;
+    final command = UpdateEntityPayloadCommand(_mixRegistry, address, payload);
+    command.apply(); // notifies → _syncChannelsFromRegistry keeps the channel
+    _recordCommand?.call(command);
   }
 
   void _emit(Timer _) {
