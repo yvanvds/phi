@@ -578,12 +578,33 @@ main + app          (orchestration)
   graph and publish each edit into the `clip.` entity through
   `ProjectController.recordCommand` (de-duped by JSON so selection/layout noise
   never dirties), so an edited-then-saved project persists the edits, not the seed.
-  The engine re-adopting a *loaded* clip document into the live session on open is
-  the follow-up (#139) — today the engine still boots its live clip from
-  `defaultDemoChain()`. Covered by unit round-trip tests (every transform, the
+  Covered by unit round-trip tests (every transform, the
   graph, the document + v1 migration, the registry method + command + journal
   replay), an engine-level publisher test, and an end-to-end `clip_persistence`
   integration test (edit a note + toggle a chip → save → reload restores both).
+  Issue #139 closes the loop #135 left open: on **project open** the engine now
+  **adopts** the loaded `clip.` document into its *live* session, so reopening a
+  saved project runs the edited clip rather than the boot `defaultDemoChain()`.
+  On every `PhiEngine.bindProject` the engine decodes the bound registry's first
+  `clip.` payload into a `ClipDocument` and hands it to a new
+  `EngineMidiController.adoptDocument`, which mutates the shared live objects **in
+  place** — `chain.source.replaceWith` + `chain.setTransforms`, `ClipEditor.reset`,
+  and a re-seed of the `MidiGraphController` from the document's graph + mode (a
+  new `MidiGraphController.loadFromGraph` copies a branched graph over the live
+  source, best-effort laid out by topological depth since positions aren't
+  persisted) — so every surface already listening follows without re-wiring. The
+  decode re-resolves `DomainSubscriptionTransform` names against the project's
+  `domain.` entities and re-links `CustomTransform`s against the
+  `CustomTransformRegistry`, both through a `MidiTransformCodec` that gained an
+  optional `timeDomains` param (symmetric with its existing `customRegistry`); the
+  shell threads its registry through `bindProject`. The `ClipRegistryPublisher` is
+  detached during adoption and re-bound after, so replaying the loaded clip never
+  dirties the project (it re-seeds its de-dupe baseline from the adopted state).
+  Covered by unit tests (codec re-resolution, `loadFromGraph`, `adoptDocument`
+  chain + graph modes), an engine-level `bindProject`-adopts test (incl. domain
+  re-resolution and the no-spurious-publish contract), and an end-to-end
+  `clip_adopt_on_open` integration test (edit → save → reopen restores the edit
+  into `engine.midi.chain`, not just the registry payload).
   Issue #136 finishes the `mix.` migration #124 bounded: a channel's **live mix
   state** (user volume, mute, solo) now persists alongside its identity. `MixStrip`
   gains `volume`/`muted`/`soloed` and `MixStripCodec` jumps to **schema v2**,

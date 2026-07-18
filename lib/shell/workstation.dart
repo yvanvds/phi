@@ -183,6 +183,7 @@ class _WorkstationState extends State<Workstation> {
     widget.engine.bindProject(
       controller.registry,
       recordCommand: controller.recordCommand,
+      customTransforms: _customTransforms,
     );
   }
 

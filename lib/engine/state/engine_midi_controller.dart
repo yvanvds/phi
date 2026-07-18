@@ -8,6 +8,7 @@ import '../../domain/midi/graph/graph_eval_context.dart';
 import '../../domain/midi/midi_clip_mode.dart';
 import '../../domain/midi/midi_note.dart';
 import '../../domain/midi/midi_transform_chain.dart';
+import '../../domain/midi/store/clip_document.dart';
 import '../../domain/midi/transforms/agent_spawn_transform.dart';
 import '../../domain/midi/transforms/domain_subscription_transform.dart';
 import '../../domain/runtime/runtime_variable_registry.dart';
@@ -284,6 +285,40 @@ class EngineMidiController {
   /// ([_field.step]) and pushes the moving set at the sink, so spawned agents
   /// are live participants that drift rather than static points (issue #79).
   final SceneField _field = SceneField();
+
+  /// Adopt a loaded [document] into the live clip objects **in place** — the
+  /// engine half of restoring a saved clip's interpretation on project open
+  /// (issue #139, the follow-up to #135's registry-level persistence).
+  ///
+  /// The source clip, chain, editor and graph controller are mutated in place
+  /// rather than recreated, so every surface already listening to these
+  /// instances (the piano roll, the chip panel, the graph canvas) follows the
+  /// swap without any re-wiring:
+  /// - the shared source clip's notes + meter are replaced ([MidiClip.replaceWith]);
+  /// - the [ClipEditor]'s undo history is reset (its indices no longer apply);
+  /// - the linear chain adopts the document's transform list;
+  /// - the graph controller is re-seeded from the document's [ClipDocument.graph]
+  ///   (or from the fresh chain when the document is chain-only) and its
+  ///   [MidiGraphController.mode] set to the document's mode, so playback reads
+  ///   the same interpretation the performer saved.
+  ///
+  /// The [document]'s transforms are expected already re-resolved / re-linked by
+  /// the codec that decoded it (domain subscriptions against the session domains,
+  /// customs against the `CustomTransformRegistry`). While playing, the tick's
+  /// push-on-change picks up the fresh output within one frame; adoption normally
+  /// runs on a stopped transport at open.
+  void adoptDocument(ClipDocument document) {
+    _chain.source.replaceWith(document.source);
+    editor.reset();
+    _chain.setTransforms(document.chain);
+    final graph = document.graph;
+    if (graph != null) {
+      graphController.loadFromGraph(graph);
+    } else {
+      graphController.loadFromChain(_chain);
+    }
+    graphController.mode = document.mode;
+  }
 
   /// Start (or restart) playback from the top of the clip. Opens the output
   /// port and mints the engine transport lazily on first play, then pushes the
