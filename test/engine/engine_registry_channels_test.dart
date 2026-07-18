@@ -45,7 +45,7 @@ void main() {
     final payload = registry.entityAt(mix('drums'))!.payload;
     expect(
       MixStrip.fromJson((payload! as Map).cast()),
-      const MixStrip(name: 'drums', voice: 1),
+      const MixStrip(voice: 1),
     );
     // The materialised channel is the one exposed to the surface.
     expect(engine.channels.value, [ch]);
@@ -91,11 +91,11 @@ void main() {
     addTearDown(registry.dispose);
     registry.createEntity(
       mix('bass'),
-      payload: const MixStrip(name: 'bass', voice: 4).toJson(),
+      payload: const MixStrip(voice: 4).toJson(),
     );
     registry.createEntity(
       mix('lead'),
-      payload: const MixStrip(name: 'lead', voice: 2).toJson(),
+      payload: const MixStrip(voice: 2).toJson(),
     );
 
     engine.start();
@@ -113,15 +113,9 @@ void main() {
 
   test('rebinding a fresh registry tears down the previous channels', () {
     final projectA = ProjectRegistry()
-      ..createEntity(
-        mix('a'),
-        payload: const MixStrip(name: 'a', voice: 1).toJson(),
-      );
+      ..createEntity(mix('a'), payload: const MixStrip(voice: 1).toJson());
     final projectB = ProjectRegistry()
-      ..createEntity(
-        mix('b'),
-        payload: const MixStrip(name: 'b', voice: 1).toJson(),
-      );
+      ..createEntity(mix('b'), payload: const MixStrip(voice: 1).toJson());
     addTearDown(projectA.dispose);
     addTearDown(projectB.dispose);
 

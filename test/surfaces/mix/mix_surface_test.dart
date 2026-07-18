@@ -111,10 +111,12 @@ void main() {
 
       await tester.tap(find.text('+'));
       await tester.pump();
-      expect(engine.channels.value.single.name, 'ch 1');
+      // A strip is named by its address leaf (issue #166), so the default
+      // 'ch 1' shows as its slug 'ch_1'.
+      expect(engine.channels.value.single.name, 'ch_1');
 
       // Tap the strip's name to edit, type a new one, commit with Enter.
-      await tester.tap(find.text('ch 1'));
+      await tester.tap(find.text('ch_1'));
       await tester.pump();
       await tester.enterText(find.byType(TextField), 'lead');
       await tester.testTextInput.receiveAction(TextInputAction.done);

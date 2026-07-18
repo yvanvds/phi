@@ -522,12 +522,15 @@ class PhiEngine {
         (_mixRegistry.entityAt(address)!.payload as Map)
             .cast<String, Object?>(),
       );
-      final id = _gateway.createChannel(strip.name);
+      // The channel is named by its address leaf — the one-name re-alignment
+      // (issue #166): the strip payload no longer carries a display name.
+      final name = address.name;
+      final id = _gateway.createChannel(name);
       // Restore the persisted live mix state (issue #136) onto the fresh
       // channel; the effective gateway volume is pushed by the solo-aware sweep
       // below, once every channel's soloed flag is known.
       _channelsByAddress[address] =
-          MixerChannel.user(id: id, name: strip.name, voice: strip.voice)
+          MixerChannel.user(id: id, name: name, voice: strip.voice)
             ..applyVolume(strip.volume)
             ..applyMuted(strip.muted)
             ..applySoloed(strip.soloed);
@@ -674,7 +677,7 @@ class PhiEngine {
     final command = CreateEntityCommand(
       _mixRegistry,
       address,
-      payload: MixStrip(name: resolvedName, voice: voice).toJson(),
+      payload: MixStrip(voice: voice).toJson(),
     );
     command.apply(); // notifies → _syncChannelsFromRegistry materialises it
     _recordCommand?.call(command);
@@ -694,48 +697,24 @@ class PhiEngine {
     _recordCommand?.call(command);
   }
 
-  /// Renames a user channel: updates its display name in the `mix.` payload and,
-  /// when the new name slugs to a different address, **moves** the entity to that
-  /// slug so the address follows the name — "rename = refactor" (design §4), which
-  /// rewrites any back-references to the channel as one journaled command. No-op
-  /// for the master channel, an instance the engine no longer holds, or a blank /
-  /// unchanged name. The live volume/mute/solo survive the move (they ride the
-  /// payload the strip is rematerialised from). Both the payload update and the
-  /// move are recorded for dirty-tracking + journaling.
+  /// Renames a user channel by **moving** its `mix.` entity to the slug of the
+  /// new name, so the address follows the name — "rename = refactor" (design §4),
+  /// which rewrites any back-references to the channel as one journaled command.
+  /// Since the one-name re-alignment (issue #166) a strip has no separate display
+  /// name — the channel is named by its address leaf — so a rename is purely that
+  /// move: the live volume/mute/solo/sends ride the payload and survive it. No-op
+  /// for the master channel, an instance the engine no longer holds, a blank
+  /// name, or a name whose slug is unchanged (the name already *is* the slug, so
+  /// there is nothing to rename).
   void renameChannel(MixerChannel channel, String name) {
     if (!_started || channel.isMaster) return;
     if (!_userChannels.contains(channel)) return;
     final address = _addressOf(channel);
     if (address == null) return;
     final trimmed = name.trim();
-    if (trimmed.isEmpty || trimmed == channel.name) return;
-
-    // Snapshot the live state onto the renamed strip so a move (which tears the
-    // channel down and rematerialises it from this payload) preserves the fader
-    // value, mute and solo — not just the name.
-    final renamed = MixStrip(
-      name: trimmed,
-      voice: channel.voice,
-      volume: channel.volume,
-      muted: channel.muted,
-      soloed: channel.soloed,
-    ).toJson();
-
-    // 1. Persist the new display name into the payload at the current address —
-    //    so if the address changes below, the rematerialised channel already
-    //    carries the new name.
-    final update = UpdateEntityPayloadCommand(_mixRegistry, address, renamed);
-    update.apply();
-    _recordCommand?.call(update);
-
-    // 2. Follow the name with the address slug when it actually changes.
+    if (trimmed.isEmpty) return;
     final newSlug = NameSlug.of(trimmed, fallback: 'channel');
-    if (newSlug == address.name) {
-      // The slug is unchanged (only display casing/spacing differs), so the sync
-      // does not recreate the channel — push the new name onto the live one.
-      channel.applyName(trimmed);
-      return;
-    }
+    if (newSlug == address.name) return; // the name *is* the slug — no change
     final newAddress = _uniqueMixAddress(trimmed);
     final move = MoveEntityCommand(_mixRegistry, address, newAddress);
     move.apply(); // notifies → sync rematerialises the channel at the new slug
@@ -856,24 +835,30 @@ class PhiEngine {
     _gateway.setChannelVolume(channel.id, effective);
   }
 
-  /// Publishes [channel]'s current live state (name, voice, volume, mute, solo)
-  /// into its `mix.` registry entity as a journaled [UpdateEntityPayloadCommand]
-  /// — the payload-edit path issue #135 built and #136 reuses for the mix epic.
-  /// De-duped by encoded JSON, so a set that lands on the already-stored value
-  /// (or restoring a strip to disk state) never dirties the project or bloats the
-  /// journal. No-op when the channel has no backing entity (e.g. the master).
+  /// Publishes [channel]'s current live state (voice, volume, mute, solo) into
+  /// its `mix.` registry entity as a journaled [UpdateEntityPayloadCommand] — the
+  /// payload-edit path issue #135 built and #136 reuses for the mix epic. The
+  /// parts a [MixerChannel] does not model — the return flag and sends (issue
+  /// #166) — are read back off the stored payload and preserved. De-duped by
+  /// encoded JSON, so a set that lands on the already-stored value (or restoring a
+  /// strip to disk state) never dirties the project or bloats the journal. No-op
+  /// when the channel has no backing entity (e.g. the master).
   void _persistChannelState(MixerChannel channel) {
     final address = _addressOf(channel);
     if (address == null) return;
     final entity = _mixRegistry.entityAt(address);
     if (entity == null) return;
-    final payload = MixStrip(
-      name: channel.name,
-      voice: channel.voice,
-      volume: channel.volume,
-      muted: channel.muted,
-      soloed: channel.soloed,
-    ).toJson();
+    final existing = entity.payload is Map
+        ? MixStrip.fromJson((entity.payload! as Map).cast<String, Object?>())
+        : const MixStrip(voice: 1);
+    final payload = existing
+        .copyWith(
+          voice: channel.voice,
+          volume: channel.volume,
+          muted: channel.muted,
+          soloed: channel.soloed,
+        )
+        .toJson();
     if (jsonEncode(entity.payload) == jsonEncode(payload)) return;
     final command = UpdateEntityPayloadCommand(_mixRegistry, address, payload);
     command.apply(); // notifies → _syncChannelsFromRegistry keeps the channel

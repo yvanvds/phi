@@ -45,7 +45,7 @@ void main() {
       final registry = ProjectRegistry()
         ..createEntity(
           mix('bass'),
-          payload: const MixStrip(name: 'bass', voice: 4, volume: 0.6).toJson(),
+          payload: const MixStrip(voice: 4, volume: 0.6).toJson(),
         );
       addTearDown(registry.dispose);
 
@@ -64,12 +64,7 @@ void main() {
       final registry = ProjectRegistry()
         ..createEntity(
           mix('pad'),
-          payload: const MixStrip(
-            name: 'pad',
-            voice: 1,
-            volume: 0.8,
-            muted: true,
-          ).toJson(),
+          payload: const MixStrip(voice: 1, volume: 0.8, muted: true).toJson(),
         );
       addTearDown(registry.dispose);
 
@@ -86,16 +81,11 @@ void main() {
       final registry = ProjectRegistry()
         ..createEntity(
           mix('drum'),
-          payload: const MixStrip(
-            name: 'drum',
-            voice: 1,
-            volume: 0.7,
-            soloed: true,
-          ).toJson(),
+          payload: const MixStrip(voice: 1, volume: 0.7, soloed: true).toJson(),
         )
         ..createEntity(
           mix('bass'),
-          payload: const MixStrip(name: 'bass', voice: 2, volume: 0.5).toJson(),
+          payload: const MixStrip(voice: 2, volume: 0.5).toJson(),
         );
       addTearDown(registry.dispose);
 

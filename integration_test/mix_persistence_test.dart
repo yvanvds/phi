@@ -80,7 +80,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final userStrip = find.ancestor(
-      of: find.text('ch 1'),
+      of: find.text('ch_1'),
       matching: find.byType(ChannelStrip),
     );
     final userFader = find.descendant(
@@ -157,7 +157,7 @@ void main() {
     // The restored channel carries the saved volume, mute and solo — not the
     // defaults a fresh channel would have.
     final restored = engine2.channels.value.single;
-    expect(restored.name, 'ch 1');
+    expect(restored.name, 'ch_1');
     expect(restored.muted, isTrue);
     expect(restored.soloed, isTrue);
     expect(restored.volume, closeTo(savedVolume, 1e-6));
