@@ -560,6 +560,30 @@ main + app          (orchestration)
   Covered by unit tests (registry event emission, binder forwarding + move
   classification, no-op) plus an engine-level wiring test (channel add/remove and
   a project swap reach the injected mirror).
+  Issue #135 finishes the `clip.` migration #124 bounded: a clip's
+  **interpretation** now persists alongside its source notes. `lib/domain/midi/store/`
+  adds the serialisation surface — a polymorphic `MidiTransformCodec` (a `type`-
+  tagged, frozen wire contract over all ~20 transforms; `domain.` subscriptions
+  persist by name and re-resolve live, `custom` transforms persist by definition
+  name and re-link against the `CustomTransformRegistry`, falling back to a
+  passthrough stub), an `EdgeConditionCodec` (always / state-match / runtime-
+  variable) and a `MidiTransformGraphCodec` (nodes + guarded edges, ids remapped
+  on load), all bundled by a `ClipDocument` (source + `MidiClipMode` + chain +
+  optional graph). `MidiClipCodec` jumps to **schema v2** carrying that document
+  and migrates a v1 payload (a bare clip) forward; the seed and the store now
+  round-trip the whole document. Clip-edit **dirty tracking** (deferred from #123)
+  lands too: `ProjectRegistry.updateEntityPayload` + an `UpdateEntityPayloadCommand`
+  (journalable, replayed by `RegistryCommandCodec`) let a new engine-side
+  `ClipRegistryPublisher` (`lib/engine/state/`) watch the live chain / editor /
+  graph and publish each edit into the `clip.` entity through
+  `ProjectController.recordCommand` (de-duped by JSON so selection/layout noise
+  never dirties), so an edited-then-saved project persists the edits, not the seed.
+  The engine re-adopting a *loaded* clip document into the live session on open is
+  the follow-up (#139) — today the engine still boots its live clip from
+  `defaultDemoChain()`. Covered by unit round-trip tests (every transform, the
+  graph, the document + v1 migration, the registry method + command + journal
+  replay), an engine-level publisher test, and an end-to-end `clip_persistence`
+  integration test (edit a note + toggle a chip → save → reload restores both).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

@@ -2,6 +2,7 @@ import '../commands/create_entity_command.dart';
 import '../commands/create_group_command.dart';
 import '../commands/move_entity_command.dart';
 import '../commands/remove_entity_command.dart';
+import '../commands/update_entity_payload_command.dart';
 import '../entity_address.dart';
 import '../project_command.dart';
 import '../project_registry.dart';
@@ -18,10 +19,11 @@ import '../project_registry.dart';
 /// deliberately forward-only — replay never calls `revert`, so a decoded
 /// command needs no apply-time captured state.
 ///
-/// The clip-editor commands are *not* handled here: they target a `MidiClip`,
-/// not the registry, and their `entitiesTouched` is empty until the clip becomes
-/// a registry entity (epic issue 7). Their journaling arrives with that
-/// migration.
+/// The fine-grained clip-editor commands are *not* journaled directly (they
+/// target a `MidiClip`, not the registry). Instead, a clip edit publishes its
+/// new interpretation as an `update_payload` registry command on the `clip.`
+/// entity (issue #135), which this codec reconstructs like any other — so a
+/// crash replays the clip's edited state without needing note-level replay.
 class RegistryCommandCodec {
   /// A const codec — it holds no state.
   const RegistryCommandCodec();
@@ -53,6 +55,12 @@ class RegistryCommandCodec {
         );
       case 'remove_entity':
         return RemoveEntityCommand(registry, _address(json, 'address'));
+      case 'update_payload':
+        return UpdateEntityPayloadCommand(
+          registry,
+          _address(json, 'address'),
+          json['payload'],
+        );
       default:
         throw FormatException('Unknown journal command type: "$type".');
     }

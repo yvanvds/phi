@@ -24,6 +24,7 @@ import 'bridge/registry_mirror.dart';
 import 'bridge/registry_mirror_binder.dart';
 import 'bridge/scene_renderer.dart';
 import 'bridge/yse_gateway.dart';
+import 'state/clip_registry_publisher.dart';
 import 'state/engine_midi_controller.dart';
 import 'state/engine_telemetry.dart';
 import 'state/mixer_channel.dart';
@@ -179,6 +180,11 @@ class PhiEngine {
   /// for a bare engine, which then makes registry edits without journaling them.
   void Function(ProjectCommand)? _recordCommand;
 
+  /// Publishes the live MIDI clip's edits into its `clip.` registry entity
+  /// (issue #135). Created when the MIDI subsystem starts, re-bound alongside the
+  /// channel registry on every [bindProject]. `null` without a MIDI subsystem.
+  ClipRegistryPublisher? _clipPublisher;
+
   /// The live `MixerChannel` materialised for each `mix.` entity, keyed by
   /// address so a re-sync preserves channel identity (and its live volume/peak).
   final Map<EntityAddress, MixerChannel> _channelsByAddress = {};
@@ -235,6 +241,7 @@ class PhiEngine {
   }) {
     if (identical(registry, _mixRegistry)) {
       _recordCommand = recordCommand;
+      _clipPublisher?.updateRecordCommand(recordCommand);
       return;
     }
     _mixRegistry.removeListener(_syncChannelsFromRegistry);
@@ -246,6 +253,38 @@ class PhiEngine {
     _mirrorBinder.bind(_mixRegistry);
     _teardownChannels();
     _syncChannelsFromRegistry();
+    _rebindClipPublisher();
+  }
+
+  /// (Re)binds the clip-edit publisher to the bound registry's `clip.` entity so
+  /// piano-roll / chain / graph edits persist (issue #135). No-op without a MIDI
+  /// subsystem or a clip entity to publish into. Created lazily against the live
+  /// [EngineMidiController]'s clip objects, which are stable for its lifetime.
+  void _rebindClipPublisher() {
+    final midi = _midi;
+    if (midi == null) return;
+    _clipPublisher ??= ClipRegistryPublisher(
+      chain: midi.chain,
+      editor: midi.editor,
+      graphController: midi.graphController,
+    );
+    _clipPublisher!.bind(
+      registry: _mixRegistry,
+      clipAddress: _clipAddressIn(_mixRegistry),
+      recordCommand: _recordCommand,
+    );
+  }
+
+  /// The address of the first top-level `clip.` entity in [registry], or `null`
+  /// when none exists — the clip the publisher writes edits back to (the seed
+  /// creates exactly one, `clip.phrase_a`).
+  EntityAddress? _clipAddressIn(ProjectRegistry registry) {
+    for (final node in registry.childrenOfKind(RegistryKinds.clip)) {
+      if (node is RegistryEntity) {
+        return EntityAddress(kind: RegistryKinds.clip, segments: [node.name]);
+      }
+    }
+    return null;
   }
 
   /// Initialise the engine, start the update loop, begin emitting telemetry.
@@ -304,6 +343,9 @@ class PhiEngine {
     // restored before start, or a re-start after stop). No-op for the default
     // empty registry.
     _syncChannelsFromRegistry();
+    // Now the MIDI subsystem exists, wire the clip-edit publisher to whatever
+    // registry is already bound (bindProject may have run before start).
+    _rebindClipPublisher();
   }
 
   /// Stop telemetry, close the engine.
@@ -318,6 +360,8 @@ class PhiEngine {
       _stateMachine = null;
       _runtimeVariables?.dispose();
       _runtimeVariables = null;
+      _clipPublisher?.unbind();
+      _clipPublisher = null;
       _midi?.dispose();
       _midi = null;
       _teardownChannels();
