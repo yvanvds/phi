@@ -8,6 +8,7 @@ import '../domain/midi/midi_clip_seed.dart';
 import '../domain/midi/store/clip_document.dart';
 import '../domain/midi/store/midi_transform_codec.dart';
 import '../domain/mix/mix_strip.dart';
+import '../domain/project/app_settings/audio_settings.dart';
 import '../domain/project/commands/create_entity_command.dart';
 import '../domain/project/commands/move_entity_command.dart';
 import '../domain/project/commands/remove_entity_command.dart';
@@ -21,6 +22,8 @@ import '../domain/project/registry_kinds.dart';
 import '../domain/runtime/runtime_variable_registry.dart';
 import '../domain/time_domains/time_domain.dart';
 import '../domain/time_domains/time_domain_registry.dart';
+import 'bridge/audio_device_coordinator.dart';
+import 'bridge/audio_device_notice.dart';
 import 'bridge/macbear_scene_renderer.dart';
 import 'bridge/midi_gateway.dart';
 import 'bridge/no_op_registry_mirror.dart';
@@ -89,6 +92,17 @@ class PhiEngine {
   final PatcherGateway? _patcherGateway;
   final MidiGateway? _midiGateway;
   final Duration _telemetryInterval;
+
+  /// Coordinates the boot-from-settings and live-switch device rules (design §5,
+  /// §9.3) over the gateway. Lazily built so [start] can boot from stored
+  /// [AudioSettings]; its notices flow into [_lastAudioNotice].
+  late final AudioDeviceCoordinator _audio = AudioDeviceCoordinator(
+    _gateway,
+    onNotice: (notice) => _lastAudioNotice.value = notice,
+  );
+
+  final ValueNotifier<AudioDeviceNotice?> _lastAudioNotice =
+      ValueNotifier<AudioDeviceNotice?>(null);
 
   /// The Scene renderer, if one was wired in. `null` in test setups that
   /// don't exercise the Scene surface.
@@ -364,9 +378,16 @@ class PhiEngine {
   }
 
   /// Initialise the engine, start the update loop, begin emitting telemetry.
-  void start() {
+  ///
+  /// Boots audio from [audioSettings] (design §5): with no stored device it opens
+  /// the platform default (`init()`, the pre-settings behaviour and the default
+  /// here); with a stored device it `initOffline()`s and opens that device,
+  /// falling back to the default with a [lastAudioNotice] when it is missing or
+  /// refuses to open — the stored preference is never touched. Engine auto-
+  /// reconnect is enabled either way (design §4).
+  void start({AudioSettings audioSettings = const AudioSettings()}) {
     if (_started) return;
-    _gateway.init();
+    _audio.boot(audioSettings);
     // Patcher subsystem is optional — tests that don't inject a
     // PatcherGateway get an engine without a patcher (engine.patcher
     // throws). When wired, the patcher must be created *before*
@@ -524,6 +545,28 @@ class PhiEngine {
     if (!_started) return;
     _gateway.audioTest = on;
     _testSignal.value = on;
+  }
+
+  /// The audio settings describing the device currently open — what a failed
+  /// live switch reverts to. Reads the coordinator's live state, not the stored
+  /// preference (they can differ after a boot fallback, design §5).
+  AudioSettings get activeAudioSettings => _audio.current;
+
+  /// The most recent non-blocking audio notice — a boot fallback or a reverted
+  /// live switch (design §5, §9.3) — or `null` when none has been raised.
+  /// Retained (not a stream) so a consumer that binds after boot still sees a
+  /// launch-time fallback.
+  ValueListenable<AudioDeviceNotice?> get lastAudioNotice => _lastAudioNotice;
+
+  /// Applies a live audio-device change (design §5 "Live change", §9.3): swaps to
+  /// [desired], reverting to the previous working device (with a
+  /// [lastAudioNotice]) when it is missing or refuses to open. Returns `true` on
+  /// success — or a no-op when [desired] is already open — so the caller persists
+  /// the stored choice only when it does. Returns `false` (a no-op) before
+  /// [start].
+  bool switchAudioDevice(AudioSettings desired) {
+    if (!_started) return false;
+    return _audio.switchTo(desired);
   }
 
   /// Set the master-channel volume. Clamped to `[0.0, 1.0]`. No-op before
@@ -793,6 +836,7 @@ class PhiEngine {
     _masterVolume.dispose();
     _masterChannel.dispose();
     _channels.dispose();
+    _lastAudioNotice.dispose();
     await _telemetry.close();
   }
 }
