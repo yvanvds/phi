@@ -185,9 +185,9 @@ class RealYseGateway implements YseGateway {
   Stream<void> get midiActivity => _midiActivity.stream;
 
   @override
-  int createChannel(String name) {
+  int createChannel(String name, {int? parentId}) {
     final id = _nextChannelId++;
-    _channels[id] = Channel.create(name, parent: Channel.master);
+    _channels[id] = Channel.create(name, parent: _parentOf(parentId));
     return id;
   }
 
@@ -196,6 +196,24 @@ class RealYseGateway implements YseGateway {
     final ch = _channels.remove(channelId);
     ch?.dispose();
   }
+
+  @override
+  void moveChannel(int channelId, [int? parentId]) {
+    _channels[channelId]?.moveTo(_parentOf(parentId));
+  }
+
+  @override
+  int createReturnChannel(String name, {int sendSlots = 4}) {
+    final id = _nextChannelId++;
+    _channels[id] = Channel.createReturn(name, sendSlots: sendSlots);
+    return id;
+  }
+
+  /// Resolves a parent id to a [Channel] for create / re-parent calls: `null`
+  /// or an unknown id means the master channel.
+  Channel _parentOf(int? parentId) => parentId == null
+      ? Channel.master
+      : (_channels[parentId] ?? Channel.master);
 
   @override
   double channelVolume(int channelId) => _channels[channelId]?.volume ?? 0;
@@ -209,6 +227,50 @@ class RealYseGateway implements YseGateway {
   @override
   double channelPeak(int channelId) =>
       _channels[channelId]?.peakLinearPost() ?? 0;
+
+  @override
+  void setSend(
+    int channelId,
+    int slot,
+    int returnId,
+    double level,
+    bool preFader,
+  ) {
+    final ch = _channels[channelId];
+    final ret = _channels[returnId];
+    // The engine itself rejects illegal wiring (non-return target, self-send,
+    // cycle, out-of-range slot) as a logged no-op; forwarding is safe.
+    if (ch != null && ret != null) {
+      ch.send(slot, ret, level: level, preFader: preFader);
+    }
+  }
+
+  @override
+  void setSendLevel(int channelId, int slot, double level) =>
+      _channels[channelId]?.setSendLevel(slot, level);
+
+  @override
+  void clearSend(int channelId, int slot) =>
+      _channels[channelId]?.clearSend(slot);
+
+  @override
+  int channelOutputCount(int channelId) =>
+      _channels[channelId]?.numOutputs ?? 0;
+
+  @override
+  double channelPeakOutput(int channelId, int output) =>
+      _channels[channelId]?.peakLinearPost(output: output) ?? 0;
+
+  @override
+  double channelPeakPreOutput(int channelId, int output) =>
+      _channels[channelId]?.peakLinearPre(output: output) ?? 0;
+
+  @override
+  int get masterOutputCount => Channel.master.numOutputs;
+
+  @override
+  double masterPeakOutput(int output) =>
+      Channel.master.peakLinearPost(output: output);
 
   void _destroyAllChannels() {
     for (final ch in _channels.values) {
