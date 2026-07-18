@@ -105,6 +105,24 @@ class RegistryGroup extends RegistryNode {
       ..addAll(rebuilt);
   }
 
+  /// Moves the child named [name] to sit at [index] among its siblings,
+  /// preserving every other child's relative order. [index] is the child's
+  /// **final** position (0-based), clamped into range. A no-op when [name] is
+  /// absent. The registry uses this to reorder a group's children — the
+  /// `_group.json` order a Mix-surface section reorder writes (design
+  /// `docs/design/mix.md` §7). Low-level: the registry notifies around it.
+  void reorder(String name, int index) {
+    if (!_children.containsKey(name)) return;
+    final entries = _children.entries.toList();
+    final from = entries.indexWhere((e) => e.key == name);
+    final moved = entries.removeAt(from);
+    final clamped = index.clamp(0, entries.length);
+    entries.insert(clamped, moved);
+    _children
+      ..clear()
+      ..addEntries(entries);
+  }
+
   /// Moves every child out of [other] into this group, preserving order;
   /// [other] is left empty. Used to rehome a subtree when a move renames its
   /// root (whose own [name] is immutable), so the descendant nodes are reused

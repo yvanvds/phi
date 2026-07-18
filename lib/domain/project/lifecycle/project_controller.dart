@@ -14,6 +14,8 @@ import '../recovery/command_journal.dart';
 import '../recovery/crash_recovery.dart';
 import '../recovery/recovery_offer.dart';
 import '../recovery/registry_command_codec.dart';
+import '../registry_group.dart';
+import '../registry_node.dart';
 import '../store/group_metadata.dart';
 import '../store/journal_store.dart';
 import '../store/project_manifest.dart';
@@ -325,8 +327,60 @@ class ProjectController extends ChangeNotifier {
   ProjectSnapshot _snapshot() => ProjectSnapshot(
     manifest: _manifestFromSession(),
     registry: _registry,
-    groupMetadata: _groupMetadata,
+    groupMetadata: _liveGroupMetadata(),
   );
+
+  /// The group metadata a save persists, with each group's child [order] taken
+  /// from the **live registry** child order — so a Mix-surface section reorder
+  /// (design `docs/design/mix.md` §7) sticks through a save/reload — and its
+  /// cosmetic colour carried over from what was loaded. Order is omitted when it
+  /// already matches the alphabetical default a load falls back to, so a group
+  /// that was never reordered writes no `order` field (and nothing at all when
+  /// it also has no colour), keeping saves minimal and diffable.
+  Map<EntityAddress, GroupMetadata> _liveGroupMetadata() {
+    final result = <EntityAddress, GroupMetadata>{};
+    for (final address in _allGroupAddresses()) {
+      final childNames = _registry
+          .childrenOfGroup(address)
+          .map((n) => n.name)
+          .toList();
+      final sorted = [...childNames]..sort();
+      final order = _sameOrder(childNames, sorted)
+          ? const <String>[]
+          : childNames;
+      final color = _groupMetadata[address]?.color;
+      final meta = GroupMetadata(order: order, color: color);
+      if (!meta.isEmpty) result[address] = meta;
+    }
+    return result;
+  }
+
+  /// Every group address in the live registry, across every kind, in pre-order.
+  List<EntityAddress> _allGroupAddresses() {
+    final result = <EntityAddress>[];
+    void walk(String kind, List<String> prefix, Iterable<RegistryNode> nodes) {
+      for (final node in nodes) {
+        if (node is! RegistryGroup) continue;
+        final segments = [...prefix, node.name];
+        final address = EntityAddress(kind: kind, segments: segments);
+        result.add(address);
+        walk(kind, segments, _registry.childrenOfGroup(address));
+      }
+    }
+
+    for (final kind in _registry.kinds) {
+      walk(kind, const [], _registry.childrenOfKind(kind));
+    }
+    return result;
+  }
+
+  static bool _sameOrder(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
 
   /// The project name a `<name>.phi` folder implies — its basename with the
   /// `.phi` suffix stripped. Falls back to the current name for an oddly-named

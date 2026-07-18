@@ -35,6 +35,7 @@ class ChannelStrip extends StatelessWidget {
     this.onSoloToggle,
     this.onRename,
     this.onRemove,
+    this.dragHandle,
     this.isMaster = false,
     super.key,
   });
@@ -85,6 +86,12 @@ class ChannelStrip extends StatelessWidget {
   /// remove control is shown (the master strip is never removed).
   final VoidCallback? onRemove;
 
+  /// An optional drag affordance placed at the start of the header row (before
+  /// the voice dot) — the Mix surface fills it with a `Draggable` grip so a strip
+  /// can be dragged into / out of a group or reordered (design §7). Left null on
+  /// the master, group buses, and plain widget tests, which are not draggable.
+  final Widget? dragHandle;
+
   static const double width = 86;
   static const double _faderHeight = 160;
   static const double _faderTrackWidth = 14;
@@ -128,6 +135,10 @@ class ChannelStrip extends StatelessWidget {
   Widget _header() {
     return Row(
       children: [
+        if (dragHandle != null) ...[
+          dragHandle!,
+          const SizedBox(width: PhiSpacing.s1),
+        ],
         Container(
           width: 6,
           height: 6,

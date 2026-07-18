@@ -759,6 +759,32 @@ main + app          (orchestration)
   volume/mute manifest round-trip + dirty-on-change), and an end-to-end
   `mix_master_persistence` integration test (drag the master fader → save → reload
   restores it).
+  Issue #169 turns the flat Mix rack into the **grouped rack** (design
+  `docs/design/mix.md` §7). `PhiEngine` gains a tree view — `mixTree`, a
+  `MixTreeNode` forest (`lib/engine/state/`) rebuilt on every re-sync, nesting each
+  non-return channel under its parent — plus the surface-facing tree-editing façade:
+  `addGroup` (a `mix.` group bus via `CreateGroupCommand`), `addReturn` (a top-level
+  `return: true` entity), `moveChannelToGroup` (drag-into / drag-out re-parenting via
+  `MoveEntityCommand`), and `moveChannelBefore` (in-section reorder). Reorder lands as
+  a new registry primitive: `RegistryGroup.reorder` + `ProjectRegistry.reorderChild`
+  (order-only, no address/reference change, so no lifecycle event) and a journalled
+  `ReorderChildCommand` (decoded by `RegistryCommandCodec`); the `ProjectController`
+  now derives each group's `_group.json` child `order` from the **live registry** on
+  save, so a reorder persists (top-level order stays alphabetical, as before). Group
+  buses also finally persist their own fader/mute/solo — `_persistChannelState` writes
+  through `updateGroupPayload` for a group node. The surface (`mix_surface.dart`)
+  renders top-level strips + framed group sections (a group's own header strip beside
+  its child strips), a `+` add-menu (`showMenu`: add channel · group · return), and a
+  `Draggable` header handle per leaf strip (added as an optional `dragHandle` slot on
+  `ChannelStrip`); nested `DragTarget`s route a drop — onto a group section = re-parent
+  in, onto a sibling = reorder / re-parent, onto the open rack = un-group. Covered by
+  domain unit tests (`reorder_child_command` — registry reorder, command apply/revert,
+  journal codec), engine tests (`engine_mix_surface_api` — addGroup/addReturn, drag
+  re-parenting, reorder, `mixTree`, group-bus persist), widget tests (`mix_surface` —
+  group rendering, the add-menu paths, drag-to-group + un-group + reorder driven by
+  real drag gestures), and an end-to-end `mix_grouped_rack` integration test (add a
+  group + channels → drag both in → reorder → save → reload restores the group with
+  its children in the dragged order).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
