@@ -33,6 +33,8 @@ import 'package:phi/domain/midi/transforms/velocity_curve_shape.dart';
 import 'package:phi/domain/midi/transforms/velocity_to_parameter_transform.dart';
 import 'package:phi/domain/midi/transforms/voice_routing_rule.dart';
 import 'package:phi/domain/midi/transforms/voice_routing_transform.dart';
+import 'package:phi/domain/time_domains/time_domain.dart';
+import 'package:phi/domain/time_domains/time_domain_registry.dart';
 import 'package:vector_math/vector_math_64.dart';
 
 void main() {
@@ -139,6 +141,39 @@ void main() {
       expect(t.domainName, 'drum');
       // The resolved domain is re-bound live, so it is null after a decode.
       expect(t.domain, isNull);
+    });
+
+    test('domain subscription re-resolves against a session registry', () {
+      // With a time-domain registry, decode re-binds the name — the engine's
+      // adopt-on-open path (#139), so boundTempo is live again after a reload.
+      final registry = TimeDomainRegistry(const [
+        TimeDomain(name: 'drum', tempo: 124),
+      ]);
+      final resolvingCodec = MidiTransformCodec(timeDomains: registry);
+      final encoded = codec.encode(
+        const DomainSubscriptionTransform(domainName: 'drum', label: 'dom'),
+      );
+      final decoded =
+          resolvingCodec.decode(encoded) as DomainSubscriptionTransform;
+
+      expect(decoded.domainName, 'drum');
+      expect(decoded.domain, const TimeDomain(name: 'drum', tempo: 124));
+      expect(decoded.boundTempo, 124);
+    });
+
+    test('an unknown domain name re-resolves to nothing', () {
+      final resolvingCodec = MidiTransformCodec(
+        timeDomains: TimeDomainRegistry(const []),
+      );
+      final encoded = codec.encode(
+        const DomainSubscriptionTransform(domainName: 'gone', label: 'dom'),
+      );
+      final decoded =
+          resolvingCodec.decode(encoded) as DomainSubscriptionTransform;
+
+      expect(decoded.domainName, 'gone');
+      expect(decoded.domain, isNull);
+      expect(decoded.boundTempo, isNull);
     });
   });
 

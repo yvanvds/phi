@@ -54,6 +54,63 @@ class MidiGraphController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Rebuild the live graph from a loaded [source] graph — the branching-clip
+  /// half of adopting a saved clip document on project open (issue #139). The
+  /// domain graph is deliberately position-free, so [source] carries no layout;
+  /// [source]'s nodes are copied (under freshly minted ids) and its edges rewired
+  /// through them onto the live [graph] (which keeps the live source clip), then
+  /// laid out left-to-right by topological depth. Notifies so the canvas redraws.
+  void loadFromGraph(MidiTransformGraph source) {
+    graph.clear();
+    _positions
+      ..clear()
+      ..[TransformNodeId.source] = _origin;
+    final idMap = <TransformNodeId, TransformNodeId>{
+      TransformNodeId.source: TransformNodeId.source,
+    };
+    for (final node in source.nodes) {
+      final fresh = graph.addNode(node.transform);
+      idMap[node.id] = fresh.id;
+    }
+    for (final edge in source.edges) {
+      final from = idMap[edge.fromId];
+      final to = idMap[edge.toId];
+      if (from == null || to == null) continue;
+      graph.connect(from, to, condition: edge.condition);
+    }
+    _layoutByDepth();
+    notifyListeners();
+  }
+
+  /// Assign each node a canvas position from its longest-path depth from the
+  /// source (its column) and its order within that column (its row). Best-effort
+  /// only — positions are not persisted, so an adopted graph gets a readable
+  /// left-to-right layout rather than the authored one.
+  void _layoutByDepth() {
+    final order =
+        graph.topologicalOrder() ?? [for (final n in graph.nodes) n.id];
+    final column = <TransformNodeId, int>{TransformNodeId.source: 0};
+    for (final id in order) {
+      var col = 1;
+      for (final edge in graph.edges) {
+        if (edge.toId != id) continue;
+        final fromCol = column[edge.fromId] ?? 0;
+        if (fromCol + 1 > col) col = fromCol + 1;
+      }
+      column[id] = col;
+    }
+    final rowInColumn = <int, int>{};
+    for (final node in graph.nodes) {
+      final col = column[node.id] ?? 1;
+      final row = rowInColumn[col] ?? 0;
+      rowInColumn[col] = row + 1;
+      _positions[node.id] = Offset(
+        _origin.dx + col * _columnSpacing,
+        _origin.dy + row * _rowSpacing,
+      );
+    }
+  }
+
   /// Wire `source → t0 → t1 → …` into [graph] with unconditional edges, laying
   /// nodes out left-to-right into [positions]. Shared by [seededFrom] (fresh
   /// graph) and [loadFromChain] (cleared graph); both start with the source at
@@ -186,6 +243,7 @@ class MidiGraphController extends ChangeNotifier {
 
   static const Offset _origin = Offset(160, 240);
   static const double _columnSpacing = 190;
+  static const double _rowSpacing = 140;
 
   static Offset _snap(Offset p) {
     const step = TransformGraphCanvasConstants.snapStep;

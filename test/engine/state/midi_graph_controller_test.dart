@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/domain/midi/graph/midi_transform_graph.dart';
 import 'package:phi/domain/midi/graph/state_match_condition.dart';
 import 'package:phi/domain/midi/graph/transform_node_id.dart';
 import 'package:phi/domain/midi/midi_clip.dart';
@@ -182,6 +183,62 @@ void main() {
     expect(controller.graph.nodes, hasLength(1));
     expect(controller.graph.isLinear, isTrue);
 
+    controller.dispose();
+    chain.dispose();
+  });
+
+  test('loadFromGraph copies a branched graph over the live source', () {
+    final chain = chainWith(const []);
+    final controller = MidiGraphController.seededFrom(chain);
+
+    // A branched source graph (as a decoded document would arrive): source → +7
+    // unconditional, and source → +12 guarded by a state that is not live.
+    final source = MidiTransformGraph(
+      source: MidiClip(
+        name: 's',
+        bars: 1,
+        notes: const [MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1)],
+      ),
+    );
+    final a = source.addNode(
+      const TransposeTransform(semitones: 7, label: '+7'),
+    );
+    final b = source.addNode(
+      const TransposeTransform(semitones: 12, label: '+12'),
+    );
+    source.connect(TransformNodeId.source, a.id);
+    source.connect(
+      TransformNodeId.source,
+      b.id,
+      condition: const StateMatchCondition(PerformanceStateId('x')),
+    );
+
+    var notified = 0;
+    controller.addListener(() => notified++);
+    controller.loadFromGraph(source);
+
+    // Nodes and edges copied, structure preserved, and notified.
+    expect(controller.graph.nodes, hasLength(2));
+    expect(controller.graph.edges, hasLength(2));
+    expect(
+      controller.graph.edges.any((e) => e.condition is StateMatchCondition),
+      isTrue,
+    );
+    expect(notified, greaterThan(0));
+    // Fresh ids are minted — the source's node ids are not reused.
+    expect(controller.graph.nodes.map((n) => n.id), isNot(contains(a.id)));
+    // The live graph evaluates over the live source clip (pitch 60); with no
+    // state live the +12 branch is closed, so only +7 reaches the output.
+    expect(controller.graph.evaluate().map((n) => n.pitch), [67]);
+    // Every copied node has a laid-out position (right of the source).
+    for (final node in controller.graph.nodes) {
+      expect(
+        controller.positionOf(node.id).dx,
+        greaterThan(controller.positionOf(TransformNodeId.source).dx),
+      );
+    }
+
+    source.dispose();
     controller.dispose();
     chain.dispose();
   });

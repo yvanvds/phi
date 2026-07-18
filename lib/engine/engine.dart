@@ -3,7 +3,10 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../domain/midi/custom_transform_registry.dart';
 import '../domain/midi/midi_clip_seed.dart';
+import '../domain/midi/store/clip_document.dart';
+import '../domain/midi/store/midi_transform_codec.dart';
 import '../domain/mix/mix_strip.dart';
 import '../domain/project/commands/create_entity_command.dart';
 import '../domain/project/commands/remove_entity_command.dart';
@@ -15,6 +18,8 @@ import '../domain/project/project_registry.dart';
 import '../domain/project/registry_entity.dart';
 import '../domain/project/registry_kinds.dart';
 import '../domain/runtime/runtime_variable_registry.dart';
+import '../domain/time_domains/time_domain.dart';
+import '../domain/time_domains/time_domain_registry.dart';
 import 'bridge/macbear_scene_renderer.dart';
 import 'bridge/midi_gateway.dart';
 import 'bridge/no_op_registry_mirror.dart';
@@ -187,6 +192,13 @@ class PhiEngine {
   /// channel registry on every [bindProject]. `null` without a MIDI subsystem.
   ClipRegistryPublisher? _clipPublisher;
 
+  /// The catalogue a persisted `clip.` document's live-coded [CustomTransform]s
+  /// re-link against when the engine adopts the clip on [bindProject] (issue
+  /// #139). Held as a bare reference — the shell owns it — refreshed on every
+  /// bind. `null` decodes customs to passthrough stubs (the default project has
+  /// none).
+  CustomTransformRegistry? _clipCustomTransforms;
+
   /// The live `MixerChannel` materialised for each `mix.` entity, keyed by
   /// address so a re-sync preserves channel identity (and its live volume/peak).
   final Map<EntityAddress, MixerChannel> _channelsByAddress = {};
@@ -242,14 +254,20 @@ class PhiEngine {
   /// truth, recording structural channel commands through [recordCommand]
   /// (design §8). Channels materialised from the previous registry are torn down
   /// and rebuilt from [registry] — so opening a project re-creates its saved
-  /// strips, and starting a new one clears them. Idempotent when [registry] is
-  /// already bound (it only refreshes [recordCommand]).
+  /// strips, and starting a new one clears them. The registry's `clip.` document
+  /// is adopted into the live MIDI session (issue #139), so opening a project
+  /// also restores its edited clip rather than the boot default. [customTransforms]
+  /// is the catalogue that clip's live-coded transforms re-link against. Idempotent
+  /// when [registry] is already bound (it only refreshes [recordCommand] and
+  /// [customTransforms]).
   void bindProject(
     ProjectRegistry registry, {
     void Function(ProjectCommand)? recordCommand,
+    CustomTransformRegistry? customTransforms,
   }) {
     if (identical(registry, _mixRegistry)) {
       _recordCommand = recordCommand;
+      _clipCustomTransforms = customTransforms;
       _clipPublisher?.updateRecordCommand(recordCommand);
       return;
     }
@@ -258,11 +276,59 @@ class PhiEngine {
     _mixRegistry = registry;
     _ownsMixRegistry = false;
     _recordCommand = recordCommand;
+    _clipCustomTransforms = customTransforms;
     _mixRegistry.addListener(_syncChannelsFromRegistry);
     _mirrorBinder.bind(_mixRegistry);
     _teardownChannels();
     _syncChannelsFromRegistry();
+    _adoptClipAndRebindPublisher();
+  }
+
+  /// Adopt the bound registry's `clip.` document into the live MIDI objects, then
+  /// (re)bind the clip-edit publisher (issue #139). The publisher is detached
+  /// **before** adoption so the in-place mutations that replay the loaded clip
+  /// never publish back as spurious edits, and re-bound **after** so it seeds its
+  /// de-dupe baseline from the adopted state. No-op without a MIDI subsystem (a
+  /// [bindProject] before [start] — [start] runs this once the subsystem exists).
+  void _adoptClipAndRebindPublisher() {
+    final midi = _midi;
+    if (midi == null) return;
+    _clipPublisher?.unbind();
+    _adoptClipDocument(midi);
     _rebindClipPublisher();
+  }
+
+  /// Decode the bound registry's first `clip.` entity into a [ClipDocument] and
+  /// adopt it into [midi]'s live clip objects (issue #139). Re-resolves domain
+  /// subscriptions against the project's `domain.` entities and re-links custom
+  /// transforms against [_clipCustomTransforms], both through the decoding codec.
+  /// No-op when the registry carries no clip (or a non-map payload).
+  void _adoptClipDocument(EngineMidiController midi) {
+    final address = _clipAddressIn(_mixRegistry);
+    if (address == null) return;
+    final payload = _mixRegistry.entityAt(address)?.payload;
+    if (payload is! Map) return;
+    final document = ClipDocument.fromJson(
+      payload.cast<String, Object?>(),
+      transformCodec: MidiTransformCodec(
+        customRegistry: _clipCustomTransforms,
+        timeDomains: _sessionTimeDomains(),
+      ),
+    );
+    midi.adoptDocument(document);
+  }
+
+  /// The session time-domain registry, materialised from the bound registry's
+  /// top-level `domain.` entities — what a persisted `DomainSubscriptionTransform`
+  /// re-resolves its name against when a clip is adopted (issue #139).
+  TimeDomainRegistry _sessionTimeDomains() {
+    final domains = <TimeDomain>[];
+    for (final node in _mixRegistry.childrenOfKind(RegistryKinds.domain)) {
+      if (node is! RegistryEntity) continue;
+      final payload = node.payload;
+      if (payload is TimeDomain) domains.add(payload);
+    }
+    return TimeDomainRegistry(domains);
   }
 
   /// (Re)binds the clip-edit publisher to the bound registry's `clip.` entity so
@@ -352,9 +418,10 @@ class PhiEngine {
     // restored before start, or a re-start after stop). No-op for the default
     // empty registry.
     _syncChannelsFromRegistry();
-    // Now the MIDI subsystem exists, wire the clip-edit publisher to whatever
-    // registry is already bound (bindProject may have run before start).
-    _rebindClipPublisher();
+    // Now the MIDI subsystem exists, adopt whatever clip the bound registry
+    // carries and wire the clip-edit publisher (bindProject may have run before
+    // start). A no-op for the default empty registry.
+    _adoptClipAndRebindPublisher();
   }
 
   /// Stop telemetry, close the engine.

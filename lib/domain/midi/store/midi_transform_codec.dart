@@ -1,5 +1,6 @@
 import 'package:vector_math/vector_math_64.dart';
 
+import '../../time_domains/time_domain_registry.dart';
 import '../custom_transform_registry.dart';
 import '../midi_transform.dart';
 import '../midi_transform_kind.dart';
@@ -49,7 +50,9 @@ import '../transforms/voice_routing_transform.dart';
 /// can't be fully rebuilt from JSON alone:
 /// - [DomainSubscriptionTransform] persists only its `domainName`; the resolved
 ///   [TimeDomain] is re-bound live against the session registry, exactly as the
-///   seed does (`boundTempo` is `null` until then).
+///   seed does. Pass [timeDomains] so [decode] re-resolves the name against it
+///   (as the engine does when adopting a loaded clip on project open, issue
+///   #139); without one, `boundTempo` stays `null` until the name is re-bound.
 /// - [CustomTransform] persists its definition `name` + `kind`; on [decode] it
 ///   re-links to a live [CustomTransformDefinition] in [customRegistry] when one
 ///   is registered, else falls back to a passthrough [StubTransform] carrying the
@@ -58,11 +61,17 @@ import '../transforms/voice_routing_transform.dart';
 class MidiTransformCodec {
   /// Builds a codec. [customRegistry] lets [decode] re-link a persisted
   /// [CustomTransform] to its live definition; `null` (the default, e.g. the
-  /// `const` clip codec) decodes customs to passthrough stubs.
-  const MidiTransformCodec({this.customRegistry});
+  /// `const` clip codec) decodes customs to passthrough stubs. [timeDomains]
+  /// lets [decode] re-resolve a persisted [DomainSubscriptionTransform]'s name
+  /// against the session's domains; `null` leaves the subscription unresolved.
+  const MidiTransformCodec({this.customRegistry, this.timeDomains});
 
   /// The catalogue a persisted [CustomTransform] re-binds against on [decode].
   final CustomTransformRegistry? customRegistry;
+
+  /// The session time-domain registry a persisted [DomainSubscriptionTransform]
+  /// re-resolves its name against on [decode], or `null` to leave it unresolved.
+  final TimeDomainRegistry? timeDomains;
 
   /// Flattens [transform] to a JSON-compatible map tagged with its `type`.
   Map<String, Object?> encode(MidiTransform transform) {
@@ -293,8 +302,21 @@ class MidiTransformCodec {
           active: active,
         );
       case 'domain_subscription':
+        final domainName = json['domainName'] as String? ?? '';
+        final registry = timeDomains;
+        if (registry != null) {
+          // Re-resolve the name against the session's domains so the adopted
+          // subscription binds its clock tempo live (issue #139), exactly as
+          // `DomainSubscriptionTransform.resolve` does at seed time.
+          return DomainSubscriptionTransform.resolve(
+            registry: registry,
+            domainName: domainName,
+            label: label,
+            active: active,
+          );
+        }
         return DomainSubscriptionTransform(
-          domainName: json['domainName'] as String? ?? '',
+          domainName: domainName,
           label: label,
           active: active,
         );
