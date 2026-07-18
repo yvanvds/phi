@@ -17,6 +17,8 @@ void main() {
       VoidCallback? onVolumeChangeEnd,
       VoidCallback? onMuteToggle,
       VoidCallback? onSoloToggle,
+      ValueChanged<String>? onRename,
+      VoidCallback? onRemove,
     }) {
       return MaterialApp(
         home: Scaffold(
@@ -35,6 +37,8 @@ void main() {
               onVolumeChangeEnd: onVolumeChangeEnd,
               onMuteToggle: onMuteToggle,
               onSoloToggle: onSoloToggle,
+              onRename: onRename,
+              onRemove: onRemove,
             ),
           ),
         ),
@@ -176,6 +180,54 @@ void main() {
       await tester.pump();
 
       expect(soloTaps, 1);
+    });
+
+    testWidgets('no remove control when onRemove is null', (tester) async {
+      await tester.pumpWidget(host(name: 'pad'));
+
+      expect(find.byKey(ChannelStrip.removeButtonKey), findsNothing);
+    });
+
+    testWidgets('the remove control calls onRemove', (tester) async {
+      var removes = 0;
+      await tester.pumpWidget(host(name: 'pad', onRemove: () => removes++));
+
+      expect(find.byKey(ChannelStrip.removeButtonKey), findsOneWidget);
+      await tester.tap(find.byKey(ChannelStrip.removeButtonKey));
+      await tester.pump();
+
+      expect(removes, 1);
+    });
+
+    testWidgets('a plain header name is not editable without onRename', (
+      tester,
+    ) async {
+      await tester.pumpWidget(host(name: 'pad'));
+
+      // Tapping the label does nothing — no text field appears.
+      await tester.tap(find.text('pad'));
+      await tester.pump();
+      expect(find.byType(TextField), findsNothing);
+    });
+
+    testWidgets('inline-editing the header name commits through onRename', (
+      tester,
+    ) async {
+      String? renamedTo;
+      await tester.pumpWidget(
+        host(name: 'pad', onRename: (n) => renamedTo = n),
+      );
+
+      // Tap the name to enter edit mode, type a new name, commit with Enter.
+      await tester.tap(find.text('pad'));
+      await tester.pump();
+      expect(find.byType(TextField), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), 'lead synth');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+
+      expect(renamedTo, 'lead synth');
     });
   });
 }

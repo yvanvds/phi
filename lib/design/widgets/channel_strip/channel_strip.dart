@@ -4,6 +4,7 @@ import '../../tokens/phi_colors.dart';
 import '../../tokens/phi_radii.dart';
 import '../../tokens/phi_spacing.dart';
 import '../../tokens/phi_type.dart';
+import '../inline_editable_text/inline_editable_text.dart';
 
 /// Single mixer channel strip — voice-swatch dot, name, fader with an
 /// overlaid peak meter, mute/solo buttons, and a numeric readout.
@@ -13,6 +14,11 @@ import '../../tokens/phi_type.dart';
 /// `isMaster` flips the strip to its accent treatment (voice-coloured
 /// border with a soft halo) and hides the mute/solo buttons — the master
 /// has nothing to mute against.
+///
+/// When [onRename] is wired the header name becomes inline-editable (tap to
+/// edit, commit on Enter/blur); when [onRemove] is wired a compact remove
+/// control appears in the header. Both are left null on the master strip — it
+/// is neither renamed nor removed.
 class ChannelStrip extends StatelessWidget {
   const ChannelStrip({
     required this.name,
@@ -27,6 +33,8 @@ class ChannelStrip extends StatelessWidget {
     this.onVolumeChangeEnd,
     this.onMuteToggle,
     this.onSoloToggle,
+    this.onRename,
+    this.onRemove,
     this.isMaster = false,
     super.key,
   });
@@ -68,6 +76,15 @@ class ChannelStrip extends StatelessWidget {
   final VoidCallback? onMuteToggle;
   final VoidCallback? onSoloToggle;
 
+  /// Fired with the edited name when the performer renames the strip inline.
+  /// When null the header name is a plain, non-editable label (the master
+  /// strip, or a plain widget test).
+  final ValueChanged<String>? onRename;
+
+  /// Fired when the performer triggers the header remove control. When null no
+  /// remove control is shown (the master strip is never removed).
+  final VoidCallback? onRemove;
+
   static const double width = 86;
   static const double _faderHeight = 160;
   static const double _faderTrackWidth = 14;
@@ -104,6 +121,10 @@ class ChannelStrip extends StatelessWidget {
     );
   }
 
+  /// Key on the header's remove control — exposed so widget tests can trigger
+  /// removal without depending on the glyph or layout.
+  static const Key removeButtonKey = Key('ChannelStrip.removeButton');
+
   Widget _header() {
     return Row(
       children: [
@@ -117,17 +138,30 @@ class ChannelStrip extends StatelessWidget {
           ),
         ),
         const SizedBox(width: PhiSpacing.s1),
-        Expanded(
-          child: Text(
-            name,
-            overflow: TextOverflow.ellipsis,
-            style: PhiType.monoS().copyWith(
-              color: muted ? PhiColors.fg3 : PhiColors.fg0,
-            ),
-          ),
-        ),
+        Expanded(child: _name()),
+        if (onRemove != null) ...[
+          const SizedBox(width: PhiSpacing.s1),
+          _RemoveButton(onPressed: onRemove!),
+        ],
       ],
     );
+  }
+
+  Widget _name() {
+    final style = PhiType.monoS().copyWith(
+      color: muted ? PhiColors.fg3 : PhiColors.fg0,
+    );
+    final rename = onRename;
+    if (rename != null) {
+      return InlineEditableText(
+        value: name,
+        onChanged: rename,
+        style: style,
+        maxWidth: width,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+    return Text(name, overflow: TextOverflow.ellipsis, style: style);
   }
 
   /// Key on the fader's hit-area — exposed so widget tests can locate the
@@ -352,6 +386,40 @@ class _StripButton extends StatelessWidget {
               color: active ? activeColor : PhiColors.fg2,
               fontWeight: FontWeight.w600,
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact header affordance to remove a user strip — a small `×` box that
+/// mirrors the mix header's `+` add control.
+class _RemoveButton extends StatelessWidget {
+  const _RemoveButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: Container(
+          key: ChannelStrip.removeButtonKey,
+          width: 16,
+          height: 16,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: PhiColors.bg0,
+            border: Border.all(color: PhiColors.line1),
+            borderRadius: PhiRadii.all1,
+          ),
+          child: Text(
+            '×',
+            style: PhiType.monoS().copyWith(color: PhiColors.fg2, height: 1),
           ),
         ),
       ),

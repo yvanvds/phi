@@ -39,6 +39,29 @@ class RegistryGroup extends RegistryNode {
   /// Removes and returns the child named [name], or `null` if absent.
   RegistryNode? remove(String name) => _children.remove(name);
 
+  /// Replaces the child keyed [oldName] with [node] (keyed by its own name) at
+  /// the *same position*, preserving sibling insertion order — appending [node]
+  /// when [oldName] is absent. The registry uses this so a same-parent rename
+  /// keeps its place in the listing instead of being reinserted at the end (a
+  /// plain [remove] + [put] would). Low-level: the registry checks name validity
+  /// and clashes before calling this.
+  void replaceChild(String oldName, RegistryNode node) {
+    final rebuilt = <String, RegistryNode>{};
+    var replaced = false;
+    for (final entry in _children.entries) {
+      if (entry.key == oldName) {
+        rebuilt[node.name] = node;
+        replaced = true;
+      } else {
+        rebuilt[entry.key] = entry.value;
+      }
+    }
+    if (!replaced) rebuilt[node.name] = node;
+    _children
+      ..clear()
+      ..addAll(rebuilt);
+  }
+
   /// Moves every child out of [other] into this group, preserving order;
   /// [other] is left empty. Used to rehome a subtree when a move renames its
   /// root (whose own [name] is immutable), so the descendant nodes are reused

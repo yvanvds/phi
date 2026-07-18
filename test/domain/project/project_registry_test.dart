@@ -506,6 +506,36 @@ void main() {
       expect(registry.referencesOf(addr('voice.bells')), {addr('mix.perc')});
       expect(registry.referrersOf(addr('mix.perc')), {addr('voice.bells')});
     });
+
+    test('a same-parent rename keeps the node in its sibling position', () {
+      registry.createEntity(addr('mix.a'));
+      registry.createEntity(addr('mix.b'));
+      registry.createEntity(addr('mix.c'));
+
+      // Rename the middle one — it must stay in the middle, not jump to the end.
+      registry.move(addr('mix.b'), addr('mix.beta'));
+
+      expect(registry.childrenOfKind('mix').map((n) => n.name), [
+        'a',
+        'beta',
+        'c',
+      ]);
+    });
+
+    test('a reparent (different group) appends at the destination', () {
+      registry.createEntity(addr('clip.drums.a'));
+      registry.createEntity(addr('clip.drums.b'));
+      registry.createEntity(addr('clip.x'));
+
+      // Moving into the drums group lands after its existing members.
+      registry.move(addr('clip.x'), addr('clip.drums.x'));
+
+      expect(registry.childrenOfGroup(addr('clip.drums')).map((n) => n.name), [
+        'a',
+        'b',
+        'x',
+      ]);
+    });
   });
 
   group('delete warnings (impactOfRemoving)', () {

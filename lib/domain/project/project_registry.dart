@@ -328,14 +328,24 @@ class ProjectRegistry extends ChangeNotifier {
       }
     }
 
-    // Detach, rewrite the subtree's internal references, then reattach —
-    // renaming the root when its leaf name changed.
-    _resolveGroup(from.kind, from.groupPath)!.remove(from.name);
+    // Rewrite the subtree's internal references, then reattach — renaming the
+    // root when its leaf name changed.
+    final fromParent = _resolveGroup(from.kind, from.groupPath)!;
     final relocated = _relocate(node, remap);
-    final parent = _ensureGroupPath(to.kind, to.groupPath);
-    parent.put(
-      to.name == from.name ? relocated : _renamedNode(relocated, to.name),
-    );
+    final toParent = _ensureGroupPath(to.kind, to.groupPath);
+    final reattached = to.name == from.name
+        ? relocated
+        : _renamedNode(relocated, to.name);
+    if (identical(fromParent, toParent)) {
+      // A same-parent rename: replace in place so the node keeps its position
+      // in the listing rather than jumping to the end (design: a rename must
+      // not reorder siblings — the mix rack renames a strip without shuffling
+      // it away from its neighbours).
+      fromParent.replaceChild(from.name, reattached);
+    } else {
+      fromParent.remove(from.name);
+      toParent.put(reattached);
+    }
 
     // Addresses shifted throughout the subtree, so rebuild the index from the
     // tree rather than trying to patch every moved key incrementally.
