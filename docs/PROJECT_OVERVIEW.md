@@ -496,9 +496,13 @@ main + app          (orchestration)
   `CrashRecovery`, and an `AppSettings` store together — exposing New / Open /
   Save / Save-As-Duplicate / Rename, a `ValueNotifier<bool> isDirty`, a
   recent-projects list, and an autosave timer (default 60 s, cadence in settings,
-  which keeps running while the transport plays). `AppSettings` (recent projects +
-  autosave cadence) persists to `%APPDATA%/phi/settings.json` through a Real/Fake
-  `AppSettingsStore` seam (`lib/domain/project/app_settings/`); a
+  which keeps running while the transport plays). `AppSettings` (a `version` field,
+  recent projects, pinned projects, autosave cadence, plus `AudioSettings` and
+  `MidiSettings` value sections) persists to `%APPDATA%/phi/settings.json` through
+  a Real/Fake `AppSettingsStore` seam (`lib/domain/project/app_settings/`); each
+  section parses tolerantly (missing/malformed keys fall back to defaults) so an
+  older file still loads, and pinned projects are listed first in the File menu and
+  never dropped by the recents cap. A
   `ProjectDirectoryPicker` seam (real `file_selector` folder dialogs, faked in
   tests) fronts the Open/Save-location pick. Open replays a dirty journal through
   `CrashRecovery` behind the existing `RecoveryDialog`, then re-saves + resolves;

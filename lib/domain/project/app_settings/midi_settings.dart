@@ -1,0 +1,68 @@
+/// The MIDI section of `settings.json` (design
+/// `docs/design/settings-and-devices.md` §3) — which output port to send on, and
+/// which input ports to open.
+///
+/// A plain immutable value type in the same style as `AppSettings`: it
+/// (de)serialises to a JSON map, compares by value, and its [fromJson] tolerates
+/// missing or malformed keys with defaults.
+///
+/// Ports are identified by **name**, never by index — the stored name is
+/// resolved to the current device index each time a port is (re)opened, so
+/// replugging keeps working (§4). Opening the input ports and routing their
+/// events belongs to later issues; this type only remembers the choice.
+class MidiSettings {
+  /// Builds the MIDI settings. The all-default instance
+  /// (`const MidiSettings()`) means "no output port chosen, no inputs open".
+  const MidiSettings({this.outputPort, this.inputPorts = const []});
+
+  /// Reads the MIDI section from a decoded map, tolerating missing or malformed
+  /// keys with defaults. Non-string entries in `inputPorts` are dropped.
+  factory MidiSettings.fromJson(Map<String, Object?> json) {
+    final rawInputs = json['inputPorts'];
+    final inputs = <String>[
+      for (final entry in (rawInputs is List ? rawInputs : const []))
+        if (entry is String) entry,
+    ];
+    final port = json['outputPort'];
+    return MidiSettings(
+      outputPort: port is String ? port : null,
+      inputPorts: List.unmodifiable(inputs),
+    );
+  }
+
+  /// The chosen MIDI output port's name, or `null` when none is chosen (the
+  /// engine's hard-coded port 0 stays in use until a later issue reads this).
+  final String? outputPort;
+
+  /// The names of the MIDI input ports the performer enabled, in listing order.
+  final List<String> inputPorts;
+
+  /// The section as the JSON map nested under `midi` in `settings.json`. A null
+  /// [outputPort] is omitted (absent = none chosen); [inputPorts] is always
+  /// written (possibly empty) so a round-trip is an identity.
+  Map<String, Object?> toJson() => {
+    if (outputPort != null) 'outputPort': outputPort,
+    'inputPorts': inputPorts,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is MidiSettings &&
+      other.outputPort == outputPort &&
+      _listEquals(other.inputPorts, inputPorts);
+
+  @override
+  int get hashCode => Object.hash(outputPort, Object.hashAll(inputPorts));
+
+  @override
+  String toString() =>
+      'MidiSettings(outputPort: $outputPort, inputPorts: $inputPorts)';
+
+  static bool _listEquals(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+}
