@@ -201,6 +201,9 @@ class _WorkstationState extends State<Workstation> {
     // reverting to the default (with a notice) if it is missing or refuses to
     // open. A no-op when no device was chosen.
     widget.engine.switchAudioDevice(controller.audioSettings);
+    // Apply the stored MIDI choice too (design §5): set the output port by name
+    // and open the enabled input ports. A no-op when nothing was chosen.
+    widget.engine.applyMidiSettings(controller.midiSettings);
     final recents = controller.recentProjects.value;
     if (recents.isEmpty) {
       controller.newProject();

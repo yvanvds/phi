@@ -37,6 +37,30 @@ class MidiSettings {
   /// The names of the MIDI input ports the performer enabled, in listing order.
   final List<String> inputPorts;
 
+  /// A copy with the output port set to [port] (or cleared when `null`) — the
+  /// MIDI section's output-port picker (design §6). [inputPorts] is unchanged.
+  MidiSettings withOutputPort(String? port) =>
+      MidiSettings(outputPort: port, inputPorts: inputPorts);
+
+  /// A copy with input port [name] enabled or disabled — the MIDI section's
+  /// input checklist (design §6). Enabling appends [name] (de-duplicated, at the
+  /// end so listing order is stable); disabling removes it. [outputPort] is
+  /// unchanged.
+  MidiSettings withInput(String name, {required bool enabled}) {
+    if (enabled) {
+      if (inputPorts.contains(name)) return this;
+      return MidiSettings(
+        outputPort: outputPort,
+        inputPorts: List.unmodifiable([...inputPorts, name]),
+      );
+    }
+    if (!inputPorts.contains(name)) return this;
+    return MidiSettings(
+      outputPort: outputPort,
+      inputPorts: List.unmodifiable(inputPorts.where((p) => p != name)),
+    );
+  }
+
   /// The section as the JSON map nested under `midi` in `settings.json`. A null
   /// [outputPort] is omitted (absent = none chosen); [inputPorts] is always
   /// written (possibly empty) so a round-trip is an identity.

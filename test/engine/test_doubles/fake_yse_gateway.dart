@@ -18,6 +18,11 @@ class FakeYseGateway implements YseGateway {
   final List<String> calls = [];
   bool initialised = false;
   bool audioTestOn = false;
+
+  /// Fabricated libYSE version + resolved library path the diagnostics section
+  /// reads back (design §6). Reassign to model other values (or an unset path).
+  String engineVersionValue = 'fake-yse 0.0.0';
+  String? libraryPathValue = r'C:\fake\yse\bin';
   double cpuLoadValue = 0;
   int missedCallbacksValue = 0;
   double activeSampleRateValue = 0;
@@ -51,6 +56,12 @@ class FakeYseGateway implements YseGateway {
     calls.add('close');
     initialised = false;
   }
+
+  @override
+  String get engineVersion => engineVersionValue;
+
+  @override
+  String? get libraryPath => libraryPathValue;
 
   /// Fabricated device list handed out by [audioDevices]. Two entries share a
   /// name under different hosts, so tests exercise the name + host identity rule

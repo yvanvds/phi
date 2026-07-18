@@ -7,6 +7,9 @@ import '../../design/tokens/phi_type.dart';
 import '../../domain/project/app_settings/app_settings_controller.dart';
 import '../../engine/engine.dart';
 import 'audio_settings_section.dart';
+import 'diagnostics_settings_section.dart';
+import 'midi_settings_section.dart';
+import 'projects_settings_section.dart';
 import 'settings_section.dart';
 
 /// The settings dialog (design `docs/design/settings-and-devices.md` §6): a modal
@@ -15,9 +18,8 @@ import 'settings_section.dart';
 /// sized to never scroll a section, and has **no OK / Cancel** — every control
 /// applies immediately (design §5), so closing is the only action.
 ///
-/// Only the AUDIO section carries fields today (issue #154); the other three are
-/// placeholders until the follow-up issue fills them in, but they list from the
-/// start so the shape of the surface is visible.
+/// All four sections carry fields: AUDIO (issue #154) plus MIDI, PROJECTS, and
+/// DIAGNOSTICS (issue #151).
 class SettingsDialog extends StatefulWidget {
   const SettingsDialog({
     required this.engine,
@@ -142,9 +144,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
           settings: widget.settings,
         );
       case SettingsSection.midi:
+        return MidiSettingsSection(
+          engine: widget.engine,
+          settings: widget.settings,
+        );
       case SettingsSection.projects:
+        return ProjectsSettingsSection(settings: widget.settings);
       case SettingsSection.diagnostics:
-        return _Placeholder(section: _section);
+        return DiagnosticsSettingsSection(engine: widget.engine);
     }
   }
 }
@@ -187,22 +194,6 @@ class _SectionTile extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _Placeholder extends StatelessWidget {
-  const _Placeholder({required this.section});
-
-  final SettingsSection section;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        '${section.label} settings arrive with the next issue',
-        style: PhiType.small().copyWith(color: PhiColors.fg3),
       ),
     );
   }

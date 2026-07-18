@@ -2,9 +2,8 @@
 /// `docs/design/settings-and-devices.md` §6) — the left-hand list the performer
 /// picks between.
 ///
-/// Only [audio] carries fields today (issue #154); [midi], [projects], and
-/// [diagnostics] are placeholders until the follow-up issue fills them in, but
-/// they list here so the shell shows the whole surface from the start.
+/// All four carry fields: [audio] (issue #154), and [midi], [projects], and
+/// [diagnostics] (issue #151).
 enum SettingsSection {
   audio('AUDIO'),
   midi('MIDI'),

@@ -22,6 +22,16 @@ abstract interface class YseGateway {
   /// Shut the engine down.
   void close();
 
+  /// The libYSE library version string (e.g. `2.0.1`) — a read-only
+  /// diagnostics fact (design §6). Available without a device open.
+  String get engineVersion;
+
+  /// The directory the engine library was loaded from, as configured through
+  /// the `YSE_DLL_PATH` environment variable — the resolved path shown in the
+  /// diagnostics section (design §6). `null` when the variable is unset (the
+  /// library then resolves from its bundled/package location).
+  String? get libraryPath;
+
   /// The audio devices the engine can currently see, as pure FFI-free
   /// [AudioDeviceDescriptor]s (design §4) — the list the settings window builds
   /// its output-device dropdown from. Available after [init] / [initOffline].

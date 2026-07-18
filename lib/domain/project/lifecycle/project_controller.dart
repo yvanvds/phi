@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../../session/session_state.dart';
 import '../app_settings/app_settings_controller.dart';
 import '../app_settings/audio_settings.dart';
+import '../app_settings/midi_settings.dart';
 import '../entity_address.dart';
 import '../project_command.dart';
 import '../project_registry.dart';
@@ -100,6 +101,13 @@ class ProjectController extends ChangeNotifier {
   final ValueNotifier<List<String>> recentProjects =
       ValueNotifier<List<String>>(const []);
 
+  /// The pinned-projects list, most-recently pinned first — floated to the top
+  /// of the File menu and never aged out (design §6, §9.2). Mirrored from the
+  /// single settings owner so a pin/unpin in the settings dialog updates the
+  /// menu at once.
+  final ValueNotifier<List<String>> pinnedProjects =
+      ValueNotifier<List<String>>(const []);
+
   ProjectRegistry _registry = ProjectRegistry();
 
   /// The live registry — the source of truth for the open project's entities.
@@ -111,6 +119,17 @@ class ProjectController extends ChangeNotifier {
   final Set<EntityAddress> _dirtyEntities = {};
 
   Timer? _autosaveTimer;
+
+  /// The cadence the autosave timer is currently armed for, so a settings change
+  /// re-arms only when the interval actually moved. `null` until the first arm.
+  Duration? _armedAutosaveInterval;
+
+  /// Whether autosave has been armed at least once (via [loadSettings]). A
+  /// cadence edit only re-arms after launch has started the timer, so a bare
+  /// controller in a widget test never spins a stray timer on an unrelated
+  /// settings write.
+  bool _autosaveStarted = false;
+
   bool _applyingSnapshot = false;
 
   /// Whether the open project has an on-disk home yet (`false` for a brand-new,
@@ -126,6 +145,11 @@ class ProjectController extends ChangeNotifier {
   /// engine boots from once [loadSettings] has read `settings.json` — the shell
   /// applies these to the engine at launch (design §5).
   AudioSettings get audioSettings => _settings.value.audio;
+
+  /// The stored MIDI settings (chosen output port + enabled input ports) the
+  /// engine applies once [loadSettings] has read `settings.json` — the shell
+  /// applies these to the engine at launch (design §5).
+  MidiSettings get midiSettings => _settings.value.midi;
 
   /// The single owner of the live app settings (design §7) — the object the
   /// settings dialog reads the current sections from and writes edits back
@@ -359,18 +383,33 @@ class ProjectController extends ChangeNotifier {
 
   void _onSessionChanged() => markDirty();
 
-  /// Mirrors the single settings owner's recents into [recentProjects] whenever
-  /// the live value changes — so the File menu follows every write, no matter
-  /// who triggered it (this controller or, later, the settings dialog).
-  void _onSettingsChanged() =>
-      recentProjects.value = _settings.value.recentProjects;
+  /// Mirrors the single settings owner's recents + pins into [recentProjects] /
+  /// [pinnedProjects] whenever the live value changes — so the File menu follows
+  /// every write, no matter who triggered it (this controller or the settings
+  /// dialog). A changed autosave cadence re-arms the timer (design §5, "on the
+  /// next timer arm"), but only once launch has started it, so a bare controller
+  /// never spins a stray timer.
+  void _onSettingsChanged() {
+    recentProjects.value = _settings.value.recentProjects;
+    pinnedProjects.value = _settings.value.pinnedProjects;
+    if (_autosaveStarted && autosaveInterval != _armedAutosaveInterval) {
+      _restartAutosave();
+    }
+  }
 
+  /// Arms (or re-arms) the autosave timer for the current [autosaveInterval]. A
+  /// zero or negative cadence disables autosave (design §6): the timer is left
+  /// cancelled until the cadence is raised again.
   void _restartAutosave() {
     _autosaveTimer?.cancel();
-    _autosaveTimer = Timer.periodic(
-      autosaveInterval,
-      (_) => unawaited(autosaveNow()),
-    );
+    _autosaveStarted = true;
+    final interval = autosaveInterval;
+    _armedAutosaveInterval = interval;
+    if (interval <= Duration.zero) {
+      _autosaveTimer = null;
+      return;
+    }
+    _autosaveTimer = Timer.periodic(interval, (_) => unawaited(autosaveNow()));
   }
 
   @override
@@ -385,6 +424,7 @@ class ProjectController extends ChangeNotifier {
     isDirty.dispose();
     location.dispose();
     recentProjects.dispose();
+    pinnedProjects.dispose();
     _registry.dispose();
     super.dispose();
   }
