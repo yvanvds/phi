@@ -3,7 +3,10 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:phi/domain/project/app_settings/app_settings.dart';
+import 'package:phi/domain/project/app_settings/audio_settings.dart';
+import 'package:phi/domain/project/app_settings/midi_settings.dart';
 import 'package:phi/domain/project/app_settings/real_app_settings_store.dart';
+import 'package:phi/domain/project/app_settings/speaker_layout.dart';
 
 void main() {
   late Directory temp;
@@ -52,5 +55,44 @@ void main() {
       final store = RealAppSettingsStore(directory: temp);
       expect(await store.load(), const AppSettings());
     });
+
+    test('round-trips audio/midi/pins through the real filesystem', () async {
+      final store = RealAppSettingsStore(directory: temp);
+      const settings = AppSettings(
+        recentProjects: ['one.phi'],
+        pinnedProjects: ['pinned.phi'],
+        autosaveInterval: Duration(seconds: 45),
+        audio: AudioSettings(
+          outputHost: 'ASIO',
+          outputDevice: 'Fireface UCX',
+          sampleRate: 48000,
+          bufferSize: 256,
+          layout: SpeakerLayout.surround51,
+        ),
+        midi: MidiSettings(
+          outputPort: 'loopMIDI Port',
+          inputPorts: ['Keystation 61'],
+        ),
+      );
+      await store.save(settings);
+      expect(await store.load(), settings);
+    });
+
+    test(
+      'an old settings.json without the new keys loads to defaults',
+      () async {
+        // A file hand-written in the pre-settings-and-devices schema.
+        await File(
+          p.join(temp.path, RealAppSettingsStore.fileName),
+        ).writeAsString('{"recentProjects":["old.phi"],"autosaveSeconds":60}');
+        final store = RealAppSettingsStore(directory: temp);
+        final loaded = await store.load();
+        expect(loaded.recentProjects, ['old.phi']);
+        expect(loaded.pinnedProjects, isEmpty);
+        expect(loaded.audio, const AudioSettings());
+        expect(loaded.midi, const MidiSettings());
+        expect(loaded.version, AppSettings.schemaVersion);
+      },
+    );
   });
 }
