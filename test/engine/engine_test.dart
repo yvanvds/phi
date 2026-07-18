@@ -106,6 +106,27 @@ void main() {
       expect(engine.masterVolume.value, closeTo(1.0, 1e-9));
     });
 
+    test('setMasterMuted collapses the effective gateway volume to zero', () {
+      engine.start();
+      engine.setMasterVolume(0.8);
+
+      engine.setMasterMuted(muted: true);
+      // The gateway is silenced …
+      expect(gateway.masterVolumeValue, 0.0);
+      expect(engine.masterMuted.value, isTrue);
+      // … but the user-set volume is remembered and still reported.
+      expect(engine.masterVolume.value, closeTo(0.8, 1e-9));
+
+      // A volume move while muted stays silent at the gateway.
+      engine.setMasterVolume(0.5);
+      expect(gateway.masterVolumeValue, 0.0);
+      expect(engine.masterVolume.value, closeTo(0.5, 1e-9));
+
+      // Unmuting restores the effective volume.
+      engine.setMasterMuted(muted: false);
+      expect(gateway.masterVolumeValue, closeTo(0.5, 1e-9));
+    });
+
     test('telemetry stream emits gateway snapshots while running', () async {
       gateway.cpuLoadValue = 0.42;
       gateway.missedCallbacksValue = 3;

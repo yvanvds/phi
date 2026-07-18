@@ -9,7 +9,6 @@ import '../../design/widgets/inline_editable_text/inline_editable_text.dart';
 import '../../domain/session/session_state.dart';
 import '../../domain/state_machine/performance_state.dart';
 import '../../domain/state_machine/state_snapshot.dart';
-import '../../engine/engine.dart';
 
 /// Right inspector — collapsed by default to a 28px strip with a rotated
 /// label. Tap to expand to 320px and reveal property editors for the active
@@ -17,13 +16,8 @@ import '../../engine/engine.dart';
 /// a context panel watches [SessionState.selection] and renders editors
 /// for whichever object is currently selected on any surface.
 class RightInspector extends StatefulWidget {
-  const RightInspector({
-    required this.engine,
-    required this.session,
-    super.key,
-  });
+  const RightInspector({required this.session, super.key});
 
-  final PhiEngine engine;
   final SessionState session;
 
   @override
@@ -57,11 +51,7 @@ class _RightInspectorState extends State<RightInspector> {
               ? PhiSpacing.rightInspectorExpandedWidth
               : PhiSpacing.rightInspectorCollapsedWidth,
           child: _expanded
-              ? _ExpandedBody(
-                  engine: widget.engine,
-                  session: widget.session,
-                  onCollapse: _toggle,
-                )
+              ? _ExpandedBody(session: widget.session, onCollapse: _toggle)
               : _CollapsedStrip(onExpand: _toggle),
         ),
       ),
@@ -90,13 +80,8 @@ class _CollapsedStrip extends StatelessWidget {
 }
 
 class _ExpandedBody extends StatelessWidget {
-  const _ExpandedBody({
-    required this.engine,
-    required this.session,
-    required this.onCollapse,
-  });
+  const _ExpandedBody({required this.session, required this.onCollapse});
 
-  final PhiEngine engine;
   final SessionState session;
   final VoidCallback onCollapse;
 
@@ -115,7 +100,7 @@ class _ExpandedBody extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _MasterSection(engine: engine),
+                _MasterSection(session: session),
                 const SizedBox(height: PhiSpacing.s5),
                 ValueListenableBuilder<Object?>(
                   valueListenable: session.selection,
@@ -272,9 +257,9 @@ class _Header extends StatelessWidget {
 }
 
 class _MasterSection extends StatelessWidget {
-  const _MasterSection({required this.engine});
+  const _MasterSection({required this.session});
 
-  final PhiEngine engine;
+  final SessionState session;
 
   @override
   Widget build(BuildContext context) {
@@ -284,11 +269,15 @@ class _MasterSection extends StatelessWidget {
         Text('MASTER', style: PhiType.caption()),
         const SizedBox(height: PhiSpacing.s3),
         Center(
+          // Bound to the session (not the engine directly): master volume is
+          // manifest state (design `docs/design/mix.md` §3), so the fader writes
+          // it there — the shell mirrors it onto the engine, and a save persists
+          // it. Mirrors how the session owns tempo.
           child: ValueListenableBuilder<double>(
-            valueListenable: engine.masterVolume,
+            valueListenable: session.masterVolume,
             builder: (context, value, _) => PhiFader(
               value: value,
-              onChanged: engine.setMasterVolume,
+              onChanged: session.setMasterVolume,
               readout: value.toStringAsFixed(2),
               label: 'volume',
             ),

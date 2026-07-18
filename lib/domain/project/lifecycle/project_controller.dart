@@ -63,6 +63,10 @@ class ProjectController extends ChangeNotifier {
        _autosaveIntervalOverride = autosaveIntervalOverride {
     _session.sceneName.addListener(_onSessionChanged);
     _session.tempo.addListener(_onSessionChanged);
+    // Master volume/mute are manifest state too (design `docs/design/mix.md` §3),
+    // so a live master change dirties the project like a tempo change.
+    _session.masterVolume.addListener(_onSessionChanged);
+    _session.masterMuted.addListener(_onSessionChanged);
     // The settings controller is the single owner of the live value; mirror its
     // recents into [recentProjects] so the File menu follows every write —
     // whether it came from here (open/save) or, later, the settings dialog.
@@ -340,6 +344,8 @@ class ProjectController extends ChangeNotifier {
     name: name.value,
     tempo: _session.tempo.value,
     sceneName: _session.sceneName.value,
+    masterVolume: _session.masterVolume.value,
+    masterMuted: _session.masterMuted.value,
   );
 
   void _applyManifest(ProjectManifest manifest) {
@@ -348,6 +354,8 @@ class ProjectController extends ChangeNotifier {
       name.value = manifest.name;
       _session.setTempo(manifest.tempo);
       _session.renameScene(manifest.sceneName);
+      _session.setMasterVolume(manifest.masterVolume);
+      _session.setMasterMuted(manifest.masterMuted);
     } finally {
       _applyingSnapshot = false;
     }
@@ -417,6 +425,8 @@ class ProjectController extends ChangeNotifier {
     _autosaveTimer?.cancel();
     _session.sceneName.removeListener(_onSessionChanged);
     _session.tempo.removeListener(_onSessionChanged);
+    _session.masterVolume.removeListener(_onSessionChanged);
+    _session.masterMuted.removeListener(_onSessionChanged);
     // The settings controller is injected — stop listening, but its owner
     // disposes it.
     _settings.removeListener(_onSettingsChanged);
