@@ -3,6 +3,7 @@ import 'package:phi/domain/project/commands/create_entity_command.dart';
 import 'package:phi/domain/project/commands/create_group_command.dart';
 import 'package:phi/domain/project/commands/move_entity_command.dart';
 import 'package:phi/domain/project/commands/remove_entity_command.dart';
+import 'package:phi/domain/project/commands/update_entity_payload_command.dart';
 import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/project/project_registry.dart';
 import 'package:phi/domain/project/recovery/registry_command_codec.dart';
@@ -94,6 +95,28 @@ void main() {
     codec.decode(journaled, registry).apply();
 
     expect(registry.entityAt(addr('clip.a')), isNull);
+  });
+
+  test('decoded update_payload replays the clip payload change', () {
+    // A clip edit journals its new interpretation as an update_payload command.
+    final original = ProjectRegistry();
+    original.createEntity(addr('clip.phrase_a'), payload: {'v': 1});
+    final journaled = UpdateEntityPayloadCommand(
+      original,
+      addr('clip.phrase_a'),
+      {'v': 2, 'chain': const <Object?>[]},
+    ).toJson();
+    expect(journaled['type'], 'update_payload');
+
+    // Replay onto a fresh registry seeded to the pre-edit state.
+    final registry = ProjectRegistry();
+    registry.createEntity(addr('clip.phrase_a'), payload: {'v': 1});
+    codec.decode(journaled, registry).apply();
+
+    expect(registry.entityAt(addr('clip.phrase_a'))!.payload, {
+      'v': 2,
+      'chain': const <Object?>[],
+    });
   });
 
   test('an unknown command type throws a FormatException', () {

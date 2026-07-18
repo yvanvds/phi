@@ -215,6 +215,39 @@ class ProjectRegistry extends ChangeNotifier {
     _bumpAndNotify();
   }
 
+  /// Replaces the [payload] of the entity at [address] in place, keeping its
+  /// name, kind and position — the hook a clip edit uses to publish its updated
+  /// interpretation into the registry (issue #135, the clip-edit dirty-tracking
+  /// seam #123 deferred).
+  ///
+  /// References follow the new payload when it is a [ReferenceSource] (else the
+  /// entity's existing declared references are kept), and the back-reference
+  /// index is updated to match. Throws [RegistryError.notFound] when no entity
+  /// sits at [address]. Notifies, but emits **no** lifecycle event — a payload
+  /// change is not a structural (namespace) mutation, mirroring [setReferences].
+  void updateEntityPayload(EntityAddress address, Object? payload) {
+    final parent = _resolveGroup(address.kind, address.groupPath);
+    final existing = parent?.child(address.name);
+    if (existing is! RegistryEntity) {
+      throw RegistryException(
+        RegistryError.notFound,
+        'Cannot update the payload of "$address": no entity is there.',
+      );
+    }
+    parent!.put(
+      RegistryEntity(
+        name: existing.name,
+        kind: existing.kind,
+        payload: payload,
+        references: existing.references,
+      ),
+    );
+    _backrefs.removeSource(address);
+    final resolved = entityAt(address)!.references;
+    if (resolved.isNotEmpty) _backrefs.add(address, resolved);
+    _bumpAndNotify();
+  }
+
   /// Removes the node at [address] — for a group, its whole subtree — and
   /// returns whether anything was removed. Tolerant: a missing target is a
   /// no-op that returns `false` and does not notify.

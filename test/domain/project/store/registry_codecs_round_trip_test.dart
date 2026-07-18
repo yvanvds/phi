@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:phi/domain/midi/midi_clip.dart';
+import 'package:phi/domain/midi/store/clip_document.dart';
 import 'package:phi/domain/mix/mix_strip.dart';
 import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/project/project_registry.dart';
@@ -30,29 +30,29 @@ void main() {
     registry: registry,
   );
 
-  test(
-    'the seeded default project round-trips clip + domain payloads',
-    () async {
-      final registry = ProjectRegistry();
-      seedDefaultProject(registry);
+  test('the seeded default project round-trips clip + domain payloads', () async {
+    final registry = ProjectRegistry();
+    seedDefaultProject(registry);
 
-      final store = FakeProjectStore(codecs: defaultEntityCodecs());
-      await store.save(snapshotOf(registry));
-      final loaded = await store.load();
-      addTearDown(loaded.registry.dispose);
+    final store = FakeProjectStore(codecs: defaultEntityCodecs());
+    await store.save(snapshotOf(registry));
+    final loaded = await store.load();
+    addTearDown(loaded.registry.dispose);
 
-      final clip = loaded.registry.entityAt(addr('clip.phrase_a'))!.payload;
-      expect(clip, isA<MidiClip>());
-      expect((clip! as MidiClip).name, 'phrase A');
-      expect((clip as MidiClip).notes, isNotEmpty);
+    final clip = loaded.registry.entityAt(addr('clip.phrase_a'))!.payload;
+    // The clip payload is a v2 ClipDocument map (source notes + interpretation).
+    final document = ClipDocument.fromJson((clip! as Map).cast());
+    expect(document.source.name, 'phrase A');
+    expect(document.source.notes, isNotEmpty);
+    // The transform chain round-tripped alongside the source (issue #135).
+    expect(document.chain, isNotEmpty);
 
-      final domain = loaded.registry.entityAt(addr('domain.drum'))!.payload;
-      expect(domain, isA<TimeDomain>());
-      expect((domain! as TimeDomain).tempo, 124);
+    final domain = loaded.registry.entityAt(addr('domain.drum'))!.payload;
+    expect(domain, isA<TimeDomain>());
+    expect((domain! as TimeDomain).tempo, 124);
 
-      registry.dispose();
-    },
-  );
+    registry.dispose();
+  });
 
   test('mix strip payloads round-trip as normalised maps', () async {
     final registry = ProjectRegistry();
@@ -94,7 +94,7 @@ void main() {
     final clipFile =
         jsonDecode(store.files['clip/phrase_a.json']!) as Map<String, Object?>;
     expect(clipFile['kind'], 'clip');
-    expect(clipFile['version'], 1);
+    expect(clipFile['version'], 2);
     expect(clipFile['payload'], isA<Map<String, Object?>>());
 
     final mixFile =
