@@ -46,7 +46,9 @@ main + app          (orchestration)
 - Theme in `lib/design/theme.dart`
 - Widget library: `PrimaryButton`, `PeakMeter`, `Capsule`, `PhiToggle`,
   `InlineEditableText`, `TransportButton`, `RailButton`, `StatusChip`,
-  `PhiFader`, `ChannelStrip`
+  `PhiFader`, `ChannelStrip`, `PhiSelect` (token-first dropdown — flat or
+  host-grouped options, keyboard nav, disabled state; issue #153) +
+  `PhiChecklistRow` (label + checkbox + trailing slot)
 - `PhiEngine` façade over a `YseGateway` interface (`RealYseGateway` for
   production, `FakeYseGateway` for tests). Owns the master + N user
   `MixerChannel` instances and exposes add/remove/volume/mute/solo;
