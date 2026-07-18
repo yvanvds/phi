@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
 import 'package:phi/domain/project/app_settings/app_settings.dart';
+import 'package:phi/domain/project/app_settings/app_settings_controller.dart';
 import 'package:phi/domain/project/lifecycle/project_controller.dart';
 import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/engine.dart';
@@ -31,9 +32,10 @@ void main() {
     );
     final session = SessionState();
     final store = FakeProjectStore();
+    final settings = AppSettingsController(FakeAppSettingsStore());
     final controller = ProjectController(
       session: session,
-      settingsStore: FakeAppSettingsStore(),
+      settings: settings,
       storeFactory: (_) => store,
       journalStoreFactory: (_) => FakeJournalStore(),
       autosaveIntervalOverride: const Duration(hours: 1),
@@ -85,6 +87,7 @@ void main() {
     expect(saved.manifest.tempo, 132);
 
     controller.dispose();
+    settings.dispose();
     session.dispose();
     await engine.dispose();
   });
@@ -101,25 +104,28 @@ void main() {
     final store = FakeProjectStore();
     final journal = FakeJournalStore();
     final seedSession = SessionState();
+    final seedSettings = AppSettingsController(FakeAppSettingsStore());
     final seedController = ProjectController(
       session: seedSession,
-      settingsStore: FakeAppSettingsStore(),
+      settings: seedSettings,
       storeFactory: (_) => store,
       journalStoreFactory: (_) => journal,
     );
     await seedController.saveAs(dir); // writes the clean save
     seedController.dispose();
+    seedSettings.dispose();
     seedSession.dispose();
     await journal.append(
       jsonEncode(const {'type': 'create_entity', 'address': 'clip.recovered'}),
     );
 
     // Launch with that project as the most-recent, and auto-restore on.
+    final settings = AppSettingsController(
+      FakeAppSettingsStore(const AppSettings(recentProjects: [dir])),
+    );
     final controller = ProjectController(
       session: session,
-      settingsStore: FakeAppSettingsStore(
-        const AppSettings(recentProjects: [dir]),
-      ),
+      settings: settings,
       storeFactory: (_) => store,
       journalStoreFactory: (_) => journal,
       autosaveIntervalOverride: const Duration(hours: 1),
@@ -156,6 +162,7 @@ void main() {
     expect(controller.registry.kinds, contains('clip'));
 
     controller.dispose();
+    settings.dispose();
     session.dispose();
     await engine.dispose();
   });

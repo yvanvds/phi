@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'design/theme.dart';
 import 'domain/midi/custom_transform_registry.dart';
+import 'domain/project/app_settings/app_settings_controller.dart';
 import 'domain/project/app_settings/real_app_settings_store.dart';
 import 'domain/project/lifecycle/project_controller.dart';
 import 'domain/project/lifecycle/project_directory_picker.dart';
@@ -80,6 +81,11 @@ class _PhiAppState extends State<PhiApp> {
   late final bool _ownsProjectController;
   late final ProjectDirectoryPicker _directoryPicker;
 
+  /// The single settings owner backing a self-built [_projectController]. Held
+  /// only so it can be disposed with the controller; `null` when a controller
+  /// was injected (the test owns its own settings controller).
+  AppSettingsController? _ownedAppSettings;
+
   @override
   void initState() {
     super.initState();
@@ -107,9 +113,11 @@ class _PhiAppState extends State<PhiApp> {
       _projectController = injectedController;
       _ownsProjectController = false;
     } else {
+      final appSettings = AppSettingsController(RealAppSettingsStore());
+      _ownedAppSettings = appSettings;
       _projectController = ProjectController(
         session: _session,
-        settingsStore: RealAppSettingsStore(),
+        settings: appSettings,
         storeFactory: (directory) => RealProjectStore(
           Directory(directory),
           codecs: defaultEntityCodecs(),
@@ -129,6 +137,8 @@ class _PhiAppState extends State<PhiApp> {
     // The controller listens to the session, so dispose it before the session.
     if (_ownsProjectController) {
       _projectController.dispose();
+      // The project controller listens to the settings owner; dispose it after.
+      _ownedAppSettings?.dispose();
     }
     if (_ownsEngine) {
       _engine.stop();

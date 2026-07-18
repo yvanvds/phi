@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/domain/project/app_settings/app_settings_controller.dart';
 import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/project/lifecycle/project_controller.dart';
 import 'package:phi/domain/project/project_registry.dart';
@@ -16,15 +17,18 @@ void main() {
     setUp(() => session = SessionState());
     tearDown(() => session.dispose());
 
-    ProjectController controllerWith(void Function(ProjectRegistry)? seed) =>
-        ProjectController(
-          session: session,
-          settingsStore: FakeAppSettingsStore(),
-          storeFactory: (_) => FakeProjectStore(),
-          journalStoreFactory: (_) => FakeJournalStore(),
-          seedRegistry: seed,
-          autosaveIntervalOverride: const Duration(hours: 1),
-        );
+    ProjectController controllerWith(void Function(ProjectRegistry)? seed) {
+      final settings = AppSettingsController(FakeAppSettingsStore());
+      addTearDown(settings.dispose);
+      return ProjectController(
+        session: session,
+        settings: settings,
+        storeFactory: (_) => FakeProjectStore(),
+        journalStoreFactory: (_) => FakeJournalStore(),
+        seedRegistry: seed,
+        autosaveIntervalOverride: const Duration(hours: 1),
+      );
+    }
 
     test('newProject seeds the default entities when a seeder is given', () {
       final controller = controllerWith(seedDefaultProject);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/domain/project/app_settings/app_settings_controller.dart';
 import 'package:phi/domain/project/lifecycle/project_controller.dart';
 import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/shell/project/project_menu.dart';
@@ -13,15 +14,17 @@ void main() {
   late SessionState session;
   late FakeProjectStore store;
   late FakeJournalStore journal;
+  late AppSettingsController settings;
   late ProjectController controller;
 
   ProjectController build() {
     session = SessionState();
     store = FakeProjectStore();
     journal = FakeJournalStore();
+    settings = AppSettingsController(FakeAppSettingsStore());
     return ProjectController(
       session: session,
-      settingsStore: FakeAppSettingsStore(),
+      settings: settings,
       storeFactory: (_) => store,
       journalStoreFactory: (_) => journal,
     );
@@ -29,6 +32,7 @@ void main() {
 
   tearDown(() {
     controller.dispose();
+    settings.dispose();
     session.dispose();
   });
 
