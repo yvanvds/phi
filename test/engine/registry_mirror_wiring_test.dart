@@ -64,7 +64,7 @@ void main() {
     // A create straight on the freshly bound registry reaches the mirror.
     project.createEntity(
       mix('bass'),
-      payload: const MixStrip(name: 'bass', voice: 4).toJson(),
+      payload: const MixStrip(voice: 4).toJson(),
     );
     await pumpEventQueue();
 

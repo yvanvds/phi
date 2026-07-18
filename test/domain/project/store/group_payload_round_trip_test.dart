@@ -52,7 +52,6 @@ void main() {
       registry.createGroup(
         addr('mix.drums'),
         payload: const MixStrip(
-          name: 'drums',
           voice: 3,
           volume: 0.42,
           muted: true,
@@ -71,13 +70,7 @@ void main() {
       final payload = loaded.registry.groupAt(addr('mix.drums'))!.payload;
       expect(
         MixStrip.fromJson((payload! as Map).cast()),
-        const MixStrip(
-          name: 'drums',
-          voice: 3,
-          volume: 0.42,
-          muted: true,
-          soloed: true,
-        ),
+        const MixStrip(voice: 3, volume: 0.42, muted: true, soloed: true),
       );
       // The send (a reference to the return) survives, back-index and all.
       expect(loaded.registry.referencesOf(addr('mix.drums')), {
@@ -97,7 +90,7 @@ void main() {
       registry.createEntity(addr('mix.verb'));
       registry.createGroup(
         addr('mix.drums'),
-        payload: const MixStrip(name: 'drums', voice: 2).toJson(),
+        payload: const MixStrip(voice: 2).toJson(),
         references: {addr('mix.verb')},
       );
 
@@ -113,15 +106,18 @@ void main() {
           jsonDecode(store.files['mix/drums/_group.json']!)
               as Map<String, Object?>;
       expect(json['kind'], 'mix');
-      expect(json['version'], 2);
+      expect(json['version'], 3);
+      // The envelope's `name` is the group's own address leaf, not a payload
+      // field (the payload no longer carries a display name).
       expect(json['name'], 'drums');
       expect(json['references'], ['mix.verb']);
       expect(json['payload'], {
-        'name': 'drums',
         'voice': 2,
         'volume': 1.0,
         'muted': false,
         'soloed': false,
+        'return': false,
+        'sends': <Object?>[],
       });
       // Cosmetic metadata coexists in the same file.
       expect(json['color'], 'amber');
@@ -145,19 +141,14 @@ void main() {
       final registry = ProjectRegistry();
       registry.createGroup(
         addr('mix.drums'),
-        payload: const MixStrip(name: 'drums', voice: 2).toJson(),
+        payload: const MixStrip(voice: 2).toJson(),
       );
       final store = mixStore();
       await store.save(snapshotOf(registry));
 
       registry.updateGroupPayload(
         addr('mix.drums'),
-        const MixStrip(
-          name: 'drums',
-          voice: 2,
-          volume: 0.1,
-          muted: true,
-        ).toJson(),
+        const MixStrip(voice: 2, volume: 0.1, muted: true).toJson(),
       );
       await store.save(snapshotOf(registry), dirty: {addr('mix.drums')});
 
@@ -242,7 +233,7 @@ void main() {
       registry.createEntity(addr('mix.verb'));
       registry.createGroup(
         addr('mix.drums'),
-        payload: const MixStrip(name: 'drums', voice: 4, volume: 0.7).toJson(),
+        payload: const MixStrip(voice: 4, volume: 0.7).toJson(),
         references: {addr('mix.verb')},
       );
 

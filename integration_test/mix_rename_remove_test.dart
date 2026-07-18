@@ -18,13 +18,15 @@ import '../test/domain/project/test_doubles/fake_project_directory_picker.dart';
 import '../test/domain/project/test_doubles/fake_project_store.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
 
-/// End-to-end proof of the Mix-surface rename + remove affordances (issue #141)
-/// driven through the real [PhiApp]: the performer adds two channels, inline-
-/// renames one (which slugs to a new registry address — a `move`, so the address
-/// follows the display name), removes the other, and saves. A second launch
-/// pointed at the same project restores exactly the surviving, renamed channel —
-/// proving the rename and the removal both persisted through a save/reload. All
-/// against in-memory fakes, so no native dialog or filesystem is touched.
+/// End-to-end proof of the Mix-surface rename + remove affordances (issue #141,
+/// re-aligned by #166) driven through the real [PhiApp]: the performer adds two
+/// channels, inline-renames one to a spaced name (`lead synth`) — and, under the
+/// one-name re-alignment (design §10 decision 1), the strip header now shows the
+/// **address leaf** `lead_synth`, not a divergent free-form name — removes the
+/// other, and saves. A second launch pointed at the same project restores exactly
+/// the surviving, renamed channel — proving the rename and the removal both
+/// persisted through a save/reload. All against in-memory fakes, so no native
+/// dialog or filesystem is touched.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -75,28 +77,31 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(addButton);
     await tester.pumpAndSettle();
-    expect(engine1.channels.value.map((c) => c.name), ['ch 1', 'ch 2']);
+    expect(engine1.channels.value.map((c) => c.name), ['ch_1', 'ch_2']);
 
     // Inline-rename the first strip. 'lead synth' slugs to a new address, so the
-    // engine performs a registry move; order preservation keeps it first.
-    await tester.tap(find.text('ch 1'));
+    // engine performs a registry move; order preservation keeps it first. The
+    // header shows the slugged address leaf 'lead_synth' (one-name re-alignment),
+    // not the spaced text the performer typed.
+    await tester.tap(find.text('ch_1'));
     await tester.pump();
     expect(find.byType(TextField), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'lead synth');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
-    expect(engine1.channels.value.map((c) => c.name), ['lead synth', 'ch 2']);
-    expect(find.text('lead synth'), findsOneWidget);
+    expect(engine1.channels.value.map((c) => c.name), ['lead_synth', 'ch_2']);
+    expect(find.text('lead_synth'), findsOneWidget);
+    expect(find.text('lead synth'), findsNothing);
 
     // Remove the second strip via its own header remove control.
     await tester.tap(
       find.descendant(
-        of: stripFor('ch 2'),
+        of: stripFor('ch_2'),
         matching: find.byKey(ChannelStrip.removeButtonKey),
       ),
     );
     await tester.pumpAndSettle();
-    expect(engine1.channels.value.map((c) => c.name), ['lead synth']);
+    expect(engine1.channels.value.map((c) => c.name), ['lead_synth']);
     expect(controller1.isDirty.value, isTrue);
 
     // Save via the project menu; the new project gets its home from the picker.
@@ -150,11 +155,11 @@ void main() {
     session1.dispose();
 
     // The removed channel is gone and the renamed one came back with its new
-    // name — not the 'ch 1' the seed default would have carried.
-    expect(engine2.channels.value.map((c) => c.name), ['lead synth']);
-    expect(find.text('lead synth'), findsOneWidget);
-    expect(find.text('ch 1'), findsNothing);
-    expect(find.text('ch 2'), findsNothing);
+    // (slugged) name — not the 'ch_1' the seed default would have carried.
+    expect(engine2.channels.value.map((c) => c.name), ['lead_synth']);
+    expect(find.text('lead_synth'), findsOneWidget);
+    expect(find.text('ch_1'), findsNothing);
+    expect(find.text('ch_2'), findsNothing);
 
     await engine2.dispose();
     await gateway2.dispose();

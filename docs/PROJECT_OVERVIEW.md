@@ -703,6 +703,31 @@ main + app          (orchestration)
   rename-refactor over group payloads, the two commands, journal replay) plus
   in-memory and real-filesystem store round-trips (`_group.json` payload
   envelope; `clip.` groups unchanged).
+  Issue #166 grows the **mix domain** (design `docs/design/mix.md` §3–§4, §10):
+  `MixStrip` gains `isReturn` (a top-level return bus) and an ordered `sends`
+  list of the new `MixSend` value type (`{to, level, preFader}`, slot = index),
+  and `MixStripCodec` jumps to **schema v3**. A strip is now a `ReferenceSource`:
+  its `references` are its send targets, so a strip's sends feed the
+  back-reference index and `withReferenceUpdated` rewrites a send's `to` when its
+  return is renamed/moved (the same seam group buses already use). Send targets
+  are validated at edit time — `SendTarget.isReturn`/`validate`
+  (`lib/domain/mix/send_target.dart`) reject a send to anything but a top-level
+  `mix.` return, so an illegal wiring never reaches the journal or the engine.
+  **One-name re-alignment (§10 decision 1):** `MixStrip`'s free-form display name
+  is **dropped outright** — no compat shim, a stored `name` key is simply no
+  longer read. A channel is named by its **address leaf**: the engine names each
+  `MixerChannel` from `address.name` (now `final`), so `renameChannel` collapses
+  to a pure registry **move** (a same-slug rename is a no-op) and the surface
+  header shows the slug (`lead synth` → `lead_synth`). Master state (volume, mute)
+  moves into the **project manifest** (`ProjectManifest.masterVolume`/
+  `masterMuted`) — master is not an entity, so its state persists there; wiring
+  the live engine master into/out of the manifest lands with the engine work
+  (#168). Covered by domain unit tests (strip/send/codec incl. v2→v3, the
+  `ReferenceSource` rewrite, send-target validation, manifest master round-trip),
+  engine tests (channels named from the address, rename-as-move, live-state
+  persistence preserving sends), and the end-to-end `mix_rename_remove`
+  integration test (a spaced rename now shows the slugged leaf and round-trips a
+  save/reload).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

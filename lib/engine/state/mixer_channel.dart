@@ -24,8 +24,10 @@ class MixerChannel extends ChangeNotifier {
   /// be passed to per-channel gateway calls.
   final int id;
 
-  /// Visible name. Mutated by the engine on a rename via [applyName].
-  String name;
+  /// Visible name — the channel's registry address leaf (the one-name
+  /// re-alignment, issue #166). Set at creation; a rename rematerialises the
+  /// channel from the moved entity rather than mutating this in place.
+  final String name;
 
   /// Voice swatch index in `[1, 6]`, picked when the channel is added.
   int voice;
@@ -49,15 +51,6 @@ class MixerChannel extends ChangeNotifier {
   double get peak => _peak;
 
   // Internal mutators — only the engine should call these.
-
-  /// Set the visible [name]. Notifies so a bound strip re-renders in place —
-  /// used when a rename does not change the channel's registry address (the
-  /// slug is unchanged), so the sync does not recreate the channel for it.
-  void applyName(String value) {
-    if (name == value) return;
-    name = value;
-    notifyListeners();
-  }
 
   void applyMuted(bool value) {
     if (_muted == value) return;

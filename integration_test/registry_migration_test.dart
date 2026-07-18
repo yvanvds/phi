@@ -140,7 +140,7 @@ void main() {
 
     // The saved channel materialised from its `mix.` entity …
     expect(engine2.channels.value, hasLength(1));
-    expect(engine2.channels.value.single.name, 'ch 1');
+    expect(engine2.channels.value.single.name, 'ch_1');
     // … and shows on the Mix surface (master + the restored channel).
     expect(find.byType(ChannelStrip), findsNWidgets(2));
     // … and the demo clip + domain entities came back in the registry.
