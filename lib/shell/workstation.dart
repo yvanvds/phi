@@ -148,6 +148,14 @@ class _WorkstationState extends State<Workstation> {
     widget.session.transport.addListener(_onTransport);
     widget.session.tempo.addListener(_onTempo);
 
+    // Master volume/mute are session-owned manifest state (design
+    // `docs/design/mix.md` §3); mirror them onto the engine so a fader move — or
+    // a project open that loads them from the manifest — reaches the audio path.
+    widget.session.masterVolume.addListener(_onMasterVolume);
+    widget.session.masterMuted.addListener(_onMasterMuted);
+    _onMasterVolume();
+    _onMasterMuted();
+
     _setUpProject();
   }
 
@@ -256,6 +264,8 @@ class _WorkstationState extends State<Workstation> {
     _exitListener?.dispose();
     widget.session.transport.removeListener(_onTransport);
     widget.session.tempo.removeListener(_onTempo);
+    widget.session.masterVolume.removeListener(_onMasterVolume);
+    widget.session.masterMuted.removeListener(_onMasterMuted);
     // The router only references scopes; it never owns them, so disposing it
     // won't touch the MIDI editor's scope (disposed with the editor below).
     _undoScopes.dispose();
@@ -282,6 +292,12 @@ class _WorkstationState extends State<Workstation> {
   }
 
   void _onTempo() => widget.engine.midiOrNull?.bpm = widget.session.tempo.value;
+
+  void _onMasterVolume() =>
+      widget.engine.setMasterVolume(widget.session.masterVolume.value);
+
+  void _onMasterMuted() =>
+      widget.engine.setMasterMuted(muted: widget.session.masterMuted.value);
 
   void _onSelect(SurfaceId id) {
     setState(() => _selected = id);
@@ -340,10 +356,7 @@ class _WorkstationState extends State<Workstation> {
                 children: [
                   LeftRail(selected: _selected, onSelect: _onSelect),
                   Expanded(child: _buildCentre()),
-                  RightInspector(
-                    engine: widget.engine,
-                    session: widget.session,
-                  ),
+                  RightInspector(session: widget.session),
                 ],
               ),
             ),

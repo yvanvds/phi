@@ -728,6 +728,37 @@ main + app          (orchestration)
   persistence preserving sends), and the end-to-end `mix_rename_remove`
   integration test (a spaced rename now shows the slugged leaf and round-trips a
   save/reload).
+  Issue #168 makes the engine **tree-aware** (design `docs/design/mix.md` §5, §8):
+  `PhiEngine._syncChannelsFromRegistry` now walks the whole `mix.` tree instead of
+  the flat top level — materialising a channel per node (a `mix.` group *is* a bus,
+  created **before** its children so they have a parent; a top-level `return: true`
+  entity is a `createReturnChannel` outside the tree with auto-upgraded send slots),
+  re-parenting a moved node with `moveChannel` (a regroup keeps the same leaf name,
+  so the engine correlates the gone/appeared addresses and preserves the gateway
+  channel + its live meters rather than tearing it down), destroying removed nodes,
+  and — in a **second pass**, once every channel exists — wiring aux sends to their
+  return buses (`setSend`/`setSendLevel`/`clearSend`, reconciled against what is
+  already applied). Tree **mute/solo** collapse to effective gateway volumes
+  (`_recomputeEffectiveVolumes`): mute wins on the path (a soloed leaf inside a
+  muted group stays silent), solo keeps the soloed nodes ∪ their descendants ∪ their
+  ancestors audible, and **returns are exempt from solo** (§10 decision 3). The
+  engine exposes a returns list (`PhiEngine.returns`) and a send-edit API
+  (`setChannelSend`/`clearChannelSend`/`setChannelSendLevel` with
+  `begin`/`endSendLevelGesture` coalescing, the same one-command-per-drag pattern as
+  the fader) for the surface work (#170). **Master** volume/mute — not a registry
+  entity, so manifest state (design §3) — now round-trips: `SessionState` grows
+  `masterVolume`/`masterMuted` (the manifest's in-memory carrier, like tempo), the
+  `ProjectController` folds them into / out of the manifest on save/open (a master
+  change dirties the project), the shell mirrors them onto the engine, and
+  `PhiEngine.setMasterMuted` collapses the effective master volume to zero while
+  remembering the user value. The right inspector's master fader now binds to the
+  session. Covered by engine unit tests (`engine_mix_tree_test` — group create/move/
+  remove reconciliation, second-pass send wiring incl. sender-before-target,
+  the full solo/mute truth table, returns, send-edit + gesture coalescing; plus
+  master-mute effective volume in `engine_test`), controller tests (master
+  volume/mute manifest round-trip + dirty-on-change), and an end-to-end
+  `mix_master_persistence` integration test (drag the master fader → save → reload
+  restores it).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

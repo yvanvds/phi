@@ -7,6 +7,7 @@ import '../domain/midi/custom_transform_registry.dart';
 import '../domain/midi/midi_clip_seed.dart';
 import '../domain/midi/store/clip_document.dart';
 import '../domain/midi/store/midi_transform_codec.dart';
+import '../domain/mix/mix_send.dart';
 import '../domain/mix/mix_strip.dart';
 import '../domain/project/app_settings/audio_settings.dart';
 import '../domain/project/app_settings/midi_settings.dart';
@@ -14,12 +15,15 @@ import '../domain/project/commands/create_entity_command.dart';
 import '../domain/project/commands/move_entity_command.dart';
 import '../domain/project/commands/remove_entity_command.dart';
 import '../domain/project/commands/update_entity_payload_command.dart';
+import '../domain/project/commands/update_group_payload_command.dart';
 import '../domain/project/entity_address.dart';
 import '../domain/project/name_slug.dart';
 import '../domain/project/project_command.dart';
 import '../domain/project/project_registry.dart';
 import '../domain/project/registry_entity.dart';
+import '../domain/project/registry_group.dart';
 import '../domain/project/registry_kinds.dart';
+import '../domain/project/registry_node.dart';
 import '../domain/runtime/runtime_variable_registry.dart';
 import '../domain/time_domains/time_domain.dart';
 import '../domain/time_domains/time_domain_registry.dart';
@@ -188,6 +192,7 @@ class PhiEngine {
       StreamController<EngineTelemetry>.broadcast();
   final ValueNotifier<bool> _testSignal = ValueNotifier<bool>(false);
   final ValueNotifier<double> _masterVolume = ValueNotifier<double>(1);
+  final ValueNotifier<bool> _masterMuted = ValueNotifier<bool>(false);
 
   final MixerChannel _masterChannel = MixerChannel.master();
 
@@ -217,15 +222,37 @@ class PhiEngine {
   /// none).
   CustomTransformRegistry? _clipCustomTransforms;
 
-  /// The live `MixerChannel` materialised for each `mix.` entity, keyed by
-  /// address so a re-sync preserves channel identity (and its live volume/peak).
-  final Map<EntityAddress, MixerChannel> _channelsByAddress = {};
+  /// The live channel materialised for each `mix.` node (strip, group bus, or
+  /// return), keyed by address so a re-sync preserves channel identity (and its
+  /// live volume/peak). Groups are buses (a `mix.` group *is* a channel, design
+  /// §3); returns sit outside the tree (design §4).
+  final Map<EntityAddress, _MaterialisedChannel> _channelsByAddress = {};
 
-  /// The materialised user channels in registry order — rebuilt on every sync.
+  /// The materialised **non-return** channels (strips + group buses) in tree
+  /// pre-order — rebuilt on every sync. Returns are excluded (their own section
+  /// lands with the surface work, #170); master is implicit.
   final List<MixerChannel> _userChannels = [];
   final ValueNotifier<List<MixerChannel>> _channels =
       ValueNotifier<List<MixerChannel>>(const []);
+
+  /// The materialised **return** buses in tree order — the aux buses beside
+  /// master (design §4), rebuilt on every sync. Kept apart from [_channels] so
+  /// the rack renders strips + groups while the returns section (#170) renders
+  /// these.
+  final ValueNotifier<List<MixerChannel>> _returns =
+      ValueNotifier<List<MixerChannel>>(const []);
   int _voiceCursor = 1;
+
+  /// The (channel, slot) whose send level is mid-drag, or `null` when no send
+  /// gesture is live. Mirrors [_volumeGestureChannel] for aux sends (design §4):
+  /// while set, [setChannelSendLevel] rams the gateway every tick but defers the
+  /// journal write, so a send-level drag emits one `mix.` payload command on
+  /// [endSendLevelGesture].
+  ({EntityAddress address, int slot})? _sendGesture;
+
+  /// The latest level pushed during the live [_sendGesture], persisted when the
+  /// gesture ends.
+  double _sendGestureLevel = 1.0;
 
   /// The channel whose fader is mid-drag, or `null` when no volume gesture is
   /// live. While set, [setChannelVolume] mutates transient state (the live
@@ -251,8 +278,16 @@ class PhiEngine {
   ValueListenable<bool> get testSignal => _testSignal;
 
   /// Master-channel volume in `[0.0, 1.0]`. Observable so faders can bind
-  /// directly. Drives the engine's master channel via [setMasterVolume].
+  /// directly. Drives the engine's master channel via [setMasterVolume]. Reports
+  /// the user-set value even while master mute collapses the *effective* gateway
+  /// volume to zero.
   ValueListenable<double> get masterVolume => _masterVolume;
+
+  /// Whether the master channel is muted. Observable so a mute control can bind.
+  /// Master is not a registry entity, so this state persists in the project
+  /// manifest (design `docs/design/mix.md` §3) — the shell mirrors it through
+  /// [SessionState] like the master volume.
+  ValueListenable<bool> get masterMuted => _masterMuted;
 
   /// The master mixer channel. Always present, never destroyed. Mute and
   /// solo on the master are no-ops by design — there is nothing to mix
@@ -263,6 +298,11 @@ class PhiEngine {
   /// added or removed; per-channel state changes (volume, mute, solo, peak)
   /// fire on the individual [MixerChannel] instead.
   ValueListenable<List<MixerChannel>> get channels => _channels;
+
+  /// Live list of return buses (design §4) — the aux buses beside master. Fires
+  /// when returns are added or removed; per-return state changes fire on the
+  /// individual [MixerChannel].
+  ValueListenable<List<MixerChannel>> get returns => _returns;
 
   /// The registry the engine currently syncs its channels from — its own private
   /// one until [bindProject] rebinds it.
@@ -479,70 +519,239 @@ class PhiEngine {
   /// tree.
   void _teardownChannels() {
     _volumeGestureChannel = null;
-    for (final ch in _channelsByAddress.values) {
-      if (_started) _gateway.destroyChannel(ch.id);
-      ch.dispose();
+    _sendGesture = null;
+    for (final mc in _channelsByAddress.values) {
+      if (_started) _gateway.destroyChannel(mc.channel.id);
+      mc.channel.dispose();
     }
     _channelsByAddress.clear();
     _userChannels.clear();
     _channels.value = const [];
+    _returns.value = const [];
   }
 
-  /// Reconciles the materialised channels with the `mix.` entities in
-  /// [_mixRegistry]: creates a gateway channel + `MixerChannel` for each new
-  /// entity, drops those whose entity is gone, and reorders to match the tree —
-  /// the "engine consumes the registry" half of design §8. Preserves the
-  /// `MixerChannel` for an entity that persists, so its live volume/mute/solo/
-  /// peak survive an unrelated tree change. No-op before [start] (no gateway to
-  /// create channels on) and while applying nothing changes.
+  /// Tree-aware reconciliation of the materialised channels against the `mix.`
+  /// tree in [_mixRegistry] (design §8): groups (buses) are materialised **before
+  /// their children** so a child always has a parent to hang from, returns are
+  /// created outside the tree, nodes whose entity is gone are destroyed, a node
+  /// that merely moved (a regroup — same leaf name, new parent) is **re-parented
+  /// with `moveChannel`** rather than torn down, and — in a **second pass**, once
+  /// every channel exists — aux sends are wired to their return buses. Channel
+  /// identity stays keyed by address, so a persisting node keeps its live
+  /// volume/mute/solo/peak (and mid-gesture state) across an unrelated re-sync.
+  /// No-op before [start] (no gateway to create channels on).
   void _syncChannelsFromRegistry() {
     if (!_started) return;
-    final desired = <EntityAddress>[];
-    for (final node in _mixRegistry.childrenOfKind(RegistryKinds.mix)) {
-      if (node is! RegistryEntity) continue;
-      desired.add(
-        EntityAddress(kind: RegistryKinds.mix, segments: [node.name]),
-      );
-    }
+    final desired = _walkMixTree();
+    final desiredAddresses = {for (final node in desired) node.address};
 
-    // Drop channels whose entity no longer exists.
+    // A move changes a node's address (its address *is* its tree path, so a
+    // regroup shifts it), which reads here as one address gone and another
+    // appeared. Correlate a gone address to an appeared one by **leaf name** — a
+    // pure reparent keeps the name — so the gateway channel is `moveChannel`d
+    // rather than destroyed and rebuilt, preserving its live meters and sends.
+    // Ambiguous names (present more than once on either side) fall back to a
+    // destroy + create, which is correct, just a brief dropout.
     final gone = _channelsByAddress.keys
-        .where((address) => !desired.contains(address))
+        .where((a) => !desiredAddresses.contains(a))
         .toList();
+    final appeared = desired
+        .where((node) => !_channelsByAddress.containsKey(node.address))
+        .map((node) => node.address)
+        .toList();
+    final correlated = _correlateMoves(gone, appeared);
+
+    // Rekey correlated survivors to their new address (identity preserved).
+    for (final entry in correlated.entries) {
+      _channelsByAddress[entry.key] = _channelsByAddress.remove(entry.value)!;
+    }
+    // Destroy the genuinely removed nodes.
     for (final address in gone) {
-      final ch = _channelsByAddress.remove(address)!;
-      _gateway.destroyChannel(ch.id);
-      ch.dispose();
+      if (correlated.containsValue(address)) continue;
+      final mc = _channelsByAddress.remove(address)!;
+      _gateway.destroyChannel(mc.channel.id);
+      mc.channel.dispose();
     }
 
-    // Create channels for new entities, in registry order.
-    for (final address in desired) {
-      if (_channelsByAddress.containsKey(address)) continue;
-      final strip = MixStrip.fromJson(
-        (_mixRegistry.entityAt(address)!.payload as Map)
-            .cast<String, Object?>(),
-      );
-      // The channel is named by its address leaf — the one-name re-alignment
-      // (issue #166): the strip payload no longer carries a display name.
-      final name = address.name;
-      final id = _gateway.createChannel(name);
-      // Restore the persisted live mix state (issue #136) onto the fresh
-      // channel; the effective gateway volume is pushed by the solo-aware sweep
-      // below, once every channel's soloed flag is known.
-      _channelsByAddress[address] =
-          MixerChannel.user(id: id, name: name, voice: strip.voice)
-            ..applyVolume(strip.volume)
-            ..applyMuted(strip.muted)
-            ..applySoloed(strip.soloed);
+    // Materialise / re-parent in tree pre-order (parents precede children).
+    for (final node in desired) {
+      final parentId = node.parentAddress == null
+          ? null
+          : _channelsByAddress[node.parentAddress]?.channel.id;
+      final existing = _channelsByAddress[node.address];
+      if (existing == null) {
+        _channelsByAddress[node.address] = _createChannel(node, parentId);
+      } else if (!existing.isReturn && existing.parentId != parentId) {
+        // A re-parented survivor (or one whose parent bus was rebuilt with a
+        // new id): move it under the current parent.
+        _gateway.moveChannel(existing.channel.id, parentId);
+        existing.parentId = parentId;
+      }
     }
 
     _userChannels
       ..clear()
-      ..addAll([for (final address in desired) _channelsByAddress[address]!]);
+      ..addAll([
+        for (final node in desired)
+          if (!node.isReturn) _channelsByAddress[node.address]!.channel,
+      ]);
     _channels.value = List<MixerChannel>.unmodifiable(_userChannels);
-    // Solo is global, so re-push effective volume across the whole set.
-    for (final ch in _userChannels) {
-      _pushEffectiveVolume(ch);
+    _returns.value = List<MixerChannel>.unmodifiable([
+      for (final node in desired)
+        if (node.isReturn) _channelsByAddress[node.address]!.channel,
+    ]);
+
+    // Second pass: every channel exists now, so aux sends can be wired to their
+    // return targets (design §8 — "targets must exist first").
+    for (final node in desired) {
+      _reconcileSends(node);
+    }
+
+    _recomputeEffectiveVolumes();
+  }
+
+  /// Creates the gateway channel + `MixerChannel` for a freshly-appeared [node],
+  /// adopting its persisted live mix state (issue #136). A return goes through
+  /// [YseGateway.createReturnChannel] with enough send slots for its payload
+  /// (design §10 decision 4); a strip or group bus is an ordinary tree channel
+  /// under [parentId] (`null` = master).
+  _MaterialisedChannel _createChannel(_MixNode node, int? parentId) {
+    final name = node.address.name;
+    final int id;
+    if (node.isReturn) {
+      id = _gateway.createReturnChannel(
+        name,
+        sendSlots: node.strip.sends.length > 4 ? node.strip.sends.length : 4,
+      );
+    } else {
+      id = _gateway.createChannel(name, parentId: parentId);
+    }
+    final channel =
+        MixerChannel.user(id: id, name: name, voice: node.strip.voice)
+          ..applyVolume(node.strip.volume)
+          ..applyMuted(node.strip.muted)
+          ..applySoloed(node.strip.soloed);
+    return _MaterialisedChannel(
+      channel,
+      isReturn: node.isReturn,
+      parentId: parentId,
+    );
+  }
+
+  /// old → new address for every gone/appeared pair that shares a **unique** leaf
+  /// name — a node reparented within the tree. Returns `{newAddress: oldAddress}`.
+  Map<EntityAddress, EntityAddress> _correlateMoves(
+    List<EntityAddress> gone,
+    List<EntityAddress> appeared,
+  ) {
+    List<EntityAddress> uniqueByName(List<EntityAddress> addresses) {
+      final counts = <String, int>{};
+      for (final a in addresses) {
+        counts[a.name] = (counts[a.name] ?? 0) + 1;
+      }
+      return [
+        for (final a in addresses)
+          if (counts[a.name] == 1) a,
+      ];
+    }
+
+    final goneByName = {for (final a in uniqueByName(gone)) a.name: a};
+    final result = <EntityAddress, EntityAddress>{};
+    for (final newAddress in uniqueByName(appeared)) {
+      final old = goneByName[newAddress.name];
+      if (old != null) result[newAddress] = old;
+    }
+    return result;
+  }
+
+  /// Walks the `mix.` tree depth-first (pre-order, so a group precedes its
+  /// children) into a flat list of nodes carrying their parent address. A
+  /// top-level entity with `return: true` is a return bus (outside the tree, so
+  /// no parent, no children); every other node is a strip or a group bus.
+  List<_MixNode> _walkMixTree() {
+    final nodes = <_MixNode>[];
+    void visit(
+      RegistryNode node,
+      EntityAddress address,
+      EntityAddress? parent,
+    ) {
+      if (node is RegistryGroup) {
+        // A `mix.` group *is* a bus (design §3). A payload-less structural
+        // ancestor still becomes a bus so its children have a parent.
+        nodes.add(_MixNode(address, parent, false, _stripOf(node.payload)));
+        for (final child in node.children) {
+          visit(child, address.child(child.name), address);
+        }
+      } else if (node is RegistryEntity) {
+        final strip = _stripOf(node.payload);
+        final isReturn = strip.isReturn && address.isTopLevel;
+        nodes.add(_MixNode(address, isReturn ? null : parent, isReturn, strip));
+      }
+    }
+
+    for (final child in _mixRegistry.childrenOfKind(RegistryKinds.mix)) {
+      visit(
+        child,
+        EntityAddress(kind: RegistryKinds.mix, segments: [child.name]),
+        null,
+      );
+    }
+    return nodes;
+  }
+
+  /// A [MixStrip] from a node's opaque [payload] — the map form entities/groups
+  /// store, falling back to a bare default for a payload-less structural group.
+  MixStrip _stripOf(Object? payload) => payload is Map
+      ? MixStrip.fromJson(payload.cast<String, Object?>())
+      : const MixStrip(voice: 1);
+
+  /// Wires [node]'s aux sends to their return buses, reconciling against what is
+  /// already applied so an unchanged send is not re-sent (design §4): a new or
+  /// re-targeted slot goes through [YseGateway.setSend], a level-only change
+  /// through the ramped [YseGateway.setSendLevel], and a dropped slot through
+  /// [YseGateway.clearSend]. A send whose target is missing or is not a return is
+  /// skipped (the gateway would reject it anyway). The slot mid-gesture is left
+  /// untouched so a live send-level drag is never stomped by an unrelated sync.
+  void _reconcileSends(_MixNode node) {
+    final mc = _channelsByAddress[node.address]!;
+    final applied = mc.appliedSends;
+    final sends = node.strip.sends;
+
+    // Drop applied slots the payload no longer carries.
+    for (final slot in applied.keys.toList()) {
+      if (slot >= sends.length) {
+        _gateway.clearSend(mc.channel.id, slot);
+        applied.remove(slot);
+      }
+    }
+
+    for (var slot = 0; slot < sends.length; slot++) {
+      if (_sendGesture == (address: node.address, slot: slot)) continue;
+      final send = sends[slot];
+      final target = _channelsByAddress[send.to];
+      if (target == null || !target.isReturn) {
+        if (applied.remove(slot) != null) {
+          _gateway.clearSend(mc.channel.id, slot);
+        }
+        continue;
+      }
+      final returnId = target.channel.id;
+      final prev = applied[slot];
+      if (prev == null ||
+          prev.returnId != returnId ||
+          prev.preFader != send.preFader) {
+        _gateway.setSend(
+          mc.channel.id,
+          slot,
+          returnId,
+          send.level,
+          send.preFader,
+        );
+        applied[slot] = _AppliedSend(returnId, send.level, send.preFader);
+      } else if (prev.level != send.level) {
+        _gateway.setSendLevel(mc.channel.id, slot, send.level);
+        prev.level = send.level;
+      }
     }
   }
 
@@ -651,13 +860,31 @@ class PhiEngine {
   int get missedCallbacks => _started ? _gateway.missedCallbacks : 0;
 
   /// Set the master-channel volume. Clamped to `[0.0, 1.0]`. No-op before
-  /// [start].
+  /// [start]. When master mute is engaged the *effective* gateway volume stays
+  /// zero, but the user value is still remembered (and reported by
+  /// [masterVolume]).
   void setMasterVolume(double value) {
     if (!_started) return;
     final clamped = value.clamp(0.0, 1.0);
-    _gateway.masterVolume = clamped;
     _masterVolume.value = clamped;
     _masterChannel.applyVolume(clamped);
+    _pushMasterEffective();
+  }
+
+  /// Mute or unmute the master channel — collapses the effective gateway volume
+  /// to zero while remembering the user volume. No-op before [start]. Persists
+  /// through the manifest like [setMasterVolume].
+  void setMasterMuted({required bool muted}) {
+    if (!_started) return;
+    _masterMuted.value = muted;
+    _masterChannel.applyMuted(muted);
+    _pushMasterEffective();
+  }
+
+  /// Pushes the master channel's *effective* volume (zero while muted) to the
+  /// gateway — the master counterpart of the per-channel mute collapse.
+  void _pushMasterEffective() {
+    _gateway.masterVolume = _masterMuted.value ? 0.0 : _masterVolume.value;
   }
 
   /// Adds a user channel by creating a `mix.` entity in the registry — the
@@ -681,7 +908,7 @@ class PhiEngine {
     );
     command.apply(); // notifies → _syncChannelsFromRegistry materialises it
     _recordCommand?.call(command);
-    return _channelsByAddress[address]!;
+    return _channelsByAddress[address]!.channel;
   }
 
   /// Removes a user channel by removing its `mix.` entity; the ensuing sync
@@ -725,10 +952,15 @@ class PhiEngine {
   /// no longer holds it.
   EntityAddress? _addressOf(MixerChannel channel) {
     for (final entry in _channelsByAddress.entries) {
-      if (identical(entry.value, channel)) return entry.key;
+      if (identical(entry.value.channel, channel)) return entry.key;
     }
     return null;
   }
+
+  /// Whether the engine currently materialises [channel] (a strip, group bus, or
+  /// return) — the guard for the per-channel mutators. Master and stale handles
+  /// are excluded.
+  bool _holds(MixerChannel channel) => _addressOf(channel) != null;
 
   /// A free top-level `mix.` address for a channel named [displayName] — the
   /// slug of the name, suffixed `_2`, `_3`, … until it is unused.
@@ -755,9 +987,9 @@ class PhiEngine {
       setMasterVolume(clamped);
       return;
     }
-    if (!_userChannels.contains(channel)) return;
+    if (!_holds(channel)) return;
     channel.applyVolume(clamped);
-    _pushEffectiveVolume(channel);
+    _recomputeEffectiveVolumes();
     // Persist the new fader value — unless a drag gesture is live for this
     // channel, in which case the write is coalesced into the single command
     // [endChannelVolumeGesture] emits (design §6). A tap or a programmatic set
@@ -796,43 +1028,252 @@ class PhiEngine {
     _persistChannelState(channel);
   }
 
-  /// Mute or unmute a user channel. Master mute is intentionally unsupported
-  /// (use volume instead). Triggers a solo-aware re-evaluation across all
-  /// user channels. Discrete, so it persists immediately (issue #136).
+  /// Mute or unmute a channel (strip or group bus). Master mute is set through
+  /// [setMasterMuted]; muting a group silences its whole subtree (design §5).
+  /// Triggers a tree-wide solo/mute re-evaluation. Discrete, so it persists
+  /// immediately (issue #136).
   void setChannelMuted(MixerChannel channel, {required bool muted}) {
     if (!_started || channel.isMaster) return;
-    if (!_userChannels.contains(channel)) return;
+    if (!_holds(channel)) return;
     channel.applyMuted(muted);
-    _pushEffectiveVolume(channel);
+    _recomputeEffectiveVolumes();
     _persistChannelState(channel);
   }
 
-  /// Toggle a channel's solo flag. When at least one user channel is
-  /// soloed, every non-soloed user channel is silenced at the gateway
-  /// until solo is cleared.
+  /// Toggle a channel's solo flag. Solo audibility follows the tree (design §5):
+  /// the soloed nodes, their descendants, and their ancestors stay open; every
+  /// other tree node is silenced until solo clears; returns are exempt. Mute wins
+  /// on the path, so a soloed leaf inside a muted group stays silent.
   void setChannelSoloed(MixerChannel channel, {required bool soloed}) {
     if (!_started || channel.isMaster) return;
     if (!_userChannels.contains(channel)) return;
-    final wasAnySoloed = _userChannels.any((c) => c.soloed);
     channel.applySoloed(soloed);
-    final isAnySoloed = _userChannels.any((c) => c.soloed);
-    if (wasAnySoloed != isAnySoloed) {
-      for (final c in _userChannels) {
-        _pushEffectiveVolume(c);
-      }
-    } else {
-      _pushEffectiveVolume(channel);
-    }
+    _recomputeEffectiveVolumes();
     // Only the toggled channel's own soloed flag is persisted state; the effect
     // on other channels is derived (effective volume), not saved.
     _persistChannelState(channel);
   }
 
-  void _pushEffectiveVolume(MixerChannel channel) {
-    final anySoloed = _userChannels.any((c) => c.soloed);
-    final silenced = channel.muted || (anySoloed && !channel.soloed);
-    final effective = silenced ? 0.0 : channel.volume;
-    _gateway.setChannelVolume(channel.id, effective);
+  /// Recomputes and pushes every materialised channel's **effective** gateway
+  /// volume from the live solo/mute state, walking the tree (design §5):
+  ///
+  /// - **Mute wins on the path** — a node with a muted ancestor (or itself muted)
+  ///   is silent, so a soloed leaf inside a muted group stays silent.
+  /// - **Solo** (when any tree node is soloed) keeps audible only the soloed
+  ///   nodes, their descendants, and their ancestors (the path to master); every
+  ///   other tree node is silenced.
+  /// - **Returns are exempt from solo** (design §5 / §10 decision 3) — a return's
+  ///   effective volume follows its own mute alone.
+  ///
+  /// The address *is* the tree path, so ancestry is read straight off addresses.
+  void _recomputeEffectiveVolumes() {
+    final tree = {
+      for (final entry in _channelsByAddress.entries)
+        if (!entry.value.isReturn) entry.key: entry.value.channel,
+    };
+    final anySoloed = tree.values.any((c) => c.soloed);
+
+    // The audible set under solo: every soloed node with its descendants and its
+    // ancestors.
+    final soloAudible = <EntityAddress>{};
+    if (anySoloed) {
+      for (final soloed in tree.entries.where((e) => e.value.soloed)) {
+        soloAudible.add(soloed.key);
+        for (final other in tree.keys) {
+          if (other.isDescendantOf(soloed.key) ||
+              soloed.key.isDescendantOf(other)) {
+            soloAudible.add(other);
+          }
+        }
+      }
+    }
+
+    for (final entry in tree.entries) {
+      final address = entry.key;
+      final channel = entry.value;
+      final mutedOnPath =
+          channel.muted ||
+          tree.entries.any(
+            (a) =>
+                a.key != address &&
+                address.isDescendantOf(a.key) &&
+                a.value.muted,
+          );
+      final audible = mutedOnPath
+          ? false
+          : (anySoloed ? soloAudible.contains(address) : true);
+      _gateway.setChannelVolume(channel.id, audible ? channel.volume : 0.0);
+    }
+
+    // Returns sit outside the tree and are exempt from solo — mute alone.
+    for (final mc in _channelsByAddress.values.where((mc) => mc.isReturn)) {
+      _gateway.setChannelVolume(
+        mc.channel.id,
+        mc.channel.muted ? 0.0 : mc.channel.volume,
+      );
+    }
+  }
+
+  // ─── Aux sends (design §4) ───────────────────────────────────────────────
+
+  /// Adds or replaces the aux send in [slot] of [channel], routing it to the
+  /// [returnBus] at [level] (post-fader unless [preFader]). The edit lands in the
+  /// strip payload and the ensuing sync wires the gateway (the second-pass send
+  /// wiring), so it persists and journals like any payload change. No-op unless
+  /// [returnBus] is a materialised return (the only legal target, design §4) and
+  /// [channel] is a materialised strip/bus.
+  void setChannelSend(
+    MixerChannel channel,
+    int slot, {
+    required MixerChannel returnBus,
+    double level = 1.0,
+    bool preFader = false,
+  }) {
+    if (!_started || slot < 0) return;
+    final address = _addressOf(channel);
+    final returnAddress = _addressOf(returnBus);
+    if (address == null || returnAddress == null) return;
+    if (!(_channelsByAddress[returnAddress]?.isReturn ?? false)) return;
+    final strip = _storedStrip(address);
+    if (strip == null) return;
+    final send = MixSend(
+      to: returnAddress,
+      level: level.clamp(0.0, 1.0),
+      preFader: preFader,
+    );
+    _persistSends(address, _withSendAt(strip.sends, slot, send));
+  }
+
+  /// Detaches the send in [slot] of [channel] (design §4) — a payload edit the
+  /// sync clears at the gateway. No-op when the slot is unset.
+  void clearChannelSend(MixerChannel channel, int slot) {
+    if (!_started || slot < 0) return;
+    final address = _addressOf(channel);
+    if (address == null) return;
+    final strip = _storedStrip(address);
+    if (strip == null || slot >= strip.sends.length) return;
+    _persistSends(address, _withSendRemovedAt(strip.sends, slot));
+  }
+
+  /// Set the level of the send in [slot] of [channel], ramped and click-free
+  /// (design §4) — safe to write every control tick during a drag. Coalesces the
+  /// journal write like a fader gesture: while a [beginSendLevelGesture] is live
+  /// for this slot the level rams the gateway but the payload is written once, on
+  /// [endSendLevelGesture]; a set with no gesture persists immediately.
+  void setChannelSendLevel(MixerChannel channel, int slot, double level) {
+    if (!_started || slot < 0) return;
+    final address = _addressOf(channel);
+    if (address == null) return;
+    final mc = _channelsByAddress[address]!;
+    if (!mc.appliedSends.containsKey(slot)) return;
+    final clamped = level.clamp(0.0, 1.0);
+    _gateway.setSendLevel(mc.channel.id, slot, clamped);
+    mc.appliedSends[slot]!.level = clamped;
+    if (_sendGesture == (address: address, slot: slot)) {
+      _sendGestureLevel = clamped;
+      return;
+    }
+    final strip = _storedStrip(address);
+    if (strip == null || slot >= strip.sends.length) return;
+    _persistSends(
+      address,
+      _withSendAt(
+        strip.sends,
+        slot,
+        strip.sends[slot].copyWith(level: clamped),
+      ),
+    );
+  }
+
+  /// Marks the start of a send-level drag on [slot] of [channel]: subsequent
+  /// [setChannelSendLevel] calls ram the gateway without journaling, coalescing
+  /// into one payload command on [endSendLevelGesture]. Flushes any unfinished
+  /// previous send gesture first.
+  void beginSendLevelGesture(MixerChannel channel, int slot) {
+    if (!_started) return;
+    final address = _addressOf(channel);
+    if (address == null ||
+        !_channelsByAddress[address]!.appliedSends.containsKey(slot)) {
+      return;
+    }
+    final pending = _sendGesture;
+    if (pending != null && pending != (address: address, slot: slot)) {
+      _sendGesture = null;
+      _flushSendGesture(pending);
+    }
+    _sendGesture = (address: address, slot: slot);
+    _sendGestureLevel = _channelsByAddress[address]!.appliedSends[slot]!.level;
+  }
+
+  /// Marks the end of a send-level drag on [slot] of [channel] and flushes the
+  /// coalesced level as one journaled payload command. No-op when no gesture is
+  /// live for that slot.
+  void endSendLevelGesture(MixerChannel channel, int slot) {
+    final address = _addressOf(channel);
+    if (address == null || _sendGesture != (address: address, slot: slot)) {
+      return;
+    }
+    _sendGesture = null;
+    _flushSendGesture((address: address, slot: slot));
+  }
+
+  void _flushSendGesture(({EntityAddress address, int slot}) gesture) {
+    final strip = _storedStrip(gesture.address);
+    if (strip == null || gesture.slot >= strip.sends.length) return;
+    _persistSends(
+      gesture.address,
+      _withSendAt(
+        strip.sends,
+        gesture.slot,
+        strip.sends[gesture.slot].copyWith(level: _sendGestureLevel),
+      ),
+    );
+  }
+
+  /// The [MixStrip] stored in the entity **or group bus** at [address], or `null`
+  /// when nothing sits there. A send may live on either (design §3).
+  MixStrip? _storedStrip(EntityAddress address) {
+    final payload = _mixRegistry.nodeAt(address) is RegistryGroup
+        ? _mixRegistry.groupAt(address)?.payload
+        : _mixRegistry.entityAt(address)?.payload;
+    if (payload is MixStrip) return payload;
+    if (payload is Map) {
+      return MixStrip.fromJson(payload.cast<String, Object?>());
+    }
+    return null;
+  }
+
+  /// [sends] with [send] placed at [slot], padded with copies of the slot before
+  /// it when [slot] is past the end (sends are dense, slot = index).
+  List<MixSend> _withSendAt(List<MixSend> sends, int slot, MixSend send) {
+    final next = [...sends];
+    while (next.length <= slot) {
+      next.add(send);
+    }
+    next[slot] = send;
+    return next;
+  }
+
+  List<MixSend> _withSendRemovedAt(List<MixSend> sends, int slot) =>
+      [...sends]..removeAt(slot);
+
+  /// Writes [sends] into the `mix.` node at [address] as a journaled payload
+  /// command (de-duped by JSON like [_persistChannelState]); the ensuing sync
+  /// reconciles the gateway. Handles both an entity strip and a group bus.
+  void _persistSends(EntityAddress address, List<MixSend> sends) {
+    final strip = _storedStrip(address);
+    if (strip == null) return;
+    final payload = strip.copyWith(sends: sends).toJson();
+    final node = _mixRegistry.nodeAt(address);
+    final currentPayload = node is RegistryGroup
+        ? node.payload
+        : _mixRegistry.entityAt(address)?.payload;
+    if (jsonEncode(currentPayload) == jsonEncode(payload)) return;
+    final command = node is RegistryGroup
+        ? UpdateGroupPayloadCommand(_mixRegistry, address, payload)
+        : UpdateEntityPayloadCommand(_mixRegistry, address, payload);
+    command.apply();
+    _recordCommand?.call(command);
   }
 
   /// Publishes [channel]'s current live state (voice, volume, mute, solo) into
@@ -897,9 +1338,48 @@ class PhiEngine {
     if (_ownsMixRegistry) _mixRegistry.dispose();
     _testSignal.dispose();
     _masterVolume.dispose();
+    _masterMuted.dispose();
     _masterChannel.dispose();
     _channels.dispose();
+    _returns.dispose();
     _lastAudioNotice.dispose();
     await _telemetry.close();
   }
+}
+
+/// A `mix.` node flattened out of the tree for reconciliation: its [address],
+/// the [parentAddress] its gateway channel hangs from (`null` = master, or a
+/// return outside the tree), whether it is a return ([isReturn]), and the
+/// [strip] payload driving its voice / volume / mute / solo / sends.
+class _MixNode {
+  _MixNode(this.address, this.parentAddress, this.isReturn, this.strip);
+
+  final EntityAddress address;
+  final EntityAddress? parentAddress;
+  final bool isReturn;
+  final MixStrip strip;
+}
+
+/// The engine's live handle on a materialised `mix.` channel: its [channel]
+/// (identity + live volume/mute/solo/peak), whether it is a return, the gateway
+/// [parentId] currently applied (so a re-parent is only issued on a real change),
+/// and the aux sends already wired ([appliedSends], keyed by slot) so the second
+/// pass re-sends only what changed.
+class _MaterialisedChannel {
+  _MaterialisedChannel(this.channel, {required this.isReturn, this.parentId});
+
+  final MixerChannel channel;
+  final bool isReturn;
+  int? parentId;
+  final Map<int, _AppliedSend> appliedSends = {};
+}
+
+/// One aux send already wired at the gateway — the target return id, the last
+/// level pushed, and the pre/post-fader tap — so the sync diffs against it.
+class _AppliedSend {
+  _AppliedSend(this.returnId, this.level, this.preFader);
+
+  final int returnId;
+  double level;
+  final bool preFader;
 }

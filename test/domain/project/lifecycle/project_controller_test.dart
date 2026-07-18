@@ -113,6 +113,21 @@ void main() {
       expect(reloaded.manifest.sceneName, 'bridge');
       expect(reloaded.manifest.tempo, 90);
     });
+
+    test('save persists the master volume/mute into the manifest', () async {
+      final h = harness();
+      await h.controller.saveAs(dir);
+      h.session
+        ..setMasterVolume(0.42)
+        ..setMasterMuted(true);
+      expect(h.controller.isDirty.value, isTrue); // a master change dirties
+
+      await h.controller.save();
+
+      final reloaded = await h.store.load();
+      expect(reloaded.manifest.masterVolume, closeTo(0.42, 1e-9));
+      expect(reloaded.manifest.masterMuted, isTrue);
+    });
   });
 
   group('ProjectController — open', () {
@@ -130,6 +145,24 @@ void main() {
         expect(h.controller.location.value, dir);
       },
     );
+
+    test('open restores the master volume/mute without dirtying', () async {
+      final h = harness();
+      h.session
+        ..setMasterVolume(0.3)
+        ..setMasterMuted(true);
+      await h.controller.saveAs(dir); // manifest carries master 0.3 / muted
+      // Diverge the live session from disk.
+      h.session
+        ..setMasterVolume(0.9)
+        ..setMasterMuted(false);
+
+      await h.controller.open(dir);
+
+      expect(h.session.masterVolume.value, closeTo(0.3, 1e-9));
+      expect(h.session.masterMuted.value, isTrue);
+      expect(h.controller.isDirty.value, isFalse); // a clean load stays clean
+    });
 
     test(
       'a dirty journal triggers recovery and is replayed + resolved',

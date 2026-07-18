@@ -25,6 +25,15 @@ class SessionState {
 
   final ValueNotifier<String> sceneName;
 
+  /// Master-strip volume in `[0.0, 1.0]`. Master is not a registry entity, so its
+  /// state lives in the project manifest (design `docs/design/mix.md` §3); this is
+  /// the in-memory carrier the [ProjectController] round-trips through it, exactly
+  /// like [tempo] and [sceneName]. The engine's master fader mirrors it.
+  final ValueNotifier<double> masterVolume = ValueNotifier<double>(1);
+
+  /// Whether the master strip is muted — persisted alongside [masterVolume].
+  final ValueNotifier<bool> masterMuted = ValueNotifier<bool>(false);
+
   /// Cross-surface selection. Whichever surface publishes here, every
   /// other chrome region (notably the right inspector) can watch and
   /// react. Holds anything — a [PerformanceState], a `PatchNode`, a
@@ -51,6 +60,13 @@ class SessionState {
     sceneName.value = trimmed;
   }
 
+  /// Set the master-strip volume, clamped to `[0.0, 1.0]`.
+  void setMasterVolume(double value) =>
+      masterVolume.value = value.clamp(0.0, 1.0);
+
+  /// Mute or unmute the master strip.
+  void setMasterMuted(bool value) => masterMuted.value = value;
+
   /// Publish a selection. Pass `null` (or call [clearSelection]) to
   /// unset.
   void select(Object? value) => selection.value = value;
@@ -63,6 +79,8 @@ class SessionState {
     projection.dispose();
     tempo.dispose();
     sceneName.dispose();
+    masterVolume.dispose();
+    masterMuted.dispose();
     selection.dispose();
   }
 }
