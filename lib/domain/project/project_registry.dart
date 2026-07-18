@@ -315,6 +315,28 @@ class ProjectRegistry extends ChangeNotifier {
     _bumpAndNotify();
   }
 
+  /// Reorders [childName] to sit at [index] among the children of the group at
+  /// [group] (or the [kind] root when [group] is null) — the `_group.json`
+  /// order a Mix-surface section reorder writes (design `docs/design/mix.md`
+  /// §7). [index] is the child's final position; [RegistryGroup.reorder] clamps
+  /// it into range.
+  ///
+  /// A reorder shifts no address and rewires no reference, so — like
+  /// [setReferences] — it emits **no** lifecycle event; it only [notifyListeners]
+  /// so surfaces re-render. A no-op (no notify) when the parent group is absent
+  /// or holds no such child.
+  void reorderChild({
+    required String kind,
+    EntityAddress? group,
+    required String childName,
+    required int index,
+  }) {
+    final parent = group == null ? _roots[kind] : groupAt(group);
+    if (parent == null || !parent.hasChild(childName)) return;
+    parent.reorder(childName, index);
+    _bumpAndNotify();
+  }
+
   /// Removes the node at [address] — for a group, its whole subtree — and
   /// returns whether anything was removed. Tolerant: a missing target is a
   /// no-op that returns `false` and does not notify.

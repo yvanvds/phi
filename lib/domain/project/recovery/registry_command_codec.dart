@@ -2,6 +2,7 @@ import '../commands/create_entity_command.dart';
 import '../commands/create_group_command.dart';
 import '../commands/move_entity_command.dart';
 import '../commands/remove_entity_command.dart';
+import '../commands/reorder_child_command.dart';
 import '../commands/update_entity_payload_command.dart';
 import '../commands/update_group_payload_command.dart';
 import '../entity_address.dart';
@@ -61,6 +62,16 @@ class RegistryCommandCodec {
         );
       case 'remove_entity':
         return RemoveEntityCommand(registry, _address(json, 'address'));
+      case 'reorder_child':
+        final groupRaw = json['group'];
+        return ReorderChildCommand(
+          registry,
+          kind: _string(json, 'kind'),
+          group: groupRaw is String ? EntityAddress.parse(groupRaw) : null,
+          childName: _string(json, 'child'),
+          fromIndex: _int(json, 'from'),
+          toIndex: _int(json, 'to'),
+        );
       case 'update_payload':
         return UpdateEntityPayloadCommand(
           registry,
@@ -84,6 +95,22 @@ class RegistryCommandCodec {
       throw FormatException('Journal entry is missing string "$key": $json.');
     }
     return EntityAddress.parse(raw);
+  }
+
+  String _string(Map<String, Object?> json, String key) {
+    final raw = json[key];
+    if (raw is! String) {
+      throw FormatException('Journal entry is missing string "$key": $json.');
+    }
+    return raw;
+  }
+
+  int _int(Map<String, Object?> json, String key) {
+    final raw = json[key];
+    if (raw is! num) {
+      throw FormatException('Journal entry is missing number "$key": $json.');
+    }
+    return raw.toInt();
   }
 
   Set<EntityAddress> _references(Map<String, Object?> json) {

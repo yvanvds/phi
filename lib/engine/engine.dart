@@ -12,8 +12,10 @@ import '../domain/mix/mix_strip.dart';
 import '../domain/project/app_settings/audio_settings.dart';
 import '../domain/project/app_settings/midi_settings.dart';
 import '../domain/project/commands/create_entity_command.dart';
+import '../domain/project/commands/create_group_command.dart';
 import '../domain/project/commands/move_entity_command.dart';
 import '../domain/project/commands/remove_entity_command.dart';
+import '../domain/project/commands/reorder_child_command.dart';
 import '../domain/project/commands/update_entity_payload_command.dart';
 import '../domain/project/commands/update_group_payload_command.dart';
 import '../domain/project/entity_address.dart';
@@ -45,6 +47,7 @@ import 'bridge/yse_gateway.dart';
 import 'state/clip_registry_publisher.dart';
 import 'state/engine_midi_controller.dart';
 import 'state/engine_telemetry.dart';
+import 'state/mix_tree_node.dart';
 import 'state/mixer_channel.dart';
 import 'state/patcher_controller.dart';
 import 'state/state_machine_controller.dart';
@@ -235,6 +238,13 @@ class PhiEngine {
   final ValueNotifier<List<MixerChannel>> _channels =
       ValueNotifier<List<MixerChannel>>(const []);
 
+  /// The materialised non-return channels shaped as a **tree** (groups carrying
+  /// their children), rebuilt on every sync — the grouped rack the Mix surface
+  /// renders (design §7). A parallel view of [_channels]; the flat list stays
+  /// for the header count and for callers that don't care about nesting.
+  final ValueNotifier<List<MixTreeNode>> _mixTree =
+      ValueNotifier<List<MixTreeNode>>(const []);
+
   /// The materialised **return** buses in tree order — the aux buses beside
   /// master (design §4), rebuilt on every sync. Kept apart from [_channels] so
   /// the rack renders strips + groups while the returns section (#170) renders
@@ -298,6 +308,12 @@ class PhiEngine {
   /// added or removed; per-channel state changes (volume, mute, solo, peak)
   /// fire on the individual [MixerChannel] instead.
   ValueListenable<List<MixerChannel>> get channels => _channels;
+
+  /// The materialised non-return channels as a tree (groups nesting their
+  /// children) — the source the Mix surface renders its grouped rack from
+  /// (design §7). Fires on every structural re-sync (add / remove / move /
+  /// reorder); per-channel state changes fire on the individual [MixerChannel].
+  ValueListenable<List<MixTreeNode>> get mixTree => _mixTree;
 
   /// Live list of return buses (design §4) — the aux buses beside master. Fires
   /// when returns are added or removed; per-return state changes fire on the
@@ -527,6 +543,7 @@ class PhiEngine {
     _channelsByAddress.clear();
     _userChannels.clear();
     _channels.value = const [];
+    _mixTree.value = const [];
     _returns.value = const [];
   }
 
@@ -607,7 +624,37 @@ class PhiEngine {
       _reconcileSends(node);
     }
 
+    _rebuildMixTree(desired);
     _recomputeEffectiveVolumes();
+  }
+
+  /// Rebuilds the [mixTree] view from the flat, pre-ordered [desired] nodes —
+  /// nesting each non-return node under its parent so the surface renders groups
+  /// as framed sections (design §7). Returns are excluded (they surface through
+  /// [returns]); pre-order guarantees a parent is built before its children.
+  void _rebuildMixTree(List<_MixNode> desired) {
+    final builders = <EntityAddress, _MixTreeBuilder>{};
+    final roots = <_MixTreeBuilder>[];
+    for (final node in desired) {
+      if (node.isReturn) continue;
+      final builder = _MixTreeBuilder(
+        _channelsByAddress[node.address]!.channel,
+        node.address,
+        node.isGroup,
+      );
+      builders[node.address] = builder;
+      final parent = node.parentAddress == null
+          ? null
+          : builders[node.parentAddress];
+      if (parent == null) {
+        roots.add(builder);
+      } else {
+        parent.children.add(builder);
+      }
+    }
+    _mixTree.value = List<MixTreeNode>.unmodifiable(
+      roots.map((b) => b.freeze()),
+    );
   }
 
   /// Creates the gateway channel + `MixerChannel` for a freshly-appeared [node],
@@ -678,14 +725,18 @@ class PhiEngine {
       if (node is RegistryGroup) {
         // A `mix.` group *is* a bus (design §3). A payload-less structural
         // ancestor still becomes a bus so its children have a parent.
-        nodes.add(_MixNode(address, parent, false, _stripOf(node.payload)));
+        nodes.add(
+          _MixNode(address, parent, false, true, _stripOf(node.payload)),
+        );
         for (final child in node.children) {
           visit(child, address.child(child.name), address);
         }
       } else if (node is RegistryEntity) {
         final strip = _stripOf(node.payload);
         final isReturn = strip.isReturn && address.isTopLevel;
-        nodes.add(_MixNode(address, isReturn ? null : parent, isReturn, strip));
+        nodes.add(
+          _MixNode(address, isReturn ? null : parent, isReturn, false, strip),
+        );
       }
     }
 
@@ -911,6 +962,105 @@ class PhiEngine {
     return _channelsByAddress[address]!.channel;
   }
 
+  /// Adds a **group bus** — a `mix.` group carrying a strip payload, so it has a
+  /// fader of its own (design §3). Created top-level through [CreateGroupCommand];
+  /// child strips join it by being dragged in ([moveChannelToGroup]). Picks the
+  /// next voice slot and slugs [name] into a unique address, recording the create
+  /// for dirty-tracking + journaling. Returns the materialised group [MixerChannel].
+  MixerChannel addGroup({String? name}) {
+    if (!_started) {
+      throw StateError('PhiEngine.addGroup called before start()');
+    }
+    final voice = _voiceCursor;
+    _voiceCursor = (_voiceCursor % 6) + 1;
+    final address = _uniqueMixAddress(name ?? 'group');
+    final command = CreateGroupCommand(
+      _mixRegistry,
+      address,
+      payload: MixStrip(voice: voice).toJson(),
+    );
+    command.apply(); // notifies → sync materialises the group bus
+    _recordCommand?.call(command);
+    return _channelsByAddress[address]!.channel;
+  }
+
+  /// Adds a **return bus** — a top-level `mix.` entity flagged `return: true`
+  /// (design §4), so it lands outside the tree in [returns] rather than the rack.
+  /// Picks the next voice slot and slugs [name] into a unique address, recording
+  /// the create. Returns the materialised return [MixerChannel].
+  MixerChannel addReturn({String? name}) {
+    if (!_started) {
+      throw StateError('PhiEngine.addReturn called before start()');
+    }
+    final voice = _voiceCursor;
+    _voiceCursor = (_voiceCursor % 6) + 1;
+    final address = _uniqueMixAddress(name ?? 'return');
+    final command = CreateEntityCommand(
+      _mixRegistry,
+      address,
+      payload: MixStrip(voice: voice, isReturn: true).toJson(),
+    );
+    command.apply(); // notifies → sync materialises the return bus
+    _recordCommand?.call(command);
+    return _channelsByAddress[address]!.channel;
+  }
+
+  /// Re-parents [channel] under the group bus at [group] (appended among its
+  /// children), or back to top level when [group] is `null` — the drag-into /
+  /// drag-out-of-a-group gesture (design §7). A registry **move** rewrites the
+  /// address to follow the tree (rename = refactor), and the ensuing sync
+  /// `moveChannel`s the gateway channel, preserving its live meters (design §8).
+  /// No-op for the master, a stale handle, a channel already directly under
+  /// [group], or a group dropped into its own subtree. Records the move.
+  void moveChannelToGroup(MixerChannel channel, EntityAddress? group) {
+    if (!_started || channel.isMaster) return;
+    final from = _addressOf(channel);
+    if (from == null) return;
+    final parentSegments = group?.segments ?? const <String>[];
+    if (_sameSegments(from.groupPath, parentSegments)) return; // already there
+    // Never drop a group into itself or its own subtree (the registry throws).
+    if (group != null && (group == from || group.isDescendantOf(from))) return;
+    final to = _uniqueMixAddressUnder(parentSegments, from.name);
+    final command = MoveEntityCommand(_mixRegistry, from, to);
+    command.apply(); // notifies → sync re-parents the gateway channel
+    _recordCommand?.call(command);
+  }
+
+  /// Reorders [channel] to sit immediately before [before] among their shared
+  /// siblings — the drag-to-reorder-within-a-section gesture (design §7). No-op
+  /// unless the two currently share a parent (a cross-group drop is a
+  /// [moveChannelToGroup] instead). The new order persists through the group's
+  /// `_group.json`. Records the reorder.
+  void moveChannelBefore(MixerChannel channel, MixerChannel before) {
+    if (!_started) return;
+    final from = _addressOf(channel);
+    final target = _addressOf(before);
+    if (from == null || target == null || from == target) return;
+    if (from.parent != target.parent) return; // reorder is within one parent
+    final group = from.parent; // null → the kind root (top level)
+    final siblings = group == null
+        ? _mixRegistry.childrenOfKind(RegistryKinds.mix)
+        : _mixRegistry.childrenOfGroup(group);
+    final names = siblings.map((n) => n.name).toList();
+    final fromIndex = names.indexOf(from.name);
+    final targetIndex = names.indexOf(target.name);
+    if (fromIndex < 0 || targetIndex < 0) return;
+    // "Immediately before target": removing the moved child first shifts an
+    // earlier target left by one, so land at targetIndex-1 in that case.
+    final toIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex;
+    if (toIndex == fromIndex) return;
+    final command = ReorderChildCommand(
+      _mixRegistry,
+      kind: RegistryKinds.mix,
+      group: group,
+      childName: from.name,
+      fromIndex: fromIndex,
+      toIndex: toIndex,
+    );
+    command.apply(); // notifies → sync rebuilds the tree in the new order
+    _recordCommand?.call(command);
+  }
+
   /// Removes a user channel by removing its `mix.` entity; the ensuing sync
   /// destroys the gateway channel and disposes the [MixerChannel]. No-op for the
   /// master channel or an instance the engine no longer holds. The removal is
@@ -975,6 +1125,38 @@ class PhiEngine {
       n++;
     }
     return EntityAddress(kind: RegistryKinds.mix, segments: [segment]);
+  }
+
+  /// A free `mix.` address for [leaf] directly under [parentSegments] (empty =
+  /// top level) — the leaf itself, else suffixed `_2`, `_3`, … until unused. The
+  /// destination a drag-into-a-group move targets.
+  EntityAddress _uniqueMixAddressUnder(
+    List<String> parentSegments,
+    String leaf,
+  ) {
+    var segment = leaf;
+    var n = 2;
+    while (_mixRegistry.contains(
+      EntityAddress(
+        kind: RegistryKinds.mix,
+        segments: [...parentSegments, segment],
+      ),
+    )) {
+      segment = '${leaf}_$n';
+      n++;
+    }
+    return EntityAddress(
+      kind: RegistryKinds.mix,
+      segments: [...parentSegments, segment],
+    );
+  }
+
+  static bool _sameSegments(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   /// Set a channel's user-facing volume. Clamped to `[0.0, 1.0]`. Routes
@@ -1287,10 +1469,15 @@ class PhiEngine {
   void _persistChannelState(MixerChannel channel) {
     final address = _addressOf(channel);
     if (address == null) return;
-    final entity = _mixRegistry.entityAt(address);
-    if (entity == null) return;
-    final existing = entity.payload is Map
-        ? MixStrip.fromJson((entity.payload! as Map).cast<String, Object?>())
+    // A group bus stores its state on the group's own payload (design §3), a
+    // strip on the entity's — persist to whichever sits at the address.
+    final node = _mixRegistry.nodeAt(address);
+    final currentPayload = node is RegistryGroup
+        ? node.payload
+        : _mixRegistry.entityAt(address)?.payload;
+    if (node == null) return;
+    final existing = currentPayload is Map
+        ? MixStrip.fromJson(currentPayload.cast<String, Object?>())
         : const MixStrip(voice: 1);
     final payload = existing
         .copyWith(
@@ -1300,8 +1487,10 @@ class PhiEngine {
           soloed: channel.soloed,
         )
         .toJson();
-    if (jsonEncode(entity.payload) == jsonEncode(payload)) return;
-    final command = UpdateEntityPayloadCommand(_mixRegistry, address, payload);
+    if (jsonEncode(currentPayload) == jsonEncode(payload)) return;
+    final command = node is RegistryGroup
+        ? UpdateGroupPayloadCommand(_mixRegistry, address, payload)
+        : UpdateEntityPayloadCommand(_mixRegistry, address, payload);
     command.apply(); // notifies → _syncChannelsFromRegistry keeps the channel
     _recordCommand?.call(command);
   }
@@ -1341,6 +1530,7 @@ class PhiEngine {
     _masterMuted.dispose();
     _masterChannel.dispose();
     _channels.dispose();
+    _mixTree.dispose();
     _returns.dispose();
     _lastAudioNotice.dispose();
     await _telemetry.close();
@@ -1349,15 +1539,41 @@ class PhiEngine {
 
 /// A `mix.` node flattened out of the tree for reconciliation: its [address],
 /// the [parentAddress] its gateway channel hangs from (`null` = master, or a
-/// return outside the tree), whether it is a return ([isReturn]), and the
-/// [strip] payload driving its voice / volume / mute / solo / sends.
+/// return outside the tree), whether it is a return ([isReturn]), whether it is
+/// a group bus ([isGroup] — a framed section in the rack), and the [strip]
+/// payload driving its voice / volume / mute / solo / sends.
 class _MixNode {
-  _MixNode(this.address, this.parentAddress, this.isReturn, this.strip);
+  _MixNode(
+    this.address,
+    this.parentAddress,
+    this.isReturn,
+    this.isGroup,
+    this.strip,
+  );
 
   final EntityAddress address;
   final EntityAddress? parentAddress;
   final bool isReturn;
+  final bool isGroup;
   final MixStrip strip;
+}
+
+/// Mutable scratch node used while nesting the flat [_MixNode] list into the
+/// immutable [MixTreeNode] forest [PhiEngine.mixTree] exposes.
+class _MixTreeBuilder {
+  _MixTreeBuilder(this.channel, this.address, this.isGroup);
+
+  final MixerChannel channel;
+  final EntityAddress address;
+  final bool isGroup;
+  final List<_MixTreeBuilder> children = [];
+
+  MixTreeNode freeze() => MixTreeNode(
+    channel: channel,
+    address: address,
+    isGroup: isGroup,
+    children: List<MixTreeNode>.unmodifiable(children.map((c) => c.freeze())),
+  );
 }
 
 /// The engine's live handle on a materialised `mix.` channel: its [channel]
