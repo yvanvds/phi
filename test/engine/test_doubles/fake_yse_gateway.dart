@@ -210,6 +210,23 @@ class FakeYseGateway implements YseGateway {
   @override
   double get masterPeak => masterPeakValue;
 
+  /// Number of speaker outputs the master channel feeds (design §6). Reassign
+  /// to model a non-stereo layout (e.g. 6 for 5.1) before reading meters.
+  int masterOutputCountValue = 2;
+
+  /// Per-output post-fader master peaks — seed to drive the master strip's
+  /// per-speaker meters. Out-of-range indices read `0`.
+  List<double> masterPeakOutputs = [0, 0];
+
+  @override
+  int get masterOutputCount => masterOutputCountValue;
+
+  @override
+  double masterPeakOutput(int output) =>
+      (output >= 0 && output < masterPeakOutputs.length)
+      ? masterPeakOutputs[output]
+      : 0;
+
   @override
   double get activeSampleRate => activeSampleRateValue;
 
@@ -226,10 +243,10 @@ class FakeYseGateway implements YseGateway {
   int _nextChannelId = 1;
 
   @override
-  int createChannel(String name) {
+  int createChannel(String name, {int? parentId}) {
     final id = _nextChannelId++;
-    calls.add('createChannel:$id:$name');
-    channels[id] = FakeChannel(name);
+    calls.add('createChannel:$id:$name:${parentId ?? 'master'}');
+    channels[id] = FakeChannel(name, parentId: parentId);
     return id;
   }
 
@@ -237,6 +254,21 @@ class FakeYseGateway implements YseGateway {
   void destroyChannel(int channelId) {
     calls.add('destroyChannel:$channelId');
     channels.remove(channelId);
+  }
+
+  @override
+  void moveChannel(int channelId, [int? parentId]) {
+    calls.add('moveChannel:$channelId:${parentId ?? 'master'}');
+    final ch = channels[channelId];
+    if (ch != null) ch.parentId = parentId;
+  }
+
+  @override
+  int createReturnChannel(String name, {int sendSlots = 4}) {
+    final id = _nextChannelId++;
+    calls.add('createReturnChannel:$id:$name:$sendSlots');
+    channels[id] = FakeChannel(name, isReturn: true, sendSlots: sendSlots);
+    return id;
   }
 
   @override
@@ -252,6 +284,83 @@ class FakeYseGateway implements YseGateway {
   @override
   double channelPeak(int channelId) => channels[channelId]?.peak ?? 0;
 
+  @override
+  void setSend(
+    int channelId,
+    int slot,
+    int returnId,
+    double level,
+    bool preFader,
+  ) {
+    calls.add(
+      'setSend:$channelId:$slot:$returnId:'
+      '${level.toStringAsFixed(3)}:$preFader',
+    );
+    final ch = channels[channelId];
+    if (ch == null) return;
+    // Mirror the engine's illegal-wiring rejection as a silent no-op (design
+    // §4): the slot must be in range, the target must be an existing return,
+    // and the edge must be neither a self-send nor close a cycle.
+    if (!_isLegalSend(channelId, slot, returnId)) return;
+    ch.sends[slot] = FakeSend(
+      returnId: returnId,
+      level: level,
+      preFader: preFader,
+    );
+  }
+
+  @override
+  void setSendLevel(int channelId, int slot, double level) {
+    calls.add('setSendLevel:$channelId:$slot:${level.toStringAsFixed(3)}');
+    final send = channels[channelId]?.sends[slot];
+    if (send != null) send.level = level;
+  }
+
+  @override
+  void clearSend(int channelId, int slot) {
+    calls.add('clearSend:$channelId:$slot');
+    channels[channelId]?.sends.remove(slot);
+  }
+
+  @override
+  int channelOutputCount(int channelId) =>
+      channels[channelId]?.outputCount ?? 0;
+
+  @override
+  double channelPeakOutput(int channelId, int output) =>
+      channels[channelId]?.peakOutput(output) ?? 0;
+
+  @override
+  double channelPeakPreOutput(int channelId, int output) =>
+      channels[channelId]?.prePeakOutput(output) ?? 0;
+
+  /// Whether wiring send [slot] of [channelId] to [returnId] would be accepted
+  /// by the engine. Encodes the four rejection cases the engine logs as no-ops.
+  bool _isLegalSend(int channelId, int slot, int returnId) {
+    final ch = channels[channelId];
+    if (ch == null) return false;
+    if (slot < 0 || slot >= ch.sendSlots) return false; // out-of-range slot
+    if (returnId == channelId) return false; // self-send
+    final target = channels[returnId];
+    if (target == null || !target.isReturn) return false; // non-return target
+    if (_sendReaches(returnId, channelId)) return false; // would close a cycle
+    return true;
+  }
+
+  /// Whether [from] can already reach [goal] by following existing send edges —
+  /// used to reject a return → return edge that would close a cycle.
+  bool _sendReaches(int from, int goal, [Set<int>? seen]) {
+    if (from == goal) return true;
+    seen ??= {};
+    if (!seen.add(from)) return false;
+    final ch = channels[from];
+    if (ch == null) return false;
+    for (final send in ch.sends.values) {
+      if (_sendReaches(send.returnId, goal, seen)) return true;
+    }
+    return false;
+  }
+
   /// Close the internal stream controller. Call from test teardown to keep
   /// `flutter test --reporter expanded` from leaking pending subscriptions.
   Future<void> dispose() => _midiActivity.close();
@@ -259,9 +368,59 @@ class FakeYseGateway implements YseGateway {
 
 /// Per-channel state the fake records and the engine writes to.
 class FakeChannel {
-  FakeChannel(this.name);
+  FakeChannel(
+    this.name, {
+    this.parentId,
+    this.isReturn = false,
+    int sendSlots = 4,
+  }) : sendSlots = isReturn ? sendSlots : 4;
 
   final String name;
   double volume = 1.0;
   double peak = 0.0;
+
+  /// Parent channel id in the mix tree, or `null` for a child of master.
+  /// Meaningless for a return (returns sit outside the tree).
+  int? parentId;
+
+  /// Whether this channel is a return bus ([createReturnChannel]) rather than
+  /// an ordinary mix-tree channel.
+  final bool isReturn;
+
+  /// Number of aux-send slots. Ordinary channels get the engine default of
+  /// four; a return fixes its own count at creation.
+  final int sendSlots;
+
+  /// Number of speaker outputs this channel feeds. Reassign to model a
+  /// non-stereo layout before reading per-output meters.
+  int outputCount = 2;
+
+  /// Per-output post- and pre-fader peaks — seed to drive per-speaker meters.
+  /// Out-of-range indices read `0`.
+  List<double> peakOutputs = [0, 0];
+  List<double> prePeakOutputs = [0, 0];
+
+  /// Active sends keyed by slot index.
+  final Map<int, FakeSend> sends = {};
+
+  double peakOutput(int output) =>
+      (output >= 0 && output < peakOutputs.length) ? peakOutputs[output] : 0;
+
+  double prePeakOutput(int output) =>
+      (output >= 0 && output < prePeakOutputs.length)
+      ? prePeakOutputs[output]
+      : 0;
+}
+
+/// One wired aux send: the target return, its level, and pre/post-fader tap.
+class FakeSend {
+  FakeSend({
+    required this.returnId,
+    required this.level,
+    required this.preFader,
+  });
+
+  final int returnId;
+  double level;
+  final bool preFader;
 }

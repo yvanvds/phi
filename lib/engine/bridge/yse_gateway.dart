@@ -104,13 +104,37 @@ abstract interface class YseGateway {
   /// yet exposed).
   Stream<void> get midiActivity;
 
-  /// Create a new YSE channel parented to the master channel and return an
-  /// opaque integer id. Subsequent per-channel calls take the same id.
-  int createChannel(String name);
+  /// Create a new YSE channel and return an opaque integer id. Subsequent
+  /// per-channel calls take the same id.
+  ///
+  /// [parentId] chooses the channel's parent in the mix tree; `null` (the
+  /// default) parents to the master channel. Pass another channel's id to nest
+  /// this one under it — a child's audio flows through its parent, so the tree
+  /// is rooted at master (design `docs/design/mix.md` §3). An unknown
+  /// [parentId] falls back to master rather than failing.
+  int createChannel(String name, {int? parentId});
 
-  /// Destroy a channel previously returned by [createChannel]. No-op for an
-  /// unknown id (already destroyed, or never existed).
+  /// Destroy a channel previously returned by [createChannel] (or
+  /// [createReturnChannel]). No-op for an unknown id (already destroyed, or
+  /// never existed).
   void destroyChannel(int channelId);
+
+  /// Re-parent [channelId] under [parentId], or under master when [parentId] is
+  /// `null` — the regroup-as-`moveTo` operation (design §8). All attached
+  /// sounds and subchannels follow. No-op for an unknown [channelId]; an
+  /// unknown [parentId] resolves to master.
+  void moveChannel(int channelId, [int? parentId]);
+
+  /// Create a **return bus** — an aux bus outside the mix tree (design §4) —
+  /// and return its opaque id. Other channels route scaled copies of their
+  /// signal into it with [setSend]; its output folds into master after the
+  /// source tree. A return may itself send onward into another return.
+  ///
+  /// [sendSlots] fixes how many onward sends this return can drive; it is set
+  /// once at creation and never resized. The default of four matches an
+  /// ordinary channel; the engine sync raises it when a payload wants more
+  /// (design §10 decision 4, `createWithSends` semantics).
+  int createReturnChannel(String name, {int sendSlots = 4});
 
   /// Volume of a non-master channel in `[0.0, 1.0]`.
   double channelVolume(int channelId);
@@ -119,4 +143,47 @@ abstract interface class YseGateway {
   /// Post-volume peak amplitude of a non-master channel — linear `[0.0, 1.0+]`.
   /// Sampled once per telemetry tick. Mirrors [masterPeak] for user channels.
   double channelPeak(int channelId);
+
+  /// Wire send [slot] of [channelId] to the return [returnId] at [level].
+  ///
+  /// Sends are post-fader by default (they follow the channel's volume); pass
+  /// [preFader] `true` for a cue-style send independent of the fader. The
+  /// engine rejects and logs an illegal wiring — a target that is not a return,
+  /// a self-send, a return → return edge that would close a cycle, or an
+  /// out-of-range slot — as a no-op rather than an error (design §4).
+  void setSend(
+    int channelId,
+    int slot,
+    int returnId,
+    double level,
+    bool preFader,
+  );
+
+  /// Set the level of send [slot] on [channelId], ramped and click-free — safe
+  /// to write every control tick (design §4). No-op for an unset slot.
+  void setSendLevel(int channelId, int slot, double level);
+
+  /// Detach send [slot] on [channelId], disconnecting it from its return bus.
+  void clearSend(int channelId, int slot);
+
+  /// Number of speaker outputs [channelId] feeds — index the per-output peak
+  /// reads with `[0, channelOutputCount)`. `0` for an unknown id.
+  int channelOutputCount(int channelId);
+
+  /// Post-fader peak on a single [output] of [channelId] — linear `[0.0, 1.0+]`.
+  /// Out-of-range outputs read `0`.
+  double channelPeakOutput(int channelId, int output);
+
+  /// Pre-fader peak on a single [output] of [channelId] — linear `[0.0, 1.0+]`,
+  /// measured before the channel volume (design §6; exposed but no v1 UI).
+  /// Out-of-range outputs read `0`.
+  double channelPeakPreOutput(int channelId, int output);
+
+  /// Number of speaker outputs the master channel feeds — the master strip
+  /// renders one meter bar per output (design §6).
+  int get masterOutputCount;
+
+  /// Post-fader peak on a single master [output] — linear `[0.0, 1.0+]`.
+  /// Out-of-range outputs read `0`.
+  double masterPeakOutput(int output);
 }
