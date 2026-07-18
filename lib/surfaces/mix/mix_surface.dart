@@ -166,6 +166,8 @@ class _BoundStrip extends StatelessWidget {
         voiceGlow: PhiVoices.glow(channel.voice),
         isMaster: channel.isMaster,
         onVolumeChanged: (v) => engine.setChannelVolume(channel, v),
+        onVolumeChangeStart: () => engine.beginChannelVolumeGesture(channel),
+        onVolumeChangeEnd: () => engine.endChannelVolumeGesture(channel),
         onMuteToggle: channel.isMaster
             ? null
             : () => engine.setChannelMuted(channel, muted: !channel.muted),

@@ -23,6 +23,8 @@ class ChannelStrip extends StatelessWidget {
     required this.voiceColor,
     required this.voiceGlow,
     required this.onVolumeChanged,
+    this.onVolumeChangeStart,
+    this.onVolumeChangeEnd,
     this.onMuteToggle,
     this.onSoloToggle,
     this.isMaster = false,
@@ -52,6 +54,17 @@ class ChannelStrip extends StatelessWidget {
   final bool isMaster;
 
   final ValueChanged<double> onVolumeChanged;
+
+  /// Fired when a fader interaction begins (drag start or a click-to-set). The
+  /// mix surface uses it to open a gesture the engine coalesces, so a drag emits
+  /// one persisted command instead of one per tick. Optional — a strip without
+  /// coalescing (a plain widget test) leaves it null.
+  final VoidCallback? onVolumeChangeStart;
+
+  /// Fired when a fader interaction ends (drag end/cancel or the tap releasing),
+  /// closing the coalesced gesture so the engine flushes one command. Optional.
+  final VoidCallback? onVolumeChangeEnd;
+
   final VoidCallback? onMuteToggle;
   final VoidCallback? onSoloToggle;
 
@@ -126,11 +139,28 @@ class ChannelStrip extends StatelessWidget {
     final clampedPeak = peak.clamp(0.0, 1.0);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapDown: (d) => onVolumeChanged(_yToValue(d.localPosition.dy)),
-      onVerticalDragStart: (d) =>
-          onVolumeChanged(_yToValue(d.localPosition.dy)),
+      // A fader interaction opens a coalescing gesture on pointer-down and closes
+      // it when the interaction ends, so the engine journals one command per
+      // drag rather than one per tick. A click-to-set uses the tap recognizer
+      // (down → up); a drag uses the vertical-drag recognizer (start → end).
+      // The two are disjoint here, so each interaction fires exactly one
+      // start / end pair. (`onVerticalDragCancel` is intentionally unwired: it
+      // fires whenever the drag recognizer merely loses the arena to a tap, so
+      // it is not a reliable "gesture ended" signal — a started drag always ends
+      // via `onVerticalDragEnd`, and any stray unclosed gesture self-heals on the
+      // next `begin`.)
+      onTapDown: (d) {
+        onVolumeChangeStart?.call();
+        onVolumeChanged(_yToValue(d.localPosition.dy));
+      },
+      onTapUp: (_) => onVolumeChangeEnd?.call(),
+      onVerticalDragStart: (d) {
+        onVolumeChangeStart?.call();
+        onVolumeChanged(_yToValue(d.localPosition.dy));
+      },
       onVerticalDragUpdate: (d) =>
           onVolumeChanged(_yToValue(d.localPosition.dy)),
+      onVerticalDragEnd: (_) => onVolumeChangeEnd?.call(),
       child: SizedBox(
         key: faderHitAreaKey,
         height: _faderHeight,
