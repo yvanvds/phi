@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:phi/engine/bridge/midi_gateway.dart';
 import 'package:phi/engine/bridge/midi_transport.dart';
 
@@ -22,13 +24,56 @@ class FakeMidiGateway implements MidiGateway {
   /// single fake port so [open] succeeds out of the box.
   List<String> deviceNames = const ['Fake MIDI Out'];
 
+  /// Fabricated input-port names, so the settings window's input checklist is
+  /// drivable without hardware. Reassign to model other (or no) inputs.
+  List<String> inputNames = const ['Fake MIDI In', 'Keystation 61'];
+
   int? openPort;
+
+  final List<String> _openInputs = [];
+  final StreamController<String> _inputActivity =
+      StreamController<String>.broadcast();
 
   @override
   int get outputDeviceCount => deviceNames.length;
 
   @override
   String outputDeviceName(int id) => deviceNames[id];
+
+  @override
+  int get inputDeviceCount => inputNames.length;
+
+  @override
+  String inputDeviceName(int id) => inputNames[id];
+
+  @override
+  List<String> inputDeviceNames() => List<String>.of(inputNames);
+
+  @override
+  List<String> get openInputNames => List<String>.unmodifiable(_openInputs);
+
+  @override
+  Stream<String> get inputActivity => _inputActivity.stream;
+
+  @override
+  void openInputs(List<String> names) {
+    calls.add('openInputs:${names.join(',')}');
+    // Open exactly the requested names that resolve to a known port; an unknown
+    // name is skipped, mirroring the real gateway's name→index resolution.
+    _openInputs
+      ..clear()
+      ..addAll(names.where(inputNames.contains));
+  }
+
+  @override
+  void closeInputs() {
+    calls.add('closeInputs');
+    _openInputs.clear();
+  }
+
+  /// Push a synthetic activity tick for [portName] — drives [inputActivity]
+  /// listeners as if that open port had delivered a MIDI message.
+  void emitInputActivity(String portName) => _inputActivity.add(portName);
 
   @override
   bool get isOpen => openPort != null;
@@ -58,4 +103,8 @@ class FakeMidiGateway implements MidiGateway {
     calls.add('close');
     openPort = null;
   }
+
+  /// Close the input-activity stream controller. Call from test teardown to keep
+  /// `flutter test` from leaking a pending broadcast controller.
+  Future<void> dispose() => _inputActivity.close();
 }

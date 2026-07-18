@@ -1,3 +1,8 @@
+import '../../domain/project/app_settings/speaker_layout.dart';
+import 'audio_device_descriptor.dart';
+import 'audio_device_exception.dart';
+import 'audio_device_state.dart';
+
 /// Abstract port over the `package:yse` library.
 ///
 /// `PhiEngine` depends on this interface, not on `package:yse` directly, so
@@ -8,8 +13,41 @@ abstract interface class YseGateway {
   /// Initialise the audio engine and open the default device.
   void init();
 
+  /// Initialise the engine **without** opening any audio device — the boot path
+  /// (design `docs/design/settings-and-devices.md` §5) taken when a stored
+  /// device must be resolved and opened explicitly. Enumerate with
+  /// [audioDevices] and open one with [openAudioDevice].
+  void initOffline();
+
   /// Shut the engine down.
   void close();
+
+  /// The audio devices the engine can currently see, as pure FFI-free
+  /// [AudioDeviceDescriptor]s (design §4) — the list the settings window builds
+  /// its output-device dropdown from. Available after [init] / [initOffline].
+  List<AudioDeviceDescriptor> audioDevices();
+
+  /// Open an audio device, or live-swap to it if one is already open
+  /// (`closeCurrentDevice` + `openDevice`, design §5 — a brief dropout is
+  /// accepted). Passing a null [descriptor] opens the platform-default device.
+  /// [rate] / [buffer] override the device's own defaults when non-null;
+  /// [layout] chooses the speaker layout.
+  ///
+  /// Throws [AudioDeviceException] when the descriptor resolves to no visible
+  /// device or the engine refuses to open it — the caller reverts to the
+  /// previous working device and shows a notice (design §5). The stored
+  /// preference is the caller's concern, never dropped by a failed open.
+  void openAudioDevice(
+    AudioDeviceDescriptor? descriptor, {
+    double? rate,
+    int? buffer,
+    SpeakerLayout layout = SpeakerLayout.auto,
+  });
+
+  /// The live state of the open device — active sample rate, buffer size, and
+  /// output latency (design §4). Reads the device, not the stored settings; the
+  /// two can legitimately differ. [AudioDeviceState.none] when none is open.
+  AudioDeviceState activeAudioState();
 
   /// Begin the periodic engine-update timer at the given [interval].
   void startUpdateTimer([Duration interval]);

@@ -1,11 +1,19 @@
 import 'dart:async';
 
+import 'package:phi/domain/project/app_settings/speaker_layout.dart';
+import 'package:phi/engine/bridge/audio_device_descriptor.dart';
+import 'package:phi/engine/bridge/audio_device_exception.dart';
+import 'package:phi/engine/bridge/audio_device_state.dart';
 import 'package:phi/engine/bridge/yse_gateway.dart';
 
 /// In-memory [YseGateway] used in unit and widget tests.
 ///
 /// Records every call against the engine so tests can assert call sequence
-/// without touching `package:yse` or its native library.
+/// without touching `package:yse` or its native library. Fabricates an audio
+/// device list ([devices]) so the settings window is fully drivable without
+/// hardware; [openAudioDevice] reflects the chosen rate / buffer into the
+/// active-state fields, and [unopenableDeviceNames] simulates a device that is
+/// present but refuses to open (the design §5 fallback path).
 class FakeYseGateway implements YseGateway {
   final List<String> calls = [];
   bool initialised = false;
@@ -33,9 +41,115 @@ class FakeYseGateway implements YseGateway {
   }
 
   @override
+  void initOffline() {
+    calls.add('initOffline');
+    initialised = true;
+  }
+
+  @override
   void close() {
     calls.add('close');
     initialised = false;
+  }
+
+  /// Fabricated device list handed out by [audioDevices]. Two entries share a
+  /// name under different hosts, so tests exercise the name + host identity rule
+  /// (design §3). Reassign to model other hardware (or an empty list).
+  List<AudioDeviceDescriptor> devices = const [
+    AudioDeviceDescriptor(
+      name: 'Fake Interface',
+      hostName: 'WASAPI',
+      inputChannelNames: ['In 1', 'In 2'],
+      outputChannelNames: ['Out 1', 'Out 2'],
+      sampleRates: [44100.0, 48000.0, 96000.0],
+      bufferSizes: [64, 128, 256, 512],
+      defaultBufferSize: 256,
+      outputLatency: 256,
+      inputLatency: 256,
+    ),
+    AudioDeviceDescriptor(
+      name: 'Fake Interface',
+      hostName: 'ASIO',
+      inputChannelNames: ['In 1', 'In 2'],
+      outputChannelNames: ['Out 1', 'Out 2', 'Out 3', 'Out 4'],
+      sampleRates: [48000.0, 96000.0],
+      bufferSizes: [128, 256],
+      defaultBufferSize: 128,
+      outputLatency: 128,
+      inputLatency: 128,
+    ),
+  ];
+
+  /// Device names that are present in [devices] but "fail to open" — lets tests
+  /// drive the open-failure path (design §5) for a device that is visible yet
+  /// refused by the engine.
+  final Set<String> unopenableDeviceNames = {};
+
+  /// The descriptor last passed to (or resolved by) [openAudioDevice], or `null`
+  /// before any successful open. `<default>` opens record the resolved device.
+  AudioDeviceDescriptor? openedDevice;
+
+  /// The layout the last successful [openAudioDevice] opened with.
+  SpeakerLayout? openLayout;
+
+  @override
+  List<AudioDeviceDescriptor> audioDevices() => devices;
+
+  @override
+  void openAudioDevice(
+    AudioDeviceDescriptor? descriptor, {
+    double? rate,
+    int? buffer,
+    SpeakerLayout layout = SpeakerLayout.auto,
+  }) {
+    final AudioDeviceDescriptor target;
+    if (descriptor == null) {
+      if (devices.isEmpty) {
+        throw const AudioDeviceException(
+          'no platform-default audio device is available',
+        );
+      }
+      target = devices.first;
+    } else {
+      final match = _find(descriptor.name, descriptor.hostName);
+      if (match == null) {
+        throw AudioDeviceException(
+          'no audio device named "${descriptor.name}" on '
+          '"${descriptor.hostName}" is available',
+        );
+      }
+      target = match;
+    }
+    if (unopenableDeviceNames.contains(target.name)) {
+      throw AudioDeviceException('engine failed to open "${target.name}"');
+    }
+    calls.add(
+      'openAudioDevice:${descriptor?.name ?? '<default>'}:'
+      '${rate?.toStringAsFixed(0) ?? 'def'}:${buffer ?? 'def'}:'
+      '${layout.wireName}',
+    );
+    openedDevice = target;
+    openLayout = layout;
+    // Reflect the choice into the live state so activeAudioState() reads back
+    // what was opened — overrides win, else the device's own defaults.
+    activeSampleRateValue =
+        rate ?? (target.sampleRates.isNotEmpty ? target.sampleRates.first : 0);
+    activeBufferSizeValue = buffer ?? target.defaultBufferSize;
+    activeOutputLatencyValue = target.outputLatency;
+  }
+
+  @override
+  AudioDeviceState activeAudioState() => AudioDeviceState(
+    sampleRate: activeSampleRateValue,
+    bufferSize: activeBufferSizeValue,
+    outputLatency: activeOutputLatencyValue,
+  );
+
+  AudioDeviceDescriptor? _find(String name, String hostName) {
+    for (final device in devices) {
+      if (device.name == name && device.hostName == hostName) return device;
+    }
+    return null;
   }
 
   @override

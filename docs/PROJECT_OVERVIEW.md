@@ -51,7 +51,14 @@ main + app          (orchestration)
   production, `FakeYseGateway` for tests). Owns the master + N user
   `MixerChannel` instances and exposes add/remove/volume/mute/solo;
   mute/solo are collapsed to an effective gateway volume since YSE has no
-  native notion of them.
+  native notion of them. Since issue #150 `YseGateway` also carries the
+  **device surface** the settings epic (design `settings-and-devices.md`)
+  consumes: `audioDevices()` hands out FFI-free `AudioDeviceDescriptor`s (name +
+  host identity, reported rates/buffers/latencies), `openAudioDevice()` does the
+  `initOffline` boot / `closeCurrentDevice`+`openDevice` live-swap (throwing a
+  bridge-level `AudioDeviceException` the caller falls back on), and
+  `activeAudioState()` reads back the live device state — the `SpeakerLayout`
+  domain enum maps to yse's `ChannelType` only inside the bridge.
 - `SessionState` in `lib/domain/session/` — pure-Dart cross-cutting state
   (transport intent, projection, scene name)
 - Workstation chrome: top toolbar (wordmark, inline-editable scene name,
@@ -324,6 +331,11 @@ main + app          (orchestration)
   events in tests) is minted by `MidiGateway.createTransport`; the gateway's own
   surface shrank to the genuinely immediate MIDI — device enumeration, opening
   the port, and `allNotesOff` on stop (the same Real/Fake split as `YseGateway`).
+  Issue #150 grows `MidiGateway` with the **input** surface the settings epic
+  needs: name-addressed input enumeration, `openInputs`/`closeInputs` of the
+  enabled ports, and an `inputActivity` stream ticking the receiving port's name
+  for the UI dot — the hardware is opened and its activity shown, but nothing
+  routes MIDI-in anywhere yet (that is the racks & voices epic).
   An opt-in `microtonal` flag (issue #36) voices a
   note's fractional pitch as its nearest semitone plus normalised pitch-bend
   event data the transport carries (±2-semitone GM range assumed); off by

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:yse/yse.dart';
 
 import 'midi_gateway.dart';
@@ -10,12 +12,24 @@ import 'real_midi_transport.dart';
 /// [RealYseGateway] initialises); output goes through a single [MidiOut]
 /// port opened on demand. Timed note dispatch has moved to the engine clip
 /// transport ([createTransport]) since issue #101; what stays here is device
-/// enumeration, the port, and [allNotesOff]. Requires `libyse.dll`
-/// discoverable at runtime — see README.md for the Windows setup.
+/// enumeration, the output port, [allNotesOff], and — since issue #150 — the
+/// MIDI **input** surface: name-addressed enumeration, open/close of the enabled
+/// input ports (each mapped to a live [MidiIn]), and an [inputActivity] tick per
+/// received message. Nothing routes MIDI-in anywhere yet (design §8); this only
+/// opens the hardware and reports activity. Requires `libyse.dll` discoverable
+/// at runtime — see README.md for the Windows setup.
 class RealMidiGateway implements MidiGateway {
   System? _sys;
   MidiOut? _out;
   int? _openPort;
+
+  /// Open input ports keyed by device name, and their message subscriptions —
+  /// kept in step so [closeInputs] / [openInputs] can dispose exactly the ports
+  /// they own. Insertion-ordered so [openInputNames] reports open order.
+  final Map<String, MidiIn> _inputs = {};
+  final Map<String, StreamSubscription<MidiInParsedMessage>> _inputSubs = {};
+  final StreamController<String> _inputActivity =
+      StreamController<String>.broadcast();
 
   System get _system => _sys ??= System.instance;
 
@@ -29,6 +43,68 @@ class RealMidiGateway implements MidiGateway {
 
   @override
   String outputDeviceName(int id) => _system.midiOutDeviceName(id);
+
+  @override
+  int get inputDeviceCount => _system.midiInDeviceCount;
+
+  @override
+  String inputDeviceName(int id) => _system.midiInDeviceName(id);
+
+  @override
+  List<String> inputDeviceNames() => [
+    for (var i = 0; i < _system.midiInDeviceCount; i++)
+      _system.midiInDeviceName(i),
+  ];
+
+  @override
+  List<String> get openInputNames => List<String>.unmodifiable(_inputs.keys);
+
+  @override
+  Stream<String> get inputActivity => _inputActivity.stream;
+
+  @override
+  void openInputs(List<String> names) {
+    final desired = names.toSet();
+    // Close ports no longer wanted.
+    for (final name in _inputs.keys.toList()) {
+      if (!desired.contains(name)) _closeInput(name);
+    }
+    // Open newly wanted ports, resolving each name to a current index.
+    for (final name in names) {
+      if (_inputs.containsKey(name)) continue;
+      final index = _indexOfInput(name);
+      if (index == null) continue; // no visible port by that name — skip.
+      try {
+        final input = MidiIn.open(index);
+        _inputs[name] = input;
+        _inputSubs[name] = input.parsedMessages.listen(
+          (_) => _inputActivity.add(name),
+        );
+      } on YseException {
+        // Port claimed by another application — leave it unopened.
+      }
+    }
+  }
+
+  @override
+  void closeInputs() {
+    for (final name in _inputs.keys.toList()) {
+      _closeInput(name);
+    }
+  }
+
+  /// The current input-device index reporting [name], or `null` when none does.
+  int? _indexOfInput(String name) {
+    for (var i = 0; i < _system.midiInDeviceCount; i++) {
+      if (_system.midiInDeviceName(i) == name) return i;
+    }
+    return null;
+  }
+
+  void _closeInput(String name) {
+    _inputSubs.remove(name)?.cancel();
+    _inputs.remove(name)?.dispose();
+  }
 
   @override
   bool get isOpen => _out != null;
