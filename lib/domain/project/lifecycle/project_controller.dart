@@ -4,8 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../../session/session_state.dart';
-import '../app_settings/app_settings.dart';
-import '../app_settings/app_settings_store.dart';
+import '../app_settings/app_settings_controller.dart';
 import '../entity_address.dart';
 import '../project_command.dart';
 import '../project_registry.dart';
@@ -33,8 +32,9 @@ typedef RecoveryPrompt = Future<RecoveryChoice?> Function(RecoveryOffer offer);
 /// to the current `.phi` folder (built lazily through the injected factories so
 /// this class touches no filesystem itself), [SessionState] (tempo + scene name
 /// live in the manifest), [CrashRecovery] (replay a dirty journal on open), and
-/// [AppSettings] (the recent-projects list and autosave cadence, persisted to
-/// `%APPDATA%/phi/`).
+/// the [AppSettingsController] (the single owner of the recent-projects list and
+/// autosave cadence — this controller folds its recents writes through it, so
+/// `settings.json` is never written from two places).
 ///
 /// A [ChangeNotifier] plus a handful of [ValueNotifier]s so the toolbar can bind
 /// to the project name, the dirty flag, and the recents list without rebuilding
@@ -46,14 +46,14 @@ class ProjectController extends ChangeNotifier {
   /// regardless of settings — handy for deterministic tests.
   ProjectController({
     required SessionState session,
-    required AppSettingsStore settingsStore,
+    required AppSettingsController settings,
     required ProjectStore Function(String directory) storeFactory,
     required JournalStore Function(String directory) journalStoreFactory,
     RegistryCommandCodec codec = const RegistryCommandCodec(),
     void Function(ProjectRegistry registry)? seedRegistry,
     Duration? autosaveIntervalOverride,
   }) : _session = session,
-       _settingsStore = settingsStore,
+       _settings = settings,
        _storeFactory = storeFactory,
        _journalStoreFactory = journalStoreFactory,
        _codec = codec,
@@ -61,10 +61,18 @@ class ProjectController extends ChangeNotifier {
        _autosaveIntervalOverride = autosaveIntervalOverride {
     _session.sceneName.addListener(_onSessionChanged);
     _session.tempo.addListener(_onSessionChanged);
+    // The settings controller is the single owner of the live value; mirror its
+    // recents into [recentProjects] so the File menu follows every write —
+    // whether it came from here (open/save) or, later, the settings dialog.
+    _settings.addListener(_onSettingsChanged);
   }
 
   final SessionState _session;
-  final AppSettingsStore _settingsStore;
+
+  /// The single owner of the app-wide settings value — the only object that ever
+  /// writes `settings.json` (design §7). Recents writes and settings edits both
+  /// flow through its `update`, so concurrent writers are impossible.
+  final AppSettingsController _settings;
   final ProjectStore Function(String directory) _storeFactory;
   final JournalStore Function(String directory) _journalStoreFactory;
   final RegistryCommandCodec _codec;
@@ -101,7 +109,6 @@ class ProjectController extends ChangeNotifier {
   Map<EntityAddress, GroupMetadata> _groupMetadata = const {};
   final Set<EntityAddress> _dirtyEntities = {};
 
-  AppSettings _settings = const AppSettings();
   Timer? _autosaveTimer;
   bool _applyingSnapshot = false;
 
@@ -112,14 +119,15 @@ class ProjectController extends ChangeNotifier {
   /// The autosave cadence in force — the override if given, else the settings
   /// value (design §3, default 60 s).
   Duration get autosaveInterval =>
-      _autosaveIntervalOverride ?? _settings.autosaveInterval;
+      _autosaveIntervalOverride ?? _settings.value.autosaveInterval;
 
-  /// Loads persisted settings (recents + autosave cadence) and starts the
-  /// autosave timer. Call once at launch. Safe to call before any project is
-  /// open — autosave simply no-ops until one is bound.
+  /// Loads persisted settings (recents + autosave cadence) through the single
+  /// settings owner and starts the autosave timer. Call once at launch. Safe to
+  /// call before any project is open — autosave simply no-ops until one is bound.
   Future<void> loadSettings() async {
-    _settings = await _settingsStore.load();
-    recentProjects.value = _settings.recentProjects;
+    await _settings.load();
+    // [_onSettingsChanged] mirrored the loaded recents; arm autosave with the
+    // now-current cadence.
     _restartAutosave();
     notifyListeners();
   }
@@ -267,12 +275,10 @@ class ProjectController extends ChangeNotifier {
   }
 
   /// Drops [path] from the recents list and persists the change — used when an
-  /// open fails because the folder has moved or been deleted.
+  /// open fails because the folder has moved or been deleted. Routed through the
+  /// single settings owner, which mirrors the change back into [recentProjects].
   void forgetRecent(String path) {
-    _settings = _settings.withoutRecentProject(path);
-    recentProjects.value = _settings.recentProjects;
-    unawaited(_settingsStore.save(_settings));
-    notifyListeners();
+    unawaited(_settings.update(_settings.value.withoutRecentProject(path)));
   }
 
   // --- internals -----------------------------------------------------------
@@ -337,12 +343,16 @@ class ProjectController extends ChangeNotifier {
   }
 
   void _rememberRecent(String directory) {
-    _settings = _settings.withRecentProject(directory);
-    recentProjects.value = _settings.recentProjects;
-    unawaited(_settingsStore.save(_settings));
+    unawaited(_settings.update(_settings.value.withRecentProject(directory)));
   }
 
   void _onSessionChanged() => markDirty();
+
+  /// Mirrors the single settings owner's recents into [recentProjects] whenever
+  /// the live value changes — so the File menu follows every write, no matter
+  /// who triggered it (this controller or, later, the settings dialog).
+  void _onSettingsChanged() =>
+      recentProjects.value = _settings.value.recentProjects;
 
   void _restartAutosave() {
     _autosaveTimer?.cancel();
@@ -357,6 +367,9 @@ class ProjectController extends ChangeNotifier {
     _autosaveTimer?.cancel();
     _session.sceneName.removeListener(_onSessionChanged);
     _session.tempo.removeListener(_onSessionChanged);
+    // The settings controller is injected — stop listening, but its owner
+    // disposes it.
+    _settings.removeListener(_onSettingsChanged);
     name.dispose();
     isDirty.dispose();
     location.dispose();

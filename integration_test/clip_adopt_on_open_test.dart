@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
 import 'package:phi/domain/midi/midi_note.dart';
+import 'package:phi/domain/project/app_settings/app_settings_controller.dart';
 import 'package:phi/domain/project/lifecycle/project_controller.dart';
 import 'package:phi/domain/project/registry_seed.dart';
 import 'package:phi/domain/project/store/registry_codecs.dart';
@@ -45,9 +46,10 @@ void main() {
       telemetryInterval: const Duration(milliseconds: 20),
     );
     final session1 = SessionState();
+    final appSettings1 = AppSettingsController(settings);
     final controller1 = ProjectController(
       session: session1,
-      settingsStore: settings,
+      settings: appSettings1,
       storeFactory: (_) => store,
       journalStoreFactory: (_) => journal,
       seedRegistry: seedDefaultProject,
@@ -101,9 +103,12 @@ void main() {
       telemetryInterval: const Duration(milliseconds: 20),
     );
     final session2 = SessionState();
+    // A fresh owner over the same store — a "restart" reading the saved recents,
+    // which auto-restores the saved project.
+    final appSettings2 = AppSettingsController(settings);
     final controller2 = ProjectController(
       session: session2,
-      settingsStore: settings, // same recents → auto-restores the saved project
+      settings: appSettings2,
       storeFactory: (_) => store,
       journalStoreFactory: (_) => journal,
       seedRegistry: seedDefaultProject,
@@ -126,6 +131,7 @@ void main() {
     await engine1.dispose();
     await gateway1.dispose();
     controller1.dispose();
+    appSettings1.dispose();
     session1.dispose();
 
     // The live engine chain — not just the registry payload — reflects the
@@ -140,6 +146,7 @@ void main() {
     await engine2.dispose();
     await gateway2.dispose();
     controller2.dispose();
+    appSettings2.dispose();
     session2.dispose();
   });
 }

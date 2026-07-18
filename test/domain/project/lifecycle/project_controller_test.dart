@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/project/app_settings/app_settings.dart';
+import 'package:phi/domain/project/app_settings/app_settings_controller.dart';
 import 'package:phi/domain/project/commands/create_entity_command.dart';
 import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/project/lifecycle/project_controller.dart';
@@ -20,9 +21,10 @@ class _Harness {
       store = FakeProjectStore(),
       journal = FakeJournalStore(),
       settingsStore = FakeAppSettingsStore() {
+    settings = AppSettingsController(settingsStore);
     controller = ProjectController(
       session: session,
-      settingsStore: settingsStore,
+      settings: settings,
       storeFactory: (_) => store,
       journalStoreFactory: (_) => journal,
       autosaveIntervalOverride: autosaveIntervalOverride,
@@ -33,10 +35,12 @@ class _Harness {
   final FakeProjectStore store;
   final FakeJournalStore journal;
   final FakeAppSettingsStore settingsStore;
+  late final AppSettingsController settings;
   late final ProjectController controller;
 
   void dispose() {
     controller.dispose();
+    settings.dispose();
     session.dispose();
   }
 }
@@ -233,9 +237,11 @@ void main() {
       );
       final session = SessionState();
       addTearDown(session.dispose);
+      final settings = AppSettingsController(seeded);
+      addTearDown(settings.dispose);
       final controller = ProjectController(
         session: session,
-        settingsStore: seeded,
+        settings: settings,
         storeFactory: (_) => FakeProjectStore(),
         journalStoreFactory: (_) => FakeJournalStore(),
       );
