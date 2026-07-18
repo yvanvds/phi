@@ -30,13 +30,29 @@ import 'save_plan.dart';
 /// Payloads are (de)serialised through a per-kind [EntityPayloadCodec] (keyed by
 /// [codecs]); kinds without a registered codec fall back to
 /// [JsonPassthroughCodec], which round-trips `null` and already-JSON payloads.
+///
+/// **Kind-declared group payloads (issue #165).** A kind in [groupPayloadKinds]
+/// declares that its *groups* carry an entity payload too (a `mix.` group is a
+/// bus); for such a kind, a group's `_group.json` holds the payload — encoded by
+/// the same per-kind [EntityPayloadCodec] — alongside the ordering/colour
+/// metadata. Kinds absent from that set are byte-for-byte unchanged: a `clip.`
+/// group's `_group.json` still carries order/colour only.
 class ProjectSerializer {
   /// Builds a serializer. [codecs] maps a kind to the codec that (de)serialises
-  /// its entities' payloads; any kind absent uses [JsonPassthroughCodec].
-  const ProjectSerializer({this.codecs = const {}});
+  /// its entities' (and group buses') payloads; any kind absent uses
+  /// [JsonPassthroughCodec]. [groupPayloadKinds] names the kinds whose groups
+  /// carry a persisted payload in `_group.json` (issue #165).
+  const ProjectSerializer({
+    this.codecs = const {},
+    this.groupPayloadKinds = const {},
+  });
 
   /// Per-kind payload codecs. A kind absent here uses the pass-through codec.
   final Map<String, EntityPayloadCodec> codecs;
+
+  /// The kinds whose groups carry a persisted payload in `_group.json`. A kind
+  /// absent here has plain structural groups (order/colour metadata only).
+  final Set<String> groupPayloadKinds;
 
   /// The manifest's relative path.
   static const String manifestPath = 'project.json';
@@ -103,12 +119,15 @@ class ProjectSerializer {
       );
     }
 
-    // Group metadata: rewrite every non-empty entry whose group still exists.
-    // These files are tiny, so we don't bother filtering by the dirty set.
-    for (final entry in snapshot.groupMetadata.entries) {
-      if (entry.value.isEmpty) continue;
-      if (registry.groupAt(entry.key) == null) continue;
-      writes[groupFile(entry.key)] = _write(entry.value.toJson());
+    // Group files: cosmetic order/colour metadata plus, for a declared kind, the
+    // group bus's payload (issue #165). Rewrite every group that has either —
+    // these files are tiny, so we don't bother filtering by the dirty set (a
+    // dirtied group payload is thus always re-persisted). A group with neither
+    // writes no file.
+    for (final address in _allGroups(registry)) {
+      final json = _groupJson(address, registry.groupAt(address)!, snapshot);
+      if (json.isEmpty) continue;
+      writes[groupFile(address)] = _write(json);
     }
 
     final deletes = _plannedDeletes(
@@ -181,12 +200,19 @@ class ProjectSerializer {
       if (!path.endsWith('.json')) return;
       final parts = path.split('/');
       if (parts.last == groupFileName) {
-        // kind/group…/_group.json — metadata for the enclosing group.
+        // kind/group…/_group.json — metadata for the enclosing group, plus the
+        // group bus's payload envelope for a declared kind (issue #165).
         // Kind-root metadata (kind/_group.json) is not modelled, so skip it.
         final groupSegments = parts.sublist(1, parts.length - 1);
         if (groupSegments.isEmpty) return;
-        _descend(kindRoot(parts.first), groupSegments).meta =
-            GroupMetadata.fromJson(_read(contents));
+        final kind = parts.first;
+        final map = _read(contents);
+        final node = _descend(kindRoot(kind), groupSegments);
+        node.meta = GroupMetadata.fromJson(map);
+        if (groupPayloadKinds.contains(kind) &&
+            (map.containsKey('payload') || map.containsKey('references'))) {
+          node.payloadFile = _groupPayloadFromJson(map);
+        }
       } else {
         // kind/group…/name.json — one entity.
         final kind = parts.first;
@@ -240,6 +266,34 @@ class ProjectSerializer {
     return json;
   }
 
+  /// The `_group.json` map for the group at [address]: its cosmetic order/colour
+  /// metadata and — for a declared kind carrying a payload (issue #165) — the
+  /// group bus's `kind`/`version`/`name`/`references`/`payload` envelope, encoded
+  /// through the kind's [EntityPayloadCodec]. An undeclared kind (or a payload-
+  /// free group) yields metadata only, so a `clip.` group is unchanged. Returns
+  /// an empty map when there is nothing worth a file.
+  Map<String, Object?> _groupJson(
+    EntityAddress address,
+    RegistryGroup group,
+    ProjectSnapshot snapshot,
+  ) {
+    final meta = snapshot.groupMetadata[address] ?? const GroupMetadata();
+    final json = <String, Object?>{...meta.toJson()};
+    if (!groupPayloadKinds.contains(address.kind)) return json;
+    if (group.payload == null && group.references.isEmpty) return json;
+    final codec = _codecFor(address.kind);
+    json['kind'] = address.kind;
+    json['version'] = codec.version;
+    json['name'] = group.name;
+    if (group.references.isNotEmpty) {
+      final refs = group.references.map((r) => r.format()).toList()..sort();
+      json['references'] = refs;
+    }
+    final payload = group.payload == null ? null : codec.encode(group.payload);
+    if (payload != null) json['payload'] = payload;
+    return json;
+  }
+
   Map<EntityAddress, RegistryEntity> _allEntities(ProjectRegistry registry) {
     final result = <EntityAddress, RegistryEntity>{};
     void walk(String kind, List<String> prefix, Iterable<RegistryNode> nodes) {
@@ -282,6 +336,27 @@ class ProjectSerializer {
     return result;
   }
 
+  /// Every group address in the tree (kind roots excluded — they are not
+  /// addressable), in a stable pre-order — the set whose `_group.json` files a
+  /// save considers writing.
+  List<EntityAddress> _allGroups(ProjectRegistry registry) {
+    final result = <EntityAddress>[];
+    void walk(String kind, List<String> prefix, Iterable<RegistryNode> nodes) {
+      for (final node in nodes) {
+        if (node is! RegistryGroup) continue;
+        final segments = [...prefix, node.name];
+        final address = EntityAddress(kind: kind, segments: segments);
+        result.add(address);
+        walk(kind, segments, registry.childrenOfGroup(address));
+      }
+    }
+
+    for (final kind in registry.kinds) {
+      walk(kind, const [], registry.childrenOfKind(kind));
+    }
+    return result;
+  }
+
   // --- load helpers --------------------------------------------------------
 
   _DirNode _descend(_DirNode from, List<String> segments) {
@@ -315,7 +390,21 @@ class ProjectSerializer {
         );
       } else {
         final child = node.groups[name]!;
-        registry.createGroup(address);
+        final pf = child.payloadFile;
+        if (pf != null) {
+          // A declared kind's group bus (issue #165): decode its payload through
+          // the kind's codec, matching the entity path.
+          final codec = _codecFor(kind);
+          registry.createGroup(
+            address,
+            payload: pf.payloadJson == null
+                ? null
+                : codec.decode(pf.payloadJson, pf.version),
+            references: pf.references,
+          );
+        } else {
+          registry.createGroup(address);
+        }
         if (child.meta != null && !child.meta!.isEmpty) {
           groupMetadata[address] = child.meta!;
         }
@@ -325,17 +414,26 @@ class ProjectSerializer {
   }
 
   _EntityFile _entityFromJson(Map<String, Object?> json) {
-    final references =
-        (json['references'] as List<Object?>?)
-            ?.map((e) => EntityAddress.parse(e as String))
-            .toSet() ??
-        const <EntityAddress>{};
     return _EntityFile(
       version: json['version'] as int? ?? 1,
       payloadJson: json['payload'],
-      references: references,
+      references: _referencesFromJson(json),
     );
   }
+
+  _GroupPayloadFile _groupPayloadFromJson(Map<String, Object?> json) {
+    return _GroupPayloadFile(
+      version: json['version'] as int? ?? 1,
+      payloadJson: json['payload'],
+      references: _referencesFromJson(json),
+    );
+  }
+
+  Set<EntityAddress> _referencesFromJson(Map<String, Object?> json) =>
+      (json['references'] as List<Object?>?)
+          ?.map((e) => EntityAddress.parse(e as String))
+          .toSet() ??
+      const <EntityAddress>{};
 
   /// Names in [order] first (those present in [names]), then the rest
   /// alphabetically — the default when a group has no `order`.
@@ -367,12 +465,31 @@ class _DirNode {
   final Map<String, _DirNode> groups = {};
   final Map<String, _EntityFile> entities = {};
   GroupMetadata? meta;
+
+  /// The group bus's payload envelope, when this group's `_group.json` carried
+  /// one for a declared kind (issue #165); `null` for a plain folder.
+  _GroupPayloadFile? payloadFile;
 }
 
 /// A parsed entity file awaiting creation (payload still JSON until its codec
 /// decodes it in creation order).
 class _EntityFile {
   _EntityFile({
+    required this.version,
+    required this.payloadJson,
+    required this.references,
+  });
+
+  final int version;
+  final Object? payloadJson;
+  final Set<EntityAddress> references;
+}
+
+/// A parsed group-payload envelope from a `_group.json` (issue #165) — the
+/// group-bus counterpart of [_EntityFile], its payload still JSON until the
+/// kind's codec decodes it in creation order.
+class _GroupPayloadFile {
+  _GroupPayloadFile({
     required this.version,
     required this.payloadJson,
     required this.references,

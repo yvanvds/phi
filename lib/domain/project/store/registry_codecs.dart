@@ -16,3 +16,10 @@ Map<String, EntityPayloadCodec> defaultEntityCodecs() => const {
   RegistryKinds.mix: MixStripCodec(),
   RegistryKinds.domain: TimeDomainCodec(),
 };
+
+/// The kinds whose *groups* carry a persisted payload in `_group.json` (issue
+/// #165, design `docs/design/mix.md` §3). A `mix.` group is a bus with its own
+/// fader/sends, so it round-trips a [MixStripCodec] payload; every other kind
+/// has plain structural groups (order/colour metadata only). Handed to every
+/// [ProjectStore] alongside [defaultEntityCodecs].
+Set<String> defaultGroupPayloadKinds() => const {RegistryKinds.mix};

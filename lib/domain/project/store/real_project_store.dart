@@ -19,11 +19,17 @@ import 'project_store.dart';
 /// works on Windows and elsewhere.
 class RealProjectStore implements ProjectStore {
   /// Binds the store to the project [directory] (the `<name>.phi` folder).
-  /// [codecs] supplies per-kind payload (de)serialisers.
+  /// [codecs] supplies per-kind payload (de)serialisers; [groupPayloadKinds]
+  /// names the kinds whose groups persist a payload in `_group.json` (issue
+  /// #165).
   RealProjectStore(
     this.directory, {
     Map<String, EntityPayloadCodec> codecs = const {},
-  }) : _serializer = ProjectSerializer(codecs: codecs);
+    Set<String> groupPayloadKinds = const {},
+  }) : _serializer = ProjectSerializer(
+         codecs: codecs,
+         groupPayloadKinds: groupPayloadKinds,
+       );
 
   /// The `.phi` folder this store reads and writes.
   final Directory directory;
