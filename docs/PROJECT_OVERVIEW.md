@@ -788,6 +788,23 @@ main + app          (orchestration)
   lands a new entity, EXPORT round-trips the selected clip) — the old
   `midi_smf` integration test (which asserted the now-removed in-place overwrite)
   is superseded by it.
+  Issue #198 gives the zoomed roll **independent panning** (follow-up to #189,
+  which only moved the view by zooming). `PianoRollView` gains pan arithmetic —
+  `maxScrollBeats` / `maxScrollLanes`, `withScrollBeats` / `withScrollLanes`, and
+  `pannedBy` — all clamping through the *same* bounds zoom uses, so pan and zoom
+  share one source of truth and the clip can never pull away from an edge. A new
+  `PianoRollScrollbar` (`lib/surfaces/midi/piano_roll_scrollbar.dart`, unit-agnostic
+  — beats for the horizontal bar, lanes for the vertical) overlays the roll's edges
+  and hides itself while the axis fits; `PianoRollEditor` also pans on a
+  **middle-mouse drag** (a `Listener` path that leaves the left button free for
+  editing, active only once zoomed). Both feed the session-local view the
+  `MidiViewport` owns, so the velocity lane — sharing that view — scrolls in
+  lock-step for free. Covered by `PianoRollView` pan/clamp unit tests, a
+  `piano_roll_pan` widget test (scrollbars appear only when zoomed; thumb + middle
+  drags scroll the view) and an end-to-end `midi_pan` integration test (Ctrl+wheel
+  zoom, then a middle-drag pans and the velocity lane follows). The header snap
+  picker's dropped `SNAP` label (a narrow-width layout concern) is split out to
+  #274.
   Issue #136 finishes the `mix.` migration #124 bounded: a channel's **live mix
   state** (user volume, mute, solo) now persists alongside its identity. `MixStrip`
   gains `volume`/`muted`/`soloed` and `MixStripCodec` jumps to **schema v2**,

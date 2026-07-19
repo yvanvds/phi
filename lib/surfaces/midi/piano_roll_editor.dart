@@ -11,6 +11,7 @@ import '../../domain/midi/midi_note.dart';
 import 'piano_roll_caret.dart';
 import 'piano_roll_geometry.dart';
 import 'piano_roll_painter.dart';
+import 'piano_roll_scrollbar.dart';
 import 'piano_roll_view.dart';
 
 /// The interactive piano roll: hit-tests, drags and keyboard edits on top of
@@ -172,6 +173,47 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
       ),
     );
   }
+
+  // ── Pan (issue #198) ──────────────────────────────────────────────────────
+
+  /// Pan the zoomed view by a pointer delta (middle-drag). Only acts once the
+  /// roll has been zoomed (a non-null [PianoRollEditor.view]) — the fitted roll
+  /// has nothing to pan, and emitting a view there would freeze the auto-fit
+  /// scale against later resizes. Both axes clamp through the same bounds zoom
+  /// uses, so a drag can never run the clip off an edge.
+  void _panBy(Offset delta) {
+    final view = widget.view;
+    final onChanged = widget.onViewChanged;
+    if (view == null || onChanged == null || _size.isEmpty) return;
+    onChanged(
+      view.pannedBy(
+        dxPixels: delta.dx,
+        dyPixels: delta.dy,
+        viewportWidth: _size.width,
+        viewportHeight: _size.height,
+        beatSpan: _beatSpan,
+        laneSpan: _pitchSpan,
+      ),
+    );
+  }
+
+  /// Middle-mouse drag pans the roll (issue #198) — a conflict-free companion to
+  /// the scrollbars that leaves the left button free for editing. Tracked on the
+  /// enclosing [Listener] so it works anywhere over the roll, not just the thin
+  /// scrollbar strips.
+  bool _middlePanning = false;
+
+  void _onPointerDown(PointerDownEvent event) {
+    if (event.buttons == kMiddleMouseButton) _middlePanning = true;
+  }
+
+  void _onPointerMove(PointerMoveEvent event) {
+    if (_middlePanning && event.buttons == kMiddleMouseButton) {
+      _panBy(event.delta);
+    }
+  }
+
+  void _onPointerUp(PointerUpEvent event) => _middlePanning = false;
 
   /// Ctrl+wheel zooms: horizontal by default (anchored on the pointer's beat),
   /// vertical with Shift held. A bare wheel scroll is left alone.
@@ -451,6 +493,59 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
     );
   }
 
+  /// Overlay scrollbars for the zoomed roll (issue #198). They float over the
+  /// content edges (rather than reserving space) so the painter keeps the full
+  /// paint area and every existing fit/zoom arithmetic is untouched; each bar
+  /// hides itself when its axis already fits. Dragging a thumb reports a fresh
+  /// clamped scroll through the same view the middle-drag and zoom use, so the
+  /// velocity lane — which shares the view — tracks the horizontal one for free.
+  List<Widget> _scrollbars() {
+    final view = widget.view;
+    final onChanged = widget.onViewChanged;
+    if (view == null || onChanged == null || _size.isEmpty) return const [];
+    const t = PianoRollScrollbar.defaultThickness;
+    return [
+      Positioned(
+        left: 0,
+        right: t,
+        bottom: 0,
+        height: t,
+        child: PianoRollScrollbar(
+          axis: Axis.horizontal,
+          contentExtent: _beatSpan.toDouble(),
+          viewportExtent: _size.width / view.pixelsPerBeat,
+          offset: view.scrollBeats,
+          onScrollTo: (beats) => onChanged(
+            view.withScrollBeats(
+              beats,
+              viewportWidth: _size.width,
+              beatSpan: _beatSpan,
+            ),
+          ),
+        ),
+      ),
+      Positioned(
+        top: 0,
+        right: 0,
+        bottom: t,
+        width: t,
+        child: PianoRollScrollbar(
+          axis: Axis.vertical,
+          contentExtent: _pitchSpan.toDouble(),
+          viewportExtent: _size.height / view.laneHeight,
+          offset: view.scrollLanes,
+          onScrollTo: (lanes) => onChanged(
+            view.withScrollLanes(
+              lanes,
+              viewportHeight: _size.height,
+              laneSpan: _pitchSpan,
+            ),
+          ),
+        ),
+      ),
+    ];
+  }
+
   Widget _painter(double playhead) => CustomPaint(
     size: Size.infinite,
     painter: PianoRollPainter(
@@ -491,6 +586,10 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
                 Positioned.fill(
                   child: Listener(
                     onPointerSignal: _onPointerSignal,
+                    onPointerDown: _onPointerDown,
+                    onPointerMove: _onPointerMove,
+                    onPointerUp: _onPointerUp,
+                    onPointerCancel: (_) => _middlePanning = false,
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTapUp: _onTapUp,
@@ -512,6 +611,7 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
                     ),
                   ),
                 ),
+                ..._scrollbars(),
               ],
             );
           },
