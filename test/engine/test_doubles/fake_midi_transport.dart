@@ -1,4 +1,5 @@
 import 'package:clock/clock.dart';
+import 'package:phi/engine/bridge/materialised_synth.dart';
 import 'package:phi/engine/bridge/midi_transport.dart';
 import 'package:phi/engine/bridge/transport_note.dart';
 
@@ -60,6 +61,38 @@ class FakeMidiTransport implements MidiTransport {
     this.events = List<TransportNote>.of(events);
     this.loopBeats = loopBeats;
     pushCount++;
+  }
+
+  /// Synths connected via [connectSynth] and not since disconnected — lets a
+  /// test assert exactly which internal voices a session wired to this
+  /// transport.
+  final List<MaterialisedSynth> connectedSynths = [];
+
+  /// Whether the external MIDI-out port is currently connected.
+  bool midiOutConnected = false;
+
+  @override
+  void connectSynth(MaterialisedSynth synth) {
+    calls.add('connectSynth');
+    if (!connectedSynths.contains(synth)) connectedSynths.add(synth);
+  }
+
+  @override
+  void disconnectSynth(MaterialisedSynth synth) {
+    calls.add('disconnectSynth');
+    connectedSynths.remove(synth);
+  }
+
+  @override
+  void connectMidiOut() {
+    calls.add('connectMidiOut');
+    midiOutConnected = true;
+  }
+
+  @override
+  void disconnectMidiOut() {
+    calls.add('disconnectMidiOut');
+    midiOutConnected = false;
   }
 
   @override

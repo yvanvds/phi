@@ -1024,6 +1024,36 @@ main + app          (orchestration)
   voice → SMF → voice round-trip is lossless. Scene keying + voice colour fold a
   voice into a stable bucket via `voice_hash.dart`. Full engine/gateway voice
   materialisation is still a later epic issue.
+- **Gateway synth surface** (issue #206, epic #203, design
+  `docs/design/racks-and-voices.md` §3–§4) — the engine-bridge half that turns a
+  `synth.` *definition* into a live engine voice pool, the same Real/Fake split as
+  `YseGateway`/`MidiGateway`. `SynthGateway.materialiseSynth(definition, channel:)`
+  (`lib/engine/bridge/`) mints a `MaterialisedSynth` handle; the handle re-applies
+  an edited definition (`applyDefinition`), binds its output to a mix bus
+  (`bindToBus` → `Sound.fromSynth`, re-pointing on a later call), and disposes the
+  `Sound` before the `Synth` (the leak-safe order). Whether an edit re-applies
+  **live** or **rebuilds** the pool is the pure, shared
+  `SynthMaterialisation.needsRematerialise` rule (kind / voice-count change, an FM
+  bank swap, a sampler instrument swap → rebuild; VA panel and FM patch/override
+  edits → live). `RealMaterialisedSynth` wraps the confirmed yse calls per kind —
+  `addSineVoices` (on the allocated channel) / `addVaVoices` + the `setVa*` panel /
+  `addFmVoices` + `Dx7Bank.load` + `setFmPatch` + `setFm*` overrides /
+  `addSamplerVoices` over `SfzInstrument.load`/`fromSample` — behind a
+  `MixBusResolver` (bus id → `Channel`) and an `AssetPathResolver` (relative ref →
+  absolute path) the engine wires in #208. The session transport grew a connection
+  surface — `MidiTransport.connectSynth`/`disconnectSynth` (broadcast to an
+  internal voice, channel-filtered) and `connectMidiOut`/`disconnectMidiOut` (the
+  external port; the issue-#101 lazy play-connect now routes through it). Assets are
+  copied project-portable via `AssetImporter` / `FileAssetImporter`
+  (`lib/domain/project/store/`): an import copies a `.syx`/`.sfz`/sample into the
+  `.phi` folder's `assets/` and returns a POSIX relative ref, reusing byte-identical
+  files and uniquifying basename collisions. Engine-bridge seam with no user-visible
+  surface (the racks UI is #209–#212), so covered by unit tests via the fakes
+  (`FakeSynthGateway`, every kind + re-application + bus binding + disposal + the
+  transport connections) plus the real-FS asset-importer round-trip — no integration
+  test, exactly as the earlier bridge seams (`RegistryMirror`, the clip transport).
+  VA/FM/sampler pools register omni until `dart-yse` grows a channel parameter on
+  their `add*Voices` (filed upstream); sine already registers on its channel.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
