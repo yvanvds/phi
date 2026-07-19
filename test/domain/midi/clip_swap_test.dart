@@ -8,24 +8,23 @@ import 'package:phi/domain/midi/midi_transform_chain.dart';
 /// editor and engine player all share one [MidiClip] reference, so import
 /// mutates it rather than replacing it.
 void main() {
-  MidiClip clipOf(String name, List<MidiNote> notes, {int bars = 1}) =>
-      MidiClip(name: name, notes: notes, bars: bars, beatsPerBar: 4);
+  MidiClip clipOf(List<MidiNote> notes, {int bars = 1}) =>
+      MidiClip(notes: notes, bars: bars, beatsPerBar: 4);
 
   group('MidiClip.replaceWith', () {
-    test('overwrites name, meter and notes in place', () {
-      final target = clipOf('old', const [
+    test('overwrites meter and notes in place', () {
+      final target = clipOf(const [
         MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1),
       ]);
       final identity = target.notes; // same list instance must be reused
 
       target.replaceWith(
-        clipOf('new', const [
+        clipOf(const [
           MidiNote(pitch: 48, start: 0, duration: 0.5, velocity: 0.5),
           MidiNote(pitch: 55, start: 1, duration: 0.5, velocity: 0.5),
         ], bars: 3),
       );
 
-      expect(target.name, 'new');
       expect(target.bars, 3);
       expect(target.notes.length, 2);
       expect(target.notes.first.pitch, 48);
@@ -35,7 +34,7 @@ void main() {
 
   group('ClipEditor.reset', () {
     test('clears history and selection after the clip is swapped', () {
-      final clip = clipOf('c', const [
+      final clip = clipOf(const [
         MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1),
       ]);
       final editor = ClipEditor(clip);
@@ -63,7 +62,7 @@ void main() {
   group('MidiTransformChain.notifySourceChanged', () {
     test('bumps version and notifies so bound painters recompute', () {
       final chain = MidiTransformChain(
-        source: clipOf('c', const [
+        source: clipOf(const [
           MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1),
         ]),
       );

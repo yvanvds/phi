@@ -55,7 +55,6 @@ void main() {
   MidiTransformChain oneNoteChain(List<MidiTransform> transforms) =>
       MidiTransformChain(
         source: MidiClip(
-          name: 't',
           notes: const [
             MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1),
           ],
@@ -257,7 +256,6 @@ void main() {
     // A mid-velocity note, so a shape change moves the value, not just endpoints.
     final chain = MidiTransformChain(
       source: MidiClip(
-        name: 't',
         notes: const [
           MidiNote(pitch: 60, start: 0, duration: 1, velocity: 0.5),
         ],

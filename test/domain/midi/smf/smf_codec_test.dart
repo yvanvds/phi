@@ -31,7 +31,6 @@ void main() {
         // normalisation exactly; starts/durations are on a 1/16 grid so
         // beat → tick → beat is exact at 480 PPQN.
         final clip = MidiClip(
-          name: 'phrase A',
           bars: 4,
           beatsPerBar: 4,
           notes: const [
@@ -77,7 +76,6 @@ void main() {
 
     test('preserves per-note channel through the round trip', () {
       final clip = MidiClip(
-        name: 'multi',
         bars: 1,
         notes: const [
           MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1, channel: 0),
@@ -93,7 +91,6 @@ void main() {
 
     test('overlapping repeats of the same pitch stay paired (FIFO)', () {
       final clip = MidiClip(
-        name: 'overlap',
         bars: 1,
         notes: const [
           MidiNote(pitch: 60, start: 0.0, duration: 1.0, velocity: 1),
@@ -147,12 +144,14 @@ void main() {
       expect(_sorted(clip.notes).map((n) => n.pitch), [60, 64]);
     });
 
-    test('reads the track name and time signature', () {
+    test('tolerates a track name and reads the time signature', () {
+      // The clip carries no display name (issue #184): a track-name meta is
+      // skipped, but the reader still parses the events around it.
       final name = 'bassline'.codeUnits;
       final bytes = _smf(
         division: 480,
         trackEvents: [
-          0x00, 0xFF, 0x03, name.length, ...name, // track name
+          0x00, 0xFF, 0x03, name.length, ...name, // track name (ignored)
           0x00, 0xFF, 0x58, 0x04, 3, 2, 24, 8, // 3/4 time
           0x00, 0x90, 48, 80,
           0x83, 0x60, 0x80, 48, 0,
@@ -161,7 +160,7 @@ void main() {
       );
 
       final clip = reader.read(bytes);
-      expect(clip.name, 'bassline');
+      expect(clip.notes, hasLength(1));
       expect(clip.beatsPerBar, 3); // 3/4 → 3 quarter-note beats per bar
     });
 
@@ -176,28 +175,6 @@ void main() {
         ],
       );
       expect(reader.read(bytes).beatsPerBar, 3);
-    });
-
-    test('falls back to the given name when no name meta is present', () {
-      final bytes = _smf(
-        division: 480,
-        trackEvents: [
-          0x00,
-          0x90,
-          60,
-          100,
-          0x81,
-          0x70,
-          0x80,
-          60,
-          0,
-          0x00,
-          0xFF,
-          0x2F,
-          0x00,
-        ],
-      );
-      expect(reader.read(bytes, fallbackName: 'dropped').name, 'dropped');
     });
   });
 
@@ -228,7 +205,7 @@ void main() {
 
   group('writer', () {
     test('emits a well-formed format-0 header', () {
-      final bytes = writer.write(MidiClip(name: 'x', bars: 1, notes: const []));
+      final bytes = writer.write(MidiClip(bars: 1, notes: const []));
       expect(String.fromCharCodes(bytes.sublist(0, 4)), 'MThd');
       expect(bytes.sublist(4, 8), [0, 0, 0, 6]); // header length
       expect(bytes.sublist(8, 10), [0, 0]); // format 0

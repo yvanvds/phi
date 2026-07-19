@@ -56,7 +56,6 @@ void main() {
     final registry = registryWith(
       ClipDocument(
         source: MidiClip(
-          name: 'loaded',
           bars: 2,
           notes: const [
             MidiNote(pitch: 61, start: 0, duration: 1, velocity: 0.42),
@@ -89,7 +88,6 @@ void main() {
     final registry = registryWith(
       ClipDocument(
         source: MidiClip(
-          name: 'loaded',
           bars: 1,
           notes: const [
             MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1),
@@ -117,7 +115,6 @@ void main() {
     final registry = registryWith(
       ClipDocument(
         source: MidiClip(
-          name: 'loaded',
           bars: 1,
           notes: const [
             MidiNote(pitch: 61, start: 0, duration: 1, velocity: 0.5),

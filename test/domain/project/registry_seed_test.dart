@@ -19,10 +19,13 @@ void main() {
       // map-native like the mix strips.
       final payload = clip!.payload! as Map<String, Object?>;
       final document = ClipDocument.fromJson(payload);
-      expect(document.source.name, 'phrase A');
       expect(document.source.notes, isNotEmpty);
       // The default demo chain persists alongside the source notes (issue #135).
       expect(document.chain, isNotEmpty);
+      // A fresh seed carries the loop flag on and no display name (issue #184).
+      expect(document.loop, isTrue);
+      expect(payload['source'], isA<Map<String, Object?>>());
+      expect((payload['source']! as Map).containsKey('name'), isFalse);
     });
 
     test('creates the demo time domains under the domain namespace', () {

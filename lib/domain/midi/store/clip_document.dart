@@ -19,6 +19,9 @@ import 'midi_transform_graph_codec.dart';
 /// - [chain] — the linear transform list (the chain mode's pipeline).
 /// - [graph] — the branching [MidiTransformGraph], present once the clip has been
 ///   converted to graph mode (else `null`).
+/// - [loop] — whether playback loops the clip's declared length (issue #184,
+///   design §7 decision 4). **On by default** for new clips; performance play
+///   state itself is never persisted (a loaded project starts silent).
 ///
 /// [toJson] / [fromJson] are the wire form; the `clip.` [MidiClipCodec] wraps
 /// them behind the store's per-kind codec seam and handles the v1 → v2 migration.
@@ -28,6 +31,7 @@ class ClipDocument {
     this.mode = MidiClipMode.chain,
     this.chain = const [],
     this.graph,
+    this.loop = true,
   });
 
   /// Rebuilds a document from the map [toJson] produced, migrating the v1 form
@@ -57,6 +61,8 @@ class ClipDocument {
       graph: json['graph'] is Map
           ? graphCodec.decode(_map(json['graph']), source)
           : null,
+      // Absent on pre-#184 payloads → defaults on, matching a fresh clip.
+      loop: json['loop'] as bool? ?? true,
     );
   }
 
@@ -72,6 +78,10 @@ class ClipDocument {
   /// The branching transform graph, or `null` if the clip is chain-only.
   final MidiTransformGraph? graph;
 
+  /// Whether playback loops the clip's declared length. On by default; see the
+  /// class doc (issue #184, design §7 decision 4).
+  final bool loop;
+
   /// Flattens the document to a JSON-compatible map. [transformCodec] encodes
   /// the chain / graph node transforms.
   Map<String, Object?> toJson({
@@ -83,6 +93,7 @@ class ClipDocument {
       'mode': mode.name,
       'chain': [for (final t in chain) transformCodec.encode(t)],
       if (graph != null) 'graph': graphCodec.encode(graph!),
+      'loop': loop,
     };
   }
 
@@ -90,17 +101,18 @@ class ClipDocument {
 
   /// The JSON form of a source [MidiClip] — its meter and notes. Shared by
   /// [toJson] and the v1 migration so the clip encoding lives in one place.
+  ///
+  /// The clip carries no display name (issue #184); a `name` on a legacy payload
+  /// is simply no longer written or read.
   static Map<String, Object?> clipToJson(MidiClip clip) => <String, Object?>{
-    'name': clip.name,
     'bars': clip.bars,
     'beatsPerBar': clip.beatsPerBar,
     'notes': [for (final note in clip.notes) _noteToJson(note)],
   };
 
   /// Rebuilds a source [MidiClip] from the map [clipToJson] produced (also the
-  /// whole v1 payload).
+  /// whole v1 payload). Any `name` a legacy payload carries is ignored.
   static MidiClip clipFromJson(Map<String, Object?> json) => MidiClip(
-    name: json['name'] as String? ?? 'clip',
     bars: (json['bars'] as num?)?.toInt() ?? 4,
     beatsPerBar: (json['beatsPerBar'] as num?)?.toInt() ?? 4,
     notes: [

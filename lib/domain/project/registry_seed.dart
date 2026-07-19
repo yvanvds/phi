@@ -35,7 +35,9 @@ void seedDefaultProject(ProjectRegistry registry) {
   registry.createEntity(
     EntityAddress(
       kind: RegistryKinds.clip,
-      segments: [NameSlug.of(chain.source.name, fallback: 'clip')],
+      // The clip carries no display name (issue #184); its identity is the
+      // address leaf, so seed it directly at `clip.phrase_a`.
+      segments: const [phraseASlug],
     ),
     payload: document.toJson(),
   );

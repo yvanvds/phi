@@ -21,10 +21,11 @@ import 'smf_exception.dart';
 class SmfReader {
   const SmfReader();
 
-  /// Parse [bytes] into a [MidiClip]. [fallbackName] is used only when the
-  /// file carries no track-name meta event. Throws [SmfFormatException] on a
-  /// malformed or unsupported stream.
-  MidiClip read(Uint8List bytes, {String fallbackName = 'imported'}) {
+  /// Parse [bytes] into a [MidiClip]. The clip carries no display name
+  /// (issue #184) — a track-name meta event is tolerated but not read; the
+  /// imported entity is named by the library, not the file. Throws
+  /// [SmfFormatException] on a malformed or unsupported stream.
+  MidiClip read(Uint8List bytes) {
     final cursor = _Cursor(bytes);
 
     // ── Header chunk (MThd) ────────────────────────────────────────────────
@@ -50,7 +51,6 @@ class SmfReader {
 
     // ── Track chunks (MTrk) ────────────────────────────────────────────────
     final notes = <MidiNote>[];
-    String? clipName;
     int? tsNumerator;
     int? tsDenominator;
 
@@ -98,8 +98,8 @@ class SmfReader {
           final len = cursor.readVarLen();
           final data = cursor.readBytes(len);
           switch (metaType) {
-            case 0x03: // track / sequence name
-              clipName ??= _decodeText(data);
+            // 0x03 (track / sequence name) is tolerated but ignored — the clip
+            // has no display name (issue #184); the library names the entity.
             case 0x58 when data.length >= 2: // time signature
               tsNumerator ??= data[0];
               tsDenominator ??= 1 << data[1];
@@ -160,12 +160,7 @@ class SmfReader {
 
     final beatsPerBar = _beatsPerBar(tsNumerator, tsDenominator);
     final bars = _barsFor(notes, beatsPerBar);
-    return MidiClip(
-      name: clipName ?? fallbackName,
-      notes: notes,
-      bars: bars,
-      beatsPerBar: beatsPerBar,
-    );
+    return MidiClip(notes: notes, bars: bars, beatsPerBar: beatsPerBar);
   }
 
   static void _closeNote(
@@ -218,11 +213,6 @@ class SmfReader {
     if (maxEnd <= 0) return 1;
     final bars = (maxEnd / beatsPerBar).ceil();
     return bars < 1 ? 1 : bars;
-  }
-
-  static String _decodeText(List<int> data) {
-    // SMF text is Latin-1 by convention; map bytes straight to code units.
-    return String.fromCharCodes(data);
   }
 }
 

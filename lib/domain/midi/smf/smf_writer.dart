@@ -10,7 +10,8 @@ import '../midi_clip.dart';
 /// ticks. With the default 480 PPQN every 1/480-of-a-quarter grid position is
 /// representable exactly, so any sane editor grid survives export → import.
 ///
-/// The track carries a name meta (from [MidiClip.name]), an `x/4` time
+/// The track carries a name meta (from the [write] `name` argument — the clip
+/// itself carries no display name as of issue #184), an `x/4` time
 /// signature derived from [MidiClip.beatsPerBar], a 120 BPM tempo (Phi has no
 /// clip-level tempo yet), then the paired note-on/note-off events and an
 /// end-of-track meta. Velocity is de-normalised to `1..127` (0 is reserved for
@@ -26,8 +27,11 @@ class SmfWriter {
   /// Pulses per quarter note written into the header division field.
   final int ticksPerBeat;
 
-  Uint8List write(MidiClip clip) {
-    final track = _buildTrack(clip);
+  /// Encode [clip] to SMF bytes. [name] fills the track-name meta event — the
+  /// clip is named by its registry address leaf (issue #184), so the caller
+  /// passes that leaf; it defaults to `'clip'` for nameless callers (tests).
+  Uint8List write(MidiClip clip, {String name = 'clip'}) {
+    final track = _buildTrack(clip, name);
     final out = BytesBuilder();
 
     // ── Header chunk ───────────────────────────────────────────────────────
@@ -45,7 +49,7 @@ class SmfWriter {
     return out.toBytes();
   }
 
-  Uint8List _buildTrack(MidiClip clip) {
+  Uint8List _buildTrack(MidiClip clip, String trackName) {
     // Flatten notes into timed events, then delta-encode. Note-offs sort
     // before note-ons at the same tick so a re-struck pitch isn't silenced by
     // the previous note's release.
@@ -71,7 +75,7 @@ class SmfWriter {
     // Meta: track name.
     _addDelta(body, 0);
     body.add([0xFF, 0x03]);
-    final name = _ascii(clip.name);
+    final name = _ascii(trackName);
     _addVarLen(body, name.length);
     body.add(name);
 

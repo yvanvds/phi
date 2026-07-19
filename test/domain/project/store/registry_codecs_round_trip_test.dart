@@ -42,8 +42,9 @@ void main() {
     final clip = loaded.registry.entityAt(addr('clip.phrase_a'))!.payload;
     // The clip payload is a v2 ClipDocument map (source notes + interpretation).
     final document = ClipDocument.fromJson((clip! as Map).cast());
-    expect(document.source.name, 'phrase A');
     expect(document.source.notes, isNotEmpty);
+    // The loop flag survives the store round trip (issue #184).
+    expect(document.loop, isTrue);
     // The transform chain round-tripped alongside the source (issue #135).
     expect(document.chain, isNotEmpty);
 

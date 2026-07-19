@@ -463,7 +463,8 @@ void main() {
       engine.start();
 
       expect(engine.midiOrNull, isNotNull);
-      expect(engine.midi.chain.source.name, 'phrase A');
+      // The seeded demo clip (`phrase A`, 10 notes) is loaded into the player.
+      expect(engine.midi.chain.source.notes, hasLength(10));
     });
 
     test('midi player shares one source clip with its editor', () {

@@ -17,7 +17,6 @@ import '../test_doubles/fake_midi_gateway.dart';
 /// bound to the chain / editor / graph controller follow without re-wiring.
 MidiTransformChain _seedChain() => MidiTransformChain(
   source: MidiClip(
-    name: 'seed',
     bars: 1,
     notes: const [MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1)],
   ),
@@ -44,7 +43,6 @@ void main() {
 
     final document = ClipDocument(
       source: MidiClip(
-        name: 'loaded',
         bars: 2,
         notes: const [
           MidiNote(pitch: 72, start: 0, duration: 0.5, velocity: 0.7),
@@ -60,7 +58,6 @@ void main() {
     expect(identical(controller.chain, liveChain), isTrue);
     expect(identical(controller.editor, liveEditor), isTrue);
     expect(identical(controller.chain.source, liveSource), isTrue);
-    expect(controller.chain.source.name, 'loaded');
     expect(controller.chain.source.bars, 2);
     expect(controller.chain.source.notes.map((n) => n.pitch), [72, 74]);
     expect(controller.chain.transforms.single.label, 'loaded +5');
@@ -84,7 +81,6 @@ void main() {
     );
 
     final loadedSource = MidiClip(
-      name: 'g',
       bars: 1,
       notes: const [MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1)],
     );

@@ -12,8 +12,7 @@ import 'package:phi/surfaces/midi/piano_roll_geometry.dart';
 const _minPitch = 60;
 const _maxPitch = 64;
 
-MidiClip _clip(List<MidiNote> notes) =>
-    MidiClip(name: 't', bars: 4, notes: notes);
+MidiClip _clip(List<MidiNote> notes) => MidiClip(bars: 4, notes: notes);
 
 void main() {
   late ClipEditor editor;

@@ -1,10 +1,14 @@
 import 'midi_note.dart';
 
-/// A named bag of [MidiNote]s with a meter.
+/// A bag of [MidiNote]s with a meter.
 ///
 /// Per Phi's vision (§3.7), clips are "interpreted, not played": the
 /// `notes` list is the source material that a [MidiTransformChain] reads
 /// and rewrites before anything reaches a voice.
+///
+/// The clip carries **no free-form display name** (issue #184): it is named by
+/// its registry address leaf everywhere — the library panel, the editor header,
+/// live code — the same one-name re-alignment the mix epic made for strips.
 ///
 /// The clip is **mutable** — the note-editing layer (issue #28) authors it
 /// in place through a `ClipEditor` rather than rebuilding immutable copies.
@@ -13,13 +17,10 @@ import 'midi_note.dart';
 /// raw [notes] list is exposed for transforms and painting to read.
 class MidiClip {
   MidiClip({
-    required this.name,
     required List<MidiNote> notes,
     required this.bars,
     this.beatsPerBar = 4,
   }) : notes = List<MidiNote>.of(notes);
-
-  String name;
 
   /// Growable, mutable. Order is authoring order, not sorted by time — note
   /// identity inside an edit session is the list index, so callers must not
@@ -53,7 +54,6 @@ class MidiClip {
   /// Callers must reset any index-based state (undo stack, selection) after,
   /// since the note list is rebuilt from scratch.
   void replaceWith(MidiClip other) {
-    name = other.name;
     bars = other.bars;
     beatsPerBar = other.beatsPerBar;
     notes
