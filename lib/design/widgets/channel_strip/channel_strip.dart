@@ -35,9 +35,11 @@ class ChannelStrip extends StatelessWidget {
     this.onSoloToggle,
     this.onRename,
     this.onRemove,
+    this.removeKey,
     this.dragHandle,
     this.isMaster = false,
     this.soloable = true,
+    this.outputPeaks = const <double>[],
     super.key,
   });
 
@@ -93,6 +95,20 @@ class ChannelStrip extends StatelessWidget {
   /// remove control is shown (the master strip is never removed).
   final VoidCallback? onRemove;
 
+  /// Optional key for the header remove control, overriding the shared
+  /// [removeButtonKey] default. A rack shows several strips at once — each with
+  /// its own remove control under the same default key — so a caller that needs
+  /// to target one specific strip's control (a return, to open the delete-impact
+  /// dialog) passes a distinct key here. Ignored when [onRemove] is null.
+  final Key? removeKey;
+
+  /// Per speaker-output post-fader peaks, one entry per output — the master
+  /// strip's layout-aware meter (design `docs/design/mix.md` §6): stereo renders
+  /// two bars, 5.1 renders six. Empty (the default) on ordinary strips, which
+  /// keep their single overlaid peak meter. Each bar is keyed by [outputMeterKey]
+  /// so tests can assert the count derived from the live output count.
+  final List<double> outputPeaks;
+
   /// An optional drag affordance placed at the start of the header row (before
   /// the voice dot) — the Mix surface fills it with a `Draggable` grip so a strip
   /// can be dragged into / out of a group or reordered (design §7). Left null on
@@ -126,6 +142,10 @@ class ChannelStrip extends StatelessWidget {
           _faderWithMeter(),
           const SizedBox(height: PhiSpacing.s2),
           _readout(),
+          if (outputPeaks.isNotEmpty) ...[
+            const SizedBox(height: PhiSpacing.s2),
+            _outputMeters(),
+          ],
           if (!isMaster) ...[
             const SizedBox(height: PhiSpacing.s2),
             _muteSoloButtons(),
@@ -138,6 +158,12 @@ class ChannelStrip extends StatelessWidget {
   /// Key on the header's remove control — exposed so widget tests can trigger
   /// removal without depending on the glyph or layout.
   static const Key removeButtonKey = Key('ChannelStrip.removeButton');
+
+  /// Key on the [index]th per-output meter bar (design §6) — exposed so widget
+  /// tests can assert the bar count the strip derived from the live output count
+  /// (two on stereo, six on 5.1) without depending on layout offsets.
+  static Key outputMeterKey(int index) =>
+      Key('ChannelStrip.outputMeter.$index');
 
   Widget _header() {
     return Row(
@@ -159,7 +185,10 @@ class ChannelStrip extends StatelessWidget {
         Expanded(child: _name()),
         if (onRemove != null) ...[
           const SizedBox(width: PhiSpacing.s1),
-          _RemoveButton(onPressed: onRemove!),
+          _RemoveButton(
+            onPressed: onRemove!,
+            buttonKey: removeKey ?? removeButtonKey,
+          ),
         ],
       ],
     );
@@ -326,6 +355,31 @@ class ChannelStrip extends StatelessWidget {
     );
   }
 
+  /// The master strip's layout-aware meter (design §6): a fixed-height row of
+  /// thin vertical bars, one per speaker output, each filling bottom-up to its
+  /// output's peak. The bar count is [outputPeaks.length] — the live output
+  /// count — so a device/layout swap re-renders it (two bars on stereo, six on
+  /// 5.1).
+  Widget _outputMeters() {
+    return SizedBox(
+      height: 44,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < outputPeaks.length; i++) ...[
+            if (i > 0) const SizedBox(width: 2),
+            Expanded(
+              child: _OutputMeterBar(
+                key: outputMeterKey(i),
+                peak: outputPeaks[i].clamp(0.0, 1.0),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _muteSoloButtons() {
     return Row(
       children: [
@@ -416,9 +470,10 @@ class _StripButton extends StatelessWidget {
 /// Compact header affordance to remove a user strip — a small `×` box that
 /// mirrors the mix header's `+` add control.
 class _RemoveButton extends StatelessWidget {
-  const _RemoveButton({required this.onPressed});
+  const _RemoveButton({required this.onPressed, required this.buttonKey});
 
   final VoidCallback onPressed;
+  final Key buttonKey;
 
   @override
   Widget build(BuildContext context) {
@@ -428,7 +483,7 @@ class _RemoveButton extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onPressed,
         child: Container(
-          key: ChannelStrip.removeButtonKey,
+          key: buttonKey,
           width: 16,
           height: 16,
           alignment: Alignment.center,
@@ -440,6 +495,45 @@ class _RemoveButton extends StatelessWidget {
           child: Text(
             '×',
             style: PhiType.monoS().copyWith(color: PhiColors.fg2, height: 1),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One vertical speaker-output meter bar in the master strip (design §6): a dark
+/// track with a bottom-anchored fill scaled to [peak] and tinted by level
+/// (green below −6, amber to −2.5, hot at the top). Always present so its key is
+/// stable — only the fill height reacts to the signal.
+class _OutputMeterBar extends StatelessWidget {
+  const _OutputMeterBar({required this.peak, super.key});
+
+  /// This output's post-fader peak, clamped to `[0.0, 1.0]`.
+  final double peak;
+
+  Color get _fillColor {
+    if (peak > 0.85) return PhiColors.hot;
+    if (peak > 0.60) return PhiColors.voice3;
+    return PhiColors.voice4;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: PhiColors.bg0,
+        border: Border.all(color: PhiColors.line1),
+        borderRadius: PhiRadii.all1,
+      ),
+      child: FractionallySizedBox(
+        alignment: Alignment.bottomCenter,
+        heightFactor: peak <= 0 ? 0.0 : peak,
+        widthFactor: 1,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: _fillColor,
+            borderRadius: PhiRadii.all1,
           ),
         ),
       ),
