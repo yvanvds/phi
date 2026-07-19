@@ -269,5 +269,68 @@ void main() {
         session.dispose();
       });
     });
+
+    test('a length edit while playing re-pushes the loop length live (#200)', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final session = ClipSession(
+          address: null,
+          host: _StubHost(gateway),
+          chain: _twoBarChain(), // 2 bars × 4 = 8 beats
+        );
+
+        session.play();
+        async.elapse(const Duration(milliseconds: 20));
+        session.advance(0.016);
+        final transport = gateway.transport!;
+        expect(transport.loopBeats, 8);
+        final pushes = transport.pushCount;
+
+        // Grow the clip's declared length mid-play. A pure length edit never
+        // rewrites note times, so the memoised output keeps its identity and the
+        // note-list push-on-change never fires — only the loop window moved.
+        session.editor.setLength(bars: 5); // 5 × 4 = 20 beats
+        session.advance(0.016);
+
+        // The advance tick caught the moved loop window and re-pushed it, so the
+        // audible loop follows the declared length without a restart or a loop
+        // toggle.
+        expect(transport.pushCount, pushes + 1);
+        expect(transport.loopBeats, 20);
+
+        session.stop();
+        session.dispose();
+      });
+    });
+
+    test('a mid-play length edit while loop-off stays a one-shot (#200)', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final session = ClipSession(
+          address: null,
+          host: _StubHost(gateway),
+          chain: _twoBarChain(),
+          loop: false,
+        );
+
+        session.play();
+        async.elapse(const Duration(milliseconds: 20));
+        session.advance(0.016);
+        final transport = gateway.transport!;
+        expect(transport.loopBeats, lessThanOrEqualTo(0));
+        final pushes = transport.pushCount;
+
+        // With loop off the window is a one-shot regardless of length, so a
+        // length edit must not spuriously re-push.
+        session.editor.setLength(bars: 5);
+        session.advance(0.016);
+
+        expect(transport.pushCount, pushes);
+        expect(transport.loopBeats, lessThanOrEqualTo(0));
+
+        session.stop();
+        session.dispose();
+      });
+    });
   });
 }
