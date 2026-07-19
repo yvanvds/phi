@@ -1399,6 +1399,26 @@ class PhiEngine {
     _flushSendGesture((address: address, slot: slot));
   }
 
+  /// The aux sends stored on [channel] in slot order — the rows the Mix
+  /// surface's SENDS area renders (design §4). Empty when the channel has no
+  /// backing strip (e.g. the master) or carries no sends. Read from the stored
+  /// payload, so it reflects the last *persisted* level: a live send-level drag
+  /// keeps its transient value in the mini-fader until the gesture commits.
+  List<MixSend> channelSends(MixerChannel channel) {
+    final address = _addressOf(channel);
+    if (address == null) return const [];
+    return _storedStrip(address)?.sends ?? const [];
+  }
+
+  /// The materialised return bus a send [target] addresses, or `null` when no
+  /// such return exists (a dangling target). Lets the Mix surface resolve a send
+  /// row's stored target to the [MixerChannel] the send-edit API needs — the
+  /// target picker's selected value and the pre/post toggle both go through it.
+  MixerChannel? returnChannelFor(EntityAddress target) {
+    final mc = _channelsByAddress[target];
+    return (mc != null && mc.isReturn) ? mc.channel : null;
+  }
+
   void _flushSendGesture(({EntityAddress address, int slot}) gesture) {
     final strip = _storedStrip(gesture.address);
     if (strip == null || gesture.slot >= strip.sends.length) return;

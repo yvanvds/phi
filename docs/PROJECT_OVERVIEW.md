@@ -785,6 +785,27 @@ main + app          (orchestration)
   real drag gestures), and an end-to-end `mix_grouped_rack` integration test (add a
   group + channels → drag both in → reorder → save → reload restores the group with
   its children in the dragged order).
+  Issue #170 adds the **returns section + per-strip sends UI** (design
+  `docs/design/mix.md` §4, §7). The Mix rack pins a framed **returns section**
+  beside master, one `_ReturnStrip` per `PhiEngine.returns` bus — fader, mute,
+  meter, **no solo** (returns are exempt, §5, via a new `ChannelStrip.soloable`
+  flag) and no drag handle. Every leaf strip and group-bus header gains a compact
+  **SENDS** area under it: one row per aux send — a returns-only target picker
+  (`PhiSelect<MixerChannel>`), a vertical-drag level **mini-fader**, a pre/post
+  toggle, and a remove `×` — plus an add-send picker while a return exists to
+  target (slots auto-upgrade, no cap). The surface reads/edits sends through two
+  new engine getters (`channelSends`, `returnChannelFor`) over the #168 send-edit
+  API (`setChannelSend` / `clearChannelSend` / `setChannelSendLevel` +
+  `begin`/`endSendLevelGesture`): editing a target rewires the slot through the
+  registry sync, removing clears it, and a level drag is **gesture-coalesced**
+  (the mini-fader holds a transient value during the drag; the engine journals one
+  payload command on release) — the same pattern as the fader. Covered by widget
+  tests (`mix_surface` — add/edit/remove send, returns-only picker, pre/post
+  toggle, one-command-per-drag coalescing, group-bus sends, returns render without
+  a solo button) and an end-to-end `mix_sends_and_returns` integration test (wire
+  a send → flip pre-fader → drag its level → save → reload restores target,
+  pre/post and level, and the return re-renders in its section). Return delete via
+  the delete-impact dialog stays with #171.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
