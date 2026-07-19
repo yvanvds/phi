@@ -38,32 +38,41 @@ import 'midi_graph_controller.dart';
 /// [MidiTransformGraph]'s `evaluate` against the host's live [GraphEvalContext].
 class ClipSession {
   ClipSession({
-    required this.address,
+    required EntityAddress? address,
     required this.host,
     required MidiTransformChain chain,
     ClipEditor? editor,
     MidiGraphController? graphController,
-    this.clockName = defaultClockName,
+    String clockName = defaultClockName,
     this.sceneKeyBase = 0,
     bool loop = true,
-  }) : _chain = chain,
+  }) : _address = address,
+       _clockName = clockName,
+       _chain = chain,
        _loop = loop,
        editor = editor ?? ClipEditor(chain.source),
        graphController =
            graphController ?? MidiGraphController.seededFrom(chain);
 
+  EntityAddress? _address;
+
   /// The clip entity this session plays/edits. `null` for the engine's default
-  /// boot session, which exists before any project clip is opened.
-  final EntityAddress? address;
+  /// boot session, which exists before any project clip is opened. Re-keyed once
+  /// when the engine reconciles the boot session with the project's first clip on
+  /// open (issue #197) — see [rekey].
+  EntityAddress? get address => _address;
 
   /// The shared engine pieces this session borrows for playback.
   final ClipSessionHost host;
+
+  String _clockName;
 
   /// Name of the domain clock this session's transport binds to. Unique per
   /// session — the manager derives it from [address] — so concurrent sessions
   /// each run on their own clock, the polytemporal shape (issue #187). Defaults
   /// to [defaultClockName] for a lone session that never runs beside another.
-  final String clockName;
+  /// Updated alongside the address when the boot session is reconciled ([rekey]).
+  String get clockName => _clockName;
 
   /// Base offset for this session's scene-field voice keys, so concurrent
   /// sessions occupy disjoint key bands in the one shared [SceneField]: a note's
@@ -272,6 +281,19 @@ class ClipSession {
     _prevBeat = now;
     final total = _chain.source.totalBeats;
     _playhead.value = total > 0 ? now % total : now;
+  }
+
+  /// Re-key this session to [address], binding its transport to [clockName]
+  /// (issue #197). The engine promotes the boot session (keyed `null`) to the
+  /// project's first clip on open, so the panel's later selection of that clip
+  /// reuses this very session — with its live chain / editor / graph and any
+  /// already-bound surfaces — rather than minting an address-keyed duplicate
+  /// beside it. Intended before this session's transport is minted (the clock
+  /// name is read at first [play]); the boot reconciliation always runs at open,
+  /// before any play.
+  void rekey({required EntityAddress address, required String clockName}) {
+    _address = address;
+    _clockName = clockName;
   }
 
   /// Adopt a loaded [document] into the live clip objects **in place** (issue

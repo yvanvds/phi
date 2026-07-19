@@ -28,28 +28,27 @@ import 'midi_graph_controller.dart';
 /// notifications and graph *layout* (position) changes — which don't alter the
 /// persisted document — never spuriously dirty the project.
 class ClipRegistryPublisher {
-  /// Binds to the engine's live clip objects. [graphController] is optional —
-  /// setups without a graph editor (a bare chain) publish a chain-only document.
-  ClipRegistryPublisher({
-    required this.chain,
-    required this.editor,
-    this.graphController,
-    bool Function()? loop,
-  }) : _loop = loop;
-
-  /// The linear pipeline + source clip. Notifies on chip add/remove/toggle/edit.
-  final MidiTransformChain chain;
-
-  /// The piano-roll authoring controller. Notifies on every note edit.
-  final ClipEditor editor;
-
-  /// The branching-graph editor, or `null` when none is wired.
-  final MidiGraphController? graphController;
+  /// Creates an unbound publisher. [loop] reads the edited clip's live loop flag
+  /// (issue #190) — `null` falls back to `true`. The live clip objects are bound
+  /// (and rebound as the edited session swaps, issue #197) through [bind].
+  ClipRegistryPublisher({bool Function()? loop}) : _loop = loop;
 
   /// Reads the edited clip's live loop flag (issue #190). `null` falls back to
   /// `true`, matching a fresh clip's default. The loop flag is not carried by any
   /// of the observed listenables, so a toggle persists via [republish].
   final bool Function()? _loop;
+
+  /// The live clip objects the publisher currently observes — the edited session's
+  /// (issue #197). `null` while unbound. [bind] swaps them, moving the listeners
+  /// off the previously edited session and onto the newly opened one:
+  /// - the linear pipeline + source clip ([_chain]) notifies on chip
+  ///   add/remove/toggle/edit and length changes;
+  /// - the piano-roll authoring controller ([_editor]) notifies on every note edit;
+  /// - the branching-graph editor ([_graphController]), or `null` when none is
+  ///   wired, notifies on graph edits.
+  MidiTransformChain? _chain;
+  ClipEditor? _editor;
+  MidiGraphController? _graphController;
 
   ProjectRegistry? _registry;
   EntityAddress? _address;
@@ -63,16 +62,22 @@ class ClipRegistryPublisher {
   /// The `clip.` entity this publisher currently writes to, or `null`.
   EntityAddress? get boundAddress => _address;
 
-  /// Start publishing the live clip into the entity at [clipAddress] in
+  /// Start publishing the live clip objects — [chain], [editor], and optional
+  /// [graphController], the edited session's — into the entity at [clipAddress] in
   /// [registry], recording each change through [recordCommand]. A `null`
   /// [clipAddress] (or one absent from the registry) leaves the publisher
   /// unbound — there is nothing to publish into.
   ///
-  /// The current live state seeds the de-dupe baseline, so binding never pushes
-  /// on its own: a freshly loaded document survives untouched until the performer
-  /// actually edits the clip.
+  /// Rebinds cleanly when already bound (the edited session swapped, issue #197):
+  /// the previously observed session's listeners are detached first, then the new
+  /// ones attached. The current live state seeds the de-dupe baseline, so binding
+  /// never pushes on its own — a freshly opened clip survives untouched until the
+  /// performer actually edits it.
   void bind({
     required ProjectRegistry registry,
+    required MidiTransformChain chain,
+    required ClipEditor editor,
+    MidiGraphController? graphController,
     EntityAddress? clipAddress,
     void Function(ProjectCommand)? recordCommand,
   }) {
@@ -80,6 +85,9 @@ class ClipRegistryPublisher {
     if (clipAddress == null || !registry.contains(clipAddress)) return;
     _registry = registry;
     _address = clipAddress;
+    _chain = chain;
+    _editor = editor;
+    _graphController = graphController;
     _recordCommand = recordCommand;
     _lastPushedJson = jsonEncode(_snapshot());
     chain.addListener(_onChanged);
@@ -97,13 +105,16 @@ class ClipRegistryPublisher {
   /// Stop publishing and detach every listener. Idempotent.
   void unbind() {
     if (_listening) {
-      chain.removeListener(_onChanged);
-      editor.removeListener(_onChanged);
-      graphController?.removeListener(_onChanged);
+      _chain?.removeListener(_onChanged);
+      _editor?.removeListener(_onChanged);
+      _graphController?.removeListener(_onChanged);
       _listening = false;
     }
     _registry = null;
     _address = null;
+    _chain = null;
+    _editor = null;
+    _graphController = null;
     _recordCommand = null;
     _lastPushedJson = null;
   }
@@ -117,7 +128,7 @@ class ClipRegistryPublisher {
   void _onChanged() {
     final registry = _registry;
     final address = _address;
-    if (registry == null || address == null) return;
+    if (registry == null || address == null || _chain == null) return;
     if (!registry.contains(address)) return;
     final snapshot = _snapshot();
     final encoded = jsonEncode(snapshot);
@@ -129,7 +140,8 @@ class ClipRegistryPublisher {
   }
 
   Map<String, Object?> _snapshot() {
-    final gc = graphController;
+    final chain = _chain!;
+    final gc = _graphController;
     return ClipDocument(
       source: chain.source,
       mode: gc?.mode ?? MidiClipMode.chain,
