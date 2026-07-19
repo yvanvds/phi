@@ -140,5 +140,134 @@ void main() {
         session.dispose();
       });
     });
+
+    test('pause freezes the position; resume continues where it left off', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final session = ClipSession(
+          address: null,
+          host: _StubHost(gateway),
+          // 8 bars = 32 beats, so nothing wraps the loop within the test.
+          chain: MidiTransformChain(
+            source: MidiClip(
+              bars: 8,
+              notes: const [
+                MidiNote(pitch: 60, start: 0.0, duration: 1.0, velocity: 1.0),
+              ],
+            ),
+          ),
+        );
+
+        session.play();
+        // 120 BPM = 2 beats/s. One second in ≈ beat 2.
+        async.elapse(const Duration(seconds: 1));
+        session.advance(0.016);
+        final atPause = session.playhead.value;
+        expect(atPause, closeTo(2, 0.1));
+
+        expect(session.pause(), isTrue);
+        expect(session.isPaused, isTrue);
+        expect(session.isPlaying, isFalse);
+        // The bound clock is frozen (tempo 0) while paused.
+        expect(gateway.transport!.tempo, 0);
+
+        // A long pause must not advance the held position.
+        async.elapse(const Duration(seconds: 5));
+        expect(session.playhead.value, atPause);
+
+        expect(session.resume(), isTrue);
+        expect(session.isPlaying, isTrue);
+        expect(session.isPaused, isFalse);
+        // The clock rate is restored on resume.
+        expect(gateway.transport!.tempo, closeTo(120, 1e-9));
+
+        // Another second ≈ 2 more beats → ~beat 4. Crucially NOT 2 + 10 (the
+        // five paused seconds a running clock would have added) + 2.
+        async.elapse(const Duration(seconds: 1));
+        session.advance(0.016);
+        expect(session.playhead.value, closeTo(4, 0.2));
+
+        session.stop();
+        session.dispose();
+      });
+    });
+
+    test('pause reuses the same transport on resume (no restart)', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final session = ClipSession(
+          address: null,
+          host: _StubHost(gateway),
+          chain: _twoBarChain(),
+        );
+
+        session.play();
+        async.elapse(const Duration(milliseconds: 50));
+        final transport = gateway.transport!;
+
+        session.pause();
+        session.resume();
+
+        // Resume drives the *same* transport — it never minted a second one, so
+        // the engine clip is never torn down and re-created mid-performance.
+        expect(gateway.transports, hasLength(1));
+        expect(identical(gateway.transport, transport), isTrue);
+
+        session.stop();
+        session.dispose();
+      });
+    });
+
+    test('loop off pushes loopBeats <= 0 (one-shot)', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final session = ClipSession(
+          address: null,
+          host: _StubHost(gateway),
+          chain: _twoBarChain(),
+          loop: false,
+        );
+        expect(session.loop, isFalse);
+
+        session.play();
+        async.elapse(const Duration(milliseconds: 20));
+        session.advance(0.016);
+
+        // The 2-bar clip is 8 beats, but with loop off it fires once.
+        expect(gateway.transport!.loopBeats, lessThanOrEqualTo(0));
+
+        session.stop();
+        session.dispose();
+      });
+    });
+
+    test('toggling loop live re-pushes the loop length without a restart', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final session = ClipSession(
+          address: null,
+          host: _StubHost(gateway),
+          chain: _twoBarChain(),
+        );
+
+        session.play();
+        async.elapse(const Duration(milliseconds: 20));
+        session.advance(0.016);
+        final transport = gateway.transport!;
+        expect(transport.loopBeats, 8); // 2 bars × 4 beats
+        final pushes = transport.pushCount;
+
+        session.loop = false; // one push, loop length drops to a one-shot
+        expect(transport.pushCount, pushes + 1);
+        expect(transport.loopBeats, lessThanOrEqualTo(0));
+
+        session.loop = true; // pushes the declared length back
+        expect(transport.pushCount, pushes + 2);
+        expect(transport.loopBeats, 8);
+
+        session.stop();
+        session.dispose();
+      });
+    });
   });
 }
