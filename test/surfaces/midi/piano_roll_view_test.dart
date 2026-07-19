@@ -147,6 +147,148 @@ void main() {
     });
   });
 
+  group('PianoRollView — pan / scroll (issue #198)', () {
+    // A view zoomed 4× on both axes, so there is real room to pan.
+    PianoRollView zoomed() => _fit
+        .zoomedHorizontally(
+          factor: 4,
+          anchorX: 0,
+          viewportWidth: _size.width,
+          beatSpan: _beatSpan,
+          minPixelsPerBeat: _fitPixelsPerBeat,
+        )
+        .zoomedVertically(
+          factor: 4,
+          anchorY: 0,
+          viewportHeight: _size.height,
+          laneSpan: _laneSpan,
+          minLaneHeight: _fitLaneHeight,
+        );
+
+    test('max scroll is the content minus what the viewport shows', () {
+      final v = zoomed();
+      expect(
+        v.maxScrollBeats(viewportWidth: _size.width, beatSpan: _beatSpan),
+        closeTo(_beatSpan - _size.width / v.pixelsPerBeat, 1e-9),
+      );
+      expect(
+        v.maxScrollLanes(viewportHeight: _size.height, laneSpan: _laneSpan),
+        closeTo(_laneSpan - _size.height / v.laneHeight, 1e-9),
+      );
+    });
+
+    test('the fitted view has nothing to scroll on either axis', () {
+      expect(
+        _fit.maxScrollBeats(viewportWidth: _size.width, beatSpan: _beatSpan),
+        0,
+      );
+      expect(
+        _fit.maxScrollLanes(viewportHeight: _size.height, laneSpan: _laneSpan),
+        0,
+      );
+    });
+
+    test('dragging content right reveals earlier beats (scroll shrinks)', () {
+      final v = zoomed().withScrollBeats(
+        6,
+        viewportWidth: _size.width,
+        beatSpan: _beatSpan,
+      );
+      final panned = v.pannedBy(
+        dxPixels: 50,
+        dyPixels: 0,
+        viewportWidth: _size.width,
+        viewportHeight: _size.height,
+        beatSpan: _beatSpan,
+        laneSpan: _laneSpan,
+      );
+      expect(panned.scrollBeats, closeTo(6 - 50 / v.pixelsPerBeat, 1e-9));
+      // A horizontal-only drag leaves the vertical scroll alone.
+      expect(panned.scrollLanes, v.scrollLanes);
+    });
+
+    test('a pan cannot run off the leading edge (clamped at 0)', () {
+      final panned = zoomed().pannedBy(
+        dxPixels: 100000,
+        dyPixels: 100000,
+        viewportWidth: _size.width,
+        viewportHeight: _size.height,
+        beatSpan: _beatSpan,
+        laneSpan: _laneSpan,
+      );
+      expect(panned.scrollBeats, 0);
+      expect(panned.scrollLanes, 0);
+    });
+
+    test('a pan cannot run off the trailing edge (clamped at max)', () {
+      final v = zoomed();
+      final panned = v.pannedBy(
+        dxPixels: -100000,
+        dyPixels: -100000,
+        viewportWidth: _size.width,
+        viewportHeight: _size.height,
+        beatSpan: _beatSpan,
+        laneSpan: _laneSpan,
+      );
+      expect(
+        panned.scrollBeats,
+        closeTo(
+          v.maxScrollBeats(viewportWidth: _size.width, beatSpan: _beatSpan),
+          1e-9,
+        ),
+      );
+      expect(
+        panned.scrollLanes,
+        closeTo(
+          v.maxScrollLanes(viewportHeight: _size.height, laneSpan: _laneSpan),
+          1e-9,
+        ),
+      );
+    });
+
+    test('withScrollBeats / withScrollLanes clamp into range', () {
+      final v = zoomed();
+      expect(
+        v
+            .withScrollBeats(
+              -5,
+              viewportWidth: _size.width,
+              beatSpan: _beatSpan,
+            )
+            .scrollBeats,
+        0,
+      );
+      final maxB = v.maxScrollBeats(
+        viewportWidth: _size.width,
+        beatSpan: _beatSpan,
+      );
+      expect(
+        v
+            .withScrollBeats(
+              9999,
+              viewportWidth: _size.width,
+              beatSpan: _beatSpan,
+            )
+            .scrollBeats,
+        maxB,
+      );
+      final maxL = v.maxScrollLanes(
+        viewportHeight: _size.height,
+        laneSpan: _laneSpan,
+      );
+      expect(
+        v
+            .withScrollLanes(
+              9999,
+              viewportHeight: _size.height,
+              laneSpan: _laneSpan,
+            )
+            .scrollLanes,
+        maxL,
+      );
+    });
+  });
+
   test('value equality distinguishes zoom + scroll', () {
     const a = PianoRollView(pixelsPerBeat: 30, laneHeight: 10);
     const b = PianoRollView(pixelsPerBeat: 30, laneHeight: 10);

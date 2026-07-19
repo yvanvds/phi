@@ -98,6 +98,77 @@ class PianoRollView {
     );
   }
 
+  // ── Pan (issue #198) ────────────────────────────────────────────────────────
+
+  /// The largest [scrollBeats] that keeps the content pinned to the right edge —
+  /// the beat span minus the beats the viewport shows. Collapses to 0 when the
+  /// whole clip already fits (nothing to scroll).
+  double maxScrollBeats({
+    required double viewportWidth,
+    required int beatSpan,
+  }) {
+    final max = beatSpan - viewportWidth / pixelsPerBeat;
+    return max <= 0 ? 0 : max;
+  }
+
+  /// The largest [scrollLanes] that keeps the content pinned to the bottom edge.
+  /// Collapses to 0 when every lane already fits.
+  double maxScrollLanes({
+    required double viewportHeight,
+    required int laneSpan,
+  }) {
+    final max = laneSpan - viewportHeight / laneHeight;
+    return max <= 0 ? 0 : max;
+  }
+
+  /// Put [scrollBeats] at the left edge, clamped so the content never pulls away
+  /// from the edges — the scrollbar and drag-to-pan land here so pan and zoom
+  /// share one clamped view (issue #198).
+  PianoRollView withScrollBeats(
+    double beats, {
+    required double viewportWidth,
+    required int beatSpan,
+  }) => copyWith(
+    scrollBeats: _clamp(
+      beats,
+      maxScrollBeats(viewportWidth: viewportWidth, beatSpan: beatSpan),
+    ),
+  );
+
+  /// Put [scrollLanes] above the top edge, clamped like [withScrollBeats].
+  PianoRollView withScrollLanes(
+    double lanes, {
+    required double viewportHeight,
+    required int laneSpan,
+  }) => copyWith(
+    scrollLanes: _clamp(
+      lanes,
+      maxScrollLanes(viewportHeight: viewportHeight, laneSpan: laneSpan),
+    ),
+  );
+
+  /// Pan the view by a pointer delta in pixels — dragging the content right
+  /// ([dxPixels] > 0) reveals earlier beats, so the left-edge scroll shrinks.
+  /// Both axes are clamped through the same bounds the scrollbars use, so a
+  /// middle-drag can never run the clip off an edge (issue #198).
+  PianoRollView pannedBy({
+    required double dxPixels,
+    required double dyPixels,
+    required double viewportWidth,
+    required double viewportHeight,
+    required int beatSpan,
+    required int laneSpan,
+  }) => copyWith(
+    scrollBeats: _clamp(
+      scrollBeats - dxPixels / pixelsPerBeat,
+      maxScrollBeats(viewportWidth: viewportWidth, beatSpan: beatSpan),
+    ),
+    scrollLanes: _clamp(
+      scrollLanes - dyPixels / laneHeight,
+      maxScrollLanes(viewportHeight: viewportHeight, laneSpan: laneSpan),
+    ),
+  );
+
   /// Clamp a scroll offset into `[0, max]`, collapsing a negative [max] (content
   /// narrower/shorter than the viewport) to 0.
   static double _clamp(double value, double max) {
