@@ -13,6 +13,7 @@ import '../../domain/midi/custom_transform_registry.dart';
 import '../../domain/midi/graph/graph_eval_context.dart';
 import '../../domain/midi/midi_clip.dart';
 import '../../domain/midi/midi_clip_mode.dart';
+import '../../domain/midi/midi_clip_seed.dart';
 import '../../domain/midi/midi_note.dart';
 import '../../domain/midi/midi_transform.dart';
 import '../../domain/midi/midi_transform_chain.dart';
@@ -61,11 +62,17 @@ class MidiViewport extends StatefulWidget {
     this.graphController,
     this.stateGraph,
     this.runtimeVariables,
+    this.clipName = phraseASlug,
     super.key,
   });
 
   final MidiTransformChain chain;
   final ClipEditor? editor;
+
+  /// The clip's display name — its registry address leaf (issue #184), shown in
+  /// the header and used as the SMF export filename. Defaults to the seeded
+  /// clip's leaf; per-clip plumbing arrives with the library panel (#188).
+  final String clipName;
 
   /// The branching transform-graph controller (issue #65). When `null` the
   /// viewport seeds and owns a fallback from [chain] so the graph view is
@@ -187,12 +194,14 @@ class _MidiViewportState extends State<MidiViewport> {
     // clip is "interpreted, not played", and the file should carry what the
     // chain currently yields.
     final rendered = MidiClip(
-      name: source.name,
       notes: widget.chain.output,
       bars: source.bars,
       beatsPerBar: source.beatsPerBar,
     );
-    await _fileIo.saveSmf('${source.name}.mid', _writer.write(rendered));
+    await _fileIo.saveSmf(
+      '${widget.clipName}.mid',
+      _writer.write(rendered, name: widget.clipName),
+    );
   }
 
   Future<void> _onDrop(DropDoneDetails details) async {
@@ -227,7 +236,7 @@ class _MidiViewportState extends State<MidiViewport> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 MidiHeaderStrip(
-                  clipName: clip.name,
+                  clipName: widget.clipName,
                   noteCount: clip.notes.length,
                   bars: clip.bars,
                   onImport: _pickAndImport,

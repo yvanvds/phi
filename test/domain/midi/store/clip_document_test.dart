@@ -9,7 +9,6 @@ import 'package:phi/domain/midi/transforms/transpose_transform.dart';
 
 void main() {
   MidiClip source() => MidiClip(
-    name: 'phrase',
     bars: 2,
     beatsPerBar: 4,
     notes: const [
@@ -30,7 +29,6 @@ void main() {
     final decoded = ClipDocument.fromJson(doc.toJson());
 
     expect(decoded.mode, MidiClipMode.chain);
-    expect(decoded.source.name, 'phrase');
     expect(decoded.source.bars, 2);
     expect(decoded.source.notes, hasLength(2));
     expect(decoded.source.notes[1].channel, 1);
@@ -38,6 +36,22 @@ void main() {
     expect((decoded.chain[0] as TransposeTransform).semitones, 3);
     expect(decoded.chain[1].active, isFalse);
     expect(decoded.graph, isNull);
+    // Loop defaults on and survives the round trip (issue #184).
+    expect(decoded.loop, isTrue);
+  });
+
+  test('the loop flag round-trips both states', () {
+    for (final loop in [true, false]) {
+      final doc = ClipDocument(source: source(), loop: loop);
+      final json = doc.toJson();
+      expect(json['loop'], loop);
+      expect(ClipDocument.fromJson(json).loop, loop);
+    }
+  });
+
+  test('defaults the loop flag on when the payload omits it', () {
+    final json = ClipDocument(source: source()).toJson()..remove('loop');
+    expect(ClipDocument.fromJson(json).loop, isTrue);
   });
 
   test('a graph-mode document round-trips its graph', () {
@@ -71,10 +85,10 @@ void main() {
     expect(v1.containsKey('source'), isFalse);
 
     final decoded = ClipDocument.fromJson(v1);
-    expect(decoded.source.name, 'phrase');
     expect(decoded.source.notes, hasLength(2));
     expect(decoded.mode, MidiClipMode.chain);
     expect(decoded.chain, isEmpty);
     expect(decoded.graph, isNull);
+    expect(decoded.loop, isTrue);
   });
 }

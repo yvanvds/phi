@@ -20,8 +20,7 @@ import 'package:phi/domain/midi/transforms/velocity_to_parameter_transform.dart'
 import 'package:phi/domain/midi/transforms/voice_routing_rule.dart';
 import 'package:phi/domain/midi/transforms/voice_routing_transform.dart';
 
-MidiClip _clip(List<MidiNote> notes) =>
-    MidiClip(name: 't', notes: notes, bars: 1);
+MidiClip _clip(List<MidiNote> notes) => MidiClip(notes: notes, bars: 1);
 
 void main() {
   group('MidiTransformChain', () {

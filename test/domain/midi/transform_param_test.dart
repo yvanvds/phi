@@ -135,7 +135,6 @@ void main() {
     test('replaceAt with an edited transform changes the chain output', () {
       final chain = MidiTransformChain(
         source: MidiClip(
-          name: 't',
           notes: const [
             MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1),
           ],

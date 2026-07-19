@@ -27,7 +27,7 @@ void main() {
       // independently in a chain (setActiveAt keys on index, not identity).
       final entry = BuiltinTransformCatalog.entries.first;
       final chain = MidiTransformChain(
-        source: MidiClip(name: 't', notes: sample, bars: 1),
+        source: MidiClip(notes: sample, bars: 1),
         transforms: [entry.build(), entry.build()],
       );
       chain.setActiveAt(0, false);

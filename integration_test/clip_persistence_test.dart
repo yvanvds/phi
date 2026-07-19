@@ -74,8 +74,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // A fresh project seeded the demo clip with its default chain.
+    // A fresh project seeded the demo clip with its default chain and the loop
+    // flag on (issue #184).
     expect(clipDocumentOf(controller1).chain, isNotEmpty);
+    expect(clipDocumentOf(controller1).loop, isTrue);
     expect(controller1.isDirty.value, isFalse);
 
     // Edit the live clip: add a distinctive note and toggle the first chip.
@@ -152,6 +154,8 @@ void main() {
     expect(restored.source.notes.any((n) => n.pitch == 61), isTrue);
     expect(restored.chain, isNotEmpty);
     expect(restored.chain.first.active, !firstActiveBefore);
+    // The loop flag round-trips through save/reload (issue #184).
+    expect(restored.loop, isTrue);
 
     await engine2.dispose();
     await gateway2.dispose();

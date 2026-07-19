@@ -13,7 +13,6 @@ import 'package:phi/engine/state/midi_graph_controller.dart';
 void main() {
   MidiTransformChain chainWith(List<int> transposes) => MidiTransformChain(
     source: MidiClip(
-      name: 't',
       bars: 1,
       notes: const [MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1)],
     ),
@@ -195,7 +194,6 @@ void main() {
     // unconditional, and source → +12 guarded by a state that is not live.
     final source = MidiTransformGraph(
       source: MidiClip(
-        name: 's',
         bars: 1,
         notes: const [MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1)],
       ),

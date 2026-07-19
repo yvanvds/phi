@@ -21,7 +21,6 @@ import '../test_doubles/fake_midi_transport.dart';
 /// A 2-bar clip (8 beats) with three notes at known positions, no overlap.
 MidiTransformChain _twoBarChain() => MidiTransformChain(
   source: MidiClip(
-    name: 'two bars',
     bars: 2,
     notes: const [
       MidiNote(pitch: 60, start: 0.0, duration: 1.0, velocity: 1.0),
@@ -144,7 +143,6 @@ void main() {
         final controller = EngineMidiController(
           chain: MidiTransformChain(
             source: MidiClip(
-              name: 'one note',
               bars: 1,
               notes: const [
                 MidiNote(pitch: 60, start: 0.0, duration: 1.0, velocity: 1.0),
@@ -201,7 +199,6 @@ void main() {
         final controller = EngineMidiController(
           chain: MidiTransformChain(
             source: MidiClip(
-              name: 'micro',
               bars: 1,
               notes: const [
                 // 60.25 = a quarter-of-a-semitone (25 cents) above C4.
@@ -238,7 +235,6 @@ void main() {
         final controller = EngineMidiController(
           chain: MidiTransformChain(
             source: MidiClip(
-              name: 'micro',
               bars: 1,
               notes: const [
                 MidiNote(
@@ -271,7 +267,6 @@ void main() {
         final controller = EngineMidiController(
           chain: MidiTransformChain(
             source: MidiClip(
-              name: 'micro',
               bars: 1,
               notes: const [
                 MidiNote(
@@ -352,7 +347,6 @@ void main() {
     // A 1-bar clip (4 beats) with a single note at beat 0.
     MidiTransformChain oneNoteChain() => MidiTransformChain(
       source: MidiClip(
-        name: 'one note',
         bars: 1,
         notes: const [
           MidiNote(pitch: 60, start: 0.0, duration: 1.0, velocity: 1.0),
@@ -453,7 +447,6 @@ void main() {
     // DomainSubscriptionTransform. Session tempo stays at the 120 default.
     MidiTransformChain subscribedChain() => MidiTransformChain(
       source: MidiClip(
-        name: 'subscribed',
         bars: 1,
         notes: const [
           MidiNote(pitch: 60, start: 0.0, duration: 1.0, velocity: 1.0),
@@ -629,7 +622,6 @@ void main() {
         final controller = EngineMidiController(
           chain: MidiTransformChain(
             source: MidiClip(
-              name: 'subscribed',
               bars: 1,
               notes: const [
                 MidiNote(pitch: 60, start: 0.0, duration: 1.0, velocity: 1.0),

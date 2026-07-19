@@ -42,7 +42,6 @@ void main() {
     // are multiples of 1/127 and timings sit on a 1/16 grid so the round trip
     // is byte-exact.
     final importClip = MidiClip(
-      name: 'dropped',
       bars: 2,
       notes: const [
         MidiNote(pitch: 62, start: 0.0, duration: 0.5, velocity: 100 / 127),
@@ -69,10 +68,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Open the MIDI surface; it starts on the seeded 10-note "phrase A".
+    // Open the MIDI surface; it starts on the seeded 10-note clip. The header
+    // shows the clip's registry address leaf — `clip.phrase_a` (issue #184) —
+    // not a free-form display name.
     await tester.tap(railFor(SurfaceId.midi));
     await tester.pumpAndSettle();
-    expect(find.text('MIDI · PHRASE A'), findsOneWidget);
+    expect(find.text('MIDI · PHRASE_A'), findsOneWidget);
     expect(find.textContaining('10 notes'), findsOneWidget);
 
     // Turn the domain subscription off (issue #61): it tempo-locks the clip by
@@ -83,20 +84,24 @@ void main() {
     await tester.pumpAndSettle();
 
     // Import: the header IMPORT button pulls bytes from the fake dialog and
-    // swaps them into the live clip. The roll repaints with the new content.
+    // swaps them into the live clip in place. The roll repaints with the new
+    // content; the header keeps the clip's address-leaf name — import mutates
+    // the same entity now that the clip carries no display name (issue #184;
+    // import-as-new-entity lands with the library in #185).
     await tester.tap(find.text('IMPORT'));
     await tester.pumpAndSettle();
     expect(fakeIo.openCalls, 1);
-    expect(find.text('MIDI · DROPPED'), findsOneWidget);
+    expect(find.text('MIDI · PHRASE_A'), findsOneWidget);
     expect(find.textContaining('3 notes'), findsOneWidget);
     expect(engine.midi.chain.source.notes.length, 3);
 
     // Export: the header EXPORT button encodes the chain's transformed output
     // (source transforms still active) and hands the bytes to the fake dialog.
+    // The file is named from the clip's address leaf (issue #184).
     await tester.tap(find.text('EXPORT'));
     await tester.pumpAndSettle();
     expect(fakeIo.saveCalls, 1);
-    expect(fakeIo.savedName, 'dropped.mid');
+    expect(fakeIo.savedName, 'phrase_a.mid');
     expect(fakeIo.savedBytes, isNotNull);
 
     // The exported bytes are valid SMF and decode back to exactly the chain's

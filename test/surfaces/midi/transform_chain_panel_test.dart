@@ -41,7 +41,6 @@ void main() {
   });
 
   MidiClip oneNoteClip() => MidiClip(
-    name: 't',
     notes: const [MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1)],
     bars: 1,
   );

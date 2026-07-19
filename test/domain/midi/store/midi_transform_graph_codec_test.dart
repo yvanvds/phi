@@ -13,7 +13,6 @@ void main() {
   const codec = MidiTransformGraphCodec();
 
   MidiClip source() => MidiClip(
-    name: 'clip',
     bars: 1,
     notes: const [MidiNote(pitch: 60, start: 0, duration: 1, velocity: 0.5)],
   );

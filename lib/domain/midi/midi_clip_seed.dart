@@ -20,12 +20,17 @@ import 'transforms/transpose_transform.dart';
 import 'transforms/voice_routing_rule.dart';
 import 'transforms/voice_routing_transform.dart';
 
+/// The registry address leaf of the seeded demo clip (`clip.phrase_a`). With the
+/// free-form display name dropped (issue #184) the clip is named by this leaf
+/// everywhere — the library, the editor header, live code — so the seed and the
+/// MIDI surface header share this one source of truth.
+const String phraseASlug = 'phrase_a';
+
 /// The ten-note "phrase A" used as the on-load demo clip. Matches the
 /// surface-midi.jsx mockup note-for-note — pitch classes include scale
 /// degrees both inside and outside D-dorian so scale-conformance has
 /// something visible to do when the user toggles it.
 MidiClip phraseA() => MidiClip(
-  name: 'phrase A',
   bars: 4,
   notes: const [
     MidiNote(pitch: 60, start: 0.00, duration: 0.25, velocity: 0.7),

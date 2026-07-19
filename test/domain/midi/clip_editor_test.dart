@@ -4,7 +4,6 @@ import 'package:phi/domain/midi/midi_clip.dart';
 import 'package:phi/domain/midi/midi_note.dart';
 
 MidiClip _clip([List<MidiNote>? notes]) => MidiClip(
-  name: 't',
   bars: 4,
   notes:
       notes ??

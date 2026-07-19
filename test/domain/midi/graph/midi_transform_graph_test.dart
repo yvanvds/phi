@@ -11,7 +11,6 @@ import 'package:phi/domain/midi/transforms/transpose_transform.dart';
 import 'package:phi/domain/state_machine/performance_state_id.dart';
 
 MidiClip _clip(List<int> pitches) => MidiClip(
-  name: 't',
   bars: 1,
   notes: [
     for (final p in pitches)

@@ -58,7 +58,9 @@ void main() {
   ) async {
     await pumpSurface(tester);
 
-    expect(find.textContaining('phrase A'.toUpperCase()), findsOneWidget);
+    // The header now shows the clip's registry address leaf (issue #184), not a
+    // free-form name — the seeded clip is `clip.phrase_a`.
+    expect(find.textContaining('phrase_a'.toUpperCase()), findsOneWidget);
     expect(find.textContaining('interpreted, not played'), findsOneWidget);
     expect(find.text('D DORIAN'), findsOneWidget);
     expect(find.text('DOMAIN · DRUM'), findsOneWidget);
@@ -70,7 +72,6 @@ void main() {
   ) async {
     final chain = MidiTransformChain(
       source: MidiClip(
-        name: 't',
         notes: const [MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1)],
         bars: 1,
       ),
@@ -123,7 +124,6 @@ void main() {
 
   MidiTransformChain oneTransformChain() => MidiTransformChain(
     source: MidiClip(
-      name: 't',
       bars: 1,
       notes: const [MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1)],
     ),

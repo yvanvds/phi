@@ -19,7 +19,6 @@ import '../test_doubles/fake_scene_renderer.dart';
 /// duration 1. Note B: beat 2, duration 1. Non-overlapping so each spawn and
 /// despawn is unambiguous.
 MidiClip _clip() => MidiClip(
-  name: 'spawns',
   bars: 1,
   notes: const [
     MidiNote(pitch: 60, start: 0.0, duration: 1.0, velocity: 1.0),
@@ -45,7 +44,6 @@ MidiTransformChain _chainWith(AgentSpawnTransform t) =>
 /// start 0 → z 0, so it spawns at (60, 1, 0).
 MidiTransformChain _heldChain() => MidiTransformChain(
   source: MidiClip(
-    name: 'held',
     bars: 1,
     notes: const [
       MidiNote(pitch: 60, start: 0.0, duration: 4.0, velocity: 1.0),
