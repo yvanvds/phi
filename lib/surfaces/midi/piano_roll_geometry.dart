@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import '../../domain/midi/midi_note.dart';
+import 'piano_roll_view.dart';
 
 /// Which part of a note a pointer landed on — drives the drag gesture.
 enum NoteEdge { left, body, right }
@@ -24,6 +25,7 @@ class PianoRollGeometry {
     required this.beatsPerBar,
     this.minPitch = 55,
     this.maxPitch = 76,
+    this.view,
   });
 
   final Size size;
@@ -32,6 +34,12 @@ class PianoRollGeometry {
   final int minPitch;
   final int maxPitch;
 
+  /// Session-local pan/zoom. When `null` the geometry fits the whole clip to the
+  /// paint area (the un-zoomed default), so every existing consumer keeps its
+  /// old arithmetic; a non-null view parametrises pixels-per-beat, lane-height
+  /// and the scroll offsets instead (issue #189).
+  final PianoRollView? view;
+
   int get beatSpan {
     final span = bars * beatsPerBar;
     return span <= 0 ? 1 : span;
@@ -39,27 +47,39 @@ class PianoRollGeometry {
 
   int get pitchSpan => (maxPitch - minPitch).clamp(1, 127);
 
-  double get laneHeight => size.height / pitchSpan;
+  /// Pixels one beat occupies — the view's zoom, or fit-to-width when un-zoomed.
+  double get pixelsPerBeat => view?.pixelsPerBeat ?? (size.width / beatSpan);
 
-  double xForBeat(double beat) => (beat / beatSpan) * size.width;
+  /// Pixels one semitone lane occupies — the view's zoom, or fit-to-height.
+  double get laneHeight => view?.laneHeight ?? (size.height / pitchSpan);
 
-  double beatForX(double x) => (x / size.width) * beatSpan;
+  double get _originBeat => view?.scrollBeats ?? 0;
+  double get _scrollLanes => view?.scrollLanes ?? 0;
 
-  double widthForBeats(double beats) => (beats / beatSpan) * size.width;
+  double xForBeat(double beat) => (beat - _originBeat) * pixelsPerBeat;
+
+  double beatForX(double x) => _originBeat + x / pixelsPerBeat;
+
+  double widthForBeats(double beats) => beats * pixelsPerBeat;
+
+  /// Y of the horizontal grid line for lane index [i] (0 = [maxPitch]), the top
+  /// edge of that lane's row — used by the painter to draw the pitch grid.
+  double laneLineY(int i) => (i - _scrollLanes) * laneHeight;
 
   /// Y of the lane *line* for [pitch] (notes are drawn centred on it). A
   /// fractional pitch lands proportionally between two lanes, so a microtonal
   /// note draws slightly off the semitone grid (issue #36).
   double yForPitch(double pitch) {
     final clamped = pitch.clamp(minPitch.toDouble(), maxPitch.toDouble());
-    return ((maxPitch - clamped) / pitchSpan) * size.height;
+    return ((maxPitch - clamped) - _scrollLanes) * laneHeight;
   }
 
   /// The integer lane under [y]. Authoring snaps to whole semitones, so this
   /// deliberately rounds — fractional pitches come from transforms, not the
   /// pointer.
-  int pitchForY(double y) =>
-      (maxPitch - (y / laneHeight).round()).clamp(minPitch, maxPitch);
+  int pitchForY(double y) => (maxPitch - _scrollLanes - y / laneHeight)
+      .round()
+      .clamp(minPitch, maxPitch);
 
   /// The clickable band for a note — a full lane-height row so thin notes
   /// stay grabbable, never narrower than [_minHitWidth].

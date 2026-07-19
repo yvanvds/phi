@@ -43,9 +43,16 @@ class ClipEditor extends ChangeNotifier {
 
   final MidiClip clip;
 
-  /// Snap resolution in beats. 0.25 = sixteenth-note grid (the painter's
-  /// finest line). The editor clamps duration to this minimum.
+  /// Snap resolution in beats, driven by the header snap picker (issue #189).
+  /// 0.25 = sixteenth-note grid (the painter's finest line). **0 disables
+  /// snapping** — add / drag / resize / nudge run free. Duration still floors at
+  /// [durationFloor] so a note is never zero-length even with snapping off.
   double gridDivision;
+
+  /// The safety floor a note's duration is held to when snapping is off — a
+  /// 1/64 note, small enough never to get in the way, large enough never to
+  /// vanish.
+  static const double minDuration = 0.0625;
 
   final int minPitch;
   final int maxPitch;
@@ -92,12 +99,16 @@ class ClipEditor extends ChangeNotifier {
 
   // ── Edits ────────────────────────────────────────────────────────────────
 
+  /// The floor a note's duration is held to: the snap step when snapping is on,
+  /// else [minDuration] so a note is never zero-length.
+  double get durationFloor => gridDivision > 0 ? gridDivision : minDuration;
+
   /// Adds a note (clamped + floored to domain bounds) and selects it.
   void addNote(MidiNote note) {
     final clamped = note.copyWith(
       pitch: note.pitch.clamp(minPitch.toDouble(), maxPitch.toDouble()),
       start: note.start < 0 ? 0 : note.start,
-      duration: note.duration < gridDivision ? gridDivision : note.duration,
+      duration: _floorDuration(note.duration),
     );
     _run(AddNoteCommand(clip, clamped, clipAddress: _clipAddress));
   }
@@ -123,10 +134,11 @@ class ClipEditor extends ChangeNotifier {
     );
   }
 
-  /// Right-edge resize: changes duration, keeps start. Floors at one grid step.
+  /// Right-edge resize: changes duration, keeps start. Floors at one grid step
+  /// (or [minDuration] when snapping is off).
   void resizeSelection(double dBeats) {
     if (dBeats == 0) return;
-    _edit((n) => n.copyWith(duration: _floorGrid(n.duration + dBeats)));
+    _edit((n) => n.copyWith(duration: _floorDuration(n.duration + dBeats)));
   }
 
   /// Sets velocity for specific notes (velocity-lane click / paint), one
@@ -209,7 +221,7 @@ class ClipEditor extends ChangeNotifier {
   }
 
   double _floor0(double v) => v < 0 ? 0 : v;
-  double _floorGrid(double v) => v < gridDivision ? gridDivision : v;
+  double _floorDuration(double v) => v < durationFloor ? durationFloor : v;
 
   bool _mapEquals(Map<int, MidiNote> a, Map<int, MidiNote> b) {
     for (final k in a.keys) {
