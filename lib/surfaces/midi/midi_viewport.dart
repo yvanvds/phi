@@ -65,12 +65,21 @@ class MidiViewport extends StatefulWidget {
     this.stateGraph,
     this.runtimeVariables,
     this.transport,
+    this.onImportSmf,
     this.clipName = phraseASlug,
     super.key,
   });
 
   final MidiTransformChain chain;
   final ClipEditor? editor;
+
+  /// Import handler wired by the surface when a clip library is live (issue
+  /// #191): dropping / importing a `.mid` lands it as a **new** clip entity in
+  /// the selected group, slugged from the filename, instead of overwriting the
+  /// open clip (design §3). Given the picked bytes and filename, it returns an
+  /// error message to surface, or `null` on success. `null` (a bare viewport
+  /// without a library) falls back to the legacy in-place import.
+  final Future<String?> Function(Uint8List bytes, String fileName)? onImportSmf;
 
   /// The edited clip's transport seam (issue #190) — play / pause / stop / loop
   /// for the header transport row. `null` in setups without a live session
@@ -182,15 +191,26 @@ class _MidiViewportState extends State<MidiViewport> {
   // ── Import / export ────────────────────────────────────────────────────────
 
   Future<void> _pickAndImport() async {
-    final bytes = await _fileIo.openSmf();
-    if (bytes != null) _importBytes(bytes);
+    final picked = await _fileIo.openSmf();
+    if (picked == null) return;
+    await _importBytes(picked.bytes, picked.name);
   }
 
-  /// Parse [bytes] as SMF and swap them into the shared source clip. The
-  /// chain, editor and engine player all hold the *same* clip reference, so a
-  /// mutate-in-place keeps every wiring point intact; the editor history is
-  /// reset because its note indices no longer line up.
-  void _importBytes(Uint8List bytes) {
+  /// Import [bytes] (from a picked or dropped file named [fileName]). With a
+  /// library wired ([MidiViewport.onImportSmf]) the file lands as a **new** clip
+  /// entity in the selected group (design §3); without one it falls back to the
+  /// legacy in-place swap into the shared source clip (a bare viewport with no
+  /// registry), resetting the editor history since its note indices no longer
+  /// line up. No [BuildContext] is used across the await, so the analyzer's
+  /// `use_build_context_synchronously` gate is satisfied.
+  Future<void> _importBytes(Uint8List bytes, String fileName) async {
+    final onImport = widget.onImportSmf;
+    if (onImport != null) {
+      final error = await onImport(bytes, fileName);
+      if (!mounted) return;
+      setState(() => _importError = error);
+      return;
+    }
     try {
       final imported = _reader.read(bytes);
       widget.chain.source.replaceWith(imported);
@@ -274,10 +294,11 @@ class _MidiViewportState extends State<MidiViewport> {
 
   Future<void> _onDrop(DropDoneDetails details) async {
     // Import the first dropped file that looks like a MIDI file; ignore the
-    // rest (Phi has one clip per surface).
+    // rest. With a library wired this lands as a new clip entity (design §3),
+    // sharing the very same path the IMPORT button drives.
     for (final file in details.files) {
       if (_isMidiName(file.name)) {
-        _importBytes(await file.readAsBytes());
+        await _importBytes(await file.readAsBytes(), file.name);
         return;
       }
     }

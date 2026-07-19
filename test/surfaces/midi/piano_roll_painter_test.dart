@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/midi/midi_clip_seed.dart';
 import 'package:phi/domain/midi/midi_note.dart';
+import 'package:phi/surfaces/midi/piano_roll_caret.dart';
 import 'package:phi/surfaces/midi/piano_roll_painter.dart';
 
 PianoRollPainter _painter({
@@ -12,6 +13,7 @@ PianoRollPainter _painter({
   int revision = 0,
   Rect? marquee,
   bool showGhost = true,
+  PianoRollCaret? caret,
 }) => PianoRollPainter(
   sourceNotes: source,
   ghostNotes: ghost,
@@ -21,6 +23,7 @@ PianoRollPainter _painter({
   revision: revision,
   marquee: marquee,
   showGhost: showGhost,
+  caret: caret,
 );
 
 void main() {
@@ -55,6 +58,32 @@ void main() {
         ),
         isTrue,
       );
+    });
+
+    test('shouldRepaint reacts to the step-entry caret', () {
+      final base = _painter();
+      const caret = PianoRollCaret(beat: 2, pitch: 64);
+      expect(base.shouldRepaint(_painter(caret: caret)), isTrue);
+      // Same caret → no repaint on that account.
+      expect(
+        _painter(caret: caret).shouldRepaint(_painter(caret: caret)),
+        isFalse,
+      );
+      // Moving the caret repaints.
+      expect(
+        _painter(caret: caret).shouldRepaint(
+          _painter(caret: const PianoRollCaret(beat: 3, pitch: 64)),
+        ),
+        isTrue,
+      );
+    });
+
+    test('paints a caret without throwing', () {
+      final recorder = PictureRecorder();
+      _painter(
+        caret: const PianoRollCaret(beat: 2, pitch: 64),
+      ).paint(Canvas(recorder), const Size(400, 200));
+      recorder.endRecording().dispose();
     });
 
     test('paints the seeded phrase with a ghost layer without throwing', () {

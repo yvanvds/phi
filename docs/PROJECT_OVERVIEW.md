@@ -763,6 +763,31 @@ main + app          (orchestration)
   fake transport), publisher loop/length persistence tests, and an end-to-end
   `midi_length_loop_transport` integration test (length field grows + persists,
   loop toggle flips + persists, header play/stop drive the transport).
+  Issue #191 closes the MIDI-clip epic (design `docs/design/midi-clips.md` §5,
+  §7 decision 3) with **caret step entry** and an **import/export flow polish**.
+  The piano roll gains a `PianoRollCaret` (`lib/surfaces/midi/piano_roll_caret.dart`,
+  a beat-position/lane edit cursor, pure view state): with the roll focused, an
+  arrow key summons + moves it by one grid step, `Enter` drops a grid-length note
+  at its lane/beat (through `ClipEditor.addNote`, so it undoes normally) and
+  advances it, and `Escape` dismisses it — while a *selected* note still nudges
+  with the arrows when no caret is up (`_arrow` routes caret vs. selection). The
+  painter draws the caret as an insertion cursor (a guide at its beat + an outlined
+  grid-length cell). **Import** no longer overwrites the open clip: the `MidiFileIo`
+  seam now returns the picked *filename* alongside the bytes, and the surface routes
+  a dropped / picked `.mid` through a new `ClipLibraryController.importFromSmf`,
+  which lands it as a **new** clip entity in the selected group (the edited clip's
+  group, or top level), slugged from the filename, and opens it — via the #185
+  `ClipLibrary.importFromSmf` command, journaled like any create. **Export** is
+  unchanged in spirit (the header writes the *selected* clip's transformed output,
+  named from its leaf). A bare viewport with no library still falls back to the
+  legacy in-place import. Covered by `piano_roll_caret` widget tests (summon /
+  move / drop / advance at 1/8 + 1/16 grids, Escape dismisses, selection still
+  nudges), a painter caret repaint test, a `ClipLibraryController` import test
+  (new entity in the selected group + opened), and an end-to-end
+  `midi_step_entry_import_export` integration test (caret authors a note, IMPORT
+  lands a new entity, EXPORT round-trips the selected clip) — the old
+  `midi_smf` integration test (which asserted the now-removed in-place overwrite)
+  is superseded by it.
   Issue #136 finishes the `mix.` migration #124 bounded: a channel's **live mix
   state** (user volume, mute, solo) now persists alongside its identity. `MixStrip`
   gains `volume`/`muted`/`soloed` and `MixStripCodec` jumps to **schema v2**,

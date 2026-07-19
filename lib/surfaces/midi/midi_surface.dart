@@ -5,6 +5,7 @@ import '../../domain/midi/clip_editor.dart';
 import '../../domain/midi/custom_transform_registry.dart';
 import '../../domain/midi/midi_clip_seed.dart';
 import '../../domain/midi/midi_transform_chain.dart';
+import '../../domain/midi/smf/smf_exception.dart';
 import '../../domain/runtime/runtime_variable_registry.dart';
 import '../../domain/state_machine/state_graph.dart';
 import '../../engine/engine.dart';
@@ -104,6 +105,17 @@ class MidiSurface extends Surface {
                 graphController: session.graphController,
                 playhead: session.playhead,
                 clipName: address?.name ?? phraseASlug,
+                // Import lands a dropped / picked `.mid` as a new clip entity in
+                // the selected group (design §3, issue #191), not an in-place
+                // overwrite; a malformed stream returns a message the header shows.
+                onImportSmf: (bytes, fileName) async {
+                  try {
+                    library.importFromSmf(bytes, fileName: fileName);
+                    return null;
+                  } on SmfFormatException catch (e) {
+                    return 'import failed · ${e.message}';
+                  }
+                },
                 transport: ClipTransportControls(
                   isPlaying: library.isEditedPlaying,
                   isPaused: library.isEditedPaused,
@@ -132,6 +144,7 @@ class MidiSurface extends Surface {
     ValueListenable<double>? playhead,
     String? clipName,
     ClipTransportControls? transport,
+    Future<String?> Function(Uint8List bytes, String fileName)? onImportSmf,
   }) => MidiViewport(
     key: key,
     chain: chain ?? _chain,
@@ -139,6 +152,7 @@ class MidiSurface extends Surface {
     registry: _registry,
     playhead: playhead ?? _playhead,
     fileIo: _fileIo,
+    onImportSmf: onImportSmf,
     graphController:
         graphController ??
         _graphController ??
