@@ -7,16 +7,17 @@ import '../../../domain/midi/midi_transform_chain.dart';
 import '../../../domain/midi/music_scale.dart';
 import '../../../domain/midi/transforms/voice_routing_rule.dart';
 import '../../../domain/midi/transforms/voice_routing_transform.dart';
+import '../../../domain/voice/voice_addresses.dart';
 import 'editor_fields.dart';
 
 /// Typed editor for a [VoiceRoutingTransform] (issue #95): the ordered list of
 /// [VoiceRoutingRule]s, first-match-wins.
 ///
 /// Each rule picks its kind (pitch range · velocity range · scale degree),
-/// spells out that kind's fields, and names the channel it routes matches to.
-/// Rules apply in list order, so specific rules go above catch-alls. Every
-/// edit applies **live** through [MidiTransformChain.replaceAt]; an empty list
-/// leaves every note on its incoming channel.
+/// spells out that kind's fields, and names the `voice.` address it routes
+/// matches to. Rules apply in list order, so specific rules go above
+/// catch-alls. Every edit applies **live** through [MidiTransformChain.replaceAt];
+/// an empty list leaves every note on its incoming voice.
 class VoiceRoutingEditor extends StatefulWidget {
   const VoiceRoutingEditor({
     required this.chain,
@@ -48,7 +49,13 @@ class _VoiceRoutingEditorState extends State<VoiceRoutingEditor> {
 
   void _addRule() {
     setState(() {
-      _rules.add(const PitchRangeRule(minPitch: 0, maxPitch: 127, channel: 1));
+      _rules.add(
+        const PitchRangeRule(
+          minPitch: 0,
+          maxPitch: 127,
+          voice: VoiceAddresses.defaultVoice,
+        ),
+      );
       _ids.add(_nextId++);
     });
     _apply();
@@ -86,7 +93,7 @@ class _VoiceRoutingEditorState extends State<VoiceRoutingEditor> {
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(
-                    'no rules — every note keeps its channel',
+                    'no rules — every note keeps its voice',
                     style: PhiType.monoS().copyWith(
                       fontSize: 11,
                       color: PhiColors.fg3,
@@ -139,7 +146,7 @@ enum _RuleKind {
   };
 }
 
-/// One rule's editable block: a kind picker, that kind's fields, a channel, and
+/// One rule's editable block: a kind picker, that kind's fields, a voice, and
 /// a remove affordance. Owns its own controllers so switching kinds rebuilds
 /// only this rule's fields; emits a rebuilt [VoiceRoutingRule] on every change.
 class _RuleBlock extends StatefulWidget {
@@ -163,10 +170,10 @@ class _RuleBlockState extends State<_RuleBlock> {
   late VoiceRoutingRule _rule = widget.rule;
   late MusicScale _scale = _initialScale;
 
-  // Kind-specific fields, rebuilt on a kind switch. The channel persists
+  // Kind-specific fields, rebuilt on a kind switch. The voice persists
   // across kinds — it means the same thing for every rule.
-  late final TextEditingController _channel = TextEditingController(
-    text: '${widget.rule.channel}',
+  late final TextEditingController _voice = TextEditingController(
+    text: widget.rule.voice,
   );
   late Map<String, TextEditingController> _fields = _fieldsFor(widget.rule);
 
@@ -176,7 +183,7 @@ class _RuleBlockState extends State<_RuleBlock> {
 
   @override
   void dispose() {
-    _channel.dispose();
+    _voice.dispose();
     _disposeFields();
     super.dispose();
   }
@@ -219,53 +226,60 @@ class _RuleBlockState extends State<_RuleBlock> {
     _emit();
   }
 
-  /// A sensible default rule of [kind], reusing the current channel.
+  /// A sensible default rule of [kind], reusing the current voice.
   VoiceRoutingRule _defaultFor(_RuleKind kind) {
-    final channel = int.tryParse(_channel.text) ?? 0;
+    final voice = _currentVoice;
     return switch (kind) {
       _RuleKind.pitchRange => PitchRangeRule(
         minPitch: 0,
         maxPitch: 127,
-        channel: channel,
+        voice: voice,
       ),
       _RuleKind.velocityRange => VelocityRangeRule(
         minVelocity: 0,
         maxVelocity: 1,
-        channel: channel,
+        voice: voice,
       ),
       _RuleKind.scaleDegree => ScaleDegreeRule(
         scale: _scale,
         tonic: 60,
         degrees: const {1},
-        channel: channel,
+        voice: voice,
       ),
     };
+  }
+
+  /// The voice the field currently names, falling back to the seeded default
+  /// while the field is blank so a rule is never half-configured.
+  String get _currentVoice {
+    final text = _voice.text.trim();
+    return text.isEmpty ? VoiceAddresses.defaultVoice : text;
   }
 
   /// Builds the rule from the live controllers and reports it upward. A field
   /// that doesn't parse keeps its value from the last good [_rule].
   void _emit() {
-    final channel = int.tryParse(_channel.text) ?? _rule.channel;
+    final voice = _currentVoice;
     final rule = switch (_kind) {
       _RuleKind.pitchRange => PitchRangeRule(
         minPitch: int.tryParse(_fields['min']!.text) ?? _fallbackInt('min', 0),
         maxPitch:
             int.tryParse(_fields['max']!.text) ?? _fallbackInt('max', 127),
-        channel: channel,
+        voice: voice,
       ),
       _RuleKind.velocityRange => VelocityRangeRule(
         minVelocity:
             double.tryParse(_fields['min']!.text) ?? _fallbackDouble('min', 0),
         maxVelocity:
             double.tryParse(_fields['max']!.text) ?? _fallbackDouble('max', 1),
-        channel: channel,
+        voice: voice,
       ),
       _RuleKind.scaleDegree => ScaleDegreeRule(
         scale: _scale,
         tonic:
             int.tryParse(_fields['tonic']!.text) ?? _fallbackInt('tonic', 60),
         degrees: _parseDegrees(_fields['degrees']!.text),
-        channel: channel,
+        voice: voice,
       ),
     };
     _rule = rule;
@@ -328,10 +342,11 @@ class _RuleBlockState extends State<_RuleBlock> {
           ),
           ..._kindFields(),
           EditorRow(
-            label: 'channel',
+            label: 'voice',
             child: EditorTextInput(
-              controller: _channel,
+              controller: _voice,
               onChanged: (_) => _emit(),
+              hintText: 'voice.default',
             ),
           ),
         ],

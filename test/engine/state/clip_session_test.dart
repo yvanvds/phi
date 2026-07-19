@@ -8,6 +8,7 @@ import 'package:phi/domain/midi/transforms/transpose_transform.dart';
 import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/scene/scene_field.dart';
 import 'package:phi/domain/time_domains/tempo_source_stack.dart';
+import 'package:phi/domain/voice/voice_channel_resolver.dart';
 import 'package:phi/engine/bridge/midi_gateway.dart';
 import 'package:phi/engine/bridge/scene_agent_sink.dart';
 import 'package:phi/engine/state/clip_session.dart';
@@ -18,7 +19,8 @@ import '../test_doubles/fake_midi_gateway.dart';
 /// A minimal [ClipSessionHost] that borrows only a gateway — enough to prove a
 /// [ClipSession] plays entirely on its own, decoupled from [EngineMidiController].
 class _StubHost implements ClipSessionHost {
-  _StubHost(this.gateway);
+  _StubHost(this.gateway, {VoiceChannelResolver? voiceResolver})
+    : voiceResolver = voiceResolver ?? VoiceChannelResolver.seededDefault();
 
   @override
   final MidiGateway gateway;
@@ -33,11 +35,24 @@ class _StubHost implements ClipSessionHost {
   @override
   double sessionBpm = 120;
 
+  /// The voice → channel table this stub flattens against.
+  final VoiceChannelResolver voiceResolver;
+
+  /// Voices that failed to resolve, recorded so a degradation test can assert
+  /// the warning was surfaced.
+  final List<String> unresolvedVoices = [];
+
   @override
   int? resolveOutputPort() => gateway.outputDeviceCount > 0 ? 0 : null;
 
   @override
   GraphEvalContext liveContext() => const GraphEvalContext.empty();
+
+  @override
+  int? channelForVoice(String? voice) => voiceResolver.channelFor(voice);
+
+  @override
+  void onUnresolvedVoice(String voice) => unresolvedVoices.add(voice);
 }
 
 MidiTransformChain _twoBarChain() => MidiTransformChain(
@@ -297,6 +312,51 @@ void main() {
         // toggle.
         expect(transport.pushCount, pushes + 1);
         expect(transport.loopBeats, 20);
+
+        session.stop();
+        session.dispose();
+      });
+    });
+
+    test('a clip routed to an unknown voice degrades gracefully (#205)', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        // The stub host only knows voice.default (seededDefault): an unrouted
+        // note resolves through it, a note routed elsewhere does not.
+        final host = _StubHost(gateway);
+        final session = ClipSession(
+          address: null,
+          host: host,
+          chain: MidiTransformChain(
+            source: MidiClip(
+              bars: 1,
+              notes: const [
+                // Unrouted → resolves through voice.default → plays.
+                MidiNote(pitch: 60, start: 0.0, duration: 1.0, velocity: 1.0),
+                // Routed to an unknown voice → silent, but surfaced.
+                MidiNote(
+                  pitch: 64,
+                  start: 1.0,
+                  duration: 1.0,
+                  velocity: 1.0,
+                  voice: 'voice.ghost',
+                ),
+              ],
+            ),
+          ),
+        );
+
+        session.play();
+        async.elapse(const Duration(milliseconds: 20));
+        session.advance(0.016);
+
+        final transport = gateway.transport!;
+        // Only the resolvable note reached the engine — the unknown voice
+        // played nothing, rather than crashing the flatten.
+        expect(transport.events.map((e) => e.pitch), [60]);
+        expect(transport.events.single.channel, 0); // voice.default → ch 0
+        // The unknown voice was surfaced exactly once.
+        expect(host.unresolvedVoices, ['voice.ghost']);
 
         session.stop();
         session.dispose();

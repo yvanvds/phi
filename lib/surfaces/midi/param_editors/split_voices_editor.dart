@@ -10,10 +10,10 @@ import 'editor_fields.dart';
 /// Typed editor for a [SplittingTransform] (issue #95): the layer list every
 /// source note is copied onto.
 ///
-/// Each row is one [SplitVoice] — a target channel (blank keeps the source
-/// channel), a semitone pitch offset, and a velocity scale. The output holds
-/// `notes × voices` copies, so a single default row is the identity and two
-/// rows double every note. Edits apply **live** through
+/// Each row is one [SplitVoice] — a target `voice.` address (blank keeps the
+/// source voice), a semitone pitch offset, and a velocity scale. The output
+/// holds `notes × voices` copies, so a single default row is the identity and
+/// two rows double every note. Edits apply **live** through
 /// [MidiTransformChain.replaceAt]; a row whose numbers don't parse falls back
 /// to a passthrough [SplitVoice] rather than dropping the layer.
 class SplitVoicesEditor extends StatefulWidget {
@@ -107,32 +107,30 @@ class _SplitVoicesEditorState extends State<SplitVoicesEditor> {
 
 /// Controllers for one layer's three fields.
 class _VoiceRow {
-  _VoiceRow.of(SplitVoice voice)
-    : channel = TextEditingController(
-        text: voice.channel == null ? '' : '${voice.channel}',
-      ),
-      pitch = TextEditingController(text: '${voice.pitchOffset}'),
+  _VoiceRow.of(SplitVoice layer)
+    : voice = TextEditingController(text: layer.voice ?? ''),
+      pitch = TextEditingController(text: '${layer.pitchOffset}'),
       velocity = TextEditingController(
-        text: voice.velocityScale == voice.velocityScale.roundToDouble()
-            ? '${voice.velocityScale.toInt()}'
-            : '${voice.velocityScale}',
+        text: layer.velocityScale == layer.velocityScale.roundToDouble()
+            ? '${layer.velocityScale.toInt()}'
+            : '${layer.velocityScale}',
       );
 
-  final TextEditingController channel;
+  final TextEditingController voice;
   final TextEditingController pitch;
   final TextEditingController velocity;
 
-  /// The [SplitVoice] this row currently describes. A blank channel maps to
-  /// `null` ("keep source channel"); unparseable numbers fall back to the
+  /// The [SplitVoice] this row currently describes. A blank voice maps to
+  /// `null` ("keep source voice"); unparseable numbers fall back to the
   /// passthrough defaults so a half-typed field never drops the layer.
   SplitVoice toVoice() => SplitVoice(
-    channel: channel.text.trim().isEmpty ? null : int.tryParse(channel.text),
+    voice: voice.text.trim().isEmpty ? null : voice.text.trim(),
     pitchOffset: int.tryParse(pitch.text) ?? 0,
     velocityScale: double.tryParse(velocity.text) ?? 1.0,
   );
 
   void dispose() {
-    channel.dispose();
+    voice.dispose();
     pitch.dispose();
     velocity.dispose();
   }
@@ -154,13 +152,13 @@ class _HeaderRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 2, left: 2),
       child: Row(
-        children: [cell('CH', 72), cell('PITCH ±', 72), cell('VEL ×', 72)],
+        children: [cell('VOICE', 72), cell('PITCH ±', 72), cell('VEL ×', 72)],
       ),
     );
   }
 }
 
-/// One layer row: channel · pitch offset · velocity scale · remove.
+/// One layer row: voice · pitch offset · velocity scale · remove.
 class _VoiceRowView extends StatelessWidget {
   const _VoiceRowView({
     required this.row,
@@ -188,7 +186,7 @@ class _VoiceRowView extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: field(row.channel, 'keep'),
+            child: field(row.voice, 'keep'),
           ),
           Padding(
             padding: const EdgeInsets.only(right: 8),

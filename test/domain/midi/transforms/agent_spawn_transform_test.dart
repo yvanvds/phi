@@ -5,6 +5,7 @@ import 'package:phi/domain/midi/midi_transform_kind.dart';
 import 'package:phi/domain/midi/spawn_axis.dart';
 import 'package:phi/domain/midi/spawn_source.dart';
 import 'package:phi/domain/midi/transforms/agent_spawn_transform.dart';
+import 'package:phi/domain/midi/voice_hash.dart';
 import 'package:vector_math/vector_math_64.dart';
 
 void main() {
@@ -39,24 +40,14 @@ void main() {
 
     test('clamps out-of-domain values to the nearest output edge', () {
       const axis = SpawnAxis(
-        source: SpawnSource.channel,
+        source: SpawnSource.pitch,
         inMin: 0,
         inMax: 4,
         outMin: -1,
         outMax: 1,
       );
-      final below = const MidiNote(
-        pitch: 60,
-        start: 0,
-        duration: 1,
-        velocity: 1,
-      ).copyWith(channel: 0);
-      final above = const MidiNote(
-        pitch: 60,
-        start: 0,
-        duration: 1,
-        velocity: 1,
-      ).copyWith(channel: 9);
+      const below = MidiNote(pitch: 0, start: 0, duration: 1, velocity: 1);
+      const above = MidiNote(pitch: 9, start: 0, duration: 1, velocity: 1);
       expect(axis.resolve(below), -1);
       expect(axis.resolve(above), 1); // 9 is past inMax=4, clamps to the edge.
     });
@@ -154,16 +145,25 @@ void main() {
     });
 
     test(
-      'voice index derives from channel, folded into the six-slot palette',
+      'voice index derives from the routed voice, folded into six slots',
       () {
         final t = transform();
-        MidiNote onChannel(int c) =>
-            MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1, channel: c);
-        expect(t.spawnFor(onChannel(0)).voiceIndex, 0);
-        expect(t.spawnFor(onChannel(3)).voiceIndex, 3);
-        expect(t.spawnFor(onChannel(5)).voiceIndex, 5);
-        expect(t.spawnFor(onChannel(6)).voiceIndex, 0); // wraps at 6
-        expect(t.spawnFor(onChannel(8)).voiceIndex, 2);
+        MidiNote onVoice(String? v) =>
+            MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1, voice: v);
+        // An unrouted note folds to slot 0, matching the old channel-0 default.
+        expect(t.spawnFor(onVoice(null)).voiceIndex, 0);
+        // Every voice folds deterministically into `[0, 6)` via voiceHash.
+        for (final v in const [
+          'voice.default',
+          'voice.bass',
+          'voice.lead',
+          'voice.pad',
+          'voice.perc',
+        ]) {
+          final index = t.spawnFor(onVoice(v)).voiceIndex;
+          expect(index, voiceHash(v) % 6);
+          expect(index, inInclusiveRange(0, 5));
+        }
       },
     );
 

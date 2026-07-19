@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import '../../project/registry_kinds.dart';
+import '../../voice/voice_addresses.dart';
 import '../midi_clip.dart';
 import '../midi_note.dart';
 import 'smf_exception.dart';
@@ -15,17 +17,35 @@ import 'smf_exception.dart';
 /// model — with note-on/note-off events paired into [MidiNote]s. Timing is
 /// expressed in **quarter-note beats** (`ticks / division`), matching the rest
 /// of the MIDI domain where a "beat" is a quarter note. Velocity is normalised
-/// to `[0, 1]`. Channel and the first time signature are preserved; other
-/// channel-voice and meta events (CC, pitch-bend, tempo, …) are skipped — Phi
-/// interprets clips through transforms, not raw controller streams.
+/// to `[0, 1]`. Each file channel is mapped onto a **`voice.` address** (design
+/// `docs/design/racks-and-voices.md` §6): the first time signature is preserved;
+/// other channel-voice and meta events (CC, pitch-bend, tempo, …) are skipped —
+/// Phi interprets clips through transforms, not raw controller streams.
 class SmfReader {
   const SmfReader();
 
-  /// Parse [bytes] into a [MidiClip]. The clip carries no display name
-  /// (issue #184) — a track-name meta event is tolerated but not read; the
-  /// imported entity is named by the library, not the file. Throws
-  /// [SmfFormatException] on a malformed or unsupported stream.
-  MidiClip read(Uint8List bytes) {
+  /// The default file-channel → voice mapping: SMF channel 1 (byte `0`) is the
+  /// seeded [VoiceAddresses.defaultVoice]; each other channel `c` becomes a
+  /// distinct `voice.channel_<n>` voice (`n` its 1-based MIDI channel), the
+  /// "others created as needed" the import command materialises (§6). The
+  /// inverse of [SmfWriter.defaultChannelForVoice], so a voices → SMF → voices
+  /// round-trip is lossless.
+  static String defaultVoiceForChannel(int channel) => channel == 0
+      ? VoiceAddresses.defaultVoice
+      : '${RegistryKinds.voice}.channel_${channel + 1}';
+
+  /// Parse [bytes] into a [MidiClip]. Each file channel is mapped to a voice by
+  /// [voiceForChannel] (defaulting to [defaultVoiceForChannel]) — an import that
+  /// wants file channels to land on specific project voices passes its own map.
+  ///
+  /// The clip carries no display name (issue #184) — a track-name meta event is
+  /// tolerated but not read; the imported entity is named by the library, not
+  /// the file. Throws [SmfFormatException] on a malformed or unsupported stream.
+  MidiClip read(
+    Uint8List bytes, {
+    String? Function(int channel)? voiceForChannel,
+  }) {
+    final resolveVoice = voiceForChannel ?? defaultVoiceForChannel;
     final cursor = _Cursor(bytes);
 
     // ── Header chunk (MThd) ────────────────────────────────────────────────
@@ -121,7 +141,15 @@ class SmfReader {
             final pitch = cursor.readByte();
             final velocity = cursor.readByte();
             if (velocity == 0) {
-              _closeNote(notes, pending, channel, pitch, absTick, division);
+              _closeNote(
+                notes,
+                pending,
+                channel,
+                pitch,
+                absTick,
+                division,
+                resolveVoice,
+              );
             } else {
               (pending[_voiceKey(channel, pitch)] ??= []).add(
                 _PendingNote(channel, pitch, absTick, velocity),
@@ -130,7 +158,15 @@ class SmfReader {
           case 0x80: // note off
             final pitch = cursor.readByte();
             cursor.readByte(); // release velocity — unused
-            _closeNote(notes, pending, channel, pitch, absTick, division);
+            _closeNote(
+              notes,
+              pending,
+              channel,
+              pitch,
+              absTick,
+              division,
+              resolveVoice,
+            );
           case 0xC0: // program change — 1 data byte
           case 0xD0: // channel pressure — 1 data byte
             cursor.readByte();
@@ -151,7 +187,7 @@ class SmfReader {
       // tick — a defensive close for malformed tracks with no note-off.
       for (final list in pending.values) {
         for (final p in list) {
-          notes.add(_noteFrom(p, absTick, division));
+          notes.add(_noteFrom(p, absTick, division, resolveVoice));
         }
       }
 
@@ -170,6 +206,7 @@ class SmfReader {
     int pitch,
     int offTick,
     int division,
+    String? Function(int channel) resolveVoice,
   ) {
     final list = pending[_voiceKey(channel, pitch)];
     if (list == null || list.isEmpty) return; // orphan note-off — ignore.
@@ -180,19 +217,23 @@ class SmfReader {
         start: on.tick / division,
         duration: (offTick - on.tick) / division,
         velocity: on.velocity / 127.0,
-        channel: channel,
+        voice: resolveVoice(channel),
       ),
     );
   }
 
-  static MidiNote _noteFrom(_PendingNote on, int offTick, int division) =>
-      MidiNote(
-        pitch: on.pitch.toDouble(),
-        start: on.tick / division,
-        duration: (offTick - on.tick) / division,
-        velocity: on.velocity / 127.0,
-        channel: on.channel,
-      );
+  static MidiNote _noteFrom(
+    _PendingNote on,
+    int offTick,
+    int division,
+    String? Function(int channel) resolveVoice,
+  ) => MidiNote(
+    pitch: on.pitch.toDouble(),
+    start: on.tick / division,
+    duration: (offTick - on.tick) / division,
+    velocity: on.velocity / 127.0,
+    voice: resolveVoice(on.channel),
+  );
 
   static int _voiceKey(int channel, int pitch) => channel * 128 + pitch;
 

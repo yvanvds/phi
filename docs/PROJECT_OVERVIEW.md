@@ -164,20 +164,21 @@ main + app          (orchestration)
   velocity) and `ProbabilisticSkipRepeatTransform` (per-note skip / echo
   draws) as library code awaiting UI. Three voice transforms (issue #33):
   `VoiceRoutingTransform` (ordered first-match `VoiceRoutingRule`s — pitch
-  range, velocity range, or 1-based scale degree — assign `MidiNote.channel`;
-  wired into the default chain as `route · osc.saw`),
-  `VelocityToParameterTransform` (velocity → engine-parameter
-  `ParameterEvent`s via a pure `VelocityCurve` callback — the
+  range, velocity range, or 1-based scale degree — assign `MidiNote.voice`, a
+  `voice.` registry address string (issue #205); wired into the default chain as
+  `route · voice.default`), `VelocityToParameterTransform` (velocity →
+  engine-parameter `ParameterEvent`s via a pure `VelocityCurve` callback — the
   `CodeEvaluator`-friendly seam; notes pass through untouched), and
   `SplittingTransform` (each note copied once per `SplitVoice` —
-  channel/pitch-offset/velocity-scale layers). Three structural transforms
+  voice/pitch-offset/velocity-scale layers). Three structural transforms
   (issue #34): `LoopTransform` (tiles notes across a loop window, fixed
   repeat count or fill-to-length, with a phase offset — wired into the
   default chain as `loop · 4 bars`), `ReverseTransform` (mirrors start times
   within a fixed window, preserving duration), and
   `ConditionalMutingTransform` (drops notes matching a declarative
   `NoteCondition` — a leaf `NoteFieldCondition` (field · comparison ·
-  threshold over pitch/velocity/channel/start) or an `all`/`any`
+  threshold over pitch/velocity/start — the note's voice is an address, not a
+  comparable scalar, so it is not a field) or an `all`/`any`
   `NoteConditionGroup` of them; issue #109 replaced the bare `NotePredicate`
   callback with this serialisable model, keeping `NotePredicate` only as the
   evaluated keep-form, and still standing in for the future
@@ -186,9 +187,10 @@ main + app          (orchestration)
   (position + voice + lifetime) while passing notes through untouched — the
   same control-vs-note seam as `VelocityToParameterTransform`. Position is
   three independent `SpawnAxis`es (`lib/domain/midi/spawn_axis.dart`), each a
-  clamped linear remap of a `SpawnSource` (pitch / time / velocity / channel)
-  into a spatial range; voice colour derives from the note's channel, and an
-  optional constant `velocity` seeds the spawn's initial drift. During
+  clamped linear remap of a `SpawnSource` (pitch / time / velocity / voice —
+  the voice folded into a stable bucket by `voice_hash.dart`) into a spatial
+  range; voice colour derives from the note's routed voice, and an optional
+  constant `velocity` seeds the spawn's initial drift. During
   playback `EngineMidiController` reads the chain's active spawn transform and
   drives a new `SceneAgentSink` bridge (`lib/engine/bridge/`, implemented by
   `SceneRenderer`): each note-on spawns a live `SceneAgent`, its note-off
@@ -1003,6 +1005,25 @@ main + app          (orchestration)
     through the store, and asserts both identity and the three delete-impact edges.
     Pure-domain issue (no user-visible surface) — covered by unit tests plus the
     serializer round-trip; UI + gateway materialisation land in later epic issues.
+- **`MidiNote.channel` → `MidiNote.voice`** (issue #205, epic #203, design
+  `docs/design/racks-and-voices.md` §6) — the note-flow half of the racks epic,
+  no compat shim. A note now carries a `voice.` **address string** (`null` =
+  unrouted → the seeded `voice.default`) instead of a bare channel int; the same
+  migration threads through `DslNote`, `VoiceRoutingRule`/`SplitVoice` (voice
+  refs), the transform codec, clip persistence + the edit journal, and the
+  `NoteField` enum (the `channel` field dropped — a voice is an address, not a
+  comparable scalar). `seedDefaultProject` now seeds `voice.default` →
+  `synth.sine` → `mix.master`, and the default demo chain routes there.
+  `VoiceChannelResolver` (`lib/domain/voice/`) is the pure voice-address → `0..15`
+  transport-channel map (internal via `ChannelAllocation`, external via configured
+  channel); at flatten time `ClipSession.pushEvents` resolves each voice through
+  the `ClipSessionHost` seam and **degrades gracefully** — a note routed to an
+  unknown voice plays nothing and is surfaced via `EngineMidiController.unresolvedVoices`
+  rather than crashing. SMF `SmfReader`/`SmfWriter` map file channels ↔ voices
+  (channel 1 ↔ `voice.default`, others ↔ `voice.channel_<n>`), so a
+  voice → SMF → voice round-trip is lossless. Scene keying + voice colour fold a
+  voice into a stable bucket via `voice_hash.dart`. Full engine/gateway voice
+  materialisation is still a later epic issue.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

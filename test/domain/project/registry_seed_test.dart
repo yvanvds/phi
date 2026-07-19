@@ -3,7 +3,11 @@ import 'package:phi/domain/midi/store/clip_document.dart';
 import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/project/project_registry.dart';
 import 'package:phi/domain/project/registry_seed.dart';
+import 'package:phi/domain/synth/synth_definition.dart';
+import 'package:phi/domain/synth/synth_kind.dart';
 import 'package:phi/domain/time_domains/time_domain.dart';
+import 'package:phi/domain/voice/voice_definition.dart';
+import 'package:phi/domain/voice/voice_kind.dart';
 
 void main() {
   group('seedDefaultProject', () {
@@ -47,6 +51,29 @@ void main() {
       seedDefaultProject(registry);
 
       expect(registry.childrenOfKind('mix'), isEmpty);
+    });
+
+    test('seeds the default voice → synth.sine → master (#205)', () {
+      final registry = ProjectRegistry();
+      addTearDown(registry.dispose);
+
+      seedDefaultProject(registry);
+
+      // The zero-config starter synth.
+      final synth = registry.entityAt(EntityAddress.parse('synth.sine'));
+      expect(synth, isNotNull);
+      final synthPayload = synth!.payload! as Map<String, Object?>;
+      expect(SynthDefinition.fromJson(synthPayload).kind, SynthKind.sine);
+
+      // The default voice binds that synth to the master bus.
+      final voice = registry.entityAt(EntityAddress.parse('voice.default'));
+      expect(voice, isNotNull);
+      final definition = VoiceDefinition.fromJson(
+        voice!.payload! as Map<String, Object?>,
+      );
+      expect(definition.kind, VoiceKind.internal);
+      expect(definition.synth, EntityAddress.parse('synth.sine'));
+      expect(definition.output, EntityAddress.parse('mix.master'));
     });
   });
 }

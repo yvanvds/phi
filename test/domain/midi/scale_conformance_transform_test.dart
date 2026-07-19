@@ -63,14 +63,14 @@ void main() {
       expect(snap(60.4), 60);
     });
 
-    test('preserves start, duration, velocity, and channel', () {
+    test('preserves start, duration, velocity, and voice', () {
       final out = cDorian.apply(const [
         MidiNote(
           pitch: 61,
           start: 0.5,
           duration: 0.25,
           velocity: 0.42,
-          channel: 5,
+          voice: 'voice.a',
         ),
       ]);
       expect(
@@ -80,7 +80,7 @@ void main() {
           start: 0.5,
           duration: 0.25,
           velocity: 0.42,
-          channel: 5,
+          voice: 'voice.a',
         ),
       );
     });

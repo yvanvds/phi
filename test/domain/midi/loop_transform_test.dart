@@ -60,7 +60,7 @@ void main() {
       expect(out.map((n) => n.start), [1, 5]);
     });
 
-    test('leaves duration, velocity, pitch, and channel untouched', () {
+    test('leaves duration, velocity, pitch, and voice untouched', () {
       const t = LoopTransform(loopLengthBeats: 4, repeatCount: 2, label: 'p');
       final out = t.apply(const [
         MidiNote(
@@ -68,14 +68,14 @@ void main() {
           start: 0,
           duration: 0.5,
           velocity: 0.42,
-          channel: 3,
+          voice: 'voice.a',
         ),
       ]);
       for (final n in out) {
         expect(n.pitch, 64);
         expect(n.duration, 0.5);
         expect(n.velocity, 0.42);
-        expect(n.channel, 3);
+        expect(n.voice, 'voice.a');
       }
     });
 

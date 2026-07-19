@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import '../../project/registry_kinds.dart';
+import '../../voice/voice_addresses.dart';
 import '../midi_clip.dart';
 
 /// Encodes a [MidiClip] as a Standard MIDI File (format 0, single track).
@@ -17,6 +19,11 @@ import '../midi_clip.dart';
 /// end-of-track meta. Velocity is de-normalised to `1..127` (0 is reserved for
 /// note-off, so a note never encodes as silent).
 ///
+/// Each note's **`voice.` address** is mapped to a file channel by the [write]
+/// `channelForVoice` argument (defaulting to [defaultChannelForVoice]), the
+/// export half of the channel ↔ voice migration (design
+/// `docs/design/racks-and-voices.md` §6).
+///
 /// A Standard MIDI File carries only 7-bit integer pitch, so a fractional
 /// (microtonal) pitch is **rounded to the nearest semitone** on export
 /// (issue #36); the cents offset is lost. Live output preserves it via
@@ -27,11 +34,36 @@ class SmfWriter {
   /// Pulses per quarter note written into the header division field.
   final int ticksPerBeat;
 
+  /// The default voice → file-channel mapping — the inverse of
+  /// [SmfReader.defaultVoiceForChannel]. An unrouted note (`voice == null`) and
+  /// the seeded [VoiceAddresses.defaultVoice] both write SMF channel 1 (byte
+  /// `0`); a `voice.channel_<n>` voice writes its `n`-th channel; any other
+  /// voice falls back to channel 1, so an unmapped voice is never dropped.
+  static int defaultChannelForVoice(String? voice) {
+    if (voice == null || voice == VoiceAddresses.defaultVoice) return 0;
+    const prefix = '${RegistryKinds.voice}.channel_';
+    if (voice.startsWith(prefix)) {
+      final n = int.tryParse(voice.substring(prefix.length));
+      if (n != null && n >= 1) return (n - 1).clamp(0, 15);
+    }
+    return 0;
+  }
+
   /// Encode [clip] to SMF bytes. [name] fills the track-name meta event — the
   /// clip is named by its registry address leaf (issue #184), so the caller
   /// passes that leaf; it defaults to `'clip'` for nameless callers (tests).
-  Uint8List write(MidiClip clip, {String name = 'clip'}) {
-    final track = _buildTrack(clip, name);
+  /// Each note's voice is mapped to a file channel by [channelForVoice]
+  /// (defaulting to [defaultChannelForVoice]).
+  Uint8List write(
+    MidiClip clip, {
+    String name = 'clip',
+    int Function(String? voice)? channelForVoice,
+  }) {
+    final track = _buildTrack(
+      clip,
+      name,
+      channelForVoice ?? defaultChannelForVoice,
+    );
     final out = BytesBuilder();
 
     // ── Header chunk ───────────────────────────────────────────────────────
@@ -49,7 +81,11 @@ class SmfWriter {
     return out.toBytes();
   }
 
-  Uint8List _buildTrack(MidiClip clip, String trackName) {
+  Uint8List _buildTrack(
+    MidiClip clip,
+    String trackName,
+    int Function(String? voice) channelForVoice,
+  ) {
     // Flatten notes into timed events, then delta-encode. Note-offs sort
     // before note-ons at the same tick so a re-struck pitch isn't silenced by
     // the previous note's release.
@@ -57,7 +93,7 @@ class SmfWriter {
     for (final note in clip.notes) {
       final onTick = (note.start * ticksPerBeat).round();
       final offTick = ((note.start + note.duration) * ticksPerBeat).round();
-      final channel = note.channel & 0x0F;
+      final channel = channelForVoice(note.voice) & 0x0F;
       final velocity = (note.velocity * 127).round().clamp(1, 127);
       // SMF pitch is a 7-bit integer: round the (possibly fractional) pitch to
       // its nearest semitone. Microtonal detune is preserved only in live

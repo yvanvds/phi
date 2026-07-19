@@ -21,7 +21,13 @@ void main() {
     test('a single default voice is the identity', () {
       const t = SplittingTransform(voices: [SplitVoice()], label: 'split');
       const notes = [
-        MidiNote(pitch: 60, start: 0, duration: 1, velocity: 0.7, channel: 3),
+        MidiNote(
+          pitch: 60,
+          start: 0,
+          duration: 1,
+          velocity: 0.7,
+          voice: 'voice.a',
+        ),
       ];
 
       expect(t.apply(notes), notes);
@@ -29,7 +35,10 @@ void main() {
 
     test('octave doubling keeps the original and adds a layer', () {
       const t = SplittingTransform(
-        voices: [SplitVoice(), SplitVoice(pitchOffset: 12, channel: 2)],
+        voices: [
+          SplitVoice(),
+          SplitVoice(pitchOffset: 12, voice: 'voice.b'),
+        ],
         label: 'octave up',
       );
       const source = MidiNote(pitch: 60, start: 2, duration: 1, velocity: 0.8);
@@ -38,7 +47,7 @@ void main() {
 
       expect(out, hasLength(2));
       expect(out[0], source);
-      expect(out[1], source.copyWith(pitch: 72, channel: 2));
+      expect(out[1], source.copyWith(pitch: 72, voice: 'voice.b'));
     });
 
     test('copies of one note stay adjacent in the output', () {
@@ -83,23 +92,26 @@ void main() {
       expect(out.map((n) => n.pitch), [127, 96, 34, 0]);
     });
 
-    test('null channel keeps the source channel, set channel re-routes', () {
+    test('null voice keeps the source voice, set voice re-routes', () {
       const t = SplittingTransform(
-        voices: [SplitVoice(), SplitVoice(channel: 5)],
-        label: 'layer to 5',
+        voices: [
+          SplitVoice(),
+          SplitVoice(voice: 'voice.five'),
+        ],
+        label: 'layer to five',
       );
       const source = MidiNote(
         pitch: 60,
         start: 0,
         duration: 1,
         velocity: 1,
-        channel: 2,
+        voice: 'voice.two',
       );
 
       final out = t.apply(const [source]);
 
-      expect(out[0].channel, 2);
-      expect(out[1].channel, 5);
+      expect(out[0].voice, 'voice.two');
+      expect(out[1].voice, 'voice.five');
     });
 
     test('copyWith toggles active and keeps the voices', () {

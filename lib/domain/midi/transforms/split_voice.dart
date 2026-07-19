@@ -2,18 +2,18 @@
 /// it differs from the source note.
 ///
 /// A `SplitVoice()` with all defaults reproduces the source note exactly —
-/// include one to keep the original alongside the layers. [channel] `null`
-/// means "keep the note's incoming channel" so a split can add an octave
+/// include one to keep the original alongside the layers. [voice] `null`
+/// means "keep the note's incoming voice" so a split can add an octave
 /// without also re-routing.
 class SplitVoice {
   const SplitVoice({
-    this.channel,
+    this.voice,
     this.pitchOffset = 0,
     this.velocityScale = 1.0,
   });
 
-  /// Target channel for this layer, or `null` to keep the source channel.
-  final int? channel;
+  /// Target `voice.` address for this layer, or `null` to keep the source voice.
+  final String? voice;
 
   /// Semitones added to the source pitch — `12` layers an octave up.
   final int pitchOffset;

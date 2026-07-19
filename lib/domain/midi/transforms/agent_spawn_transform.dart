@@ -5,10 +5,11 @@ import '../midi_note.dart';
 import '../midi_transform.dart';
 import '../midi_transform_kind.dart';
 import '../spawn_axis.dart';
+import '../voice_hash.dart';
 
 /// Maps each note onto an [AgentSpawn] — a position in the 3D Scene, a voice
 /// colour, and a lifetime — realising the vision's "each note-on spawns a
-/// SceneAgent whose position derives from pitch/time/velocity/channel; the
+/// SceneAgent whose position derives from pitch/time/velocity/voice; the
 /// agent lives for the note's duration" (§3.7, issue #37).
 ///
 /// Notes themselves pass through [apply] untouched: like
@@ -19,7 +20,7 @@ import '../spawn_axis.dart';
 ///
 /// Each of [x], [y], [z] is an independent [SpawnAxis], so position can bind
 /// any axis to any note dimension. The agent's voice colour is derived from
-/// the note's channel — the domain-side voice handle a [VoiceRoutingTransform]
+/// the note's routed voice — the `voice.` address a [VoiceRoutingTransform]
 /// earlier in the chain assigns — folded into the six-slot palette.
 ///
 /// [velocity] stamps every spawn with an initial motion (scene units per
@@ -91,6 +92,7 @@ class AgentSpawnTransform extends MidiTransform {
     lifetimeBeats: note.duration,
   );
 
-  /// Fold the note's channel into the six-slot voice palette (`0..5`).
-  int _voiceOf(MidiNote note) => note.channel.clamp(0, 1 << 30) % 6;
+  /// Fold the note's routed voice into the six-slot voice palette (`0..5`) via
+  /// its stable [voiceHash] — an unrouted note (`voice == null`) folds to `0`.
+  int _voiceOf(MidiNote note) => voiceHash(note.voice) % 6;
 }

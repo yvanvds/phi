@@ -126,7 +126,7 @@ class ClipDocument {
     'start': note.start,
     'duration': note.duration,
     'velocity': note.velocity,
-    'channel': note.channel,
+    if (note.voice != null) 'voice': note.voice,
   };
 
   static MidiNote _noteFromJson(Map<String, Object?> json) => MidiNote(
@@ -134,7 +134,7 @@ class ClipDocument {
     start: (json['start'] as num?)?.toDouble() ?? 0,
     duration: (json['duration'] as num?)?.toDouble() ?? 0,
     velocity: (json['velocity'] as num?)?.toDouble() ?? 0,
-    channel: (json['channel'] as num?)?.toInt() ?? 0,
+    voice: json['voice'] as String?,
   );
 
   static MidiClipMode _mode(Object? name) {

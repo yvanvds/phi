@@ -3,16 +3,16 @@ import '../midi_transform.dart';
 import '../midi_transform_kind.dart';
 import 'voice_routing_rule.dart';
 
-/// Assigns each note's [MidiNote.channel] from an ordered list of [rules].
+/// Assigns each note's [MidiNote.voice] from an ordered list of [rules].
 ///
 /// Rules are tried in list order and the **first match wins**, so specific
 /// rules (an accent range, a single scale degree) go before broad
-/// catch-alls. A note no rule matches keeps its incoming channel — the
+/// catch-alls. A note no rule matches keeps its incoming voice — the
 /// transform routes, it never drops.
 ///
-/// The channel number is the domain-side handle for a voice; the engine
-/// bridge decides what a channel means (a YSE voice, a patcher inlet).
-/// Keeping that mapping out of the domain keeps this transform pure Dart.
+/// The voice is a `voice.` registry address; the flatten step maps it onto the
+/// voice's allocated engine channel (design `docs/design/racks-and-voices.md`
+/// §6). Keeping that mapping out of the domain keeps this transform pure Dart.
 class VoiceRoutingTransform extends MidiTransform {
   const VoiceRoutingTransform({
     required this.rules,
@@ -20,7 +20,7 @@ class VoiceRoutingTransform extends MidiTransform {
     this.active = true,
   });
 
-  /// Tried in order; first match assigns the note's channel.
+  /// Tried in order; first match assigns the note's voice.
   final List<VoiceRoutingRule> rules;
 
   @override
@@ -52,7 +52,7 @@ class VoiceRoutingTransform extends MidiTransform {
 
   MidiNote _route(MidiNote note) {
     for (final rule in rules) {
-      if (rule.matches(note)) return note.copyWith(channel: rule.channel);
+      if (rule.matches(note)) return note.copyWith(voice: rule.voice);
     }
     return note;
   }

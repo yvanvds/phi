@@ -76,7 +76,7 @@ void main() {
       expect(out.map((n) => n.pitch), [127, 0]);
     });
 
-    test('preserves start, duration, velocity, and channel', () {
+    test('preserves start, duration, velocity, and voice', () {
       const t = SpectralMappingTransform(table: {60: 65}, label: 'map');
       final out = t.apply(const [
         MidiNote(
@@ -84,7 +84,7 @@ void main() {
           start: 0.5,
           duration: 0.75,
           velocity: 0.42,
-          channel: 3,
+          voice: 'voice.a',
         ),
       ]);
       expect(
@@ -94,7 +94,7 @@ void main() {
           start: 0.5,
           duration: 0.75,
           velocity: 0.42,
-          channel: 3,
+          voice: 'voice.a',
         ),
       );
     });

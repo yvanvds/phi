@@ -78,7 +78,7 @@ void main() {
       );
     });
 
-    test('preserves start, duration, velocity, and channel', () {
+    test('preserves start, duration, velocity, and voice', () {
       const t = InversionTransform(axis: 60, label: 'around C4');
       final out = t.apply(const [
         MidiNote(
@@ -86,7 +86,7 @@ void main() {
           start: 0.5,
           duration: 0.75,
           velocity: 0.42,
-          channel: 3,
+          voice: 'voice.a',
         ),
       ]);
       expect(
@@ -96,7 +96,7 @@ void main() {
           start: 0.5,
           duration: 0.75,
           velocity: 0.42,
-          channel: 3,
+          voice: 'voice.a',
         ),
       );
     });

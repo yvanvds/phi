@@ -2,6 +2,7 @@ import 'package:vector_math/vector_math_64.dart';
 
 import '../time_domains/time_domain.dart';
 import '../time_domains/time_domain_registry.dart';
+import '../voice/voice_addresses.dart';
 import 'midi_clip.dart';
 import 'midi_note.dart';
 import 'midi_transform.dart';
@@ -76,8 +77,14 @@ MidiTransformChain defaultDemoChain() => MidiTransformChain(
     ),
     const QuantizationTransform(gravity: 0.6, label: 'quantize · gravity 0.6'),
     const VoiceRoutingTransform(
-      rules: [PitchRangeRule(minPitch: 0, maxPitch: 127, channel: 1)],
-      label: 'route · osc.saw',
+      rules: [
+        PitchRangeRule(
+          minPitch: 0,
+          maxPitch: 127,
+          voice: VoiceAddresses.defaultVoice,
+        ),
+      ],
+      label: 'route · voice.default',
     ),
     AgentSpawnTransform(
       // Pitch drives X, velocity lifts Y, and the note's start beat pushes it

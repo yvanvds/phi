@@ -53,7 +53,7 @@ class _AgentSpawnEditorState extends State<AgentSpawnEditor> {
     (SpawnSource.pitch, 'pitch'),
     (SpawnSource.time, 'time'),
     (SpawnSource.velocity, 'velocity'),
-    (SpawnSource.channel, 'channel'),
+    (SpawnSource.voice, 'voice'),
   ];
 
   static String _fmt(double v) =>

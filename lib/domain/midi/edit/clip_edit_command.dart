@@ -42,5 +42,5 @@ Map<String, Object?> noteToJson(MidiNote note) => {
   'start': note.start,
   'duration': note.duration,
   'velocity': note.velocity,
-  'channel': note.channel,
+  if (note.voice != null) 'voice': note.voice,
 };

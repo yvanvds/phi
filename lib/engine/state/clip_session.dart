@@ -7,6 +7,7 @@ import '../../domain/midi/midi_transform_chain.dart';
 import '../../domain/midi/store/clip_document.dart';
 import '../../domain/midi/transforms/agent_spawn_transform.dart';
 import '../../domain/midi/transforms/domain_subscription_transform.dart';
+import '../../domain/midi/voice_hash.dart';
 import '../../domain/project/entity_address.dart';
 import '../../domain/scene/scene_agent.dart';
 import '../bridge/midi_transport.dart';
@@ -76,7 +77,7 @@ class ClipSession {
 
   /// Base offset for this session's scene-field voice keys, so concurrent
   /// sessions occupy disjoint key bands in the one shared [SceneField]: a note's
-  /// key is [sceneKeyBase]` + channel * 128 + pitch`. The manager hands each
+  /// key is [sceneKeyBase]` + voiceBucket * 128 + pitch`. The manager hands each
   /// session a distinct base (issue #187) so two clips spawn side by side and a
   /// stopped clip clears only its own agents. Defaults to `0` for a lone session.
   final int sceneKeyBase;
@@ -166,8 +167,8 @@ class ClipSession {
   /// when the effective tempo hasn't moved. `null` until the first application.
   double? _appliedTempo;
 
-  /// Notes currently sounding, by `(channel, pitch)`, so the session releases
-  /// exactly what it pressed if a transform overlaps voices.
+  /// Notes currently sounding, by scene key (`voiceBucket, pitch`), so the
+  /// session releases exactly what it pressed if a transform overlaps voices.
   final Set<int> _sounding = <int>{};
 
   // ─── playback lifecycle ─────────────────────────────────────────────────
@@ -347,23 +348,46 @@ class ClipSession {
   /// nearest semitone and, in microtonal mode, carries the leftover cents as
   /// normalised pitch-bend event data. Records the pushed instance so [advance]
   /// can tell an unchanged output from a genuine revision bump.
+  ///
+  /// Each note's routed voice is mapped to its allocated engine channel (design
+  /// `docs/design/racks-and-voices.md` §6). A note whose voice resolves to no
+  /// known channel is **skipped** (it plays nothing) and its voice reported to
+  /// the host once, so an unknown voice degrades gracefully rather than crashing.
   void pushEvents() {
     final notes = _playbackNotes;
     _pushedNotes = notes;
     final loopBeats = _loopBeats;
     _pushedLoopBeats = loopBeats;
     final microtonal = host.microtonal;
-    final events = <TransportNote>[
-      for (final note in notes)
+    final events = <TransportNote>[];
+    Set<String>? unresolved;
+    for (final note in notes) {
+      final channel = host.channelForVoice(note.voice);
+      if (channel == null) {
+        // An unknown voice: silent, but surfaced. (An unrouted note — null
+        // voice — always resolves through the default voice, so it never lands
+        // here.)
+        (unresolved ??= <String>{}).add(note.voice!);
+        continue;
+      }
+      final semitone = _semitoneOf(note);
+      events.add(
         TransportNote(
           startBeat: note.start,
           durationBeats: note.duration,
-          channel: note.channel,
-          pitch: _semitoneOf(note),
+          channel: channel,
+          pitch: semitone,
           velocity: note.velocity.clamp(0.0, 1.0).toDouble(),
-          pitchBend: microtonal ? _bendFor(note, _semitoneOf(note)) : 0.0,
+          pitchBend: microtonal ? _bendFor(note, semitone) : 0.0,
         ),
-    ];
+      );
+    }
+    final reported = unresolved;
+    if (reported != null) {
+      for (final voice in reported) {
+        host.onUnresolvedVoice(voice);
+      }
+    }
     // Loop off pushes `loopBeats <= 0`, so the engine fires the events once and
     // stops (issue #184/#187); loop on loops the clip's declared length.
     _transport?.setEvents(events, loopBeats: loopBeats);
@@ -433,13 +457,13 @@ class ClipSession {
 
   void _noteOn(MidiNote note) {
     final semitone = _semitoneOf(note);
-    _sounding.add(_voiceKey(note.channel, semitone));
+    _sounding.add(_voiceKey(voiceHash(note.voice) % 16, semitone));
     _spawnAgent(note, semitone);
   }
 
   void _noteOff(MidiNote note) {
     final semitone = _semitoneOf(note);
-    final key = _voiceKey(note.channel, semitone);
+    final key = _voiceKey(voiceHash(note.voice) % 16, semitone);
     if (!_sounding.remove(key)) return;
     _despawnAgent(key);
   }
@@ -454,7 +478,7 @@ class ClipSession {
     if (transform == null) return;
     final spawn = transform.spawnFor(note);
     host.field.spawn(
-      _voiceKey(note.channel, semitone),
+      _voiceKey(voiceHash(note.voice) % 16, semitone),
       SceneAgent(
         position: spawn.position,
         velocity: spawn.velocity,
@@ -505,10 +529,11 @@ class ClipSession {
     return (semitonesOff / _bendRangeSemitones).clamp(-1.0, 1.0);
   }
 
-  /// This session's scene-field key for a `(channel, pitch)` voice, offset into
-  /// its own [sceneKeyBase] band so concurrent sessions never collide on the one
-  /// shared field (issue #187).
-  int _voiceKey(int channel, int pitch) => sceneKeyBase + channel * 128 + pitch;
+  /// This session's scene-field key for a `(voiceBucket, pitch)` pair, offset
+  /// into its own [sceneKeyBase] band so concurrent sessions never collide on
+  /// the one shared field (issue #187). The bucket is `voiceHash(voice) % 16`,
+  /// keeping the key in the same `0..2047` span the old channel did.
+  int _voiceKey(int bucket, int pitch) => sceneKeyBase + bucket * 128 + pitch;
 
   static const double _bendRangeSemitones = 2.0; // GM default: ±2 semitones.
 

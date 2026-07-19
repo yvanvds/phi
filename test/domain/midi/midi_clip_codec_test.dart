@@ -14,7 +14,13 @@ void main() {
       beatsPerBar: 4,
       notes: const [
         MidiNote(pitch: 60.5, start: 0, duration: 0.25, velocity: 0.7),
-        MidiNote(pitch: 67, start: 1, duration: 0.5, velocity: 0.6, channel: 2),
+        MidiNote(
+          pitch: 67,
+          start: 1,
+          duration: 0.5,
+          velocity: 0.6,
+          voice: 'voice.a',
+        ),
       ],
     );
 

@@ -17,6 +17,7 @@ import '../../domain/scene/scene_field.dart';
 import '../../domain/state_machine/state_graph.dart';
 import '../../domain/time_domains/fader_tempo_source.dart';
 import '../../domain/time_domains/tempo_source_stack.dart';
+import '../../domain/voice/voice_channel_resolver.dart';
 import '../bridge/midi_gateway.dart';
 import '../bridge/scene_agent_sink.dart';
 import 'clip_session.dart';
@@ -56,6 +57,7 @@ class EngineMidiController implements ClipSessionHost {
     SceneAgentSink? agentSink,
     StateGraph? stateGraph,
     RuntimeVariableRegistry? runtimeVariables,
+    VoiceChannelResolver? voiceResolver,
     double bpm = 120,
     String? outputPortName,
     bool microtonal = false,
@@ -64,6 +66,7 @@ class EngineMidiController implements ClipSessionHost {
        _agentSink = agentSink,
        _stateGraph = stateGraph,
        _runtimeVariables = runtimeVariables,
+       _voiceResolver = voiceResolver ?? VoiceChannelResolver.seededDefault(),
        _microtonal = microtonal,
        _bpm = bpm,
        _outputPortName = outputPortName,
@@ -121,8 +124,8 @@ class EngineMidiController implements ClipSessionHost {
   int _nextSceneKeyBase = 0;
 
   /// Width of a session's scene-key band. Larger than any voice key
-  /// (`channel * 128 + pitch` maxes at `15 * 128 + 127 = 2047`), so the bands
-  /// never overlap.
+  /// (`voiceBucket * 128 + pitch` maxes at `15 * 128 + 127 = 2047`), so the
+  /// bands never overlap.
   static const int _sceneKeyStride = 100000;
 
   int _allocateSceneKeyBase() {
@@ -513,6 +516,49 @@ class EngineMidiController implements ClipSessionHost {
     activeStateId: _stateGraph?.activeStateId,
     variables: _runtimeVariables?.snapshot() ?? const {},
   );
+
+  // ─── voice → channel resolution (design §6) ──────────────────────────────
+
+  /// Maps a note's routed voice to its allocated engine channel at flatten time.
+  /// Seeded with just `voice.default` on channel 0 until the racks epic
+  /// materialises further voices (issue #205); swap it via [voiceResolver] to
+  /// teach the controller the project's live voice → channel table.
+  VoiceChannelResolver _voiceResolver;
+
+  final Set<String> _unresolvedVoices = <String>{};
+
+  /// The voice → channel table sessions flatten against. Replaceable so the
+  /// racks/engine wiring (a later epic issue) can hand in the project's live
+  /// allocation without re-plumbing the sessions.
+  VoiceChannelResolver get voiceResolver => _voiceResolver;
+  set voiceResolver(VoiceChannelResolver resolver) {
+    _voiceResolver = resolver;
+    for (final s in _sessions.values) {
+      if (s.isPlaying) s.pushEvents();
+    }
+  }
+
+  @override
+  int? channelForVoice(String? voice) => _voiceResolver.channelFor(voice);
+
+  /// The distinct voices that failed to resolve since the last [clearVoiceIssues]
+  /// — an unknown voice a clip routed to played nothing (design §6). Observable
+  /// so a surface can tell the performer which voice is missing.
+  Set<String> get unresolvedVoices => Set.unmodifiable(_unresolvedVoices);
+
+  @override
+  void onUnresolvedVoice(String voice) {
+    if (_unresolvedVoices.add(voice)) {
+      debugPrint(
+        'phi.midi: clip routed to unknown voice "$voice" — its notes are '
+        'silent until the voice exists.',
+      );
+    }
+  }
+
+  /// Drop the recorded [unresolvedVoices] — e.g. after the missing voice has
+  /// been created, so a stale warning doesn't linger.
+  void clearVoiceIssues() => _unresolvedVoices.clear();
 
   /// Scatter the live agents — a one-shot performer action that disperses the
   /// spawned set with a seeded, bounded random impulse and pushes the kicked set

@@ -27,7 +27,7 @@ void main() {
       expect(t.apply(t.apply(input)), input);
     });
 
-    test('preserves duration, pitch, velocity, and channel', () {
+    test('preserves duration, pitch, velocity, and voice', () {
       const t = ReverseTransform(lengthBeats: 16, label: 'rev');
       final out = t.apply(const [
         MidiNote(
@@ -35,13 +35,13 @@ void main() {
           start: 2,
           duration: 0.5,
           velocity: 0.42,
-          channel: 3,
+          voice: 'voice.a',
         ),
       ]);
       expect(out.single.duration, 0.5);
       expect(out.single.pitch, 64);
       expect(out.single.velocity, 0.42);
-      expect(out.single.channel, 3);
+      expect(out.single.voice, 'voice.a');
     });
 
     test('a non-positive lengthBeats passes notes through unchanged', () {

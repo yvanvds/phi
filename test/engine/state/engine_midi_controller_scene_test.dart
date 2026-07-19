@@ -6,6 +6,7 @@ import 'package:phi/domain/midi/midi_transform_chain.dart';
 import 'package:phi/domain/midi/spawn_axis.dart';
 import 'package:phi/domain/midi/spawn_source.dart';
 import 'package:phi/domain/midi/transforms/agent_spawn_transform.dart';
+import 'package:phi/domain/midi/voice_hash.dart';
 import 'package:phi/domain/scene/pick_ray.dart';
 import 'package:phi/domain/scene/scatter.dart';
 import 'package:phi/domain/scene/sphere_volume.dart';
@@ -22,7 +23,13 @@ MidiClip _clip() => MidiClip(
   bars: 1,
   notes: const [
     MidiNote(pitch: 60, start: 0.0, duration: 1.0, velocity: 1.0),
-    MidiNote(pitch: 72, start: 2.0, duration: 1.0, velocity: 0.5, channel: 3),
+    MidiNote(
+      pitch: 72,
+      start: 2.0,
+      duration: 1.0,
+      velocity: 0.5,
+      voice: 'voice.b',
+    ),
   ],
 );
 
@@ -79,10 +86,10 @@ void main() {
         async.elapse(const Duration(milliseconds: 400)); // now ~1.4 beats
         expect(renderer.lastAgents, isEmpty);
 
-        // Note B (beat 2, channel 3) spawns with its own voice + position.
+        // Note B (beat 2, voice.b) spawns with its own voice colour + position.
         async.elapse(const Duration(milliseconds: 400)); // now ~2.2 beats
         expect(renderer.lastAgents, hasLength(1));
-        expect(renderer.lastAgents.single.voiceIndex, 3);
+        expect(renderer.lastAgents.single.voiceIndex, voiceHash('voice.b') % 6);
         expect(renderer.lastAgents.single.position.x, closeTo(72, 1e-9));
 
         controller.stop();

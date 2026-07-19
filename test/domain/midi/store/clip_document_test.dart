@@ -13,7 +13,13 @@ void main() {
     beatsPerBar: 4,
     notes: const [
       MidiNote(pitch: 60, start: 0, duration: 0.5, velocity: 0.7),
-      MidiNote(pitch: 64, start: 1, duration: 0.5, velocity: 0.6, channel: 1),
+      MidiNote(
+        pitch: 64,
+        start: 1,
+        duration: 0.5,
+        velocity: 0.6,
+        voice: 'voice.lead',
+      ),
     ],
   );
 
@@ -31,7 +37,7 @@ void main() {
     expect(decoded.mode, MidiClipMode.chain);
     expect(decoded.source.bars, 2);
     expect(decoded.source.notes, hasLength(2));
-    expect(decoded.source.notes[1].channel, 1);
+    expect(decoded.source.notes[1].voice, 'voice.lead');
     expect(decoded.chain, hasLength(2));
     expect((decoded.chain[0] as TransposeTransform).semitones, 3);
     expect(decoded.chain[1].active, isFalse);

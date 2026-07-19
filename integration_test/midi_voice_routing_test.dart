@@ -11,20 +11,23 @@ import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
 import '../test/surfaces/midi/fake_midi_file_io.dart';
 
-/// End-to-end voice routing through the real workstation (issue #33).
+/// End-to-end voice routing through the real workstation (issue #33, #205).
 ///
-/// The `route · osc.saw` chip in the default chain is a real
-/// [VoiceRoutingTransform] now, so its effect — every note re-channelled to
-/// channel 1 — must survive the real app's export path: real navigation,
-/// real sidebar chip toggle, real SMF encoding. A fake [FakeMidiFileIo]
-/// stands in for the native save dialog only.
+/// The `route · voice.default` chip in the default chain is a real
+/// [VoiceRoutingTransform] that now assigns each note a `voice.` address rather
+/// than a bare channel (issue #205). Its effect — every note carrying
+/// `voice.default` when active, and falling back to the unrouted `null` voice
+/// when toggled off — must show up on the live interpreted output through the
+/// real app: real navigation, real sidebar chip toggle. The routed clip also
+/// still exports to SMF (the default voice maps to channel 0). A fake
+/// [FakeMidiFileIo] stands in for the native save dialog only.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   Finder railFor(SurfaceId id) =>
       find.byWidgetPredicate((w) => w is RailButton && w.label == id.label);
 
-  testWidgets('midi: the route chip re-channels the exported clip', (
+  testWidgets('midi: the route chip re-voices the interpreted clip', (
     tester,
   ) async {
     final fakeIo = FakeMidiFileIo();
@@ -43,30 +46,35 @@ void main() {
     // Open the MIDI surface; the seeded chain has the route chip active.
     await tester.tap(railFor(SurfaceId.midi));
     await tester.pumpAndSettle();
-    expect(find.text('route · osc.saw'), findsOneWidget);
+    expect(find.text('route · voice.default'), findsOneWidget);
 
-    // Export the seeded phrase with routing active: every decoded note
-    // carries the routed channel, proving the chip is live in the real
-    // app and the channel survives the SMF bytes.
+    // With routing active every interpreted note carries voice.default — the
+    // chip is live in the real app.
+    final routedOutput = engine.midi.chain.output;
+    expect(routedOutput, isNotEmpty);
+    for (final note in routedOutput) {
+      expect(note.voice, 'voice.default');
+    }
+
+    // The routed clip still exports (voice.default → SMF channel 0), and
+    // re-imports as voice.default.
     await tester.tap(find.text('EXPORT'));
     await tester.pumpAndSettle();
     expect(fakeIo.saveCalls, 1);
-    final routed = const SmfReader().read(fakeIo.savedBytes!);
-    expect(routed.notes, isNotEmpty);
-    for (final note in routed.notes) {
-      expect(note.channel, 1);
+    final exported = const SmfReader().read(fakeIo.savedBytes!);
+    expect(exported.notes, isNotEmpty);
+    for (final note in exported.notes) {
+      expect(note.voice, 'voice.default');
     }
 
-    // Toggle the chip off in the sidebar and export again: notes fall back
-    // to the source channel 0 — the toggle is wired, not cosmetic.
-    await tester.tap(find.text('route · osc.saw'));
+    // Toggle the chip off in the sidebar: notes fall back to the unrouted
+    // `null` voice — the toggle is wired, not cosmetic.
+    await tester.tap(find.text('route · voice.default'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('EXPORT'));
-    await tester.pumpAndSettle();
-    expect(fakeIo.saveCalls, 2);
-    final unrouted = const SmfReader().read(fakeIo.savedBytes!);
-    for (final note in unrouted.notes) {
-      expect(note.channel, 0);
+    final unroutedOutput = engine.midi.chain.output;
+    expect(unroutedOutput, isNotEmpty);
+    for (final note in unroutedOutput) {
+      expect(note.voice, isNull);
     }
 
     session.dispose();

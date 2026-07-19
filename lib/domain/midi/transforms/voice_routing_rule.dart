@@ -2,18 +2,19 @@ import '../midi_note.dart';
 import '../music_scale.dart';
 
 /// One routing predicate inside a [VoiceRoutingTransform]: "if the note
-/// matches, send it to [channel]".
+/// matches, send it to [voice]".
 ///
 /// A sealed family rather than a single struct-of-nullables so each rule
 /// spells out exactly the fields it needs — a scale-degree rule can't be
 /// half-configured, and adding a new criterion later is a new subclass
 /// rather than another nullable on everything.
 sealed class VoiceRoutingRule {
-  const VoiceRoutingRule({required this.channel});
+  const VoiceRoutingRule({required this.voice});
 
-  /// The [MidiNote.channel] assigned when this rule matches. Downstream the
-  /// engine bridge maps channels onto voices / patcher inlets.
-  final int channel;
+  /// The [MidiNote.voice] address assigned when this rule matches. At flatten
+  /// time the session maps that voice onto its allocated engine channel (design
+  /// `docs/design/racks-and-voices.md` §6).
+  final String voice;
 
   bool matches(MidiNote note);
 }
@@ -25,7 +26,7 @@ final class PitchRangeRule extends VoiceRoutingRule {
   const PitchRangeRule({
     required this.minPitch,
     required this.maxPitch,
-    required super.channel,
+    required super.voice,
   });
 
   final int minPitch;
@@ -43,7 +44,7 @@ final class VelocityRangeRule extends VoiceRoutingRule {
   const VelocityRangeRule({
     required this.minVelocity,
     required this.maxVelocity,
-    required super.channel,
+    required super.voice,
   });
 
   final double minVelocity;
@@ -65,7 +66,7 @@ final class ScaleDegreeRule extends VoiceRoutingRule {
     required this.scale,
     required this.tonic,
     required this.degrees,
-    required super.channel,
+    required super.voice,
   });
 
   final MusicScale scale;

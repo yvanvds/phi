@@ -10,6 +10,7 @@ import 'package:phi/domain/midi/transforms/stub_transform.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
 import 'package:phi/domain/midi/transforms/voice_routing_transform.dart';
 import 'package:phi/domain/time_domains/time_domain.dart';
+import 'package:phi/domain/voice/voice_addresses.dart';
 
 void main() {
   group('phraseA', () {
@@ -70,15 +71,15 @@ void main() {
       // Voice routing is real as of issue #33; the agent-spawn chip is real as
       // of issue #37.
       expect(chain.transforms[4], isA<VoiceRoutingTransform>());
-      expect(chain.transforms[4].label, 'route · osc.saw');
+      expect(chain.transforms[4].label, 'route · voice.default');
       expect(chain.transforms[5], isA<AgentSpawnTransform>());
       expect(chain.transforms[5].label, 'spawn · agent @ p,v');
     });
 
-    test('the route chip sends every demo note to channel 1', () {
+    test('the route chip sends every demo note to voice.default', () {
       final chain = defaultDemoChain();
       for (final note in chain.output) {
-        expect(note.channel, 1);
+        expect(note.voice, VoiceAddresses.defaultVoice);
       }
     });
 

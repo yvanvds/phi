@@ -115,7 +115,7 @@ void main() {
     chain.dispose();
   });
 
-  testWidgets('routing: adding a rule re-channels the note, channel editable', (
+  testWidgets('routing: adding a rule re-routes the note, voice editable', (
     tester,
   ) async {
     final chain = oneNoteChain(const [
@@ -124,18 +124,18 @@ void main() {
     await pump(tester, chain);
     await openEditor(tester);
 
-    // No rules: the note keeps its source channel 0.
-    expect(chain.output.single.channel, 0);
+    // No rules: the note keeps its source voice (unrouted).
+    expect(chain.output.single.voice, isNull);
 
     await tester.tap(find.text('+ add rule'));
     await tester.pumpAndSettle();
-    // Default pitch-range rule (0..127 → channel 1) catches the note.
-    expect(chain.output.single.channel, 1);
+    // Default pitch-range rule (0..127 → voice.default) catches the note.
+    expect(chain.output.single.voice, 'voice.default');
 
-    // The channel field is the third field in the block (min, max, channel).
-    await tester.enterText(dialogFields().at(2), '3');
+    // The voice field is the third field in the block (min, max, voice).
+    await tester.enterText(dialogFields().at(2), 'voice.bass');
     await tester.pump();
-    expect(chain.output.single.channel, 3);
+    expect(chain.output.single.voice, 'voice.bass');
 
     chain.dispose();
   });
@@ -145,7 +145,7 @@ void main() {
   ) async {
     final chain = oneNoteChain(const [
       VoiceRoutingTransform(
-        rules: [PitchRangeRule(minPitch: 0, maxPitch: 127, channel: 2)],
+        rules: [PitchRangeRule(minPitch: 0, maxPitch: 127, voice: 'voice.two')],
         label: 'route',
       ),
     ]);
@@ -161,10 +161,10 @@ void main() {
     final rule =
         (chain.transforms.single as VoiceRoutingTransform).rules.single;
     expect(rule, isA<ScaleDegreeRule>());
-    // The channel carries across the kind switch.
-    expect(rule.channel, 2);
+    // The voice carries across the kind switch.
+    expect(rule.voice, 'voice.two');
     // The tonic-degree default routes the middle-C note (degree 1 of C).
-    expect(chain.output.single.channel, 2);
+    expect(chain.output.single.voice, 'voice.two');
 
     chain.dispose();
   });

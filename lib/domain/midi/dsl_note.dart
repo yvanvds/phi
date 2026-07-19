@@ -6,20 +6,21 @@ import 'midi_note.dart';
 /// performer-authored transform (issue #38) — deliberately decoupled from the
 /// internal [MidiNote] so the domain model can evolve without breaking scripts
 /// a performer has already written. It carries the same continuous fields plus
-/// the voice [channel], all immutable: a transform receives a list of these,
+/// the [voice] address, all immutable: a transform receives a list of these,
 /// returns a (possibly different) list of these, and Phi converts back to
 /// [MidiNote]s at the chain boundary (see `CustomTransform`).
 ///
 /// Fields mirror [MidiNote]: [pitch] is a fractional MIDI number (`60.0` is
 /// middle C, `60.5` a quarter-tone above), [start] and [duration] are in
-/// beats, [velocity] is normalised to `[0, 1]`.
+/// beats, [velocity] is normalised to `[0, 1]`, and [voice] is the note's
+/// `voice.` address (or `null` when unrouted).
 class DslNote {
   const DslNote({
     required this.pitch,
     required this.start,
     required this.duration,
     required this.velocity,
-    this.channel = 0,
+    this.voice,
   });
 
   /// Projects a domain [MidiNote] into the DSL contract.
@@ -28,27 +29,29 @@ class DslNote {
     start: note.start,
     duration: note.duration,
     velocity: note.velocity,
-    channel: note.channel,
+    voice: note.voice,
   );
 
   final double pitch;
   final double start;
   final double duration;
   final double velocity;
-  final int channel;
+
+  /// The `voice.` address this note routes to, or `null` when unrouted.
+  final String? voice;
 
   DslNote copyWith({
     double? pitch,
     double? start,
     double? duration,
     double? velocity,
-    int? channel,
+    String? voice,
   }) => DslNote(
     pitch: pitch ?? this.pitch,
     start: start ?? this.start,
     duration: duration ?? this.duration,
     velocity: velocity ?? this.velocity,
-    channel: channel ?? this.channel,
+    voice: voice ?? this.voice,
   );
 
   /// Materialises this DSL note back into a domain [MidiNote].
@@ -57,7 +60,7 @@ class DslNote {
     start: start,
     duration: duration,
     velocity: velocity,
-    channel: channel,
+    voice: voice,
   );
 
   @override
@@ -68,14 +71,14 @@ class DslNote {
           other.start == start &&
           other.duration == duration &&
           other.velocity == velocity &&
-          other.channel == channel;
+          other.voice == voice;
 
   @override
-  int get hashCode => Object.hash(pitch, start, duration, velocity, channel);
+  int get hashCode => Object.hash(pitch, start, duration, velocity, voice);
 
   @override
   String toString() =>
-      'DslNote(p:$pitch t:$start d:$duration v:$velocity c:$channel)';
+      'DslNote(p:$pitch t:$start d:$duration v:$velocity voice:$voice)';
 }
 
 /// A performer-authored transform in DSL terms: notes in, notes out.
