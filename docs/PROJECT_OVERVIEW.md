@@ -736,7 +736,7 @@ main + app          (orchestration)
   `library_panel` widget test (fake gateway — tree rendering, select, every
   context-menu path, drag-to-group, play/loop/stop-all), and an end-to-end
   `midi_library_panel` integration test (expand → add → select → play → stop-all
-  through the real shell). **Deferred (follow-up #189):** the `ClipRegistryPublisher`
+  through the real shell). **Deferred (follow-up #197):** the `ClipRegistryPublisher`
   still watches the boot session's objects, so edits made *after* a library
   selection don't yet persist — the publisher must follow the edited session.
   Issue #136 finishes the `mix.` migration #124 bounded: a channel's **live mix
