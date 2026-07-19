@@ -155,6 +155,22 @@ class ClipLibraryController extends ChangeNotifier {
     return address;
   }
 
+  /// Import the SMF [bytes] as a **new** clip entity in the currently selected
+  /// group (the edited clip's group, or the top level), its address slugged from
+  /// [fileName] (design §3) — never overwriting the open clip — then open it in
+  /// the editor. Returns the new clip's address. Throws an [SmfFormatException]
+  /// (from the SMF reader) on a malformed stream; the caller surfaces it.
+  EntityAddress importFromSmf(Uint8List bytes, {required String fileName}) {
+    final command = _library.importFromSmf(
+      bytes,
+      group: editedAddress?.parent,
+      fileName: fileName,
+    );
+    _apply(command);
+    select(command.address);
+    return command.address;
+  }
+
   /// Duplicate the whole clip document at [source] to `<name>_copy` beside it, then
   /// open the copy. A no-op when [source] is not a clip entity.
   EntityAddress? duplicate(EntityAddress source) {

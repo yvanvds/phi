@@ -8,6 +8,7 @@ import '../../design/tokens/phi_radii.dart';
 import '../../design/tokens/phi_type.dart';
 import '../../domain/midi/clip_editor.dart';
 import '../../domain/midi/midi_note.dart';
+import 'piano_roll_caret.dart';
 import 'piano_roll_geometry.dart';
 import 'piano_roll_painter.dart';
 import 'piano_roll_view.dart';
@@ -72,6 +73,12 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
   Offset _dragStart = Offset.zero;
   bool _marqueeAdditive = false;
   Rect? _marquee;
+
+  /// The step-entry caret (issue #191), or `null` when none is summoned. The
+  /// arrow keys move it by one grid step; `Enter` drops a grid-length note at its
+  /// lane/beat and advances it; `Escape` dismisses it. Pure view state — a note is
+  /// authored through [ClipEditor] like any other edit, so it undoes normally.
+  PianoRollCaret? _caret;
 
   // Live deltas for a move/resize drag (in semitones / beats).
   int _dPitch = 0;
@@ -316,22 +323,81 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
     }
     switch (key) {
       case LogicalKeyboardKey.arrowUp:
-        _editor.moveSelection(dPitch: 1);
+        _arrow(dPitch: 1);
       case LogicalKeyboardKey.arrowDown:
-        _editor.moveSelection(dPitch: -1);
+        _arrow(dPitch: -1);
       case LogicalKeyboardKey.arrowLeft:
-        _editor.moveSelection(dBeats: -_step);
+        _arrow(dBeats: -_step);
       case LogicalKeyboardKey.arrowRight:
-        _editor.moveSelection(dBeats: _step);
+        _arrow(dBeats: _step);
+      case LogicalKeyboardKey.enter:
+      case LogicalKeyboardKey.numpadEnter:
+        _dropAtCaret();
       case LogicalKeyboardKey.delete:
       case LogicalKeyboardKey.backspace:
         _editor.deleteSelection();
       case LogicalKeyboardKey.escape:
-        _editor.clearSelection();
+        if (_caret != null) {
+          setState(() => _caret = null);
+        } else {
+          _editor.clearSelection();
+        }
       default:
         return KeyEventResult.ignored;
     }
     return KeyEventResult.handled;
+  }
+
+  // ── Step entry: the caret (issue #191) ────────────────────────────────────
+
+  /// The lane a freshly-summoned caret sits on — the middle of the visible pitch
+  /// window, so the first step-entry note lands somewhere on-screen.
+  int get _homePitch => ((widget.minPitch + widget.maxPitch) / 2).round();
+
+  /// A caret at the resting origin — beat 0, middle lane.
+  PianoRollCaret get _home => PianoRollCaret(beat: 0, pitch: _homePitch);
+
+  /// An arrow key. The caret wins when it is up (step entry); otherwise a
+  /// selection is nudged as before (#189/#190); with neither, the arrow summons
+  /// the caret and moves it, so an empty roll enters step mode on the first press.
+  void _arrow({int dPitch = 0, double dBeats = 0}) {
+    if (_caret != null) {
+      _moveCaret(dPitch: dPitch, dBeats: dBeats);
+    } else if (_editor.selection.isNotEmpty) {
+      _editor.moveSelection(dPitch: dPitch, dBeats: dBeats);
+    } else {
+      setState(() => _caret = _home);
+      _moveCaret(dPitch: dPitch, dBeats: dBeats);
+    }
+  }
+
+  /// Move the caret by one grid step, clamped to the clip origin and the visible
+  /// pitch window.
+  void _moveCaret({int dPitch = 0, double dBeats = 0}) {
+    final c = _caret;
+    if (c == null) return;
+    setState(() {
+      _caret = c.copyWith(
+        beat: (c.beat + dBeats).clamp(0.0, double.infinity),
+        pitch: (c.pitch + dPitch).clamp(widget.minPitch, widget.maxPitch),
+      );
+    });
+  }
+
+  /// Drop a grid-length note at the caret (summoning one at the origin first when
+  /// none is up), then advance the caret by the grid so a run of `Enter`s lays
+  /// notes end to end. The add goes through [ClipEditor], so it undoes normally.
+  void _dropAtCaret() {
+    final c = _caret ?? _home;
+    _editor.addNote(
+      MidiNote(
+        pitch: c.pitch.toDouble(),
+        start: c.beat,
+        duration: _step,
+        velocity: 0.7,
+      ),
+    );
+    setState(() => _caret = c.copyWith(beat: c.beat + _step));
   }
 
   /// Source notes with the in-flight drag delta applied to the selection, so
@@ -400,6 +466,8 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
       maxPitch: widget.maxPitch,
       playhead: playhead,
       view: widget.view,
+      caret: _caret,
+      caretLength: _step,
     ),
   );
 

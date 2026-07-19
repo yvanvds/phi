@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/midi/midi_clip.dart';
 import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/midi_transform_chain.dart';
+import 'package:phi/domain/midi/smf/smf_writer.dart';
 import 'package:phi/domain/midi/store/clip_document.dart';
 import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/project/project_command.dart';
@@ -122,6 +123,53 @@ void main() {
       expect(registry.entityAt(copy!), isNotNull);
       expect(controller.editedAddress, copy);
     });
+
+    test('importFromSmf lands a new clip in the selected group + opens it', () {
+      registry.createGroup(_addr('clip.drums'));
+      registry.createEntity(_addr('clip.drums.kick'), payload: _clipPayload());
+      controller.select(_addr('clip.drums.kick'));
+      expect(controller.editedAddress, _addr('clip.drums.kick'));
+
+      final bytes = const SmfWriter().write(
+        MidiClip(
+          bars: 2,
+          notes: const [
+            MidiNote(pitch: 67, start: 0, duration: 0.5, velocity: 0.7),
+          ],
+        ),
+      );
+      final imported = controller.importFromSmf(bytes, fileName: 'My Loop.mid');
+
+      // Landed under the selected clip's group, slugged from the filename.
+      expect(imported, _addr('clip.drums.my_loop'));
+      expect(registry.entityAt(imported), isNotNull);
+      // Recorded (journaled) and opened as the edited session — never an
+      // in-place overwrite of the previously edited clip.
+      expect(recorded, hasLength(1));
+      expect(controller.editedAddress, imported);
+      expect(sessions.editedSession.address, imported);
+    });
+
+    test(
+      'importFromSmf lands top-level when the selected clip is top-level',
+      () {
+        registry.createEntity(_addr('clip.a'), payload: _clipPayload());
+        controller.select(_addr('clip.a'));
+
+        final bytes = const SmfWriter().write(
+          MidiClip(
+            bars: 1,
+            notes: const [
+              MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1),
+            ],
+          ),
+        );
+        final imported = controller.importFromSmf(bytes, fileName: 'loop.mid');
+
+        expect(imported, _addr('clip.loop'));
+        expect(registry.entityAt(imported), isNotNull);
+      },
+    );
 
     test('rename moves the entity to the slug of the new name (refactor)', () {
       registry.createEntity(_addr('clip.a'), payload: _clipPayload());

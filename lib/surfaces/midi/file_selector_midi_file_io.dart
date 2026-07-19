@@ -16,10 +16,10 @@ class FileSelectorMidiFileIo implements MidiFileIo {
   static const _group = XTypeGroup(label: 'MIDI', extensions: ['mid', 'midi']);
 
   @override
-  Future<Uint8List?> openSmf() async {
+  Future<PickedMidiFile?> openSmf() async {
     final file = await openFile(acceptedTypeGroups: const [_group]);
     if (file == null) return null;
-    return file.readAsBytes();
+    return (bytes: await file.readAsBytes(), name: file.name);
   }
 
   @override

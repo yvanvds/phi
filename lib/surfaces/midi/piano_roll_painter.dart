@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../design/tokens/phi_colors.dart';
 import '../../domain/midi/midi_note.dart';
+import 'piano_roll_caret.dart';
 import 'piano_roll_geometry.dart';
 import 'piano_roll_view.dart';
 
@@ -28,6 +29,8 @@ class PianoRollPainter extends CustomPainter {
     this.maxPitch = 76,
     this.playhead = 0,
     this.view,
+    this.caret,
+    this.caretLength = 0.25,
   });
 
   /// The editable clip notes — drawn bright, hit-tested by the gesture layer.
@@ -55,11 +58,21 @@ class PianoRollPainter extends CustomPainter {
   /// the area (the un-zoomed default); a view scales and offsets it.
   final PianoRollView? view;
 
+  /// The step-entry caret (issue #191), or `null` when no caret is summoned. Drawn
+  /// as an insertion cursor: a vertical guide at its beat and an outlined cell at
+  /// its lane, [caretLength] beats wide (the note a drop would land).
+  final PianoRollCaret? caret;
+
+  /// The width of the caret's cell, in beats — the current grid step, so the
+  /// preview cell matches the length `Enter` would drop.
+  final double caretLength;
+
   static const Color _noteCore = PhiColors.voice1;
   static const Color _noteHalo = PhiColors.voice1Soft;
   static const Color _attackPip = PhiColors.fg0;
   static const Color _ghost = PhiColors.fg3;
   static const Color _selOutline = PhiColors.fg0;
+  static const Color _caretColor = PhiColors.voice2;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -78,6 +91,7 @@ class PianoRollPainter extends CustomPainter {
     _paintSource(canvas, geo);
     _paintMarquee(canvas);
     _paintPlayhead(canvas, geo);
+    _paintCaret(canvas, geo);
   }
 
   void _paintLanes(Canvas canvas, PianoRollGeometry geo) {
@@ -181,6 +195,31 @@ class PianoRollPainter extends CustomPainter {
     );
   }
 
+  /// The step-entry caret: a full-height guide at its beat plus an outlined cell
+  /// at its lane, [caretLength] beats wide — a preview of the note a drop lands.
+  void _paintCaret(Canvas canvas, PianoRollGeometry geo) {
+    final c = caret;
+    if (c == null) return;
+    final x = geo.xForBeat(c.beat);
+    canvas.drawLine(
+      Offset(x, 0),
+      Offset(x, geo.size.height),
+      Paint()
+        ..color = _caretColor.withValues(alpha: 0.9)
+        ..strokeWidth = 1.5,
+    );
+    final half = geo.laneHeight / 2;
+    final y = geo.yForPitch(c.pitch.toDouble());
+    final w = geo.widthForBeats(caretLength);
+    canvas.drawRect(
+      Rect.fromLTWH(x, y - half, w <= 0 ? 2 : w, geo.laneHeight),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..color = _caretColor,
+    );
+  }
+
   void _paintPlayhead(Canvas canvas, PianoRollGeometry geo) {
     if (playhead <= 0) return;
     final x = geo.xForBeat(playhead);
@@ -201,6 +240,8 @@ class PianoRollPainter extends CustomPainter {
       old.showGhost != showGhost ||
       old.playhead != playhead ||
       old.view != view ||
+      old.caret != caret ||
+      old.caretLength != caretLength ||
       old.marquee != marquee ||
       !setEquals(old.selection, selection) ||
       !listEquals(old.sourceNotes, sourceNotes) ||
