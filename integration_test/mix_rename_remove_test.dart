@@ -68,15 +68,22 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Add two user channels through the Mix surface '+'.
-    final addButton = find.descendant(
-      of: find.byType(MixSurface),
-      matching: find.text('+'),
-    );
-    await tester.tap(addButton);
-    await tester.pumpAndSettle();
-    await tester.tap(addButton);
-    await tester.pumpAndSettle();
+    // Add two user channels through the Mix surface '+' menu. Since #169 the
+    // '+' opens an add menu (tap '+', then 'add channel') instead of adding a
+    // channel directly — matching mix_grouped_rack_test's addFromMenu helper.
+    // Going through the menu each time also clears the modal barrier, so the
+    // second add doesn't land on the first tap's still-open overlay.
+    Future<void> addChannel() async {
+      await tester.tap(
+        find.descendant(of: find.byType(MixSurface), matching: find.text('+')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('add channel'));
+      await tester.pumpAndSettle();
+    }
+
+    await addChannel();
+    await addChannel();
     expect(engine1.channels.value.map((c) => c.name), ['ch_1', 'ch_2']);
 
     // Inline-rename the first strip. 'lead synth' slugs to a new address, so the
