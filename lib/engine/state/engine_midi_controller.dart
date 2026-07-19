@@ -160,7 +160,13 @@ class EngineMidiController implements ClipSessionHost {
   /// *contents* through [adoptDocument] in place.
   ClipSession openSession(EntityAddress address, ClipDocument document) {
     final session = ensureSession(address, document);
-    _editedSession = session;
+    if (!identical(_editedSession, session)) {
+      _editedSession = session;
+      // The edited session swapped — a library selection opened a different clip.
+      // The owning engine rebinds the clip publisher so edits to *this* clip
+      // persist into its own entity (issue #197).
+      onEditedSessionChanged?.call();
+    }
     return session;
   }
 
@@ -337,6 +343,13 @@ class EngineMidiController implements ClipSessionHost {
   /// observes. `null` in setups without persistence.
   void Function()? onEditedLoopChanged;
 
+  /// Invoked when the **edited** session changes — a library selection opens a
+  /// different clip (issue #197). The owning engine rebinds the clip publisher so
+  /// edits to the newly-opened clip persist into *its* entity, moving the
+  /// publisher's listeners and bound `clip.` address off the previously edited
+  /// session. `null` in setups without persistence.
+  void Function()? onEditedSessionChanged;
+
   /// Whether the edited session loops its declared length (design §4). Toggling
   /// re-pushes the loop length live while playing, without rewriting the notes,
   /// and fires [onEditedLoopChanged] so the change persists.
@@ -359,6 +372,25 @@ class EngineMidiController implements ClipSessionHost {
   /// without re-wiring. While playing, the tick's push-on-change picks up the
   /// fresh output within one frame; adoption normally runs on a stopped transport.
   void adoptDocument(ClipDocument document) => _editedSession.adopt(document);
+
+  /// Adopt [document] into the **edited** session in place (issue #139) and
+  /// reconcile that session to [address] (issue #197): when it is the boot session
+  /// (keyed `null`), re-key it to [address] — with a matching per-clip clock name
+  /// — so the panel's later selection of that clip reuses this very session rather
+  /// than minting an address-keyed duplicate beside it. This also gives the clip
+  /// publisher (which follows the edited session's address) an entity to publish
+  /// edits into. A no-op re-key when the session already carries [address]; the
+  /// re-key is skipped when a *distinct* session already occupies [address], so a
+  /// stale duplicate is never clobbered.
+  void adoptDocumentAsEdited(EntityAddress address, ClipDocument document) {
+    _editedSession.adopt(document);
+    if (_editedSession.address == address) return;
+    final existing = _sessions[address];
+    if (existing != null && !identical(existing, _editedSession)) return;
+    _sessions.remove(_editedSession.address);
+    _editedSession.rekey(address: address, clockName: _clockNameFor(address));
+    _sessions[address] = _editedSession;
+  }
 
   // ─── shared output mode (microtonal, port, tempo) ────────────────────────
 

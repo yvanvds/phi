@@ -390,7 +390,12 @@ class PhiEngine {
         timeDomains: _sessionTimeDomains(),
       ),
     );
-    midi.adoptDocument(document);
+    // Adopt into the edited session in place *and* reconcile that session to the
+    // clip's address (issue #197): the boot session (keyed `null`) is promoted to
+    // this first clip, so a later panel selection of it reuses the same session,
+    // and the publisher — which follows the edited session's address — has an
+    // entity to publish into.
+    midi.adoptDocumentAsEdited(address, document);
   }
 
   /// The session time-domain registry, materialised from the bound registry's
@@ -414,17 +419,33 @@ class PhiEngine {
     final midi = _midi;
     if (midi == null) return;
     _clipPublisher ??= ClipRegistryPublisher(
+      // The loop flag lives in the payload but is carried by none of the
+      // observed listenables (issue #190); read it live off the edited session
+      // and re-publish on toggle.
+      loop: () => midi.loop,
+    );
+    // Follow the edited session (issue #197): a library selection swaps it, so the
+    // publisher must move its listeners and its bound `clip.` address to the newly
+    // edited clip. The loop toggle republishes through the same publisher.
+    midi.onEditedLoopChanged = _clipPublisher!.republish;
+    midi.onEditedSessionChanged = _bindClipPublisherToEdited;
+    _bindClipPublisherToEdited();
+  }
+
+  /// Bind the clip publisher to the **edited** session's live objects and its
+  /// `clip.` address (issue #197). Called on project open and whenever a library
+  /// selection swaps the edited session. Leaves the publisher unbound when the
+  /// edited session has no address (the boot session before any clip is adopted).
+  void _bindClipPublisherToEdited() {
+    final midi = _midi;
+    final publisher = _clipPublisher;
+    if (midi == null || publisher == null) return;
+    publisher.bind(
+      registry: _mixRegistry,
       chain: midi.chain,
       editor: midi.editor,
       graphController: midi.graphController,
-      // The loop flag lives in the payload but is carried by none of the
-      // observed listenables (issue #190); read it live and re-publish on toggle.
-      loop: () => midi.loop,
-    );
-    midi.onEditedLoopChanged = _clipPublisher!.republish;
-    _clipPublisher!.bind(
-      registry: _mixRegistry,
-      clipAddress: _clipAddressIn(_mixRegistry),
+      clipAddress: midi.editedSession.address,
       recordCommand: _recordCommand,
     );
   }

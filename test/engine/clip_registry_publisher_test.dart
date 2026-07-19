@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/domain/midi/midi_clip.dart';
 import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/store/clip_document.dart';
 import 'package:phi/domain/project/commands/update_entity_payload_command.dart';
@@ -125,5 +126,62 @@ void main() {
     // The old registry no longer receives edits; the new one does.
     expect(recorded, isEmpty);
     expect(otherRecorded, hasLength(1));
+  });
+
+  // ─── the publisher follows the edited session (issue #197) ────────────────
+
+  final phraseB = EntityAddress.parse('clip.phrase_b');
+
+  ClipDocument documentB() => ClipDocument(
+    source: MidiClip(
+      bars: 2,
+      notes: const [MidiNote(pitch: 48, start: 0, duration: 1, velocity: 1)],
+    ),
+  );
+
+  ClipDocument clipDocAt(EntityAddress address) => ClipDocument.fromJson(
+    (registry.entityAt(address)!.payload! as Map).cast(),
+  );
+
+  test('opening a different clip rebinds the publisher to follow it', () {
+    // A second clip entity to publish into (its seed source carries one note).
+    registry.createEntity(phraseB, payload: documentB().toJson());
+    final phraseANotes = document().source.notes.length;
+
+    // Open phrase_b as the edited session — the library-selection seam (#188).
+    engine.midi.openSession(phraseB, documentB());
+
+    // Editing the now-edited clip publishes into phrase_b, not the seeded first
+    // clip the publisher was originally bound to.
+    engine.midi.editor.addNote(
+      const MidiNote(pitch: 55, start: 0, duration: 1, velocity: 0.5),
+    );
+
+    expect(recorded, hasLength(1));
+    expect(recorded.single, isA<UpdateEntityPayloadCommand>());
+    expect(recorded.single.entitiesTouched, {phraseB});
+    // phrase_b's entity grew by the added note; the seeded first clip is untouched.
+    expect(clipDocAt(phraseB).source.notes, hasLength(2));
+    expect(document().source.notes, hasLength(phraseANotes));
+  });
+
+  test('switching the edited session back re-follows the first clip', () {
+    registry.createEntity(phraseB, payload: documentB().toJson());
+    final phraseANotes = document().source.notes.length;
+
+    // phrase_a → phrase_b → phrase_a. Reopening the first clip reuses the boot
+    // session the engine reconciled to it, and the publisher follows back.
+    engine.midi.openSession(phraseB, documentB());
+    engine.midi.openSession(clipAddress, document());
+
+    engine.midi.editor.addNote(
+      const MidiNote(pitch: 63, start: 0, duration: 1, velocity: 0.5),
+    );
+
+    expect(recorded, hasLength(1));
+    expect(recorded.single.entitiesTouched, {clipAddress});
+    expect(document().source.notes, hasLength(phraseANotes + 1));
+    // phrase_b never received this edit — still just its seed note.
+    expect(clipDocAt(phraseB).source.notes, hasLength(1));
   });
 }
