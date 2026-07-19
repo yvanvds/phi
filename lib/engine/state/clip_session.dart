@@ -43,7 +43,11 @@ class ClipSession {
     required MidiTransformChain chain,
     ClipEditor? editor,
     MidiGraphController? graphController,
+    this.clockName = defaultClockName,
+    this.sceneKeyBase = 0,
+    bool loop = true,
   }) : _chain = chain,
+       _loop = loop,
        editor = editor ?? ClipEditor(chain.source),
        graphController =
            graphController ?? MidiGraphController.seededFrom(chain);
@@ -54,6 +58,19 @@ class ClipSession {
 
   /// The shared engine pieces this session borrows for playback.
   final ClipSessionHost host;
+
+  /// Name of the domain clock this session's transport binds to. Unique per
+  /// session — the manager derives it from [address] — so concurrent sessions
+  /// each run on their own clock, the polytemporal shape (issue #187). Defaults
+  /// to [defaultClockName] for a lone session that never runs beside another.
+  final String clockName;
+
+  /// Base offset for this session's scene-field voice keys, so concurrent
+  /// sessions occupy disjoint key bands in the one shared [SceneField]: a note's
+  /// key is [sceneKeyBase]` + channel * 128 + pitch`. The manager hands each
+  /// session a distinct base (issue #187) so two clips spawn side by side and a
+  /// stopped clip clears only its own agents. Defaults to `0` for a lone session.
+  final int sceneKeyBase;
 
   final MidiTransformChain _chain;
 
@@ -75,11 +92,10 @@ class ClipSession {
   /// [play] (after the port is open) and reused across plays. `null` until then.
   MidiTransport? _transport;
 
-  /// Name of the domain clock this session's transport binds to. One session,
-  /// one clock; disposed with the transport. Per-session unique clock allocation
-  /// arrives with concurrent playback (next issue); a single clip only ever runs
-  /// one clock at a time.
-  static const String _clockName = 'phi.midi.default';
+  /// The default clock name for a lone session (the engine's boot session, or a
+  /// [ClipSession] built without an explicit [clockName]). The manager overrides
+  /// it per session so concurrent clips never share a clock.
+  static const String defaultClockName = 'phi.midi.default';
 
   /// The note-list instance last pushed to the transport, by identity. The
   /// memoised [_playbackNotes] returns the *same* instance between changes, so a
@@ -96,8 +112,30 @@ class ClipSession {
 
   bool _playing = false;
 
-  /// Whether this session's transport is currently running.
+  /// Whether this session's transport is currently running. `false` while paused
+  /// — the manager's frame ticker only advances playing sessions.
   bool get isPlaying => _playing;
+
+  bool _paused = false;
+
+  /// Whether this session is paused: its dispatch halted and its clock frozen,
+  /// but its beat position kept so [resume] continues mid-loop. Distinct from
+  /// stopped (which rewinds to the top) and from playing.
+  bool get isPaused => _paused;
+
+  bool _loop;
+
+  /// Whether playback loops the clip's declared length ([MidiClip.totalBeats]).
+  /// Loop off pushes `loopBeats <= 0`, so the events fire once (issue #184,
+  /// wired into live playback in issue #187). Persisted per clip in its document;
+  /// toggling it while playing (or paused) re-pushes the loop length live,
+  /// without ever rewriting the note list.
+  bool get loop => _loop;
+  set loop(bool value) {
+    if (_loop == value) return;
+    _loop = value;
+    if (_playing || _paused) pushEvents();
+  }
 
   /// The engine clock's beat position captured at [play] (issue #103). Play is
   /// relative to it, so `transport.beatPosition - _originBeat` is the beats
@@ -130,10 +168,11 @@ class ClipSession {
     _prevBeat = 0;
     _playhead.value = 0;
     _playing = true;
+    _paused = false;
     // Mint the transport now the port is open, bind the clock to the effective
     // tempo, push the current output, and let the engine own note timing.
     final transport = _transport ??= host.gateway.createTransport(
-      clockName: _clockName,
+      clockName: clockName,
       tempo: _effectiveTempo,
     );
     _appliedTempo = null;
@@ -146,18 +185,57 @@ class ClipSession {
     return true;
   }
 
-  /// Stop playback, silence any sounding notes, and rewind the playhead. No-op
-  /// if not playing. Returns `true` if this call actually stopped playback.
-  ///
-  /// Clearing the shared scene field is the **manager's** concern (agents are a
-  /// shared resource, keyed per voice), so this touches only the session's own
-  /// transport, sounding set, and playhead.
-  bool stop() {
+  /// Pause playback: halt dispatch, silence any sounding voice with
+  /// `allNotesOff`, and **freeze the bound clock** (tempo 0). Because a tempo-0
+  /// clock does not advance (verified in dart-yse's `clock_clip_test`), the beat
+  /// position — and the audible loop phase — hold across the pause, so [resume]
+  /// continues mid-loop without depending on the clip transport re-anchoring
+  /// across a stop/play. The beat origin and the frozen playhead are kept; only
+  /// this session's own scene agents are cleared. No-op unless playing. Returns
+  /// whether this call paused.
+  bool pause() {
     if (!_playing) return false;
     _playing = false;
+    _paused = true;
+    // Freeze the clock so no beat elapses while paused. Paused sessions are never
+    // ticked and a tempo/fader change skips them, so nothing fights the freeze
+    // until [resume] restores the rate.
+    _transport?.setTempo(0);
+    _appliedTempo = 0;
+    host.gateway.allNotesOff();
+    _clearOwnAgents();
+    return true;
+  }
+
+  /// Resume from a [pause]: restore the effective tempo (un-freezing the clock)
+  /// and let dispatch run on. Because the clock held its beat while paused, the
+  /// play-relative position resumes exactly where it left off — no beat is
+  /// skipped over the pause. No-op unless paused. Returns whether this call
+  /// resumed.
+  bool resume() {
+    if (!_paused) return false;
+    _paused = false;
+    _playing = true;
+    _appliedTempo = null;
+    applyTempo();
+    _transport?.play();
+    return true;
+  }
+
+  /// Stop playback (from playing or paused), silence any sounding notes, clear
+  /// this session's own scene agents, and rewind the playhead. No-op if already
+  /// stopped. Returns `true` if this call actually stopped playback.
+  ///
+  /// Only this session's own agents are cleared — keyed in its [sceneKeyBase]
+  /// band — so a stop leaves concurrent clips (and the scene demo) untouched
+  /// (issue #187). The rest of the shared field stays the manager's concern.
+  bool stop() {
+    if (!_playing && !_paused) return false;
+    _playing = false;
+    _paused = false;
     _transport?.stop();
     host.gateway.allNotesOff();
-    _sounding.clear();
+    _clearOwnAgents();
     _pushedNotes = null;
     _originBeat = 0;
     _prevBeat = 0;
@@ -222,6 +300,7 @@ class ClipSession {
       graphController.loadFromChain(_chain);
     }
     graphController.mode = document.mode;
+    _loop = document.loop;
   }
 
   // ─── note dispatch ──────────────────────────────────────────────────────
@@ -247,7 +326,9 @@ class ClipSession {
           pitchBend: microtonal ? _bendFor(note, _semitoneOf(note)) : 0.0,
         ),
     ];
-    _transport?.setEvents(events, loopBeats: total);
+    // Loop off pushes `loopBeats <= 0`, so the engine fires the events once and
+    // stops (issue #184/#187); loop on loops the clip's declared length.
+    _transport?.setEvents(events, loopBeats: _loop ? total : 0);
   }
 
   /// The transformed notes playback reads this tick, chosen by the clip's
@@ -345,6 +426,21 @@ class ClipSession {
     host.agentSink?.setAgents(host.field.agents);
   }
 
+  /// Despawn every scene agent this session spawned — its own [sceneKeyBase]
+  /// band — from the shared field and push the survivors to the sink, then clear
+  /// the sounding set. A stop or pause clears only this clip's agents, leaving
+  /// concurrent clips (and the scene demo) untouched (issue #187). A no-op when
+  /// this session has nothing sounding.
+  void _clearOwnAgents() {
+    if (_sounding.isEmpty) return;
+    var changed = false;
+    for (final key in _sounding) {
+      if (host.field.despawn(key)) changed = true;
+    }
+    _sounding.clear();
+    if (changed) host.agentSink?.setAgents(host.field.agents);
+  }
+
   /// The first active [AgentSpawnTransform] in the chain, or `null` if none — so
   /// toggling the spawn chip off (or removing it) stops driving the Scene.
   AgentSpawnTransform? get _activeSpawnTransform {
@@ -364,16 +460,20 @@ class ClipSession {
     return (semitonesOff / _bendRangeSemitones).clamp(-1.0, 1.0);
   }
 
-  int _voiceKey(int channel, int pitch) => channel * 128 + pitch;
+  /// This session's scene-field key for a `(channel, pitch)` voice, offset into
+  /// its own [sceneKeyBase] band so concurrent sessions never collide on the one
+  /// shared field (issue #187).
+  int _voiceKey(int channel, int pitch) => sceneKeyBase + channel * 128 + pitch;
 
   static const double _bendRangeSemitones = 2.0; // GM default: ±2 semitones.
 
   /// Release the transport, playhead, graph controller, editor and chain this
   /// session owns. Silencing the shared output is the manager's concern.
   void dispose() {
-    if (_playing) {
+    if (_playing || _paused) {
       _transport?.stop();
       _playing = false;
+      _paused = false;
     }
     _transport?.dispose();
     _transport = null;

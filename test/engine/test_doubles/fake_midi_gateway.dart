@@ -16,9 +16,16 @@ class FakeMidiGateway implements MidiGateway {
   /// Ordered log of every immediate call, formatted as `verb:args`.
   final List<String> calls = [];
 
-  /// The transport minted by [createTransport], or `null` before the first
-  /// call. Tests read its recorded events to assert the pushed note sequence.
+  /// The transport minted by the **most recent** [createTransport], or `null`
+  /// before the first call. Tests read its recorded events to assert the pushed
+  /// note sequence. For concurrent playback (issue #187) use [transports], which
+  /// keeps every minted transport (one per playing session).
   FakeMidiTransport? transport;
+
+  /// Every transport minted by [createTransport], in creation order — one per
+  /// session that has played. Lets a test observe concurrent sessions running on
+  /// their own clocks side by side, not just the last one.
+  final List<FakeMidiTransport> transports = [];
 
   /// Names returned by [outputDeviceName], indexed by port. Defaults to a
   /// single fake port so [open] succeeds out of the box.
@@ -91,7 +98,9 @@ class FakeMidiGateway implements MidiGateway {
     required double tempo,
   }) {
     calls.add('createTransport:$clockName');
-    return transport = FakeMidiTransport(clockName: clockName, tempo: tempo);
+    final minted = FakeMidiTransport(clockName: clockName, tempo: tempo);
+    transports.add(minted);
+    return transport = minted;
   }
 
   @override

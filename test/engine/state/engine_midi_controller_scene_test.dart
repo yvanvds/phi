@@ -457,18 +457,23 @@ void main() {
       controller.dispose();
     });
 
-    test('stopping the transport drops a loaded demo', () {
+    test('stopping a clip clears its own agents but leaves the demo', () {
       fakeAsync((async) {
         final renderer = FakeSceneRenderer();
         final controller = demoController(renderer);
         controller.loadSceneDemo();
+        final demoCount = renderer.lastAgents.length;
 
         controller.play();
+        // Note A (beat 0) spawns on top of the demo set within the first tick.
         async.elapse(const Duration(milliseconds: 50));
-        controller.stop();
+        expect(renderer.lastAgents.length, demoCount + 1);
 
-        expect(renderer.lastAgents, isEmpty);
-        expect(controller.isSceneDemoLoaded, isFalse);
+        controller.stop();
+        // A stopped clip clears only its own agents (design §4, issue #187): the
+        // clip's note agent is gone, but the demo scaffolding survives.
+        expect(renderer.lastAgents.length, demoCount);
+        expect(controller.isSceneDemoLoaded, isTrue);
 
         controller.dispose();
       });

@@ -681,13 +681,31 @@ main + app          (orchestration)
   suite are unchanged; `adoptDocument` still swaps the edited session's clip **in
   place** (surface bindings survive), while a new `openSession(address, document)`
   seam swaps the edited session outright — the library-selection hook the panel UI
-  will drive. For now the manager still plays only the edited session, so the
-  single-clip flow is behaviour-identical; concurrent per-session playback is the
-  next issue. Covered by a `ClipSession`-in-isolation unit test (a stub host proves
+  will drive. Covered by a `ClipSession`-in-isolation unit test (a stub host proves
   the bundle plays decoupled from the manager), a session-manager test
   (`openSession` swaps/reuses the edited session, a graph-mode document restores,
   and swapping leaks neither the transport nor the previous session), plus the
-  unchanged 60-test controller suite and the MIDI/scene/clip integration suite.
+  controller suite and the MIDI/scene/clip integration suite.
+  Issue #187 turns that seam into **concurrent playback** (design
+  `docs/design/midi-clips.md` §4). Any number of sessions now play at once, each
+  minting its transport on its **own** domain clock (`ClipSession.clockName`,
+  derived per address) so two phrases run in different time domains against each
+  other. The manager grows `playSession`/`pauseSession`/`resumeSession`/
+  `stopSession` (keyed by address), group `playGroup`/`stopGroup` (act on every
+  open session beneath a `clip.` group), and `stopAll` (the panel header); the
+  edited-session `play`/`stop` gain `pause`/`resume`/`loop`. **Pause** freezes the
+  bound clock (tempo 0 — a tempo-0 clock holds its beat, verified in dart-yse's
+  `clock_clip_test`) and `allNotesOff`s, so **resume** continues mid-loop without
+  depending on the clip transport re-anchoring across a stop/play; **stop**
+  rewinds. The **loop** flag (#184) is finally wired into playback — loop off
+  pushes `loopBeats <= 0` (one-shot); toggling it live re-pushes only the loop
+  length. **Scene keys are namespaced** per session (`ClipSession.sceneKeyBase`,
+  a disjoint band the manager allocates) so concurrent clips spawn side by side in
+  the one `SceneField` and a stopped clip clears **only its own** agents (the scene
+  demo and other clips survive — the pre-#187 whole-field clear on stop is gone).
+  Covered by concurrency + pause/resume + loop unit tests and a
+  `midi_concurrent_playback` integration test driving two clips through the real
+  shell.
   Issue #136 finishes the `mix.` migration #124 bounded: a channel's **live mix
   state** (user volume, mute, solo) now persists alongside its identity. `MixStrip`
   gains `volume`/`muted`/`soloed` and `MixStripCodec` jumps to **schema v2**,

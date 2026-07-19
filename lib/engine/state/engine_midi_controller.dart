@@ -82,6 +82,10 @@ class EngineMidiController implements ClipSessionHost {
       host: this,
       chain: chain,
       editor: editor,
+      clockName: ClipSession.defaultClockName,
+      // The boot session takes scene-key band 0, so a single-clip run keys its
+      // voices exactly as before this refactor.
+      sceneKeyBase: _allocateSceneKeyBase(),
     );
     _sessions[null] = session;
     _editedSession = session;
@@ -109,6 +113,31 @@ class EngineMidiController implements ClipSessionHost {
   /// the default boot session. Lazily grown by [openSession] and disposed
   /// together in [dispose].
   final Map<EntityAddress?, ClipSession> _sessions = {};
+
+  /// Monotonic allocator for per-session scene-key bases (issue #187): each
+  /// session gets a disjoint [ClipSession.sceneKeyBase] band, so concurrent
+  /// clips never collide on the one shared [SceneField]. The boot session takes
+  /// band `0`.
+  int _nextSceneKeyBase = 0;
+
+  /// Width of a session's scene-key band. Larger than any voice key
+  /// (`channel * 128 + pitch` maxes at `15 * 128 + 127 = 2047`), so the bands
+  /// never overlap.
+  static const int _sceneKeyStride = 100000;
+
+  int _allocateSceneKeyBase() {
+    final base = _nextSceneKeyBase;
+    _nextSceneKeyBase += _sceneKeyStride;
+    return base;
+  }
+
+  /// The unique domain-clock name for the session at [address] (issue #187): the
+  /// boot session (`null`) keeps [ClipSession.defaultClockName]; a project clip
+  /// derives its clock name from its address, so concurrent clips each run on an
+  /// independent clock.
+  String _clockNameFor(EntityAddress? address) => address == null
+      ? ClipSession.defaultClockName
+      : 'phi.midi.${address.format()}';
 
   late ClipSession _editedSession;
 
@@ -142,6 +171,9 @@ class EngineMidiController implements ClipSessionHost {
         source: document.source,
         transforms: document.chain,
       ),
+      clockName: _clockNameFor(address),
+      sceneKeyBase: _allocateSceneKeyBase(),
+      loop: document.loop,
     );
     final graph = document.graph;
     if (graph != null) session.graphController.loadFromGraph(graph);
@@ -172,6 +204,9 @@ class EngineMidiController implements ClipSessionHost {
   /// Whether the edited session's transport is running.
   bool get isPlaying => _editedSession.isPlaying;
 
+  /// Whether the edited session is paused (its clock frozen, position kept).
+  bool get isPaused => _editedSession.isPaused;
+
   /// Start (or restart) playback of the edited session, then spin the frame
   /// ticker. No-op if already playing.
   void play() {
@@ -179,12 +214,121 @@ class EngineMidiController implements ClipSessionHost {
     _syncTicker();
   }
 
-  /// Stop the edited session's playback, clear the shared scene, and idle the
-  /// ticker if nothing else needs it. No-op if not playing.
+  /// Pause the edited session — halt its dispatch (`allNotesOff` so no voice
+  /// hangs) and freeze its clock, keeping the beat position so [resume]
+  /// continues mid-loop. Idles the ticker if nothing else needs it. No-op unless
+  /// playing.
+  void pause() {
+    if (!_editedSession.pause()) return;
+    _syncTicker();
+  }
+
+  /// Resume the edited session from a [pause], then spin the frame ticker. No-op
+  /// unless paused.
+  void resume() {
+    if (!_editedSession.resume()) return;
+    _syncTicker();
+  }
+
+  /// Stop the edited session's playback (clearing its own scene agents) and idle
+  /// the ticker if nothing else needs it. No-op if already stopped. Concurrent
+  /// clips and the scene demo are untouched — stopping a clip clears only its
+  /// own agents (design §4).
   void stop() {
     if (!_editedSession.stop()) return;
-    _clearAgents();
     _syncTicker();
+  }
+
+  // ─── concurrent playback: per-session, group, and all (issue #187) ────────
+
+  /// Start (or **resume**, when paused) the open session at [address],
+  /// concurrently with any others already running — each on its own clock and
+  /// scene-key band. A no-op (returns `false`) when no session is open for
+  /// [address] or it is already playing. Spins the shared frame ticker.
+  bool playSession(EntityAddress? address) {
+    final session = _sessions[address];
+    if (session == null) return false;
+    final started = session.isPaused ? session.resume() : session.play();
+    if (started) _syncTicker();
+    return started;
+  }
+
+  /// Pause the open session at [address] (freezing its clock, keeping its
+  /// position). A no-op unless it is open and playing. Idles the ticker if
+  /// nothing else runs.
+  bool pauseSession(EntityAddress? address) {
+    final session = _sessions[address];
+    if (session == null || !session.pause()) return false;
+    _syncTicker();
+    return true;
+  }
+
+  /// Resume the open session at [address] from a pause. A no-op unless it is
+  /// open and paused.
+  bool resumeSession(EntityAddress? address) {
+    final session = _sessions[address];
+    if (session == null || !session.resume()) return false;
+    _syncTicker();
+    return true;
+  }
+
+  /// Stop the open session at [address] (clearing only its own agents). A no-op
+  /// unless it is open and playing or paused.
+  bool stopSession(EntityAddress? address) {
+    final session = _sessions[address];
+    if (session == null || !session.stop()) return false;
+    _syncTicker();
+    return true;
+  }
+
+  /// Play (or resume) every open session beneath the group at [group] — the
+  /// clips already opened under it start together, each on its own clock (design
+  /// §4, `clip.drums` → play all drums). Sessions not yet opened are the panel's
+  /// concern (it opens then plays); this acts on the manager's live sessions.
+  void playGroup(EntityAddress group) =>
+      _forEachInGroup(group, (s) => s.isPaused ? s.resume() : s.play());
+
+  /// Stop every open session beneath the group at [group] (design §4,
+  /// `clip.drums` → stop all drums). Each clip clears only its own agents.
+  void stopGroup(EntityAddress group) =>
+      _forEachInGroup(group, (s) => s.stop());
+
+  /// Stop every session — playing or paused — the panel header's stop-all
+  /// (design §4). The scene demo and effect volumes survive; each session clears
+  /// only its own agents. Idles the ticker.
+  void stopAll() {
+    var acted = false;
+    for (final session in _sessions.values) {
+      if (session.stop()) acted = true;
+    }
+    if (acted) _syncTicker();
+  }
+
+  /// Apply [action] to every open session whose address is [group] or nests
+  /// beneath it, then re-sync the ticker once. A group holds only descendants;
+  /// the boot session (`null` address) is never part of a group.
+  void _forEachInGroup(EntityAddress group, void Function(ClipSession) action) {
+    var matched = false;
+    for (final session in _sessions.values) {
+      final address = session.address;
+      if (address == null) continue;
+      if (address == group || address.isDescendantOf(group)) {
+        action(session);
+        matched = true;
+      }
+    }
+    if (matched) _syncTicker();
+  }
+
+  /// Whether the edited session loops its declared length (design §4). Toggling
+  /// re-pushes the loop length live while playing, without rewriting the notes.
+  bool get loop => _editedSession.loop;
+  set loop(bool value) => _editedSession.loop = value;
+
+  /// Set the loop flag for the open session at [address] (a library row),
+  /// re-pushing live if it is playing. A no-op when no session is open there.
+  void setSessionLoop(EntityAddress? address, bool value) {
+    _sessions[address]?.loop = value;
   }
 
   /// Adopt a loaded [document] into the **edited** session's live clip objects in
