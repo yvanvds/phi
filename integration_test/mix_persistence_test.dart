@@ -65,10 +65,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Add a user channel through the Mix surface '+'.
+    // Add a user channel through the Mix surface '+' menu (tap '+', then
+    // 'add channel'). Since #169 the '+' opens an add menu instead of adding a
+    // channel directly, matching mix_grouped_rack_test's addFromMenu helper.
     await tester.tap(
       find.descendant(of: find.byType(MixSurface), matching: find.text('+')),
     );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('add channel'));
     await tester.pumpAndSettle();
     expect(engine1.channels.value, hasLength(1));
 

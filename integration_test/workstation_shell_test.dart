@@ -53,8 +53,12 @@ void main() {
     expect(find.text('MIX · 1 CHANNELS'), findsOneWidget);
     expect(find.byType(MidiViewport), findsNothing);
 
-    // Add a user channel via the header '+' button → count goes 1 → 2.
+    // Add a user channel via the header '+' menu → count goes 1 → 2. Since #169
+    // the '+' opens an add menu (tap '+', then 'add channel') instead of adding
+    // a channel directly.
     await tester.tap(find.text('+'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('add channel'));
     await tester.pumpAndSettle();
     expect(find.text('MIX · 2 CHANNELS'), findsOneWidget);
 
