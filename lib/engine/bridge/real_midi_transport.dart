@@ -1,6 +1,8 @@
 import 'package:yse/yse.dart';
 
+import 'materialised_synth.dart';
 import 'midi_transport.dart';
+import 'real_materialised_synth.dart';
 import 'real_midi_gateway.dart';
 import 'transport_note.dart';
 
@@ -21,7 +23,7 @@ class RealMidiTransport implements MidiTransport {
   final DomainClock _clock;
   final ClipTransport _clip;
 
-  bool _connected = false;
+  bool _midiConnected = false;
   bool _disposed = false;
 
   @override
@@ -51,17 +53,43 @@ class RealMidiTransport implements MidiTransport {
   double get beatPosition => _disposed ? 0 : _clock.beatPosition;
 
   @override
+  void connectSynth(MaterialisedSynth synth) {
+    if (_disposed || synth is! RealMaterialisedSynth) return;
+    _clip.connectSynth(synth.synth);
+  }
+
+  @override
+  void disconnectSynth(MaterialisedSynth synth) {
+    if (_disposed || synth is! RealMaterialisedSynth) return;
+    _clip.disconnectSynth(synth.synth);
+  }
+
+  @override
+  void connectMidiOut() {
+    if (_disposed || _midiConnected) return;
+    // The controller opens the port just before the first play, so the MidiOut
+    // is ready by the time a session first connects.
+    final out = _gateway.midiOut;
+    if (out != null) {
+      _clip.connectMidiOut(out);
+      _midiConnected = true;
+    }
+  }
+
+  @override
+  void disconnectMidiOut() {
+    if (_disposed || !_midiConnected) return;
+    final out = _gateway.midiOut;
+    if (out != null) _clip.disconnectMidiOut(out);
+    _midiConnected = false;
+  }
+
+  @override
   void play() {
     if (_disposed) return;
-    // Connect to the gateway's output lazily: the controller opens the port
-    // just before the first play, so the MidiOut is ready by now.
-    if (!_connected) {
-      final out = _gateway.midiOut;
-      if (out != null) {
-        _clip.connectMidiOut(out);
-        _connected = true;
-      }
-    }
+    // Preserve the issue-#101 behaviour: connect to the gateway's output lazily
+    // on the first play (idempotent), now expressed through [connectMidiOut].
+    connectMidiOut();
     _clip.play();
   }
 
