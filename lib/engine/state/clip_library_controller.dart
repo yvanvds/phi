@@ -319,6 +319,46 @@ class ClipLibraryController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ─── edited-session transport (the editor header row, issue #190) ────────────
+
+  /// Whether the edited clip is currently playing.
+  bool get isEditedPlaying => sessions.isPlaying;
+
+  /// Whether the edited clip is currently paused.
+  bool get isEditedPaused => sessions.isPaused;
+
+  /// Whether the edited clip loops its declared length.
+  bool get editedLoops => sessions.loop;
+
+  /// Play (or **resume** from a pause) the edited clip — the header transport
+  /// row's play button. Drives the same session the toolbar transport does.
+  void playEdited() {
+    if (sessions.isPaused) {
+      sessions.resume();
+    } else {
+      sessions.play();
+    }
+    notifyListeners();
+  }
+
+  /// Pause the edited clip, keeping its position so play resumes mid-loop.
+  void pauseEdited() {
+    sessions.pause();
+    notifyListeners();
+  }
+
+  /// Stop the edited clip (rewinding it, clearing only its own scene agents).
+  void stopEdited() {
+    sessions.stop();
+    notifyListeners();
+  }
+
+  /// Toggle whether the edited clip loops — live, and persisted in its payload.
+  void toggleEditedLoop() {
+    sessions.loop = !sessions.loop;
+    notifyListeners();
+  }
+
   // ─── helpers ────────────────────────────────────────────────────────────────
 
   /// Decode the [ClipDocument] stored at [address], or `null` when no clip entity

@@ -417,7 +417,11 @@ class PhiEngine {
       chain: midi.chain,
       editor: midi.editor,
       graphController: midi.graphController,
+      // The loop flag lives in the payload but is carried by none of the
+      // observed listenables (issue #190); read it live and re-publish on toggle.
+      loop: () => midi.loop,
     );
+    midi.onEditedLoopChanged = _clipPublisher!.republish;
     _clipPublisher!.bind(
       registry: _mixRegistry,
       clipAddress: _clipAddressIn(_mixRegistry),

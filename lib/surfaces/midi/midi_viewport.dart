@@ -24,6 +24,7 @@ import '../../domain/midi/smf/smf_writer.dart';
 import '../../domain/runtime/runtime_variable_registry.dart';
 import '../../domain/state_machine/state_graph.dart';
 import '../../engine/state/midi_graph_controller.dart';
+import 'clip_transport_row.dart';
 import 'file_selector_midi_file_io.dart';
 import 'graph/graph_preview_strip.dart';
 import 'graph/runtime_variables_bar.dart';
@@ -63,12 +64,19 @@ class MidiViewport extends StatefulWidget {
     this.graphController,
     this.stateGraph,
     this.runtimeVariables,
+    this.transport,
     this.clipName = phraseASlug,
     super.key,
   });
 
   final MidiTransformChain chain;
   final ClipEditor? editor;
+
+  /// The edited clip's transport seam (issue #190) — play / pause / stop / loop
+  /// for the header transport row. `null` in setups without a live session
+  /// (bare widget tests); the row then shows only the length + auto-extend
+  /// controls, which act on the [editor] the viewport always owns.
+  final ClipTransportControls? transport;
 
   /// The clip's display name — its registry address leaf (issue #184), shown in
   /// the header and used as the SMF export filename. Defaults to the seeded
@@ -212,6 +220,58 @@ class _MidiViewportState extends State<MidiViewport> {
     );
   }
 
+  // ── Length authority (issue #190) ───────────────────────────────────────────
+
+  /// Slack so a note ending exactly on the clip's end doesn't read as outside it.
+  static const double _lengthEpsilon = 1e-9;
+
+  /// Guards against re-entrancy while the shrink-warning dialog is open: showing
+  /// it blurs the length field, whose commit-on-blur would otherwise fire a
+  /// second [_applyLength] and stack a duplicate dialog.
+  bool _lengthDialogOpen = false;
+
+  /// Apply an edited clip length. Growing (or a same-size meter change) applies
+  /// at once; shrinking below where notes live first warns — some notes would
+  /// fall outside the loop window and never play (design §5). A rejected shrink
+  /// leaves the length untouched and snaps the header field back.
+  Future<void> _applyLength({
+    required int bars,
+    required int beatsPerBar,
+  }) async {
+    if (_lengthDialogOpen) return;
+    final clip = widget.chain.source;
+    final safeBars = bars < 1 ? 1 : bars;
+    final safeBeatsPerBar = beatsPerBar < 1 ? 1 : beatsPerBar;
+    if (safeBars == clip.bars && safeBeatsPerBar == clip.beatsPerBar) {
+      // No effective change — still rebuild so the field snaps back to the value.
+      if (mounted) setState(() {});
+      return;
+    }
+    final newTotal = safeBars * safeBeatsPerBar;
+    final shrinking = newTotal < clip.totalBeats;
+    final strands = clip.notes.any(
+      (n) => n.start + n.duration > newTotal + _lengthEpsilon,
+    );
+    if (shrinking && strands) {
+      _lengthDialogOpen = true;
+      final confirmed = await ConfirmDialog.show(
+        context,
+        title: 'shrink clip',
+        message:
+            'Some notes fall outside the new length and won\'t play in the '
+            'loop. Shrink anyway?',
+        confirmLabel: 'shrink',
+      );
+      _lengthDialogOpen = false;
+      if (!confirmed) {
+        if (mounted) setState(() {}); // snap the field back to the old length
+        return;
+      }
+    }
+    _editor.setLength(bars: safeBars, beatsPerBar: safeBeatsPerBar);
+    if (mounted) setState(() {});
+  }
+
   Future<void> _onDrop(DropDoneDetails details) async {
     // Import the first dropped file that looks like a MIDI file; ignore the
     // rest (Phi has one clip per surface).
@@ -253,6 +313,19 @@ class _MidiViewportState extends State<MidiViewport> {
                   gridDivision: _editor.gridDivision,
                   onGridChanged: (value) =>
                       setState(() => _editor.gridDivision = value),
+                ),
+                const SizedBox(height: 8),
+                ClipTransportRow(
+                  bars: clip.bars,
+                  beatsPerBar: clip.beatsPerBar,
+                  autoExtend: _editor.autoExtend,
+                  onBarsChanged: (value) =>
+                      _applyLength(bars: value, beatsPerBar: clip.beatsPerBar),
+                  onBeatsPerBarChanged: (value) =>
+                      _applyLength(bars: clip.bars, beatsPerBar: value),
+                  onAutoExtendChanged: (value) =>
+                      setState(() => _editor.autoExtend = value),
+                  transport: widget.transport,
                 ),
                 const SizedBox(height: 8),
                 Expanded(

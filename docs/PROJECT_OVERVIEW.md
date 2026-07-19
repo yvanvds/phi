@@ -739,6 +739,30 @@ main + app          (orchestration)
   through the real shell). **Deferred (follow-up #197):** the `ClipRegistryPublisher`
   still watches the boot session's objects, so edits made *after* a library
   selection don't yet persist — the publisher must follow the edited session.
+  Issue #190 gives the piano-roll editor **length authority, auto-extend, a loop
+  toggle, and a transport row** (design `docs/design/midi-clips.md` §5) — building
+  on #189's parametrised header. A new `ClipTransportRow`
+  (`lib/surfaces/midi/clip_transport_row.dart`) sits under the header with editable
+  `bars × beats-per-bar` fields (the loop window is the clip's declared
+  `totalBeats`, not the output's extent), an **auto-extend** toggle (default on),
+  and — when a session is live — **play / pause / stop / loop** for the edited clip.
+  `ClipEditor` gains `setLength` and `autoExtend`: entering or dragging a note past
+  the end grows `bars` to fit (rounded up), journaled *with* the note edit as one
+  `CompositeClipCommand` (`lib/domain/midi/edit/`, alongside the new
+  `SetLengthCommand`) so a single undo restores both note and length; a velocity
+  paint never re-grows. Shrinking below where notes live first warns
+  (`ConfirmDialog`); the transport buttons drive the edited session through new
+  `ClipLibraryController` methods (`playEdited` resumes from a pause, `pauseEdited`,
+  `stopEdited`, `toggleEditedLoop`). The **loop flag now persists**: the
+  `ClipRegistryPublisher` reads the live loop into its snapshot and exposes
+  `republish()`, which `EngineMidiController.onEditedLoopChanged` fires on a toggle
+  (fixing the prior `loop: true` overwrite). Covered by `ClipEditor` length +
+  auto-extend unit tests (grow-on-entry, undo restores both, floors, velocity
+  no-regrow), a `ClipTransportRow` widget test, a `midi_surface_transport` widget
+  test (length applies, shrink warns/confirms/cancels, play/pause/stop against the
+  fake transport), publisher loop/length persistence tests, and an end-to-end
+  `midi_length_loop_transport` integration test (length field grows + persists,
+  loop toggle flips + persists, header play/stop drive the transport).
   Issue #136 finishes the `mix.` migration #124 bounded: a channel's **live mix
   state** (user volume, mute, solo) now persists alongside its identity. `MixStrip`
   gains `volume`/`muted`/`soloed` and `MixStripCodec` jumps to **schema v2**,

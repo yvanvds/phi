@@ -1,11 +1,15 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 
 import '../project/entity_address.dart';
 import '../project/undo_scope.dart';
 import 'edit/add_note_command.dart';
 import 'edit/clip_edit_command.dart';
+import 'edit/composite_clip_command.dart';
 import 'edit/delete_notes_command.dart';
 import 'edit/edit_notes_command.dart';
+import 'edit/set_length_command.dart';
 import 'midi_clip.dart';
 import 'midi_note.dart';
 
@@ -32,6 +36,7 @@ class ClipEditor extends ChangeNotifier {
   ClipEditor(
     this.clip, {
     this.gridDivision = 0.25,
+    this.autoExtend = true,
     this.minPitch = 55,
     this.maxPitch = 76,
     String undoScopeId = 'midi',
@@ -48,6 +53,13 @@ class ClipEditor extends ChangeNotifier {
   /// snapping** — add / drag / resize / nudge run free. Duration still floors at
   /// [durationFloor] so a note is never zero-length even with snapping off.
   double gridDivision;
+
+  /// Whether entering or dragging a note past the clip's declared end grows
+  /// [MidiClip.bars] to fit (issue #190, design §5 / decision 2). **On by
+  /// default.** The grow is journaled together with the note edit (a
+  /// [CompositeClipCommand]), so one undo restores both the note and the old
+  /// length. A header toggle drives this; it is view state, not persisted.
+  bool autoExtend;
 
   /// The safety floor a note's duration is held to when snapping is off — a
   /// 1/64 note, small enough never to get in the way, large enough never to
@@ -103,14 +115,37 @@ class ClipEditor extends ChangeNotifier {
   /// else [minDuration] so a note is never zero-length.
   double get durationFloor => gridDivision > 0 ? gridDivision : minDuration;
 
-  /// Adds a note (clamped + floored to domain bounds) and selects it.
+  /// Adds a note (clamped + floored to domain bounds) and selects it. When the
+  /// note runs past the clip's declared end and [autoExtend] is on, the clip
+  /// grows to fit — journaled with the add so one undo restores both.
   void addNote(MidiNote note) {
     final clamped = note.copyWith(
       pitch: note.pitch.clamp(minPitch.toDouble(), maxPitch.toDouble()),
       start: note.start < 0 ? 0 : note.start,
       duration: _floorDuration(note.duration),
     );
-    _run(AddNoteCommand(clip, clamped, clipAddress: _clipAddress));
+    _runNoteEdit(
+      AddNoteCommand(clip, clamped, clipAddress: _clipAddress),
+      endBeat: clamped.start + clamped.duration,
+    );
+  }
+
+  /// Set the clip's declared length — its [MidiClip.bars] and beats-per-bar — as
+  /// one undoable step (issue #190). Both are floored to `1`; a no-op change
+  /// pushes nothing onto the undo stack. Callers own any "notes fall outside"
+  /// warning before shrinking; this applies the length unconditionally.
+  void setLength({int? bars, int? beatsPerBar}) {
+    final nextBars = math.max(1, bars ?? clip.bars);
+    final nextBeatsPerBar = math.max(1, beatsPerBar ?? clip.beatsPerBar);
+    if (nextBars == clip.bars && nextBeatsPerBar == clip.beatsPerBar) return;
+    _run(
+      SetLengthCommand(
+        clip,
+        bars: nextBars,
+        beatsPerBar: nextBeatsPerBar,
+        clipAddress: _clipAddress,
+      ),
+    );
   }
 
   void deleteSelection() {
@@ -152,7 +187,10 @@ class ClipEditor extends ChangeNotifier {
       before[i] = n;
       after[i] = n.copyWith(velocity: v.clamp(0.0, 1.0));
     });
-    _commit(before, after);
+    // A velocity edit never moves a note in time, so it must not auto-extend —
+    // otherwise re-touching a note already parked past the end would re-grow the
+    // clip after a deliberate shrink.
+    _commit(before, after, grow: false);
   }
 
   /// Drops the undo/redo history and clears the selection, then notifies.
@@ -182,17 +220,64 @@ class ClipEditor extends ChangeNotifier {
     _commit(before, after);
   }
 
-  void _commit(Map<int, MidiNote> before, Map<int, MidiNote> after) {
+  void _commit(
+    Map<int, MidiNote> before,
+    Map<int, MidiNote> after, {
+    bool grow = true,
+  }) {
     if (_mapEquals(before, after)) return;
-    _run(
-      EditNotesCommand(
-        clip,
-        before: before,
-        after: after,
-        clipAddress: _clipAddress,
-      ),
+    final command = EditNotesCommand(
+      clip,
+      before: before,
+      after: after,
+      clipAddress: _clipAddress,
     );
+    if (!grow) {
+      _run(command);
+      return;
+    }
+    final maxEnd = after.values.fold<double>(
+      0,
+      (m, n) => math.max(m, n.start + n.duration),
+    );
+    _runNoteEdit(command, endBeat: maxEnd);
   }
+
+  /// Run [command], first bundling in a length grow when [autoExtend] is on and
+  /// the edit's furthest note end ([endBeat]) overruns the clip — journaled as
+  /// one [CompositeClipCommand] so a single undo restores note and length both.
+  void _runNoteEdit(ClipEditCommand command, {required double endBeat}) {
+    if (autoExtend) {
+      final grownBars = _barsToFit(endBeat);
+      if (grownBars > clip.bars) {
+        _run(
+          CompositeClipCommand(clip, [
+            SetLengthCommand(
+              clip,
+              bars: grownBars,
+              beatsPerBar: clip.beatsPerBar,
+              clipAddress: _clipAddress,
+            ),
+            command,
+          ], clipAddress: _clipAddress),
+        );
+        return;
+      }
+    }
+    _run(command);
+  }
+
+  /// The bar count needed to contain a note ending at [endBeat] (rounded up to a
+  /// whole bar), never below the clip's current [MidiClip.bars].
+  int _barsToFit(double endBeat) {
+    final beatsPerBar = clip.beatsPerBar;
+    if (beatsPerBar <= 0) return clip.bars;
+    final needed = (endBeat / beatsPerBar - _epsilon).ceil();
+    return needed > clip.bars ? needed : clip.bars;
+  }
+
+  /// Slack so a note landing exactly on the clip's end doesn't spuriously grow.
+  static const double _epsilon = 1e-9;
 
   void _run(ClipEditCommand command) => _scope.run(command);
 

@@ -71,6 +71,31 @@ void main() {
     expect(after.any((n) => n.pitch == 62), isTrue);
   });
 
+  test('a length edit publishes the updated meter (issue #190)', () {
+    engine.midi.editor.setLength(bars: 8, beatsPerBar: 3);
+
+    expect(recorded, hasLength(1));
+    expect(recorded.single, isA<UpdateEntityPayloadCommand>());
+    expect(document().source.bars, 8);
+    expect(document().source.beatsPerBar, 3);
+  });
+
+  test('toggling the loop flag publishes it into the payload (issue #190)', () {
+    // The seed defaults loop on; the payload round-trips it.
+    expect(document().loop, isTrue);
+
+    engine.midi.loop = false;
+
+    expect(recorded, hasLength(1));
+    expect(recorded.single, isA<UpdateEntityPayloadCommand>());
+    expect(document().loop, isFalse);
+
+    // Toggling back re-publishes, and the earlier default is no longer forced.
+    engine.midi.loop = true;
+    expect(document().loop, isTrue);
+    expect(recorded, hasLength(2));
+  });
+
   test('a chip toggle publishes the updated chain', () {
     final wasActive = engine.midi.chain.transforms.first.active;
 

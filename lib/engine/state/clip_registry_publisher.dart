@@ -34,7 +34,8 @@ class ClipRegistryPublisher {
     required this.chain,
     required this.editor,
     this.graphController,
-  });
+    bool Function()? loop,
+  }) : _loop = loop;
 
   /// The linear pipeline + source clip. Notifies on chip add/remove/toggle/edit.
   final MidiTransformChain chain;
@@ -44,6 +45,11 @@ class ClipRegistryPublisher {
 
   /// The branching-graph editor, or `null` when none is wired.
   final MidiGraphController? graphController;
+
+  /// Reads the edited clip's live loop flag (issue #190). `null` falls back to
+  /// `true`, matching a fresh clip's default. The loop flag is not carried by any
+  /// of the observed listenables, so a toggle persists via [republish].
+  final bool Function()? _loop;
 
   ProjectRegistry? _registry;
   EntityAddress? _address;
@@ -102,6 +108,12 @@ class ClipRegistryPublisher {
     _lastPushedJson = null;
   }
 
+  /// Force a re-snapshot + record when the persistable document changed outside
+  /// a chain / editor / graph notification — today, a loop-flag toggle (issue
+  /// #190), which none of the observed listenables signals. A no-op while
+  /// unbound, and de-duplicated like any other change.
+  void republish() => _onChanged();
+
   void _onChanged() {
     final registry = _registry;
     final address = _address;
@@ -123,6 +135,7 @@ class ClipRegistryPublisher {
       mode: gc?.mode ?? MidiClipMode.chain,
       chain: chain.transforms,
       graph: gc?.graph,
+      loop: _loop?.call() ?? true,
     ).toJson();
   }
 }
