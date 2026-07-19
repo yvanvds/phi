@@ -112,6 +112,14 @@ class ClipSession {
   /// tick re-pushes when it sees one.
   List<MidiNote>? _pushedNotes;
 
+  /// The loop length ([_loopBeats]) last pushed to the transport. A length edit
+  /// (or auto-extend) mid-play moves the declared [MidiClip.totalBeats] without
+  /// touching the note list — the note-identity check above never fires — yet the
+  /// **audible** loop window must follow the new length (issue #200). [advance]
+  /// re-pushes when this diverges from the current [_loopBeats]. `null` until the
+  /// first push, and reset on [stop].
+  double? _pushedLoopBeats;
+
   final ValueNotifier<double> _playhead = ValueNotifier<double>(0);
 
   /// Position of the playhead within the clip, in beats `[0, totalBeats)`. `0`
@@ -246,6 +254,7 @@ class ClipSession {
     host.gateway.allNotesOff();
     _clearOwnAgents();
     _pushedNotes = null;
+    _pushedLoopBeats = null;
     _originBeat = 0;
     _prevBeat = 0;
     _playhead.value = 0;
@@ -272,9 +281,15 @@ class ClipSession {
     if (!_playing) return;
     final now = (_transport?.beatPosition ?? 0) - _originBeat;
     // Push-on-change: the memoised output hands back a new list instance only
-    // when the interpretation changed. Re-push then, so the engine swaps its
-    // event buffer at the next block.
-    if (!identical(_playbackNotes, _pushedNotes)) pushEvents();
+    // when the interpretation changed, and [_loopBeats] moves only when the
+    // declared length was edited — a length edit / auto-extend leaves the note
+    // list identity intact, so the loop window changed on its own (issue #200).
+    // Re-push on either, so the engine swaps its event buffer — and its loop
+    // length — at the next block.
+    if (!identical(_playbackNotes, _pushedNotes) ||
+        _loopBeats != _pushedLoopBeats) {
+      pushEvents();
+    }
     // The window drives the Scene agent field only — note *sound* is the engine
     // transport's job now.
     _dispatchWindow(_prevBeat, now);
@@ -335,7 +350,8 @@ class ClipSession {
   void pushEvents() {
     final notes = _playbackNotes;
     _pushedNotes = notes;
-    final total = _chain.source.totalBeats;
+    final loopBeats = _loopBeats;
+    _pushedLoopBeats = loopBeats;
     final microtonal = host.microtonal;
     final events = <TransportNote>[
       for (final note in notes)
@@ -350,8 +366,15 @@ class ClipSession {
     ];
     // Loop off pushes `loopBeats <= 0`, so the engine fires the events once and
     // stops (issue #184/#187); loop on loops the clip's declared length.
-    _transport?.setEvents(events, loopBeats: _loop ? total : 0);
+    _transport?.setEvents(events, loopBeats: loopBeats);
   }
+
+  /// The loop length the transport should run at: the clip's declared
+  /// [MidiClip.totalBeats] when looping, else `0` for a one-shot (issue
+  /// #184/#187). Tracked against [_pushedLoopBeats] so [advance] re-pushes when a
+  /// mid-play length edit moves it, even though the note list keeps its identity
+  /// (issue #200).
+  double get _loopBeats => _loop ? _chain.source.totalBeats : 0;
 
   /// The transformed notes playback reads this tick, chosen by the clip's
   /// [MidiGraphController.mode]: the linear [MidiTransformChain.output] for a
