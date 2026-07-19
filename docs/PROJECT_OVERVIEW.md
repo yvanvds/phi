@@ -706,6 +706,39 @@ main + app          (orchestration)
   Covered by concurrency + pause/resume + loop unit tests and a
   `midi_concurrent_playback` integration test driving two clips through the real
   shell.
+  Issue #188 wires all of that domain + engine work into an actual **library
+  panel** on the MIDI surface (design `docs/design/midi-clips.md` §3, §4) — a
+  collapsible left sidebar (`lib/surfaces/midi/library/library_panel.dart`,
+  default collapsed, mirroring the transform-chain sidebar) showing the `clip.`
+  namespace as a tree: groups as folders, clips ordered within them (registry
+  child order = the persisted `_group.json` order). A new engine-side
+  `ClipLibraryController` (`lib/engine/state/`, a `ChangeNotifier`) is the panel's
+  single seam over the `clip.` registry, the `EngineMidiController` session
+  manager, and the `ClipLibrary` command factory: it flattens the tree into
+  `ClipTreeNode`s, and every structural edit goes through the journaled command
+  layer (create-entity via `ClipLibrary` for new/duplicate, `CreateGroupCommand`
+  for groups, `MoveEntityCommand` for rename-refactor + drag-to-regroup,
+  `ReorderChildCommand` for in-section reorder, `RemoveEntityCommand` for delete),
+  applied + recorded through `ProjectController.recordCommand`. **Selection** opens
+  the clip as the edited session (the roll/ghost/graph rebind to it — the surface
+  keys the viewport by the edited address); the **context menu** offers new clip ·
+  new group · duplicate · rename · delete (delete routing through the
+  `DeleteImpactDialog` when the node is still referenced); **drag** re-parents a
+  row into a group, out onto the body to un-group, or onto a sibling to reorder;
+  **per-row play/loop toggles** + a playing dot, group rows play/stop their whole
+  subtree, and the header carries **stop-all**. To let a row play a clip *other*
+  than the one open in the editor, `EngineMidiController` gains `ensureSession`
+  (open a session without making it edited); `openSession` is now that plus the
+  edit-swap. The shell builds the controller when a project + MIDI subsystem are
+  present and rebinds it on New/Open (registry swap). Covered by a
+  `ClipLibraryController` unit test (tree/order, selection swap, every command,
+  regroup/reorder reflected in the registry, per-row/group play state), a
+  `library_panel` widget test (fake gateway — tree rendering, select, every
+  context-menu path, drag-to-group, play/loop/stop-all), and an end-to-end
+  `midi_library_panel` integration test (expand → add → select → play → stop-all
+  through the real shell). **Deferred (follow-up #197):** the `ClipRegistryPublisher`
+  still watches the boot session's objects, so edits made *after* a library
+  selection don't yet persist — the publisher must follow the edited session.
   Issue #136 finishes the `mix.` migration #124 bounded: a channel's **live mix
   state** (user volume, mute, solo) now persists alongside its identity. `MixStrip`
   gains `volume`/`muted`/`soloed` and `MixStripCodec` jumps to **schema v2**,

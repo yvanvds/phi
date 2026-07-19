@@ -116,6 +116,34 @@ void main() {
       });
     });
 
+    test('ensureSession opens a session without making it the edited one', () {
+      final controller = EngineMidiController(
+        chain: _seedChain(),
+        gateway: FakeMidiGateway(),
+      );
+      final boot = controller.editedSession;
+
+      final session = controller.ensureSession(
+        _clip('phrase_b'),
+        _chainDoc(72),
+      );
+
+      // A session now exists for the address, reachable via sessionFor…
+      expect(
+        identical(controller.sessionFor(_clip('phrase_b')), session),
+        isTrue,
+      );
+      // …but the edited session is untouched — the row can play without swapping
+      // the clip open in the editor (issue #188).
+      expect(identical(controller.editedSession, boot), isTrue);
+
+      // A second ensure reuses the same session (never re-adopts over edits).
+      final again = controller.ensureSession(_clip('phrase_b'), _chainDoc(0));
+      expect(identical(again, session), isTrue);
+
+      controller.dispose();
+    });
+
     test('opens a graph-mode document in graph mode', () {
       final controller = EngineMidiController(
         chain: _seedChain(),

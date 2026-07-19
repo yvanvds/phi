@@ -155,15 +155,28 @@ class EngineMidiController implements ClipSessionHost {
   /// one from [document] — source + linear chain, plus the branching graph and
   /// mode when the document carries them.
   ///
-  /// This is the library-selection seam the panel UI (a later issue) drives; the
-  /// running single-clip app still swaps clip *contents* through [adoptDocument]
-  /// in place, so nothing calls this yet in production.
+  /// This is the library-selection seam the panel UI (issue #188) drives when a
+  /// performer picks a clip; the running single-clip app still swaps clip
+  /// *contents* through [adoptDocument] in place.
   ClipSession openSession(EntityAddress address, ClipDocument document) {
-    final existing = _sessions[address];
-    if (existing != null) {
-      _editedSession = existing;
-      return existing;
-    }
+    final session = ensureSession(address, document);
+    _editedSession = session;
+    return session;
+  }
+
+  /// Ensure a session exists for [address] **without** making it the edited one
+  /// — the seam a library row's play / loop toggle uses to act on a clip other
+  /// than the one open in the editor (issue #188). Reuses an already-open session
+  /// (never re-adopting over live edits); otherwise builds one from [document].
+  /// The edited session is untouched, so a row can start playing while a
+  /// different clip stays open on the roll.
+  ClipSession ensureSession(EntityAddress address, ClipDocument document) =>
+      _sessions[address] ??= _buildSession(address, document);
+
+  /// Builds a fresh [ClipSession] for [address] from [document] — source + linear
+  /// chain, plus the branching graph and mode when the document carries them. The
+  /// caller stores and (for [openSession]) marks it edited.
+  ClipSession _buildSession(EntityAddress address, ClipDocument document) {
     final session = ClipSession(
       address: address,
       host: this,
@@ -178,8 +191,6 @@ class EngineMidiController implements ClipSessionHost {
     final graph = document.graph;
     if (graph != null) session.graphController.loadFromGraph(graph);
     session.graphController.mode = document.mode;
-    _sessions[address] = session;
-    _editedSession = session;
     return session;
   }
 

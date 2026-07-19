@@ -9,6 +9,7 @@ import '../domain/midi/clip_editor.dart';
 import '../domain/midi/custom_transform_registry.dart';
 import '../domain/midi/midi_clip_seed.dart';
 import '../domain/midi/midi_transform_chain.dart';
+import '../domain/midi/store/midi_transform_codec.dart';
 import '../domain/project/lifecycle/project_controller.dart';
 import '../domain/project/lifecycle/project_directory_picker.dart';
 import '../domain/project/undo_scopes.dart';
@@ -16,6 +17,7 @@ import '../domain/session/session_state.dart';
 import '../engine/bridge/code_evaluator.dart';
 import '../engine/bridge/no_op_code_evaluator.dart';
 import '../engine/engine.dart';
+import '../engine/state/clip_library_controller.dart';
 import '../surfaces/code/code_surface.dart';
 import '../surfaces/midi/midi_file_io.dart';
 import '../surfaces/midi/midi_surface.dart';
@@ -117,6 +119,12 @@ class _WorkstationState extends State<Workstation> {
   /// controller + picker were wired. Shared by the menu and the Ctrl+S shortcut.
   ProjectActions? _actions;
 
+  /// Drives the MIDI surface's library panel (issue #188) — the `clip.` tree,
+  /// selection, context menu, drag, and per-row play state. Built only when the
+  /// engine has a MIDI subsystem and a project controller supplies the registry;
+  /// rebound alongside the engine whenever New / Open swaps the registry.
+  ClipLibraryController? _libraryController;
+
   /// Listens for OS exit requests so a dirty project can confirm-on-close
   /// (design §9). Present only when the project stack is wired.
   AppLifecycleListener? _exitListener;
@@ -165,6 +173,18 @@ class _WorkstationState extends State<Workstation> {
   void _setUpProject() {
     final controller = widget.projectController;
     if (controller == null) return;
+    // Build the clip-library controller over the engine's MIDI session manager
+    // and the project's registry — the seam the library panel drives (issue
+    // #188). Present only with a MIDI subsystem; rebound below on registry swaps.
+    final midi = widget.engine.midiOrNull;
+    if (midi != null) {
+      _libraryController = ClipLibraryController(
+        registry: controller.registry,
+        sessions: midi,
+        recordCommand: controller.recordCommand,
+        transformCodec: MidiTransformCodec(customRegistry: _customTransforms),
+      );
+    }
     // The engine consumes the registry as its channel source of truth (design
     // §8): bind it to the controller's registry now, and rebind whenever New /
     // Open swaps the registry instance (the controller notifies on that).
@@ -193,6 +213,12 @@ class _WorkstationState extends State<Workstation> {
       controller.registry,
       recordCommand: controller.recordCommand,
       customTransforms: _customTransforms,
+    );
+    // The library panel reads the same registry — rebind it too so a New / Open
+    // that swaps the registry re-points the clip tree.
+    _libraryController?.rebind(
+      registry: controller.registry,
+      recordCommand: controller.recordCommand,
     );
   }
 
@@ -261,6 +287,7 @@ class _WorkstationState extends State<Workstation> {
   @override
   void dispose() {
     widget.projectController?.removeListener(_bindEngineRegistry);
+    _libraryController?.dispose();
     _exitListener?.dispose();
     widget.session.transport.removeListener(_onTransport);
     widget.session.tempo.removeListener(_onTempo);
@@ -417,6 +444,7 @@ class _WorkstationState extends State<Workstation> {
           registry: _customTransforms,
           playhead: widget.engine.midiOrNull?.playhead,
           fileIo: widget.midiFileIo,
+          libraryController: _libraryController,
         );
       case SurfaceId.state:
         return StateSurface(engine: widget.engine, session: widget.session);
