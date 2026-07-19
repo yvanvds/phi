@@ -167,15 +167,23 @@ persists per project. A **command palette** (Ctrl+Shift+P) lands here too:
 cheap, and it doubles as discoverability + the keyboard-shortcut registry.
 The tab/split slice is deliberately pulled *early* in wave 2.
 
-### 4.10 Transport, recording & export
+### 4.10 MIDI recording, metronome & panic
 
-**Now:** play/stop + SMF import/export of the single clip.
-**Goal:** record-the-performance to disk (for a live tool, more important
-than offline bounce), later bounce/export; metronome/click on a chosen
-domain; a **panic** action (all-notes-off + soften engine) on a permanent
-shortcut.
-**Engine dependency:** record/bounce API surface in yse — verify, likely
-an engine issue.
+> Corrected 2026-07-19: this area is about **recording MIDI-in into the
+> piano roll**, not audio performance capture — the earlier
+> record-to-disk wording overstated intent. Audio capture/bounce, if it
+> ever returns, is its own future design.
+
+**Now:** notes enter the roll by mouse or step entry only; no click, no
+count-in, no panic.
+**Goal:** record played MIDI into the edited clip's *source* — raw, never
+input-quantised (interpretation stays the chain's job), timestamped on
+the session's engine clock, overdubbing per loop pass with per-pass undo;
+a **metronome/click** session on a chosen time domain (polytemporal like
+everything else); **count-in**; and a **panic** action (stop sessions +
+all-notes-off + clear spawns) on a permanent shortcut.
+**Engine dependency:** none — parsed MIDI-in and the audition path come
+from the racks design.
 
 ### 4.11 Diagnostics & resilience
 
