@@ -72,6 +72,15 @@ void main() {
     await tester.pump();
   }
 
+  // The header now carries its own length TextFields (issue #190), so a dialog's
+  // field is found by scoping to the open AlertDialog rather than the whole tree.
+  Finder dialogField([int at = 0]) => find
+      .descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      )
+      .at(at);
+
   group('add menu', () {
     testWidgets('+ opens a menu grouping the built-in catalogue by family', (
       tester,
@@ -274,7 +283,7 @@ void main() {
       expect(find.text('semitones'), findsOneWidget);
       expect(find.widgetWithText(TextField, '12'), findsOneWidget);
 
-      await tester.enterText(find.byType(TextField), '-12');
+      await tester.enterText(dialogField(), '-12');
       await tester.pump();
 
       // Live: the chain already reflects the edit while the dialog is open.
@@ -302,7 +311,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Fields follow params order: grid, then gravity. Gravity is [0, 1].
-      await tester.enterText(find.byType(TextField).at(1), '5');
+      await tester.enterText(dialogField(1), '5');
       await tester.pump();
 
       final edited = chain.transforms.single as QuantizationTransform;
@@ -323,7 +332,7 @@ void main() {
       await tester.tap(find.text('edit parameters…'));
       await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextField), '-');
+      await tester.enterText(dialogField(), '-');
       await tester.pump();
 
       expect(chain.output.single.pitch, 72);
@@ -346,7 +355,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Fields follow params order: length, repeats, phase.
-      await tester.enterText(find.byType(TextField).at(1), '3');
+      await tester.enterText(dialogField(1), '3');
       await tester.pump();
 
       expect(chain.output, hasLength(3));
@@ -411,7 +420,7 @@ void main() {
       await tester.tap(find.text('rename…'));
       await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextField), 'new name');
+      await tester.enterText(dialogField(), 'new name');
       await tester.tap(find.text('rename'));
       await tester.pumpAndSettle();
 

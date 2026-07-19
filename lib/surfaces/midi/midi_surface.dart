@@ -11,6 +11,7 @@ import '../../engine/engine.dart';
 import '../../engine/state/clip_library_controller.dart';
 import '../../engine/state/midi_graph_controller.dart';
 import '../surface.dart';
+import 'clip_transport_row.dart';
 import 'library/library_panel.dart';
 import 'midi_file_io.dart';
 import 'midi_viewport.dart';
@@ -103,6 +104,15 @@ class MidiSurface extends Surface {
                 graphController: session.graphController,
                 playhead: session.playhead,
                 clipName: address?.name ?? phraseASlug,
+                transport: ClipTransportControls(
+                  isPlaying: library.isEditedPlaying,
+                  isPaused: library.isEditedPaused,
+                  loop: library.editedLoops,
+                  onPlay: library.playEdited,
+                  onPause: library.pauseEdited,
+                  onStop: library.stopEdited,
+                  onToggleLoop: library.toggleEditedLoop,
+                ),
               );
             },
           ),
@@ -121,6 +131,7 @@ class MidiSurface extends Surface {
     MidiGraphController? graphController,
     ValueListenable<double>? playhead,
     String? clipName,
+    ClipTransportControls? transport,
   }) => MidiViewport(
     key: key,
     chain: chain ?? _chain,
@@ -134,6 +145,7 @@ class MidiSurface extends Surface {
         _engine.midiOrNull?.graphController,
     stateGraph: _stateGraph ?? _engine.stateMachineOrNull?.graph,
     runtimeVariables: _runtimeVariables ?? _engine.runtimeVariablesOrNull,
+    transport: transport,
     clipName: clipName ?? phraseASlug,
   );
 }

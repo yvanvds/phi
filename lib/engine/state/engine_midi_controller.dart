@@ -331,10 +331,21 @@ class EngineMidiController implements ClipSessionHost {
     if (matched) _syncTicker();
   }
 
+  /// Invoked when the **edited** session's loop flag changes (issue #190), so the
+  /// owning engine can re-publish the clip document — the loop flag lives in the
+  /// payload but isn't carried by the chain / editor / graph the clip publisher
+  /// observes. `null` in setups without persistence.
+  void Function()? onEditedLoopChanged;
+
   /// Whether the edited session loops its declared length (design §4). Toggling
-  /// re-pushes the loop length live while playing, without rewriting the notes.
+  /// re-pushes the loop length live while playing, without rewriting the notes,
+  /// and fires [onEditedLoopChanged] so the change persists.
   bool get loop => _editedSession.loop;
-  set loop(bool value) => _editedSession.loop = value;
+  set loop(bool value) {
+    if (_editedSession.loop == value) return;
+    _editedSession.loop = value;
+    onEditedLoopChanged?.call();
+  }
 
   /// Set the loop flag for the open session at [address] (a library row),
   /// re-pushing live if it is playing. A no-op when no session is open there.
