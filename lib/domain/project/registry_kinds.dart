@@ -14,4 +14,15 @@ abstract final class RegistryKinds {
 
   /// Time domains — `TimeDomainRegistry` migrates here in v1.
   static const String domain = 'domain';
+
+  /// Playable voices — `voice.` entities binding synth + bus + colour (racks
+  /// epic, `docs/design/racks-and-voices.md` §3).
+  static const String voice = 'voice';
+
+  /// Synth definitions — `synth.` recipes voices instantiate (racks epic §4).
+  static const String synth = 'synth';
+
+  /// Insert-effect instances — `fx.` entities placed on mix buses (racks
+  /// epic §5).
+  static const String fx = 'fx';
 }

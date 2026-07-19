@@ -975,6 +975,34 @@ main + app          (orchestration)
   clear-then-remove, per-output telemetry + live count change), and an end-to-end
   `mix_master_meters_and_return_delete` integration test (stereo → 5.1 without
   restart; wire a send → delete the return → dialog warns → confirm clears it).
+- **Racks & voices domain foundation** (issue #204, epic #203, design
+  `docs/design/racks-and-voices.md` §3–§5) — the pure-Dart entities the racks
+  epic binds *note → sound → bus* on, three new registry kinds registered in
+  `RegistryKinds` + `defaultEntityCodecs()`:
+  - `voice.` — `VoiceDefinition` (`lib/domain/voice/`), the keystone: an
+    `internal` voice points at a `synth.` definition + `mix.` bus, an `external`
+    voice carries a MIDI channel + bus; colour is an opaque design-token string.
+    It is a `ReferenceSource`, so `voice → synth` and `voice → mix` edges feed the
+    back-reference index (delete-impact, rename-refactor). `ChannelAllocation`
+    (same folder) is the immutable, copy-on-write 1–16 engine-channel table for
+    internal voices — stable assignment, lowest-free reuse on delete, and a
+    `ChannelExhaustedException` at the accepted v1 16-voice ceiling; it round-trips
+    to JSON so allocations survive save/load.
+  - `synth.` — `SynthDefinition` (`lib/domain/synth/`), an `abstract` recipe
+    hierarchy dispatched on `SynthKind`: `SineSynth`, `VaSynth` (the full VA
+    panel — oscillator stack, filter, amp/filter envelopes, LFO), `FmSynth`
+    (bank-asset ref + patch index + optional algorithm/feedback/per-op
+    overrides), `SamplerSynth` (SFZ asset *or* single-sample recipe). Definitions
+    carry no engine identity — voices instantiate them.
+  - `fx.` — `FxDefinition` (`lib/domain/fx/`), one effect instance = `FxKind` +
+    a flat `name → value` param bag; placement lives in each `mix.` bus's ordered
+    `inserts` list (`MixStrip` gained `inserts`, codec bumped to v4), so
+    `mix.inserts → fx` edges also feed the index.
+  - Every payload round-trips identity through its versioned codec; the
+    `racks_round_trip_test` builds a synth/voice/fx/mix registry, saves & reloads
+    through the store, and asserts both identity and the three delete-impact edges.
+    Pure-domain issue (no user-visible surface) — covered by unit tests plus the
+    serializer round-trip; UI + gateway materialisation land in later epic issues.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

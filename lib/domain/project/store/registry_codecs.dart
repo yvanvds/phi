@@ -1,6 +1,9 @@
+import '../../fx/fx_codec.dart';
 import '../../midi/midi_clip_codec.dart';
 import '../../mix/mix_strip_codec.dart';
+import '../../synth/synth_codec.dart';
 import '../../time_domains/time_domain_codec.dart';
+import '../../voice/voice_codec.dart';
 import '../registry_kinds.dart';
 import 'entity_payload_codec.dart';
 
@@ -15,6 +18,9 @@ Map<String, EntityPayloadCodec> defaultEntityCodecs() => const {
   RegistryKinds.clip: MidiClipCodec(),
   RegistryKinds.mix: MixStripCodec(),
   RegistryKinds.domain: TimeDomainCodec(),
+  RegistryKinds.voice: VoiceCodec(),
+  RegistryKinds.synth: SynthCodec(),
+  RegistryKinds.fx: FxCodec(),
 };
 
 /// The kinds whose *groups* carry a persisted payload in `_group.json` (issue
