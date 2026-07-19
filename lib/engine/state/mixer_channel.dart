@@ -38,6 +38,7 @@ class MixerChannel extends ChangeNotifier {
   bool _soloed = false;
   double _volume = 1.0;
   double _peak = 0.0;
+  List<double> _outputPeaks = const [];
 
   bool get muted => _muted;
   bool get soloed => _soloed;
@@ -49,6 +50,13 @@ class MixerChannel extends ChangeNotifier {
 
   /// Most recent post-volume peak in `[0.0, 1.0+]`.
   double get peak => _peak;
+
+  /// Most recent **per speaker output** post-fader peaks, one entry per output
+  /// (design `docs/design/mix.md` §6). Empty for an ordinary strip — only the
+  /// master is layout-metered, so only its per-output bars are populated. The
+  /// length *is* the live output count, so it tracks a device/layout swap
+  /// without a restart. Values are linear `[0.0, 1.0+]`.
+  List<double> get outputPeaks => _outputPeaks;
 
   // Internal mutators — only the engine should call these.
 
@@ -75,6 +83,26 @@ class MixerChannel extends ChangeNotifier {
   void applyPeak(double value) {
     if ((value - _peak).abs() < 0.001) return;
     _peak = value;
+    notifyListeners();
+  }
+
+  /// Telemetry-driven per-output peaks (design §6). Notifies whenever the
+  /// **count** changes — so a layout swap re-renders the master's meter bars
+  /// live — or any output moves by a perceptible amount, while skipping the
+  /// sub-threshold jitter that would otherwise rebuild the strip every tick at
+  /// idle (mirrors [applyPeak]).
+  void applyOutputPeaks(List<double> values) {
+    if (_outputPeaks.length == values.length) {
+      var changed = false;
+      for (var i = 0; i < values.length; i++) {
+        if ((values[i] - _outputPeaks[i]).abs() >= 0.001) {
+          changed = true;
+          break;
+        }
+      }
+      if (!changed) return;
+    }
+    _outputPeaks = List<double>.unmodifiable(values);
     notifyListeners();
   }
 }

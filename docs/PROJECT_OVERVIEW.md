@@ -806,6 +806,31 @@ main + app          (orchestration)
   a send → flip pre-fader → drag its level → save → reload restores target,
   pre/post and level, and the return re-renders in its section). Return delete via
   the delete-impact dialog stays with #171.
+  Issue #171 completes the mix epic with **layout-aware master meters + return
+  delete-impact** (design `docs/design/mix.md` §6, §7). The master strip now shows
+  **one meter bar per speaker output** (`ChannelStrip.outputPeaks` → a row of
+  vertical bars keyed by `ChannelStrip.outputMeterKey`): two on stereo, six on 5.1.
+  `MixerChannel` gains telemetry-driven `outputPeaks` (`applyOutputPeaks` notifies
+  on a count change *or* a perceptible level move), and the engine's telemetry tick
+  reads the gateway's live `masterOutputCount` + `masterPeakOutput(i)` — so the bar
+  count follows a device/layout swap **without a restart** (user strips keep their
+  single meter). **Return delete-impact**: a return strip gains a remove `×` (keyed
+  `MixSurface.returnRemoveKey`, distinct from the leaf strips' shared key) that runs
+  `PhiEngine.channelRemovalImpact` → the strips / group buses still sending to it →
+  and, when non-empty, raises a new string-based `DeleteImpactDialog`
+  (`lib/design/widgets/dialog/`, beside `ConfirmDialog`) listing them; confirming
+  calls `removeChannelClearingSenders`, which clears each sender's targeting send
+  (journaled payload edits) before removing the return, so no dangling send is left.
+  The senders are read straight off the live mix model rather than the registry's
+  back-reference index: a `mix.` payload is stored map-native (the journal contract,
+  design §3), so it is not a `ReferenceSource` and its sends never enter that index.
+  Covered by widget tests (`mix_surface` — stereo/5.1 bar-count derivation from the
+  fake gateway, user strips stay single-meter, delete-a-return warn → confirm →
+  clear, cancel keeps, no-sender direct remove; `channel_strip` — bar rendering),
+  engine tests (`engine_mix_surface_api` — impact lists strip + group-bus senders,
+  clear-then-remove, per-output telemetry + live count change), and an end-to-end
+  `mix_master_meters_and_return_delete` integration test (stereo → 5.1 without
+  restart; wire a send → delete the return → dialog warns → confirm clears it).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

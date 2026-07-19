@@ -18,6 +18,7 @@ import '../domain/project/commands/remove_entity_command.dart';
 import '../domain/project/commands/reorder_child_command.dart';
 import '../domain/project/commands/update_entity_payload_command.dart';
 import '../domain/project/commands/update_group_payload_command.dart';
+import '../domain/project/delete_impact.dart';
 import '../domain/project/entity_address.dart';
 import '../domain/project/name_slug.dart';
 import '../domain/project/project_command.dart';
@@ -1419,6 +1420,73 @@ class PhiEngine {
     return (mc != null && mc.isReturn) ? mc.channel : null;
   }
 
+  /// What removing [channel] would strand: the strips / group buses **still
+  /// sending to it** (design §4), as a [DeleteImpact] the surface hands to the
+  /// delete-impact dialog. For a return bus these are the aux senders the warning
+  /// lists before the delete clears them.
+  ///
+  /// Computed from the live mix model rather than the registry's back-reference
+  /// index: a `mix.` payload is stored map-native (the journal contract, design
+  /// §3), so it is not a `ReferenceSource` and its sends never enter that index —
+  /// but the engine already holds every strip's sends, so the senders are read
+  /// straight off them. A safe (empty) impact when nothing sends to it, or the
+  /// channel is stale/master.
+  DeleteImpact channelRemovalImpact(MixerChannel channel) {
+    final address = _addressOf(channel);
+    if (address == null) {
+      // Unreachable from the surface (it only asks about a live return); a safe,
+      // empty impact for a stale/master handle. The placeholder segment must pass
+      // the address validator, so it is a plain word, not a glyph.
+      return DeleteImpact(
+        EntityAddress(kind: RegistryKinds.mix, segments: const ['unknown']),
+        const [],
+      );
+    }
+    return DeleteImpact(address, _sendersTo(address));
+  }
+
+  /// Removes [channel] (a return bus) after **clearing every aux send that
+  /// targets it** (design §4 — "confirming clears those sends"), so no strip is
+  /// left with a dangling send. Each sender's cleared payload and the removal
+  /// journal as ordinary commands; the ensuing sync detaches the gateway sends
+  /// and destroys the channel. No-op before [start], for the master, or a stale
+  /// handle. Safe when nothing sends to it (it just removes the channel).
+  void removeChannelClearingSenders(MixerChannel channel) {
+    if (!_started || channel.isMaster) return;
+    final address = _addressOf(channel);
+    if (address == null) return;
+    // Snapshot the senders first: each [_persistSends] re-syncs the channel map,
+    // and clearing a send is a payload edit (no address change), so the sender
+    // addresses stay valid across the loop.
+    for (final sender in _sendersTo(address)) {
+      final strip = _storedStrip(sender);
+      if (strip == null) continue;
+      final kept = [
+        for (final send in strip.sends)
+          if (send.to != address) send,
+      ];
+      if (kept.length != strip.sends.length) {
+        _persistSends(sender, kept);
+      }
+    }
+    removeChannel(channel);
+  }
+
+  /// The materialised strips / group buses whose stored sends target [address],
+  /// sorted by address — the senders a delete of [address] would strand. Reads
+  /// each channel's stored strip, so it covers both entity strips and group
+  /// buses (either may carry sends, design §3).
+  List<EntityAddress> _sendersTo(EntityAddress address) {
+    final senders = <EntityAddress>[
+      for (final key in _channelsByAddress.keys)
+        if (key != address &&
+            (_storedStrip(key)?.sends.any((s) => s.to == address) ?? false))
+          key,
+    ];
+    senders.sort((a, b) => a.format().compareTo(b.format()));
+    return senders;
+  }
+
   void _flushSendGesture(({EntityAddress address, int slot}) gesture) {
     final strip = _storedStrip(gesture.address);
     if (strip == null || gesture.slot >= strip.sends.length) return;
@@ -1523,6 +1591,15 @@ class PhiEngine {
         : 0.0;
     final masterPeak = _gateway.masterPeak;
     _masterChannel.applyPeak(masterPeak);
+    // The master strip shows one meter bar per speaker output (design §6): read
+    // the live output count + per-output peaks straight off the gateway, so the
+    // bar count follows a device/layout swap without a restart. User strips keep
+    // their single post meter, so only the master gets per-output peaks.
+    final outputCount = _gateway.masterOutputCount;
+    _masterChannel.applyOutputPeaks([
+      for (var output = 0; output < outputCount; output++)
+        _gateway.masterPeakOutput(output),
+    ]);
     for (final ch in _userChannels) {
       ch.applyPeak(_gateway.channelPeak(ch.id));
     }

@@ -7,6 +7,7 @@ import '../../design/tokens/phi_type.dart';
 import '../../design/tokens/phi_voices.dart';
 import '../../design/widgets/button/primary_button.dart';
 import '../../design/widgets/channel_strip/channel_strip.dart';
+import '../../design/widgets/dialog/delete_impact_dialog.dart';
 import '../../design/widgets/select/phi_select.dart';
 import '../../design/widgets/select/phi_select_option.dart';
 import '../../domain/mix/mix_send.dart';
@@ -59,6 +60,12 @@ class MixSurface extends Surface {
 
   /// Key on the returns section container (present only when returns exist).
   static const Key returnsSectionKey = Key('MixSurface.returnsSection');
+
+  /// Key on a return strip's **remove** control, by return name — distinct from
+  /// the leaf strips' shared remove key so a test (and the delete-impact flow)
+  /// can target a specific return.
+  static Key returnRemoveKey(String name) =>
+      Key('MixSurface.returnRemove.$name');
 
   @override
   Widget build(BuildContext context) {
@@ -459,6 +466,9 @@ class _MasterStrip extends StatelessWidget {
         voiceColor: PhiVoices.color(channel.voice),
         voiceGlow: PhiVoices.glow(channel.voice),
         isMaster: true,
+        // One meter bar per speaker output (design §6): the count follows the
+        // live device layout, so a stereo → 5.1 swap re-renders without restart.
+        outputPeaks: channel.outputPeaks,
         onVolumeChanged: (v) => engine.setChannelVolume(channel, v),
         onVolumeChangeStart: () => engine.beginChannelVolumeGesture(channel),
         onVolumeChangeEnd: () => engine.endChannelVolumeGesture(channel),
@@ -935,13 +945,35 @@ class _ReturnsSection extends StatelessWidget {
 
 /// A single return strip: fader, mute, meter — **no solo** (returns are exempt,
 /// design §5) and no drag handle (returns sit outside the tree). Renaming rewires
-/// every send targeting it (the ordinary rename-refactor); removal waits on the
-/// delete-impact dialog (#171), so no remove control here yet.
+/// every send targeting it (the ordinary rename-refactor); removing it goes
+/// through the **delete-impact dialog** (design §7) when strips still send to it
+/// — the warning lists those senders and confirming clears their sends before
+/// the return is removed. A return nobody sends to removes without a prompt.
 class _ReturnStrip extends StatelessWidget {
   const _ReturnStrip({required this.engine, required this.channel});
 
   final PhiEngine engine;
   final MixerChannel channel;
+
+  /// Warn-then-remove: if any strip still sends to this return, raise the
+  /// delete-impact dialog listing them and, on confirm, clear those sends and
+  /// remove the return; otherwise remove it outright. The clear + remove is one
+  /// engine call so it journals as a unit.
+  Future<void> _remove(BuildContext context) async {
+    final impact = engine.channelRemovalImpact(channel);
+    if (impact.hasReferrers) {
+      final confirmed = await DeleteImpactDialog.show(
+        context,
+        title: 'delete return',
+        message:
+            '${channel.name} still receives these sends — '
+            'deleting it clears them:',
+        referrers: [for (final r in impact.referrers) r.format()],
+      );
+      if (!confirmed) return;
+    }
+    engine.removeChannelClearingSenders(channel);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -956,12 +988,14 @@ class _ReturnStrip extends StatelessWidget {
         voiceColor: PhiVoices.color(channel.voice),
         voiceGlow: PhiVoices.glow(channel.voice),
         soloable: false,
+        removeKey: MixSurface.returnRemoveKey(channel.name),
         onVolumeChanged: (v) => engine.setChannelVolume(channel, v),
         onVolumeChangeStart: () => engine.beginChannelVolumeGesture(channel),
         onVolumeChangeEnd: () => engine.endChannelVolumeGesture(channel),
         onMuteToggle: () =>
             engine.setChannelMuted(channel, muted: !channel.muted),
         onRename: (name) => engine.renameChannel(channel, name),
+        onRemove: () => _remove(context),
       ),
     );
   }

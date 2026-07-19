@@ -19,6 +19,7 @@ void main() {
       VoidCallback? onSoloToggle,
       ValueChanged<String>? onRename,
       VoidCallback? onRemove,
+      List<double> outputPeaks = const <double>[],
     }) {
       return MaterialApp(
         home: Scaffold(
@@ -32,6 +33,7 @@ void main() {
               voiceColor: PhiColors.voice1,
               voiceGlow: PhiColors.voice1Soft,
               isMaster: isMaster,
+              outputPeaks: outputPeaks,
               onVolumeChanged: onVolumeChanged ?? (_) {},
               onVolumeChangeStart: onVolumeChangeStart,
               onVolumeChangeEnd: onVolumeChangeEnd,
@@ -44,6 +46,31 @@ void main() {
         ),
       );
     }
+
+    testWidgets('renders one meter bar per output when given output peaks', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        host(
+          name: 'master',
+          isMaster: true,
+          outputPeaks: const [0.2, 0.5, 0.9],
+        ),
+      );
+
+      expect(find.byKey(ChannelStrip.outputMeterKey(0)), findsOneWidget);
+      expect(find.byKey(ChannelStrip.outputMeterKey(1)), findsOneWidget);
+      expect(find.byKey(ChannelStrip.outputMeterKey(2)), findsOneWidget);
+      expect(find.byKey(ChannelStrip.outputMeterKey(3)), findsNothing);
+    });
+
+    testWidgets('renders no per-output bars when output peaks are empty', (
+      tester,
+    ) async {
+      await tester.pumpWidget(host(name: 'pad'));
+
+      expect(find.byKey(ChannelStrip.outputMeterKey(0)), findsNothing);
+    });
 
     testWidgets('renders name and mute/solo buttons for a user strip', (
       tester,

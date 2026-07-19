@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/widgets/channel_strip/channel_strip.dart';
+import 'package:phi/design/widgets/dialog/delete_impact_dialog.dart';
 import 'package:phi/design/widgets/select/phi_select.dart';
 import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/project/registry_kinds.dart';
@@ -463,6 +464,187 @@ void main() {
         findsNothing,
       );
     });
+
+    // ── Layout-aware master meters (design §6) ───────────────────────────────
+    //
+    // The per-output meters are telemetry-driven, and the engine's telemetry
+    // timer only fires under `tester.pump` when it is created inside the test's
+    // fake-async zone — so these tests build their own engine in the body rather
+    // than reuse the setUp engine (whose timer lives outside the zone).
+
+    /// Runs [body] against a started engine + gateway created **in the test
+    /// body** (so its telemetry timer is a fake timer that fires under `pump`),
+    /// disposing both in a `finally` — the timer must be cancelled before the
+    /// body returns or the fake-async pending-timer invariant trips.
+    Future<void> withMeteredSurface(
+      WidgetTester tester,
+      Future<void> Function(PhiEngine engine, FakeYseGateway gateway) body,
+    ) async {
+      final g = FakeYseGateway();
+      final e = PhiEngine(
+        g,
+        telemetryInterval: const Duration(milliseconds: 20),
+      );
+      e.start();
+      try {
+        await body(e, g);
+      } finally {
+        await e.dispose();
+        await g.dispose();
+      }
+    }
+
+    /// Advances the telemetry timer and settles the rebuild so the master strip
+    /// picks up the gateway's current output count + per-output peaks.
+    Future<void> tickTelemetry(WidgetTester tester) async {
+      await tester.pump(const Duration(milliseconds: 30));
+      await tester.pump();
+    }
+
+    testWidgets('the master strip shows one meter bar per output — stereo', (
+      tester,
+    ) async {
+      await withMeteredSurface(tester, (engine, gateway) async {
+        // The fake gateway defaults to a stereo master (two outputs).
+        gateway.masterOutputCountValue = 2;
+        gateway.masterPeakOutputs = [0.3, 0.7];
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(body: MixSurface(engine: engine)),
+          ),
+        );
+        await tickTelemetry(tester);
+
+        // Exactly two bars — derived from the live output count, not hard-coded.
+        expect(find.byKey(ChannelStrip.outputMeterKey(0)), findsOneWidget);
+        expect(find.byKey(ChannelStrip.outputMeterKey(1)), findsOneWidget);
+        expect(find.byKey(ChannelStrip.outputMeterKey(2)), findsNothing);
+      });
+    });
+
+    testWidgets('the master meter re-derives its bar count on a 5.1 layout', (
+      tester,
+    ) async {
+      await withMeteredSurface(tester, (engine, gateway) async {
+        // Start stereo …
+        gateway.masterOutputCountValue = 2;
+        gateway.masterPeakOutputs = [0.2, 0.4];
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(body: MixSurface(engine: engine)),
+          ),
+        );
+        await tickTelemetry(tester);
+        expect(find.byKey(ChannelStrip.outputMeterKey(1)), findsOneWidget);
+        expect(find.byKey(ChannelStrip.outputMeterKey(2)), findsNothing);
+
+        // … then the device/layout swaps to 5.1 (six outputs) at runtime. The
+        // next telemetry tick re-derives the bar count without a restart.
+        gateway.masterOutputCountValue = 6;
+        gateway.masterPeakOutputs = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
+        await tickTelemetry(tester);
+
+        for (var i = 0; i < 6; i++) {
+          expect(find.byKey(ChannelStrip.outputMeterKey(i)), findsOneWidget);
+        }
+        expect(find.byKey(ChannelStrip.outputMeterKey(6)), findsNothing);
+      });
+    });
+
+    testWidgets('user strips keep a single meter — no per-output bars', (
+      tester,
+    ) async {
+      await withMeteredSurface(tester, (engine, gateway) async {
+        final kick = engine.addChannel(name: 'kick');
+        // Give the user channel per-output data at the gateway; a user strip
+        // must still not render per-output bars (design §6 — master-only).
+        gateway.channels[kick.id]!.outputCount = 6;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(body: MixSurface(engine: engine)),
+          ),
+        );
+        await tickTelemetry(tester);
+
+        final kickStrip = find.ancestor(
+          of: find.text('kick'),
+          matching: find.byType(ChannelStrip),
+        );
+        expect(
+          find.descendant(
+            of: kickStrip,
+            matching: find.byKey(ChannelStrip.outputMeterKey(0)),
+          ),
+          findsNothing,
+        );
+      });
+    });
+
+    // ── Return delete-impact (design §4, §7) ─────────────────────────────────
+
+    testWidgets('deleting a return with a sender warns before removing', (
+      tester,
+    ) async {
+      final kick = engine.addChannel(name: 'kick');
+      final verb = engine.addReturn(name: 'verb');
+      engine.setChannelSend(kick, 0, returnBus: verb, level: 0.5);
+      await pumpSurface(tester);
+      expect(engine.channelSends(kick), hasLength(1));
+
+      await tester.tap(find.byKey(MixSurface.returnRemoveKey('verb')));
+      await tester.pumpAndSettle();
+
+      // The delete-impact dialog warns, listing the stranded sender.
+      expect(find.byType(DeleteImpactDialog), findsOneWidget);
+      expect(find.textContaining('mix.kick'), findsOneWidget);
+      // Nothing removed yet — the delete waits on confirmation.
+      expect(engine.returns.value, hasLength(1));
+      expect(engine.channelSends(kick), hasLength(1));
+
+      await tester.tap(find.text('delete'));
+      await tester.pumpAndSettle();
+
+      // Confirmed: the return is gone and the sender's send was cleared.
+      expect(engine.returns.value, isEmpty);
+      expect(engine.channelSends(kick), isEmpty);
+    });
+
+    testWidgets('cancelling the delete-impact dialog keeps return and send', (
+      tester,
+    ) async {
+      final kick = engine.addChannel(name: 'kick');
+      final verb = engine.addReturn(name: 'verb');
+      engine.setChannelSend(kick, 0, returnBus: verb, level: 0.5);
+      await pumpSurface(tester);
+
+      await tester.tap(find.byKey(MixSurface.returnRemoveKey('verb')));
+      await tester.pumpAndSettle();
+      expect(find.byType(DeleteImpactDialog), findsOneWidget);
+
+      await tester.tap(find.text('cancel'));
+      await tester.pumpAndSettle();
+
+      // Nothing changed — the return and its incoming send both survive.
+      expect(engine.returns.value, hasLength(1));
+      expect(engine.channelSends(kick), hasLength(1));
+      expect(engine.channelSends(kick).single.to, mix(['verb']));
+    });
+
+    testWidgets(
+      'deleting a return nobody sends to removes it without warning',
+      (tester) async {
+        engine.addReturn(name: 'verb');
+        await pumpSurface(tester);
+        expect(engine.returns.value, hasLength(1));
+
+        await tester.tap(find.byKey(MixSurface.returnRemoveKey('verb')));
+        await tester.pumpAndSettle();
+
+        // No senders → no warning, removed outright.
+        expect(find.byType(DeleteImpactDialog), findsNothing);
+        expect(engine.returns.value, isEmpty);
+      },
+    );
   });
 }
 
