@@ -16,17 +16,19 @@ import 'mix_strip.dart';
 /// - **v2** (#136): added live mix state (`volume` + `muted` + `soloed`).
 /// - **v3** (#166): added `return` + `sends`, and **dropped `name`** (the
 ///   one-name re-alignment, design §10 decision 1). A `name` key in an older
-///   payload is simply no longer read — no migration, per that decision. The rest
-///   is additive: an older payload lacks `return`/`sends`, and [MixStrip.fromJson]
-///   defaults them (not a return, no sends), so it loads forward unchanged.
+///   payload is simply no longer read — no migration, per that decision.
+/// - **v4** (#204): added `inserts` — the ordered list of `fx.` addresses placed
+///   on the bus (racks design §5). Additive: an older payload lacks it and
+///   [MixStrip.fromJson] defaults it to an empty chain, so it loads forward
+///   unchanged.
 class MixStripCodec implements EntityPayloadCodec {
   /// A `const` codec — it holds no state.
   const MixStripCodec();
 
-  /// Schema v3 (issue #166): the payload carries `return` + `sends` and no longer
-  /// carries a display `name`. Older versions decode forward via defaulted keys.
+  /// Schema v4 (issue #204): the payload carries `inserts` alongside `return` +
+  /// `sends`. Older versions decode forward via defaulted keys.
   @override
-  int get version => 3;
+  int get version => 4;
 
   @override
   Object? encode(Object? payload) {

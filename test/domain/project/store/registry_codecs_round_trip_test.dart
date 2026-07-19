@@ -78,6 +78,7 @@ void main() {
       'soloed': true,
       'return': false,
       'sends': <Object?>[],
+      'inserts': <Object?>[],
     });
     // The live volume/mute/solo survive the save/reload (issue #136).
     expect(MixStrip.fromJson((payload! as Map).cast()), strip);
@@ -107,7 +108,7 @@ void main() {
     final mixFile =
         jsonDecode(store.files['mix/pad.json']!) as Map<String, Object?>;
     expect(mixFile['kind'], 'mix');
-    expect(mixFile['version'], 3);
+    expect(mixFile['version'], 4);
     expect(mixFile['payload'], {
       'voice': 1,
       'volume': 1.0,
@@ -115,6 +116,7 @@ void main() {
       'soloed': false,
       'return': false,
       'sends': <Object?>[],
+      'inserts': <Object?>[],
     });
 
     registry.dispose();

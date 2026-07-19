@@ -106,7 +106,7 @@ void main() {
           jsonDecode(store.files['mix/drums/_group.json']!)
               as Map<String, Object?>;
       expect(json['kind'], 'mix');
-      expect(json['version'], 3);
+      expect(json['version'], 4);
       // The envelope's `name` is the group's own address leaf, not a payload
       // field (the payload no longer carries a display name).
       expect(json['name'], 'drums');
@@ -118,6 +118,7 @@ void main() {
         'soloed': false,
         'return': false,
         'sends': <Object?>[],
+        'inserts': <Object?>[],
       });
       // Cosmetic metadata coexists in the same file.
       expect(json['color'], 'amber');

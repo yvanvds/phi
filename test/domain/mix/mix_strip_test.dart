@@ -19,13 +19,14 @@ void main() {
       expect(MixStrip.fromJson(strip.toJson()), strip);
     });
 
-    test('toJson carries the mix state, return flag and sends — no name', () {
+    test('toJson carries the mix state, return flag, sends and inserts', () {
       expect(
         MixStrip(
           voice: 2,
           volume: 0.5,
           muted: true,
           sends: [MixSend(to: mix('verb'), level: 0.3, preFader: true)],
+          inserts: [EntityAddress.parse('fx.big_delay')],
         ).toJson(),
         {
           'voice': 2,
@@ -36,6 +37,7 @@ void main() {
           'sends': [
             {'to': 'mix.verb', 'level': 0.3, 'preFader': true},
           ],
+          'inserts': ['fx.big_delay'],
         },
       );
     });
@@ -48,6 +50,27 @@ void main() {
       expect(strip.soloed, isFalse);
       expect(strip.isReturn, isFalse);
       expect(strip.sends, isEmpty);
+      expect(strip.inserts, isEmpty);
+    });
+
+    test('fromJson defaults inserts for a v3 (pre-#204) map', () {
+      final strip = MixStrip.fromJson(const {
+        'voice': 2,
+        'return': false,
+        'sends': <Object?>[],
+      });
+      expect(strip.inserts, isEmpty);
+    });
+
+    test('round-trips an inserts chain through JSON', () {
+      final strip = MixStrip(
+        voice: 1,
+        inserts: [
+          EntityAddress.parse('fx.big_delay'),
+          EntityAddress.parse('fx.crush'),
+        ],
+      );
+      expect(MixStrip.fromJson(strip.toJson()), strip);
     });
 
     test('fromJson ignores a legacy display name (one-name re-alignment)', () {
@@ -99,22 +122,47 @@ void main() {
         MixStrip(voice: 1, sends: [MixSend(to: mix('verb'))]),
         isNot(MixStrip(voice: 1, sends: [MixSend(to: mix('echo'))])),
       );
+      expect(
+        MixStrip(voice: 1, inserts: [EntityAddress.parse('fx.a')]),
+        isNot(MixStrip(voice: 1, inserts: [EntityAddress.parse('fx.b')])),
+      );
     });
 
     group('as a ReferenceSource', () {
-      test('references are the send targets', () {
+      EntityAddress fx(String leaf) => EntityAddress.parse('fx.$leaf');
+
+      test('references are the send targets and the insert effects', () {
         final strip = MixStrip(
           voice: 1,
           sends: [
             MixSend(to: mix('verb')),
             MixSend(to: mix('echo')),
           ],
+          inserts: [fx('big_delay'), fx('crush')],
         );
-        expect(strip.references, {mix('verb'), mix('echo')});
+        expect(strip.references, {
+          mix('verb'),
+          mix('echo'),
+          fx('big_delay'),
+          fx('crush'),
+        });
       });
 
-      test('a strip with no sends references nothing', () {
+      test('a strip with no sends or inserts references nothing', () {
         expect(const MixStrip(voice: 1).references, isEmpty);
+      });
+
+      test('withReferenceUpdated repoints a matching insert', () {
+        final strip = MixStrip(
+          voice: 1,
+          inserts: [fx('big_delay'), fx('crush')],
+        );
+        final rewritten = strip.withReferenceUpdated(
+          fx('big_delay'),
+          fx('huge_delay'),
+        );
+        expect(rewritten.inserts, [fx('huge_delay'), fx('crush')]);
+        expect(rewritten.references, {fx('huge_delay'), fx('crush')});
       });
 
       test('withReferenceUpdated repoints every matching send', () {

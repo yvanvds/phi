@@ -16,11 +16,13 @@ import 'mix_send.dart';
 /// pre-#166 payload's `name` key is simply no longer read — no compat shim, no
 /// migration.
 ///
-/// **Sends and the back-reference index (design §4).** A strip's sends point at
-/// return buses by address, so [MixStrip] is a [ReferenceSource]: its
-/// [references] are the send targets (feeding delete-impact and rename-refactor),
-/// and [withReferenceUpdated] rewrites a send's `to` when its return is renamed
-/// or moved.
+/// **Sends, inserts and the back-reference index (design §4).** A strip points at
+/// return buses through its [sends] and at `fx.` instances through its ordered
+/// [inserts] list (`mix.inserts → fx`, racks design §5), so [MixStrip] is a
+/// [ReferenceSource]: its [references] are the send targets *and* the insert
+/// effects (feeding delete-impact and rename-refactor), and [withReferenceUpdated]
+/// rewrites a send's `to` or an insert address when its target is renamed or
+/// moved.
 ///
 /// A plain, immutable value type. It (de)serialises to a JSON map so the strip is
 /// journal-friendly (a `mix.` entity is created and edited through the ordinary
@@ -39,6 +41,7 @@ class MixStrip implements ReferenceSource {
     this.soloed = false,
     this.isReturn = false,
     this.sends = const [],
+    this.inserts = const [],
   });
 
   /// Reads a strip from a decoded payload map, tolerating missing keys by
@@ -53,6 +56,10 @@ class MixStrip implements ReferenceSource {
     sends: [
       for (final send in (json['sends'] as List<Object?>? ?? const []))
         MixSend.fromJson((send as Map).cast<String, Object?>()),
+    ],
+    inserts: [
+      for (final insert in (json['inserts'] as List<Object?>? ?? const []))
+        EntityAddress.parse(insert as String),
     ],
   );
 
@@ -78,14 +85,24 @@ class MixStrip implements ReferenceSource {
   /// return bus; the mix domain validates that at edit time.
   final List<MixSend> sends;
 
-  /// The addresses this strip points at — its send targets — feeding the
-  /// registry's back-reference index (design §4).
-  @override
-  Set<EntityAddress> get references => {for (final send in sends) send.to};
+  /// The channel's insert effects, in chain order (design racks §5). Each is the
+  /// address of an `fx.` instance; the ordered list is materialised as a linked
+  /// `DspObject` chain. An instance sits on at most one bus, enforced through the
+  /// back-reference index (the placement UI + move-with-impact land in a later
+  /// issue; the domain schema and edges are here).
+  final List<EntityAddress> inserts;
 
-  /// A copy with every send targeting [from] repointed to [to] — the refactor a
-  /// return's rename/move triggers. Applying the inverse restores the original,
-  /// so undo round-trips.
+  /// The addresses this strip points at — its send targets *and* its insert
+  /// effects — feeding the registry's back-reference index (design §4).
+  @override
+  Set<EntityAddress> get references => {
+    for (final send in sends) send.to,
+    ...inserts,
+  };
+
+  /// A copy with every send target *and* insert address equal to [from]
+  /// repointed to [to] — the refactor a return's or an fx's rename/move triggers.
+  /// Applying the inverse restores the original, so undo round-trips.
   @override
   MixStrip withReferenceUpdated(EntityAddress from, EntityAddress to) =>
       copyWith(
@@ -93,6 +110,7 @@ class MixStrip implements ReferenceSource {
           for (final send in sends)
             send.to == from ? send.copyWith(to: to) : send,
         ],
+        inserts: [for (final insert in inserts) insert == from ? to : insert],
       );
 
   MixStrip copyWith({
@@ -102,6 +120,7 @@ class MixStrip implements ReferenceSource {
     bool? soloed,
     bool? isReturn,
     List<MixSend>? sends,
+    List<EntityAddress>? inserts,
   }) => MixStrip(
     voice: voice ?? this.voice,
     volume: volume ?? this.volume,
@@ -109,11 +128,13 @@ class MixStrip implements ReferenceSource {
     soloed: soloed ?? this.soloed,
     isReturn: isReturn ?? this.isReturn,
     sends: sends ?? this.sends,
+    inserts: inserts ?? this.inserts,
   );
 
   /// The strip as the JSON map stored in the `mix.` entity's (or group bus's)
   /// payload. Keys are emitted in a stable order so re-encoding an unchanged
-  /// strip is byte-identical (the persistence de-dupe relies on it).
+  /// strip is byte-identical (the persistence de-dupe relies on it). Insert
+  /// addresses are written in dotted form so the payload stays JSON-encodable.
   Map<String, Object?> toJson() => {
     'voice': voice,
     'volume': volume,
@@ -121,6 +142,7 @@ class MixStrip implements ReferenceSource {
     'soloed': soloed,
     'return': isReturn,
     'sends': [for (final send in sends) send.toJson()],
+    'inserts': [for (final insert in inserts) insert.format()],
   };
 
   @override
@@ -132,7 +154,8 @@ class MixStrip implements ReferenceSource {
           other.muted == muted &&
           other.soloed == soloed &&
           other.isReturn == isReturn &&
-          _sendsEqual(other.sends, sends);
+          _sendsEqual(other.sends, sends) &&
+          _insertsEqual(other.inserts, inserts);
 
   @override
   int get hashCode => Object.hash(
@@ -142,16 +165,27 @@ class MixStrip implements ReferenceSource {
     soloed,
     isReturn,
     Object.hashAll(sends),
+    Object.hashAll(inserts),
   );
 
   @override
   String toString() =>
       'MixStrip(voice: $voice, volume: $volume, muted: $muted, '
-      'soloed: $soloed, isReturn: $isReturn, sends: $sends)';
+      'soloed: $soloed, isReturn: $isReturn, sends: $sends, inserts: $inserts)';
 
   /// Element-wise list equality — `List.==` is identity, and the domain stays
   /// Flutter-free so it cannot borrow `foundation`'s `listEquals`.
   static bool _sendsEqual(List<MixSend> a, List<MixSend> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  /// Element-wise insert-list equality (order matters — the chain is ordered).
+  static bool _insertsEqual(List<EntityAddress> a, List<EntityAddress> b) {
     if (identical(a, b)) return true;
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {

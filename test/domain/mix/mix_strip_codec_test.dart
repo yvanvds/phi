@@ -10,8 +10,8 @@ void main() {
   group('MixStripCodec', () {
     const codec = MixStripCodec();
 
-    test('declares schema version 3 (return + sends, no name; #166)', () {
-      expect(codec.version, 3);
+    test('declares schema version 4 (adds inserts; #204)', () {
+      expect(codec.version, 4);
     });
 
     test('encodes a MixStrip to its JSON map', () {
@@ -23,6 +23,7 @@ void main() {
             muted: true,
             isReturn: true,
             sends: [MixSend(to: mix('verb'), level: 0.3)],
+            inserts: [EntityAddress.parse('fx.big_delay')],
           ),
         ),
         {
@@ -34,6 +35,7 @@ void main() {
           'sends': [
             {'to': 'mix.verb', 'level': 0.3, 'preFader': false},
           ],
+          'inserts': ['fx.big_delay'],
         },
       );
     });
@@ -47,6 +49,7 @@ void main() {
         'soloed': false,
         'return': false,
         'sends': <Object?>[],
+        'inserts': <Object?>[],
       });
     });
 
@@ -59,7 +62,8 @@ void main() {
           'soloed': true,
           'return': false,
           'sends': <Object?>[],
-        }, 3),
+          'inserts': <Object?>[],
+        }, 4),
         {
           'voice': 5,
           'volume': 0.8,
@@ -67,37 +71,37 @@ void main() {
           'soloed': true,
           'return': false,
           'sends': <Object?>[],
+          'inserts': <Object?>[],
         },
       );
     });
 
-    test(
-      'migrates a v2 payload forward, dropping name and defaulting sends',
-      () {
-        // A file written before #166 carried name + live state at version 2.
-        expect(
-          codec.decode(const {
-            'name': 'bass',
-            'voice': 4,
-            'volume': 0.6,
-            'muted': false,
-            'soloed': false,
-          }, 2),
-          {
-            'voice': 4,
-            'volume': 0.6,
-            'muted': false,
-            'soloed': false,
-            'return': false,
-            'sends': <Object?>[],
-          },
-        );
-      },
-    );
+    test('migrates a v3 payload forward, defaulting the inserts chain', () {
+      // A file written before #204 carried return + sends at version 3.
+      expect(
+        codec.decode(const {
+          'voice': 4,
+          'volume': 0.6,
+          'muted': false,
+          'soloed': false,
+          'return': false,
+          'sends': <Object?>[],
+        }, 3),
+        {
+          'voice': 4,
+          'volume': 0.6,
+          'muted': false,
+          'soloed': false,
+          'return': false,
+          'sends': <Object?>[],
+          'inserts': <Object?>[],
+        },
+      );
+    });
 
     test('null round-trips as null', () {
       expect(codec.encode(null), isNull);
-      expect(codec.decode(null, 3), isNull);
+      expect(codec.decode(null, 4), isNull);
     });
   });
 }
