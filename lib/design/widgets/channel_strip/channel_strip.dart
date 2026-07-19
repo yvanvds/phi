@@ -37,6 +37,7 @@ class ChannelStrip extends StatelessWidget {
     this.onRemove,
     this.dragHandle,
     this.isMaster = false,
+    this.soloable = true,
     super.key,
   });
 
@@ -61,6 +62,12 @@ class ChannelStrip extends StatelessWidget {
   /// Whether this is the master strip — gets the accent border and hides
   /// the mute/solo buttons.
   final bool isMaster;
+
+  /// Whether the strip offers a **solo** button. Returns are exempt from solo
+  /// (design `docs/design/mix.md` §5, §10 decision 3), so a return strip passes
+  /// `false` to render only the mute control. Ignored on the master, which shows
+  /// neither button. Defaults to `true` for ordinary channels and group buses.
+  final bool soloable;
 
   final ValueChanged<double> onVolumeChanged;
 
@@ -330,15 +337,17 @@ class ChannelStrip extends StatelessWidget {
             onPressed: onMuteToggle,
           ),
         ),
-        const SizedBox(width: PhiSpacing.s0),
-        Expanded(
-          child: _StripButton(
-            label: 'S',
-            active: soloed,
-            activeColor: PhiColors.voice3,
-            onPressed: onSoloToggle,
+        if (soloable) ...[
+          const SizedBox(width: PhiSpacing.s0),
+          Expanded(
+            child: _StripButton(
+              label: 'S',
+              active: soloed,
+              activeColor: PhiColors.voice3,
+              onPressed: onSoloToggle,
+            ),
           ),
-        ),
+        ],
       ],
     );
   }

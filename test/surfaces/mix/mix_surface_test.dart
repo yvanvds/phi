@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/widgets/channel_strip/channel_strip.dart';
+import 'package:phi/design/widgets/select/phi_select.dart';
 import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/project/registry_kinds.dart';
 import 'package:phi/engine/engine.dart';
@@ -114,11 +115,13 @@ void main() {
 
       await pickFromAddMenu(tester, 'add return');
 
-      // Returns sit outside the tree — no rack strip, one return bus.
+      // Returns sit outside the tree — not in the rack, not a user channel —
+      // but they now render as strips inside the returns section beside master.
       expect(engine.returns.value, hasLength(1));
       expect(engine.mixTree.value, isEmpty);
       expect(engine.channels.value, isEmpty);
-      expect(find.byType(ChannelStrip), findsOneWidget); // master only
+      expect(find.byKey(MixSurface.returnsSectionKey), findsOneWidget);
+      expect(find.byType(ChannelStrip), findsNWidgets(2)); // return + master
     });
 
     testWidgets('channel count in the header reflects user channels', (
@@ -262,6 +265,202 @@ void main() {
       expect(
         engine.mixRegistry.childrenOfGroup(mix(['drums'])).map((n) => n.name),
         ['snare', 'kick'],
+      );
+    });
+
+    // ── Sends (design §4) ────────────────────────────────────────────────────
+
+    /// Opens the picker keyed [pickerKey] and taps the [returnName] option. The
+    /// option is scoped to the picker's own subtree — its `OverlayPortal` keeps
+    /// the open menu there — so it never collides with the same return name shown
+    /// in the returns-section strip. `.last` skips the closed control when a
+    /// target picker already shows the name.
+    Future<void> pickReturn(
+      WidgetTester tester,
+      Key pickerKey,
+      String returnName,
+    ) async {
+      await tester.tap(find.byKey(pickerKey));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find
+            .descendant(
+              of: find.byKey(pickerKey),
+              matching: find.text(returnName),
+            )
+            .last,
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('picking a return from the add-send row creates a send', (
+      tester,
+    ) async {
+      final kick = engine.addChannel(name: 'kick');
+      engine.addReturn(name: 'verb');
+      await pumpSurface(tester);
+      expect(engine.channelSends(kick), isEmpty);
+
+      await pickReturn(tester, MixSurface.addSendKey('kick'), 'verb');
+
+      final sends = engine.channelSends(kick);
+      expect(sends, hasLength(1));
+      expect(sends.single.to, mix(['verb']));
+      expect(sends.single.level, 1.0);
+      expect(sends.single.preFader, isFalse);
+      // The new send now renders its own row.
+      expect(find.byKey(MixSurface.sendTargetKey('kick', 0)), findsOneWidget);
+    });
+
+    testWidgets('the send target picker offers only returns', (tester) async {
+      engine.addChannel(name: 'kick');
+      engine.addChannel(name: 'bass');
+      engine.addGroup(name: 'drums');
+      engine.addReturn(name: 'verb');
+      await pumpSurface(tester);
+
+      final picker = tester.widget<PhiSelect<MixerChannel>>(
+        find.byKey(MixSurface.addSendKey('kick')),
+      );
+      final labels = [
+        for (final g in picker.groups) ...g.options.map((o) => o.label),
+      ];
+      // Only the return — never a plain channel, a group bus, or master.
+      expect(labels, ['verb']);
+    });
+
+    testWidgets('editing a send target rewires the slot', (tester) async {
+      final kick = engine.addChannel(name: 'kick');
+      final verb = engine.addReturn(name: 'verb');
+      engine.addReturn(name: 'delay');
+      engine.setChannelSend(kick, 0, returnBus: verb, level: 0.5);
+      await pumpSurface(tester);
+      expect(engine.channelSends(kick).single.to, mix(['verb']));
+
+      await pickReturn(tester, MixSurface.sendTargetKey('kick', 0), 'delay');
+
+      final send = engine.channelSends(kick).single;
+      expect(send.to, mix(['delay']));
+      // Level and pre/post survive the target rewire.
+      expect(send.level, 0.5);
+      expect(send.preFader, isFalse);
+    });
+
+    testWidgets('toggling pre/post flips the send and back', (tester) async {
+      final kick = engine.addChannel(name: 'kick');
+      final verb = engine.addReturn(name: 'verb');
+      engine.setChannelSend(kick, 0, returnBus: verb, level: 0.5);
+      await pumpSurface(tester);
+      expect(engine.channelSends(kick).single.preFader, isFalse);
+
+      await tester.tap(find.byKey(MixSurface.sendPrePostKey('kick', 0)));
+      await tester.pump();
+      expect(engine.channelSends(kick).single.preFader, isTrue);
+
+      await tester.tap(find.byKey(MixSurface.sendPrePostKey('kick', 0)));
+      await tester.pump();
+      expect(engine.channelSends(kick).single.preFader, isFalse);
+    });
+
+    testWidgets('removing a send clears its slot', (tester) async {
+      final kick = engine.addChannel(name: 'kick');
+      final verb = engine.addReturn(name: 'verb');
+      engine.setChannelSend(kick, 0, returnBus: verb, level: 0.5);
+      await pumpSurface(tester);
+      expect(engine.channelSends(kick), hasLength(1));
+
+      await tester.tap(find.byKey(MixSurface.sendRemoveKey('kick', 0)));
+      await tester.pump();
+
+      expect(engine.channelSends(kick), isEmpty);
+      expect(find.byKey(MixSurface.sendTargetKey('kick', 0)), findsNothing);
+    });
+
+    testWidgets('a send-level drag coalesces to a single command', (
+      tester,
+    ) async {
+      // Record every command; the coalescing contract is one command per drag.
+      final commands = <Object>[];
+      engine.bindProject(engine.mixRegistry, recordCommand: commands.add);
+      final kick = engine.addChannel(name: 'kick');
+      final verb = engine.addReturn(name: 'verb');
+      engine.setChannelSend(kick, 0, returnBus: verb, level: 0.8);
+      await pumpSurface(tester);
+      expect(engine.channelSends(kick), hasLength(1));
+
+      // Only count the drag itself.
+      commands.clear();
+      gateway.calls.clear();
+      final fader = find.byKey(MixSurface.sendLevelKey('kick', 0));
+      final gesture = await tester.startGesture(tester.getCenter(fader));
+      await tester.pump();
+      await gesture.moveBy(const Offset(0, 20)); // down → lower the level
+      await tester.pump();
+      await gesture.moveBy(const Offset(0, 20));
+      await tester.pump();
+      await gesture.moveBy(const Offset(0, 20));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      // One journaled payload command for the whole drag …
+      expect(commands, hasLength(1));
+      // … the gateway was rammed live several times during it …
+      expect(
+        gateway.calls.where((c) => c.startsWith('setSendLevel:')).length,
+        greaterThan(1),
+      );
+      // … and the level actually dropped from its 0.8 start.
+      expect(engine.channelSends(kick).single.level, lessThan(0.8));
+    });
+
+    testWidgets('a group bus header also gains a sends area', (tester) async {
+      final group = engine.addGroup(name: 'drums');
+      engine.addReturn(name: 'verb');
+      await pumpSurface(tester);
+      // The bus header strip carries an add-send picker too (design §4).
+      expect(find.byKey(MixSurface.addSendKey('drums')), findsOneWidget);
+
+      await pickReturn(tester, MixSurface.addSendKey('drums'), 'verb');
+
+      // The send persists on the group bus's own payload.
+      expect(engine.channelSends(group), hasLength(1));
+      expect(engine.channelSends(group).single.to, mix(['verb']));
+    });
+
+    // ── Returns section (design §4, §5) ──────────────────────────────────────
+
+    testWidgets('returns render in the section without a solo button', (
+      tester,
+    ) async {
+      engine.addReturn(name: 'verb');
+      engine.addReturn(name: 'delay');
+      await pumpSurface(tester);
+
+      final section = find.byKey(MixSurface.returnsSectionKey);
+      expect(section, findsOneWidget);
+      // Both return strips render inside the section.
+      expect(
+        find.descendant(of: section, matching: find.byType(ChannelStrip)),
+        findsNWidgets(2),
+      );
+      expect(
+        find.descendant(of: section, matching: find.text('verb')),
+        findsOneWidget,
+      );
+
+      // Returns are exempt from solo (design §5) — a mute button, but no solo.
+      final verbStrip = find.ancestor(
+        of: find.text('verb'),
+        matching: find.byType(ChannelStrip),
+      );
+      expect(
+        find.descendant(of: verbStrip, matching: find.text('M')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: verbStrip, matching: find.text('S')),
+        findsNothing,
       );
     });
   });

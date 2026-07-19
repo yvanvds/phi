@@ -7,6 +7,9 @@ import '../../design/tokens/phi_type.dart';
 import '../../design/tokens/phi_voices.dart';
 import '../../design/widgets/button/primary_button.dart';
 import '../../design/widgets/channel_strip/channel_strip.dart';
+import '../../design/widgets/select/phi_select.dart';
+import '../../design/widgets/select/phi_select_option.dart';
+import '../../domain/mix/mix_send.dart';
 import '../../domain/project/entity_address.dart';
 import '../../engine/engine.dart';
 import '../../engine/state/mix_tree_node.dart';
@@ -31,6 +34,31 @@ class MixSurface extends Surface {
   /// Key on a leaf strip's drag handle, by channel name — so widget/integration
   /// tests can grab a specific strip to drag it into a group or reorder it.
   static Key dragHandleKey(String name) => Key('MixSurface.dragHandle.$name');
+
+  /// Key on a strip's **add-send** picker, by channel name — the target picker
+  /// that appends a new aux send when a return is chosen.
+  static Key addSendKey(String name) => Key('MixSurface.addSend.$name');
+
+  /// Key on an existing send row's **target picker**, by channel name + slot.
+  static Key sendTargetKey(String name, int slot) =>
+      Key('MixSurface.sendTarget.$name.$slot');
+
+  /// Key on a send row's **level mini-fader**, by channel name + slot — the
+  /// control tests drag to prove gesture-coalesced level edits (one command per
+  /// drag).
+  static Key sendLevelKey(String name, int slot) =>
+      Key('MixSurface.sendLevel.$name.$slot');
+
+  /// Key on a send row's **pre/post toggle**, by channel name + slot.
+  static Key sendPrePostKey(String name, int slot) =>
+      Key('MixSurface.sendPrePost.$name.$slot');
+
+  /// Key on a send row's **remove** control, by channel name + slot.
+  static Key sendRemoveKey(String name, int slot) =>
+      Key('MixSurface.sendRemove.$name.$slot');
+
+  /// Key on the returns section container (present only when returns exist).
+  static const Key returnsSectionKey = Key('MixSurface.returnsSection');
 
   @override
   Widget build(BuildContext context) {
@@ -211,6 +239,7 @@ class _StripRack extends StatelessWidget {
                 const SizedBox(width: PhiSpacing.s2),
                 Container(width: 1, height: 260, color: PhiColors.line1),
                 const SizedBox(width: PhiSpacing.s2),
+                _ReturnsSection(engine: engine),
                 _MasterStrip(engine: engine),
               ],
             ),
@@ -323,27 +352,39 @@ class _LeafStrip extends StatelessWidget {
       listenable: node.channel,
       builder: (context, _) => Opacity(
         opacity: highlighted ? 0.7 : 1.0,
-        child: ChannelStrip(
-          name: node.channel.name,
-          volume: node.channel.volume,
-          peak: node.channel.peak,
-          muted: node.channel.muted,
-          soloed: node.channel.soloed,
-          voiceColor: PhiVoices.color(node.channel.voice),
-          voiceGlow: PhiVoices.glow(node.channel.voice),
-          dragHandle: _DragHandle(channel: node.channel, address: node.address),
-          onVolumeChanged: (v) => engine.setChannelVolume(node.channel, v),
-          onVolumeChangeStart: () =>
-              engine.beginChannelVolumeGesture(node.channel),
-          onVolumeChangeEnd: () => engine.endChannelVolumeGesture(node.channel),
-          onMuteToggle: () =>
-              engine.setChannelMuted(node.channel, muted: !node.channel.muted),
-          onSoloToggle: () => engine.setChannelSoloed(
-            node.channel,
-            soloed: !node.channel.soloed,
-          ),
-          onRename: (name) => engine.renameChannel(node.channel, name),
-          onRemove: () => engine.removeChannel(node.channel),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ChannelStrip(
+              name: node.channel.name,
+              volume: node.channel.volume,
+              peak: node.channel.peak,
+              muted: node.channel.muted,
+              soloed: node.channel.soloed,
+              voiceColor: PhiVoices.color(node.channel.voice),
+              voiceGlow: PhiVoices.glow(node.channel.voice),
+              dragHandle: _DragHandle(
+                channel: node.channel,
+                address: node.address,
+              ),
+              onVolumeChanged: (v) => engine.setChannelVolume(node.channel, v),
+              onVolumeChangeStart: () =>
+                  engine.beginChannelVolumeGesture(node.channel),
+              onVolumeChangeEnd: () =>
+                  engine.endChannelVolumeGesture(node.channel),
+              onMuteToggle: () => engine.setChannelMuted(
+                node.channel,
+                muted: !node.channel.muted,
+              ),
+              onSoloToggle: () => engine.setChannelSoloed(
+                node.channel,
+                soloed: !node.channel.soloed,
+              ),
+              onRename: (name) => engine.renameChannel(node.channel, name),
+              onRemove: () => engine.removeChannel(node.channel),
+            ),
+            _SendsArea(engine: engine, channel: node.channel),
+          ],
         ),
       ),
     );
@@ -364,24 +405,35 @@ class _BusStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: node.channel,
-      builder: (context, _) => ChannelStrip(
-        name: node.channel.name,
-        volume: node.channel.volume,
-        peak: node.channel.peak,
-        muted: node.channel.muted,
-        soloed: node.channel.soloed,
-        voiceColor: PhiVoices.color(node.channel.voice),
-        voiceGlow: PhiVoices.glow(node.channel.voice),
-        onVolumeChanged: (v) => engine.setChannelVolume(node.channel, v),
-        onVolumeChangeStart: () =>
-            engine.beginChannelVolumeGesture(node.channel),
-        onVolumeChangeEnd: () => engine.endChannelVolumeGesture(node.channel),
-        onMuteToggle: () =>
-            engine.setChannelMuted(node.channel, muted: !node.channel.muted),
-        onSoloToggle: () =>
-            engine.setChannelSoloed(node.channel, soloed: !node.channel.soloed),
-        onRename: (name) => engine.renameChannel(node.channel, name),
-        onRemove: () => engine.removeChannel(node.channel),
+      builder: (context, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ChannelStrip(
+            name: node.channel.name,
+            volume: node.channel.volume,
+            peak: node.channel.peak,
+            muted: node.channel.muted,
+            soloed: node.channel.soloed,
+            voiceColor: PhiVoices.color(node.channel.voice),
+            voiceGlow: PhiVoices.glow(node.channel.voice),
+            onVolumeChanged: (v) => engine.setChannelVolume(node.channel, v),
+            onVolumeChangeStart: () =>
+                engine.beginChannelVolumeGesture(node.channel),
+            onVolumeChangeEnd: () =>
+                engine.endChannelVolumeGesture(node.channel),
+            onMuteToggle: () => engine.setChannelMuted(
+              node.channel,
+              muted: !node.channel.muted,
+            ),
+            onSoloToggle: () => engine.setChannelSoloed(
+              node.channel,
+              soloed: !node.channel.soloed,
+            ),
+            onRename: (name) => engine.renameChannel(node.channel, name),
+            onRemove: () => engine.removeChannel(node.channel),
+          ),
+          _SendsArea(engine: engine, channel: node.channel),
+        ],
       ),
     );
   }
@@ -469,6 +521,447 @@ class _DragHandle extends StatelessWidget {
           size: 14,
           color: PhiColors.fg3,
         ),
+      ),
+    );
+  }
+}
+
+/// The compact **SENDS** area beneath a strip or group-bus header (design §4,
+/// §7): one [_SendRow] per stored aux send, plus an [_AddSendRow] while there is
+/// a return to target (send slots have no cap — the engine auto-upgrades). Hidden
+/// entirely when the channel has no sends and there are no returns to send to.
+///
+/// Reads the sends off the engine (`channelSends`), which come from the stored
+/// payload, so structural send edits (add / edit target / pre-post / remove) all
+/// land through the ordinary payload-command path and re-render on the ensuing
+/// re-sync; a live *level* drag holds its transient value inside the mini-fader.
+class _SendsArea extends StatelessWidget {
+  const _SendsArea({required this.engine, required this.channel});
+
+  final PhiEngine engine;
+  final MixerChannel channel;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<List<MixerChannel>>(
+      valueListenable: engine.returns,
+      builder: (context, returns, _) {
+        final sends = engine.channelSends(channel);
+        if (sends.isEmpty && returns.isEmpty) return const SizedBox.shrink();
+        return Container(
+          width: ChannelStrip.width,
+          margin: const EdgeInsets.only(top: PhiSpacing.s1),
+          padding: const EdgeInsets.all(PhiSpacing.s1),
+          decoration: BoxDecoration(
+            color: PhiColors.bg0,
+            border: Border.all(color: PhiColors.line1),
+            borderRadius: PhiRadii.all1,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('SENDS', style: PhiType.caption()),
+              const SizedBox(height: PhiSpacing.s1),
+              for (var slot = 0; slot < sends.length; slot++) ...[
+                _SendRow(
+                  engine: engine,
+                  channel: channel,
+                  slot: slot,
+                  send: sends[slot],
+                  returns: returns,
+                ),
+                const SizedBox(height: PhiSpacing.s1),
+              ],
+              if (returns.isNotEmpty)
+                _AddSendRow(
+                  engine: engine,
+                  channel: channel,
+                  slot: sends.length,
+                  returns: returns,
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// One aux-send row: target picker (returns only) · level mini-fader · pre/post
+/// toggle · remove (design §4). Editing the target rewires the slot through the
+/// engine sync; the level fader drags are gesture-coalesced; removing clears the
+/// slot.
+class _SendRow extends StatelessWidget {
+  const _SendRow({
+    required this.engine,
+    required this.channel,
+    required this.slot,
+    required this.send,
+    required this.returns,
+  });
+
+  final PhiEngine engine;
+  final MixerChannel channel;
+  final int slot;
+  final MixSend send;
+  final List<MixerChannel> returns;
+
+  @override
+  Widget build(BuildContext context) {
+    // The materialised return this send currently targets — `null` only when the
+    // return has gone (a dangling target), in which case the picker falls back to
+    // naming the stored address and the pre/post toggle is inert.
+    final target = engine.returnChannelFor(send.to);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        PhiSelect<MixerChannel>.flat(
+          key: MixSurface.sendTargetKey(channel.name, slot),
+          value: target,
+          placeholder: send.to.name,
+          options: [
+            for (final r in returns)
+              PhiSelectOption<MixerChannel>(value: r, label: r.name),
+          ],
+          onChanged: (r) => engine.setChannelSend(
+            channel,
+            slot,
+            returnBus: r,
+            level: send.level,
+            preFader: send.preFader,
+          ),
+        ),
+        const SizedBox(height: PhiSpacing.s0),
+        _SendLevelFader(
+          key: MixSurface.sendLevelKey(channel.name, slot),
+          level: send.level,
+          onChangeStart: () => engine.beginSendLevelGesture(channel, slot),
+          onChanged: (v) => engine.setChannelSendLevel(channel, slot, v),
+          onChangeEnd: () => engine.endSendLevelGesture(channel, slot),
+        ),
+        const SizedBox(height: PhiSpacing.s0),
+        Row(
+          children: [
+            Expanded(
+              child: _PrePostToggle(
+                key: MixSurface.sendPrePostKey(channel.name, slot),
+                preFader: send.preFader,
+                onToggle: target == null
+                    ? null
+                    : () => engine.setChannelSend(
+                        channel,
+                        slot,
+                        returnBus: target,
+                        level: send.level,
+                        preFader: !send.preFader,
+                      ),
+              ),
+            ),
+            const SizedBox(width: PhiSpacing.s0),
+            _SendRemoveButton(
+              buttonKey: MixSurface.sendRemoveKey(channel.name, slot),
+              onPressed: () => engine.clearChannelSend(channel, slot),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// The add-send row: a placeholder picker of the available returns. Picking one
+/// appends a fresh unity, post-fader send at the next slot (design §4 — slots
+/// auto-upgrade, so there is no cap and the row is always available while a
+/// return exists to target).
+class _AddSendRow extends StatelessWidget {
+  const _AddSendRow({
+    required this.engine,
+    required this.channel,
+    required this.slot,
+    required this.returns,
+  });
+
+  final PhiEngine engine;
+  final MixerChannel channel;
+  final int slot;
+  final List<MixerChannel> returns;
+
+  @override
+  Widget build(BuildContext context) {
+    return PhiSelect<MixerChannel>.flat(
+      key: MixSurface.addSendKey(channel.name),
+      value: null,
+      placeholder: '+ send',
+      options: [
+        for (final r in returns)
+          PhiSelectOption<MixerChannel>(value: r, label: r.name),
+      ],
+      onChanged: (r) => engine.setChannelSend(
+        channel,
+        slot,
+        returnBus: r,
+        level: 1.0,
+        preFader: false,
+      ),
+    );
+  }
+}
+
+/// A compact send-level mini-fader. A **vertical** drag adjusts the level (drag
+/// up to raise) — matching the main fader's axis so it never fights the rack's
+/// horizontal scroll — and holds a transient value while the drag is live, so the
+/// display tracks the gesture even though the engine defers the journal write to
+/// the release (gesture coalescing, design §4).
+class _SendLevelFader extends StatefulWidget {
+  const _SendLevelFader({
+    required this.level,
+    required this.onChangeStart,
+    required this.onChanged,
+    required this.onChangeEnd,
+    super.key,
+  });
+
+  /// The committed send level in `[0, 1]` — shown whenever no drag is live.
+  final double level;
+
+  final VoidCallback onChangeStart;
+  final ValueChanged<double> onChanged;
+  final VoidCallback onChangeEnd;
+
+  @override
+  State<_SendLevelFader> createState() => _SendLevelFaderState();
+}
+
+class _SendLevelFaderState extends State<_SendLevelFader> {
+  /// The transient value while a drag is live; `null` when idle (display then
+  /// follows the committed [_SendLevelFader.level]).
+  double? _dragValue;
+
+  static const double _height = 16;
+
+  /// Vertical pixels of travel that span the full `0 → 1` range.
+  static const double _travel = 120;
+
+  double get _value => (_dragValue ?? widget.level).clamp(0.0, 1.0);
+
+  void _start(DragStartDetails _) {
+    widget.onChangeStart();
+    setState(() => _dragValue = widget.level);
+  }
+
+  void _update(DragUpdateDetails d) {
+    final next = ((_dragValue ?? widget.level) - d.delta.dy / _travel).clamp(
+      0.0,
+      1.0,
+    );
+    setState(() => _dragValue = next);
+    widget.onChanged(next);
+  }
+
+  void _end([DragEndDetails? _]) {
+    widget.onChangeEnd();
+    setState(() => _dragValue = null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = _value;
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeUpDown,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragStart: _start,
+        onVerticalDragUpdate: _update,
+        onVerticalDragEnd: _end,
+        child: SizedBox(
+          height: _height,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: PhiColors.bg2,
+                    border: Border.all(color: PhiColors.line1),
+                    borderRadius: PhiRadii.all1,
+                  ),
+                ),
+              ),
+              FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: value,
+                heightFactor: 1,
+                child: const DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: PhiColors.voice1,
+                    borderRadius: PhiRadii.all1,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A send's pre/post-fader toggle: highlighted `PRE` when the send is taken
+/// pre-fader, dim `POST` otherwise (post is the default, design §2). Inert (no
+/// tap) when the send's target has gone.
+class _PrePostToggle extends StatelessWidget {
+  const _PrePostToggle({
+    required this.preFader,
+    required this.onToggle,
+    super.key,
+  });
+
+  final bool preFader;
+  final VoidCallback? onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: onToggle == null
+          ? SystemMouseCursors.basic
+          : SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onToggle,
+        child: Container(
+          height: 16,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: preFader ? PhiColors.bg3 : PhiColors.bg0,
+            border: Border.all(
+              color: preFader ? PhiColors.voice3 : PhiColors.line1,
+            ),
+            borderRadius: PhiRadii.all1,
+          ),
+          child: Text(
+            preFader ? 'PRE' : 'POST',
+            style: PhiType.monoS().copyWith(
+              fontSize: 8,
+              color: preFader ? PhiColors.voice3 : PhiColors.fg2,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A send row's remove control — a small `×` box mirroring the strip's own
+/// remove affordance. Clearing the send detaches its slot (design §4).
+class _SendRemoveButton extends StatelessWidget {
+  const _SendRemoveButton({required this.buttonKey, required this.onPressed});
+
+  final Key buttonKey;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: Container(
+          key: buttonKey,
+          width: 16,
+          height: 16,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: PhiColors.bg0,
+            border: Border.all(color: PhiColors.line1),
+            borderRadius: PhiRadii.all1,
+          ),
+          child: Text(
+            '×',
+            style: PhiType.monoS().copyWith(color: PhiColors.fg2, height: 1),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The returns section pinned beside master (design §4, §7): a framed column of
+/// one [_ReturnStrip] per return bus. Rendered only when returns exist, so a
+/// project with none shows nothing here.
+class _ReturnsSection extends StatelessWidget {
+  const _ReturnsSection({required this.engine});
+
+  final PhiEngine engine;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<List<MixerChannel>>(
+      valueListenable: engine.returns,
+      builder: (context, returns, _) {
+        if (returns.isEmpty) return const SizedBox.shrink();
+        return Container(
+          key: MixSurface.returnsSectionKey,
+          margin: const EdgeInsets.only(right: PhiSpacing.s2),
+          padding: const EdgeInsets.all(PhiSpacing.s2),
+          decoration: BoxDecoration(
+            color: PhiColors.bg0,
+            border: Border.all(color: PhiColors.line2),
+            borderRadius: PhiRadii.all1,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('RETURNS', style: PhiType.caption()),
+              const SizedBox(height: PhiSpacing.s1),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final r in returns) ...[
+                    _ReturnStrip(engine: engine, channel: r),
+                    const SizedBox(width: PhiSpacing.s1),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// A single return strip: fader, mute, meter — **no solo** (returns are exempt,
+/// design §5) and no drag handle (returns sit outside the tree). Renaming rewires
+/// every send targeting it (the ordinary rename-refactor); removal waits on the
+/// delete-impact dialog (#171), so no remove control here yet.
+class _ReturnStrip extends StatelessWidget {
+  const _ReturnStrip({required this.engine, required this.channel});
+
+  final PhiEngine engine;
+  final MixerChannel channel;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: channel,
+      builder: (context, _) => ChannelStrip(
+        name: channel.name,
+        volume: channel.volume,
+        peak: channel.peak,
+        muted: channel.muted,
+        soloed: channel.soloed,
+        voiceColor: PhiVoices.color(channel.voice),
+        voiceGlow: PhiVoices.glow(channel.voice),
+        soloable: false,
+        onVolumeChanged: (v) => engine.setChannelVolume(channel, v),
+        onVolumeChangeStart: () => engine.beginChannelVolumeGesture(channel),
+        onVolumeChangeEnd: () => engine.endChannelVolumeGesture(channel),
+        onMuteToggle: () =>
+            engine.setChannelMuted(channel, muted: !channel.muted),
+        onRename: (name) => engine.renameChannel(channel, name),
       ),
     );
   }
