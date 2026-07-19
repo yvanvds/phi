@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import '../../design/tokens/phi_colors.dart';
 import '../../domain/midi/midi_note.dart';
 import 'piano_roll_geometry.dart';
+import 'piano_roll_view.dart';
 
 /// Custom-painted piano roll. Renders pitch lanes, beat grid, the transformed
 /// **ghost** layer (what the chain produces), the editable **source** layer on
@@ -26,6 +27,7 @@ class PianoRollPainter extends CustomPainter {
     this.minPitch = 55,
     this.maxPitch = 76,
     this.playhead = 0,
+    this.view,
   });
 
   /// The editable clip notes — drawn bright, hit-tested by the gesture layer.
@@ -49,6 +51,10 @@ class PianoRollPainter extends CustomPainter {
   final int maxPitch;
   final double playhead;
 
+  /// Session-local pan/zoom (issue #189). `null` paints the whole clip fitted to
+  /// the area (the un-zoomed default); a view scales and offsets it.
+  final PianoRollView? view;
+
   static const Color _noteCore = PhiColors.voice1;
   static const Color _noteHalo = PhiColors.voice1Soft;
   static const Color _attackPip = PhiColors.fg0;
@@ -63,6 +69,7 @@ class PianoRollPainter extends CustomPainter {
       beatsPerBar: beatsPerBar,
       minPitch: minPitch,
       maxPitch: maxPitch,
+      view: view,
     );
 
     _paintLanes(canvas, geo);
@@ -80,7 +87,7 @@ class PianoRollPainter extends CustomPainter {
       final pitch = maxPitch - i;
       final semitone = pitch % 12;
       final isKey = semitone == 0 || semitone == 7;
-      final y = geo.laneHeight * i;
+      final y = geo.laneLineY(i);
       canvas.drawLine(
         Offset(0, y),
         Offset(geo.size.width, y),
@@ -92,10 +99,16 @@ class PianoRollPainter extends CustomPainter {
   void _paintBeatGrid(Canvas canvas, PianoRollGeometry geo) {
     final beat = Paint()..color = PhiColors.gridStrong;
     final sub = Paint()..color = PhiColors.grid;
-    final subdivisions = geo.beatSpan * 4;
-    for (var i = 0; i <= subdivisions; i++) {
-      final x = (geo.size.width / subdivisions) * i;
-      final onBeat = i % 4 == 0;
+    // Draw the sixteenth-note grid across the *visible* beat range, so a zoomed
+    // roll still lines up on the pointer-anchored view (issue #189). Un-zoomed
+    // this reduces to the old `beatSpan * 4` lines fitted to the width.
+    const step = 0.25;
+    final firstS = (geo.beatForX(0) / step).floor();
+    final lastS = (geo.beatForX(geo.size.width) / step).ceil();
+    for (var s = firstS; s <= lastS; s++) {
+      if (s < 0) continue;
+      final x = geo.xForBeat(s * step);
+      final onBeat = s % 4 == 0;
       canvas.drawLine(
         Offset(x, 0),
         Offset(x, geo.size.height),
@@ -187,6 +200,7 @@ class PianoRollPainter extends CustomPainter {
       old.maxPitch != maxPitch ||
       old.showGhost != showGhost ||
       old.playhead != playhead ||
+      old.view != view ||
       old.marquee != marquee ||
       !setEquals(old.selection, selection) ||
       !listEquals(old.sourceNotes, sourceNotes) ||

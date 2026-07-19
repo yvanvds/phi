@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import '../../design/tokens/phi_colors.dart';
 import '../../domain/midi/midi_note.dart';
 import 'piano_roll_geometry.dart';
+import 'piano_roll_view.dart';
 
 /// Velocity lane painted *below* the piano roll, sharing its time axis: each
 /// note gets a vertical stem at its start-x whose height encodes velocity, so
@@ -17,6 +18,7 @@ class VelocityLanePainter extends CustomPainter {
     required this.bars,
     required this.beatsPerBar,
     required this.revision,
+    this.view,
   });
 
   final List<MidiNote> notes;
@@ -25,12 +27,17 @@ class VelocityLanePainter extends CustomPainter {
   final int beatsPerBar;
   final int revision;
 
+  /// The roll's session-local pan/zoom (issue #189), so a stem lands under its
+  /// note at any horizontal zoom. `null` fits the clip to the width.
+  final PianoRollView? view;
+
   @override
   void paint(Canvas canvas, Size size) {
     final geo = PianoRollGeometry(
       size: size,
       bars: bars,
       beatsPerBar: beatsPerBar,
+      view: view,
     );
 
     // Baseline.
@@ -68,6 +75,7 @@ class VelocityLanePainter extends CustomPainter {
       old.revision != revision ||
       old.bars != bars ||
       old.beatsPerBar != beatsPerBar ||
+      old.view != view ||
       !setEquals(old.selection, selection) ||
       !listEquals(old.notes, notes);
 }

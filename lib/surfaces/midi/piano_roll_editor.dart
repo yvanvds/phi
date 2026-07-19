@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -9,6 +10,7 @@ import '../../domain/midi/clip_editor.dart';
 import '../../domain/midi/midi_note.dart';
 import 'piano_roll_geometry.dart';
 import 'piano_roll_painter.dart';
+import 'piano_roll_view.dart';
 
 /// The interactive piano roll: hit-tests, drags and keyboard edits on top of
 /// [PianoRollPainter]. Gestures author the **source** clip through [editor];
@@ -27,6 +29,8 @@ class PianoRollEditor extends StatefulWidget {
     this.minPitch = 55,
     this.maxPitch = 76,
     this.playhead,
+    this.view,
+    this.onViewChanged,
     super.key,
   });
 
@@ -41,6 +45,18 @@ class PianoRollEditor extends StatefulWidget {
   /// The engine player's beat position (issue #29). When `null` the roll
   /// paints no playhead; otherwise it animates as the player advances.
   final ValueListenable<double>? playhead;
+
+  /// Session-local pan/zoom (issue #189). `null` fits the whole clip to the
+  /// paint area (the un-zoomed default). Zoom gestures — Ctrl+wheel horizontal
+  /// (pointer-anchored), Ctrl+Shift+wheel vertical, `Ctrl+=` / `Ctrl+-` — emit a
+  /// new view through [onViewChanged]; the parent owns it so the velocity lane
+  /// shares the same horizontal scale.
+  final PianoRollView? view;
+
+  /// Called with a fresh [PianoRollView] on every zoom gesture. `null` makes the
+  /// roll un-zoomable (the wheel/keys are ignored) — used by tests and previews
+  /// that want the plain fitted roll.
+  final ValueChanged<PianoRollView>? onViewChanged;
 
   @override
   State<PianoRollEditor> createState() => _PianoRollEditorState();
@@ -75,13 +91,100 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
     beatsPerBar: widget.beatsPerBar,
     minPitch: widget.minPitch,
     maxPitch: widget.maxPitch,
+    view: widget.view,
   );
 
   double get _grid => _editor.gridDivision;
-  double _snap(double beats) => (beats / _grid).round() * _grid;
+
+  /// Snap [beats] to the grid, or pass it through untouched when snapping is
+  /// off (`gridDivision <= 0`, the picker's "off").
+  double _snap(double beats) =>
+      _grid > 0 ? (beats / _grid).round() * _grid : beats;
+
+  /// Step for a fresh note's duration and an arrow-key nudge — the grid, or a
+  /// sensible default when snapping is off so both still do something useful.
+  double get _step => _grid > 0 ? _grid : _defaultStep;
+  static const double _defaultStep = 0.25;
 
   bool get _shift => HardwareKeyboard.instance.isShiftPressed;
   bool get _ctrl => HardwareKeyboard.instance.isControlPressed;
+
+  // ── Zoom (issue #189) ─────────────────────────────────────────────────────
+
+  static const double _wheelZoomIn = 1.15;
+  static const double _wheelZoomOut = 1 / 1.15;
+  static const double _keyZoomIn = 1.2;
+  static const double _keyZoomOut = 1 / 1.2;
+
+  int get _beatSpan {
+    final span = widget.bars * widget.beatsPerBar;
+    return span <= 0 ? 1 : span;
+  }
+
+  int get _pitchSpan => (widget.maxPitch - widget.minPitch).clamp(1, 127);
+
+  double get _fitPixelsPerBeat =>
+      _size.width <= 0 ? 1 : _size.width / _beatSpan;
+  double get _fitLaneHeight =>
+      _size.height <= 0 ? 1 : _size.height / _pitchSpan;
+
+  /// The current view, or a fit-to-size one synthesised from the paint area when
+  /// the roll has not been zoomed yet — so the first zoom anchors off the
+  /// fitted scale.
+  PianoRollView get _effectiveView =>
+      widget.view ??
+      PianoRollView(
+        pixelsPerBeat: _fitPixelsPerBeat,
+        laneHeight: _fitLaneHeight,
+      );
+
+  void _zoomHorizontal(double factor, double anchorX) {
+    final onChanged = widget.onViewChanged;
+    if (onChanged == null || _size.width <= 0) return;
+    onChanged(
+      _effectiveView.zoomedHorizontally(
+        factor: factor,
+        anchorX: anchorX,
+        viewportWidth: _size.width,
+        beatSpan: _beatSpan,
+        minPixelsPerBeat: _fitPixelsPerBeat,
+      ),
+    );
+  }
+
+  void _zoomVertical(double factor, double anchorY) {
+    final onChanged = widget.onViewChanged;
+    if (onChanged == null || _size.height <= 0) return;
+    onChanged(
+      _effectiveView.zoomedVertically(
+        factor: factor,
+        anchorY: anchorY,
+        viewportHeight: _size.height,
+        laneSpan: _pitchSpan,
+        minLaneHeight: _fitLaneHeight,
+      ),
+    );
+  }
+
+  /// Ctrl+wheel zooms: horizontal by default (anchored on the pointer's beat),
+  /// vertical with Shift held. A bare wheel scroll is left alone.
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_ctrl) return;
+    final dy = event.scrollDelta.dy;
+    if (dy == 0) return;
+    final zoomIn = dy < 0; // wheel-up (negative delta) magnifies
+    if (_shift) {
+      _zoomVertical(
+        zoomIn ? _wheelZoomIn : _wheelZoomOut,
+        event.localPosition.dy,
+      );
+    } else {
+      _zoomHorizontal(
+        zoomIn ? _wheelZoomIn : _wheelZoomOut,
+        event.localPosition.dx,
+      );
+    }
+  }
 
   // ── Tap: select or add ────────────────────────────────────────────────────
 
@@ -99,7 +202,7 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
         start: _snap(
           _geo.beatForX(d.localPosition.dx),
         ).clamp(0.0, double.infinity),
-        duration: _grid,
+        duration: _step,
         velocity: 0.7,
       ),
     );
@@ -194,10 +297,22 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
     }
     final key = event.logicalKey;
     if (_ctrl) {
-      // Undo/redo are no longer handled here: the shell routes Ctrl+Z/Y to the
-      // focused surface's stack (undo follows focus, #119), so let the combo
-      // bubble up to that global handler rather than acting locally.
-      return KeyEventResult.ignored;
+      // Ctrl+= / Ctrl+- zoom horizontally around the roll's centre (issue #189).
+      // Everything else (Ctrl+Z/Y) bubbles: the shell routes undo/redo to the
+      // focused surface's stack (undo follows focus, #119).
+      switch (key) {
+        case LogicalKeyboardKey.equal:
+        case LogicalKeyboardKey.add:
+        case LogicalKeyboardKey.numpadAdd:
+          _zoomHorizontal(_keyZoomIn, _size.width / 2);
+          return KeyEventResult.handled;
+        case LogicalKeyboardKey.minus:
+        case LogicalKeyboardKey.numpadSubtract:
+          _zoomHorizontal(_keyZoomOut, _size.width / 2);
+          return KeyEventResult.handled;
+        default:
+          return KeyEventResult.ignored;
+      }
     }
     switch (key) {
       case LogicalKeyboardKey.arrowUp:
@@ -205,9 +320,9 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
       case LogicalKeyboardKey.arrowDown:
         _editor.moveSelection(dPitch: -1);
       case LogicalKeyboardKey.arrowLeft:
-        _editor.moveSelection(dBeats: -_grid);
+        _editor.moveSelection(dBeats: -_step);
       case LogicalKeyboardKey.arrowRight:
-        _editor.moveSelection(dBeats: _grid);
+        _editor.moveSelection(dBeats: _step);
       case LogicalKeyboardKey.delete:
       case LogicalKeyboardKey.backspace:
         _editor.deleteSelection();
@@ -284,6 +399,7 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
       minPitch: widget.minPitch,
       maxPitch: widget.maxPitch,
       playhead: playhead,
+      view: widget.view,
     ),
   );
 
@@ -305,13 +421,16 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
             return Stack(
               children: [
                 Positioned.fill(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTapUp: _onTapUp,
-                    onPanStart: _onPanStart,
-                    onPanUpdate: _onPanUpdate,
-                    onPanEnd: _onPanEnd,
-                    child: _buildRoll(),
+                  child: Listener(
+                    onPointerSignal: _onPointerSignal,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapUp: _onTapUp,
+                      onPanStart: _onPanStart,
+                      onPanUpdate: _onPanUpdate,
+                      onPanEnd: _onPanEnd,
+                      child: _buildRoll(),
+                    ),
                   ),
                 ),
                 Positioned(

@@ -4,11 +4,14 @@ import '../../design/tokens/phi_colors.dart';
 import '../../design/tokens/phi_radii.dart';
 import '../../design/tokens/phi_type.dart';
 import '../../design/widgets/capsule/capsule.dart';
+import '../../design/widgets/select/phi_select.dart';
+import 'snap_grid.dart';
 
-/// Top header above the piano roll: clip name, note count + meter caption,
-/// the SMF import/export actions, and the two context capsules ("D dorian",
-/// "domain · drum") from the mockup. Capsules are static for the scaffold —
-/// wiring them to the live scale/time-domain state is a follow-up.
+/// Top header above the piano roll: clip name, note count + meter caption, the
+/// snap-grid picker (issue #189), the SMF import/export actions, and the two
+/// context capsules ("D dorian", "domain · drum") from the mockup. Capsules are
+/// static for the scaffold — wiring them to the live scale/time-domain state is
+/// a follow-up.
 class MidiHeaderStrip extends StatelessWidget {
   const MidiHeaderStrip({
     required this.clipName,
@@ -17,6 +20,8 @@ class MidiHeaderStrip extends StatelessWidget {
     this.onImport,
     this.onExport,
     this.errorText,
+    this.gridDivision,
+    this.onGridChanged,
     super.key,
   });
 
@@ -32,6 +37,16 @@ class MidiHeaderStrip extends StatelessWidget {
   /// Transient error (e.g. a dropped file that wasn't valid SMF). Rendered in
   /// place of the caption in the alert colour when set.
   final String? errorText;
+
+  /// The editor's current snap step in beats (issue #189). Paired with
+  /// [onGridChanged]; when either is null the snap picker is hidden.
+  final double? gridDivision;
+
+  /// Called when the performer picks a new snap value from the header select.
+  final ValueChanged<double>? onGridChanged;
+
+  /// Key on the header's snap-grid picker, so tests can drive it.
+  static const Key snapPickerKey = Key('MidiHeaderStrip.snapPicker');
 
   @override
   Widget build(BuildContext context) {
@@ -49,23 +64,52 @@ class MidiHeaderStrip extends StatelessWidget {
             maxLines: 1,
           );
 
+    final onGrid = onGridChanged;
     return Row(
       children: [
         Text('midi · $clipName'.toUpperCase(), style: PhiType.caption()),
-        const SizedBox(width: 12),
+        const SizedBox(width: 8),
         Expanded(child: caption),
+        if (onGrid != null) ...[
+          _SnapPicker(value: gridDivision ?? SnapGrid.off, onChanged: onGrid),
+          const SizedBox(width: 6),
+        ],
         if (onImport != null) ...[
           _MidiIoButton(label: 'import', onTap: onImport!),
           const SizedBox(width: 6),
         ],
         if (onExport != null) ...[
           _MidiIoButton(label: 'export', onTap: onExport!),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
         ],
         const Capsule(label: 'D dorian'),
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
         const Capsule(label: 'domain · drum', color: PhiColors.cool),
       ],
+    );
+  }
+}
+
+/// The header snap-grid picker (issue #189): a compact [PhiSelect] over the
+/// [SnapGrid] options, feeding `ClipEditor.gridDivision`. The closed control
+/// shows the current resolution (`1/16`, `1/8T`, `off`, …), so it reads as the
+/// snap control without a separate label crowding the busy header.
+class _SnapPicker extends StatelessWidget {
+  const _SnapPicker({required this.value, required this.onChanged});
+
+  final double value;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 92,
+      child: PhiSelect<double>.flat(
+        key: MidiHeaderStrip.snapPickerKey,
+        value: value,
+        options: SnapGrid.options,
+        onChanged: onChanged,
+      ),
     );
   }
 }

@@ -31,6 +31,7 @@ import 'graph/transform_graph_canvas.dart';
 import 'midi_file_io.dart';
 import 'midi_header_strip.dart';
 import 'piano_roll_editor.dart';
+import 'piano_roll_view.dart';
 import 'transform_chain_panel.dart';
 import 'velocity_lane.dart';
 
@@ -126,6 +127,13 @@ class _MidiViewportState extends State<MidiViewport> {
   /// Transient import error surfaced in the header; cleared on the next
   /// successful import or when a new one is attempted.
   String? _importError;
+
+  /// Session-local pan/zoom for the roll + velocity lane (issue #189). `null`
+  /// until the first zoom gesture (fit-to-viewport); shared between the roll and
+  /// the velocity lane so their time axes never drift. Not persisted — with the
+  /// library panel this viewport is keyed by clip address, so selecting another
+  /// clip rebuilds it and the zoom resets, exactly as "session-local" intends.
+  PianoRollView? _view;
 
   @override
   void initState() {
@@ -242,6 +250,9 @@ class _MidiViewportState extends State<MidiViewport> {
                   onImport: _pickAndImport,
                   onExport: _export,
                   errorText: _importError,
+                  gridDivision: _editor.gridDivision,
+                  onGridChanged: (value) =>
+                      setState(() => _editor.gridDivision = value),
                 ),
                 const SizedBox(height: 8),
                 Expanded(
@@ -342,6 +353,8 @@ class _MidiViewportState extends State<MidiViewport> {
             bars: clip.bars,
             beatsPerBar: clip.beatsPerBar,
             playhead: widget.playhead,
+            view: _view,
+            onViewChanged: (view) => setState(() => _view = view),
           ),
         ),
         const SizedBox(height: 8),
@@ -350,6 +363,7 @@ class _MidiViewportState extends State<MidiViewport> {
           notes: clip.notes,
           bars: clip.bars,
           beatsPerBar: clip.beatsPerBar,
+          view: _view,
         ),
       ],
     );

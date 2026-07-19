@@ -5,6 +5,7 @@ import '../../design/tokens/phi_radii.dart';
 import '../../domain/midi/clip_editor.dart';
 import '../../domain/midi/midi_note.dart';
 import 'piano_roll_geometry.dart';
+import 'piano_roll_view.dart';
 import 'velocity_lane_painter.dart';
 
 /// Interactive velocity strip under the roll. Click a column to set that
@@ -16,6 +17,7 @@ class VelocityLane extends StatefulWidget {
     required this.notes,
     required this.bars,
     required this.beatsPerBar,
+    this.view,
     this.height = 72,
     super.key,
   });
@@ -24,6 +26,12 @@ class VelocityLane extends StatefulWidget {
   final List<MidiNote> notes;
   final int bars;
   final int beatsPerBar;
+
+  /// The roll's session-local pan/zoom (issue #189) so a column sits under its
+  /// note at any horizontal zoom — the lane shares the roll's one geometry.
+  /// `null` fits the whole clip to the width, as before.
+  final PianoRollView? view;
+
   final double height;
 
   @override
@@ -46,6 +54,7 @@ class _VelocityLaneState extends State<VelocityLane> {
       size: _size,
       bars: widget.bars,
       beatsPerBar: widget.beatsPerBar,
+      view: widget.view,
     );
     int? best;
     var bestDx = _hitTolPx;
@@ -110,6 +119,7 @@ class _VelocityLaneState extends State<VelocityLane> {
                 bars: widget.bars,
                 beatsPerBar: widget.beatsPerBar,
                 revision: widget.editor.revision,
+                view: widget.view,
               ),
             ),
           ),
