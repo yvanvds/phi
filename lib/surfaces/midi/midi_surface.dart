@@ -8,8 +8,10 @@ import '../../domain/midi/midi_transform_chain.dart';
 import '../../domain/runtime/runtime_variable_registry.dart';
 import '../../domain/state_machine/state_graph.dart';
 import '../../engine/engine.dart';
+import '../../engine/state/clip_library_controller.dart';
 import '../../engine/state/midi_graph_controller.dart';
 import '../surface.dart';
+import 'library/library_panel.dart';
 import 'midi_file_io.dart';
 import 'midi_viewport.dart';
 
@@ -35,6 +37,7 @@ class MidiSurface extends Surface {
     MidiGraphController? graphController,
     StateGraph? stateGraph,
     RuntimeVariableRegistry? runtimeVariables,
+    ClipLibraryController? libraryController,
     super.key,
   }) : _engine = engine,
        _chain = chain ?? defaultDemoChain(),
@@ -44,7 +47,8 @@ class MidiSurface extends Surface {
        _fileIo = fileIo,
        _graphController = graphController,
        _stateGraph = stateGraph,
-       _runtimeVariables = runtimeVariables;
+       _runtimeVariables = runtimeVariables,
+       _libraryController = libraryController;
 
   final PhiEngine _engine;
   final MidiTransformChain _chain;
@@ -52,6 +56,13 @@ class MidiSurface extends Surface {
   final CustomTransformRegistry? _registry;
   final ValueListenable<double>? _playhead;
   final MidiFileIo? _fileIo;
+
+  /// The clip-library seam driving the collapsible left library panel (issue
+  /// #188). When present the panel is shown and clip selection swaps the edited
+  /// session, so the roll rebinds to the selected clip. `null` (widget tests
+  /// without a project / MIDI subsystem) hides the panel and keeps the injected
+  /// [_chain] / [_editor] bound, exactly as before.
+  final ClipLibraryController? _libraryController;
 
   /// The branching transform-graph controller (issue #65). When `null` the
   /// viewport seeds and owns its own from [_chain].
@@ -67,14 +78,62 @@ class MidiSurface extends Surface {
   final RuntimeVariableRegistry? _runtimeVariables;
 
   @override
-  Widget build(BuildContext context) => MidiViewport(
-    chain: _chain,
-    editor: _editor,
+  Widget build(BuildContext context) {
+    final library = _libraryController;
+    if (library == null) return _viewport();
+    // With a library controller the roll binds to the *edited* session, so a
+    // clip selection swaps it. The panel persists across selections (it sits
+    // outside the keyed viewport); the viewport is rebuilt on every controller
+    // change and keyed by the edited address so a new selection re-captures the
+    // session's chain / editor / graph.
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LibraryPanel(controller: library),
+        Expanded(
+          child: ListenableBuilder(
+            listenable: library,
+            builder: (context, _) {
+              final session = library.sessions.editedSession;
+              final address = session.address;
+              return _viewport(
+                key: ValueKey(address?.format() ?? '<boot>'),
+                chain: session.chain,
+                editor: session.editor,
+                graphController: session.graphController,
+                playhead: session.playhead,
+                clipName: address?.name ?? phraseASlug,
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Builds the piano-roll viewport. Without a library controller it binds to the
+  /// injected [_chain] / [_editor]; with one the caller passes the edited
+  /// session's objects so selection swaps what the roll shows.
+  Widget _viewport({
+    Key? key,
+    MidiTransformChain? chain,
+    ClipEditor? editor,
+    MidiGraphController? graphController,
+    ValueListenable<double>? playhead,
+    String? clipName,
+  }) => MidiViewport(
+    key: key,
+    chain: chain ?? _chain,
+    editor: editor ?? _editor,
     registry: _registry,
-    playhead: _playhead,
+    playhead: playhead ?? _playhead,
     fileIo: _fileIo,
-    graphController: _graphController ?? _engine.midiOrNull?.graphController,
+    graphController:
+        graphController ??
+        _graphController ??
+        _engine.midiOrNull?.graphController,
     stateGraph: _stateGraph ?? _engine.stateMachineOrNull?.graph,
     runtimeVariables: _runtimeVariables ?? _engine.runtimeVariablesOrNull,
+    clipName: clipName ?? phraseASlug,
   );
 }
