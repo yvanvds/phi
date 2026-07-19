@@ -312,20 +312,23 @@ class _LibraryPanelState extends State<LibraryPanel> {
   Future<void> _deleteNode(ClipTreeNode node) async {
     final impact = _controller.impactOf(node.address);
     final what = node.isGroup ? 'group' : 'clip';
-    final confirmed = impact.hasReferrers
-        ? await DeleteImpactDialog.show(
-            context,
-            title: 'delete $what',
-            message:
-                '${node.name} is still referenced — deleting it strands these:',
-            referrers: [for (final r in impact.referrers) r.format()],
-          )
-        : await ConfirmDialog.show(
-            context,
-            title: 'delete $what',
-            message: 'Delete "${node.name}"?',
-            confirmLabel: 'delete',
-          );
+    final bool confirmed;
+    if (impact.hasReferrers) {
+      confirmed = await DeleteImpactDialog.show(
+        context,
+        title: 'delete $what',
+        message:
+            '${node.name} is still referenced — deleting it strands these:',
+        referrers: [for (final r in impact.referrers) r.format()],
+      );
+    } else {
+      confirmed = await ConfirmDialog.show(
+        context,
+        title: 'delete $what',
+        message: 'Delete "${node.name}"?',
+        confirmLabel: 'delete',
+      );
+    }
     if (!confirmed) return;
     _controller.delete(node.address);
   }
