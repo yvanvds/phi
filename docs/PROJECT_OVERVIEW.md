@@ -661,6 +661,33 @@ main + app          (orchestration)
   re-resolution and the no-spurious-publish contract), and an end-to-end
   `clip_adopt_on_open` integration test (edit → save → reopen restores the edit
   into `engine.midi.chain`, not just the registry payload).
+  Issue #186 refactors `EngineMidiController` from *the clip* into a **session
+  manager** (design `docs/design/midi-clips.md` §4), the structural heart of the
+  MIDI-clips epic — deliberately behaviour-neutral. A new `ClipSession`
+  (`lib/engine/state/`) bundles everything the controller used to hold globally
+  **per clip**: the source clip + linear pipeline (`MidiTransformChain`), the
+  piano-roll edits (`ClipEditor`), the branching interpretation
+  (`MidiGraphController`), the engine `MidiTransport`, and the push-on-change
+  memoisation — keyed by `EntityAddress` and borrowing the engine's shared pieces
+  through a `ClipSessionHost` seam. The controller now owns only the genuinely
+  **shared** singletons (the MIDI output gateway, the 3D `SceneField` + agent sink,
+  the global `TempoSourceStack`/hand fader, and the live `GraphEvalContext` from
+  the state machine + runtime variables), keeps a `_sessions` map with one
+  **edited** session (the surface binds to it exactly as it bound to the single
+  controller before), and drives the one frame ticker across sessions. Its whole
+  pre-refactor surface (`chain`/`editor`/`graphController`/`playhead`/`play`/
+  `stop`/`bpm`/`microtonal`/`tempoFader`/`adoptDocument` + the scene actions) now
+  delegates to the edited session, so every caller and the full existing test
+  suite are unchanged; `adoptDocument` still swaps the edited session's clip **in
+  place** (surface bindings survive), while a new `openSession(address, document)`
+  seam swaps the edited session outright — the library-selection hook the panel UI
+  will drive. For now the manager still plays only the edited session, so the
+  single-clip flow is behaviour-identical; concurrent per-session playback is the
+  next issue. Covered by a `ClipSession`-in-isolation unit test (a stub host proves
+  the bundle plays decoupled from the manager), a session-manager test
+  (`openSession` swaps/reuses the edited session, a graph-mode document restores,
+  and swapping leaks neither the transport nor the previous session), plus the
+  unchanged 60-test controller suite and the MIDI/scene/clip integration suite.
   Issue #136 finishes the `mix.` migration #124 bounded: a channel's **live mix
   state** (user volume, mute, solo) now persists alongside its identity. `MixStrip`
   gains `volume`/`muted`/`soloed` and `MixStripCodec` jumps to **schema v2**,
