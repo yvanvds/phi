@@ -16,7 +16,7 @@ import 'editor_fields.dart';
 /// The predicate used to be a bare `bool Function(MidiNote)` callback with
 /// nothing to edit; now it is a value model, so this dialog rebuilds it in
 /// place. The performer says "mute when [any / all] of" a list of leaf
-/// conditions — each a note field (pitch · velocity · channel · start), a
+/// conditions — each a note field (pitch · velocity · start), a
 /// comparison, and a threshold. A note that matches is dropped; an empty list
 /// mutes nothing, so the catalogue's keep-all default becomes meaningful through
 /// editing alone. Every edit applies **live** through

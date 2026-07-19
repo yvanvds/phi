@@ -7,7 +7,7 @@ import 'package:phi/domain/midi/smf/smf_exception.dart';
 import 'package:phi/domain/midi/smf/smf_reader.dart';
 import 'package:phi/domain/midi/smf/smf_writer.dart';
 
-/// Notes compared modulo channel + meter (per issue #30's round-trip
+/// Notes compared modulo voice + meter (per issue #30's round-trip
 /// property), and order-independent since export sorts by tick while the
 /// source list is in authoring order.
 List<MidiNote> _sorted(List<MidiNote> notes) {
@@ -18,6 +18,12 @@ List<MidiNote> _sorted(List<MidiNote> notes) {
     });
   return copy;
 }
+
+/// The pitch/time/velocity of a note, dropping the voice — an unrouted note
+/// round-trips through SMF channel 1 as `voice.default`, so this compares the
+/// note *shape* independent of the channel ↔ voice mapping.
+(double, double, double, double) _bare(MidiNote n) =>
+    (n.pitch, n.start, n.duration, n.velocity);
 
 void main() {
   const reader = SmfReader();
@@ -70,23 +76,55 @@ void main() {
         final round = reader.read(writer.write(clip));
 
         expect(round.notes.length, clip.notes.length);
-        expect(_sorted(round.notes), _sorted(clip.notes));
+        expect(_sorted(round.notes).map(_bare), _sorted(clip.notes).map(_bare));
       },
     );
 
-    test('preserves per-note channel through the round trip', () {
+    test('preserves per-note voice through the round trip (voice ↔ channel)', () {
+      // The writer maps each voice to a file channel and the reader maps it
+      // back; the default mappings are inverses, so a voice survives the round
+      // trip. `voice.default` is SMF channel 1; `voice.channel_<n>` is channel
+      // <n>. (Issue #205, design §6.)
       final clip = MidiClip(
         bars: 1,
         notes: const [
-          MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1, channel: 0),
-          MidiNote(pitch: 64, start: 0, duration: 1, velocity: 1, channel: 5),
-          MidiNote(pitch: 67, start: 0, duration: 1, velocity: 1, channel: 9),
+          MidiNote(
+            pitch: 60,
+            start: 0,
+            duration: 1,
+            velocity: 1,
+            voice: 'voice.default',
+          ),
+          MidiNote(
+            pitch: 64,
+            start: 0,
+            duration: 1,
+            velocity: 1,
+            voice: 'voice.channel_6',
+          ),
+          MidiNote(
+            pitch: 67,
+            start: 0,
+            duration: 1,
+            velocity: 1,
+            voice: 'voice.channel_10',
+          ),
         ],
       );
 
       final round = reader.read(writer.write(clip));
-      final channels = _sorted(round.notes).map((n) => n.channel).toList();
-      expect(channels, [0, 5, 9]);
+      final voices = _sorted(round.notes).map((n) => n.voice).toList();
+      expect(voices, ['voice.default', 'voice.channel_6', 'voice.channel_10']);
+    });
+
+    test('an unrouted note round-trips as the seeded default voice', () {
+      final clip = MidiClip(
+        bars: 1,
+        notes: const [MidiNote(pitch: 60, start: 0, duration: 1, velocity: 1)],
+      );
+
+      final round = reader.read(writer.write(clip));
+      expect(round.notes.single.voice, 'voice.default');
     });
 
     test('overlapping repeats of the same pitch stay paired (FIFO)', () {

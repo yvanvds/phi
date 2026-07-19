@@ -73,12 +73,12 @@ void main() {
           start: 2,
           duration: 0.5,
           velocity: 0.42,
-          channel: 3,
+          voice: 'voice.a',
         ),
       ]);
       expect(out.single.duration, 0.5);
       expect(out.single.velocity, 0.42);
-      expect(out.single.channel, 3);
+      expect(out.single.voice, 'voice.a');
     });
 
     test('predicate is the evaluated keep-form of the condition', () {

@@ -182,13 +182,17 @@ void main() {
       final t = roundTrip<VoiceRoutingTransform>(
         const VoiceRoutingTransform(
           rules: [
-            PitchRangeRule(minPitch: 40, maxPitch: 60, channel: 1),
-            VelocityRangeRule(minVelocity: 0.2, maxVelocity: 0.8, channel: 2),
+            PitchRangeRule(minPitch: 40, maxPitch: 60, voice: 'voice.a'),
+            VelocityRangeRule(
+              minVelocity: 0.2,
+              maxVelocity: 0.8,
+              voice: 'voice.b',
+            ),
             ScaleDegreeRule(
               scale: MusicScale.dorian,
               tonic: 62,
               degrees: {1, 5},
-              channel: 3,
+              voice: 'voice.c',
             ),
           ],
           label: 'route',
@@ -196,14 +200,16 @@ void main() {
       );
       expect(t.rules, hasLength(3));
       final pitch = t.rules[0] as PitchRangeRule;
-      expect([pitch.minPitch, pitch.maxPitch, pitch.channel], [40, 60, 1]);
+      expect([pitch.minPitch, pitch.maxPitch], [40, 60]);
+      expect(pitch.voice, 'voice.a');
       final vel = t.rules[1] as VelocityRangeRule;
-      expect([vel.minVelocity, vel.maxVelocity, vel.channel], [0.2, 0.8, 2]);
+      expect([vel.minVelocity, vel.maxVelocity], [0.2, 0.8]);
+      expect(vel.voice, 'voice.b');
       final deg = t.rules[2] as ScaleDegreeRule;
       expect(deg.scale, MusicScale.dorian);
       expect(deg.tonic, 62);
       expect(deg.degrees, {1, 5});
-      expect(deg.channel, 3);
+      expect(deg.voice, 'voice.c');
     });
 
     test('splitting keeps its split voices', () {
@@ -211,14 +217,14 @@ void main() {
         const SplittingTransform(
           voices: [
             SplitVoice(),
-            SplitVoice(channel: 2, pitchOffset: 12, velocityScale: 0.5),
+            SplitVoice(voice: 'voice.b', pitchOffset: 12, velocityScale: 0.5),
           ],
           label: 'split',
         ),
       );
       expect(t.voices, hasLength(2));
-      expect(t.voices[0].channel, isNull);
-      expect(t.voices[1].channel, 2);
+      expect(t.voices[0].voice, isNull);
+      expect(t.voices[1].voice, 'voice.b');
       expect(t.voices[1].pitchOffset, 12);
       expect(t.voices[1].velocityScale, 0.5);
     });

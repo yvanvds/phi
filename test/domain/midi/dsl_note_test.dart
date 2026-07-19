@@ -9,7 +9,7 @@ void main() {
       start: 1.25,
       duration: 0.5,
       velocity: 0.8,
-      channel: 3,
+      voice: 'voice.bass',
     );
 
     test('fromNote / toNote round-trips every field', () {
@@ -18,7 +18,7 @@ void main() {
       expect(dsl.start, 1.25);
       expect(dsl.duration, 0.5);
       expect(dsl.velocity, 0.8);
-      expect(dsl.channel, 3);
+      expect(dsl.voice, 'voice.bass');
       expect(dsl.toNote(), note);
     });
 
@@ -29,7 +29,7 @@ void main() {
       expect(up.start, dsl.start);
       expect(up.duration, dsl.duration);
       expect(up.velocity, dsl.velocity);
-      expect(up.channel, dsl.channel);
+      expect(up.voice, dsl.voice);
     });
 
     test('value equality and hashCode', () {
@@ -37,13 +37,13 @@ void main() {
       expect(DslNote.fromNote(note).hashCode, DslNote.fromNote(note).hashCode);
       expect(
         DslNote.fromNote(note),
-        isNot(DslNote.fromNote(note).copyWith(channel: 4)),
+        isNot(DslNote.fromNote(note).copyWith(voice: 'voice.other')),
       );
     });
 
-    test('channel defaults to 0', () {
+    test('voice defaults to null (unrouted)', () {
       const dsl = DslNote(pitch: 60, start: 0, duration: 1, velocity: 1);
-      expect(dsl.channel, 0);
+      expect(dsl.voice, isNull);
     });
   });
 }

@@ -16,18 +16,18 @@ import '../test/surfaces/midi/fake_midi_file_io.dart';
 
 /// End-to-end typed parameter editing through the real workstation (issue #95).
 ///
-/// The seeded `route · osc.saw` chip is a real [VoiceRoutingTransform]. Opening
-/// its typed editor from the chip context menu and changing the rule's target
-/// channel must survive the real app's export path — real navigation, real
-/// context menu, real dialog, real SMF encoding — proving the editor mutates
-/// the live chain, not a copy.
+/// The seeded `route · voice.default` chip is a real [VoiceRoutingTransform].
+/// Opening its typed editor from the chip context menu and changing the rule's
+/// target **voice** must survive the real app's export path — real navigation,
+/// real context menu, real dialog, real SMF encoding (the voice ↔ channel
+/// mapping, issue #205) — proving the editor mutates the live chain, not a copy.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   Finder railFor(SurfaceId id) =>
       find.byWidgetPredicate((w) => w is RailButton && w.label == id.label);
 
-  testWidgets('midi: editing the route chip re-channels the exported clip', (
+  testWidgets('midi: editing the route chip re-voices the exported clip', (
     tester,
   ) async {
     final fakeIo = FakeMidiFileIo();
@@ -43,12 +43,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Open the MIDI surface; the seeded route rule sends every note to ch 1.
+    // Open the MIDI surface; the seeded route rule sends every note to
+    // voice.default.
     await tester.tap(railFor(SurfaceId.midi));
     await tester.pumpAndSettle();
 
     final routeChip = find.ancestor(
-      of: find.text('route · osc.saw'),
+      of: find.text('route · voice.default'),
       matching: find.byType(TransformChip),
     );
     expect(routeChip, findsOneWidget);
@@ -59,27 +60,29 @@ void main() {
     await tester.tap(find.text('edit parameters…'));
     await tester.pumpAndSettle();
 
-    // The rule's fields are min, max, channel — retarget channel 1 → 4.
-    final channelField = find
+    // The rule's fields are min, max, voice — retarget the voice. `voice.channel_5`
+    // exports to SMF channel 4 and re-imports back to the same voice.
+    final voiceField = find
         .descendant(
           of: find.byType(AlertDialog),
           matching: find.byType(TextField),
         )
         .at(2);
-    await tester.enterText(channelField, '4');
+    await tester.enterText(voiceField, 'voice.channel_5');
     await tester.pump();
     await tester.tap(find.text('done'));
     await tester.pumpAndSettle();
 
-    // Export: every decoded note now carries the edited channel, proving the
-    // typed editor mutated the live chain end-to-end.
+    // Export: every decoded note now carries the edited voice (round-tripped
+    // through its SMF channel), proving the typed editor mutated the live chain
+    // end-to-end.
     await tester.tap(find.text('EXPORT'));
     await tester.pumpAndSettle();
     expect(fakeIo.saveCalls, 1);
-    final exported = _decode(fakeIo);
+    final exported = _decodeVoices(fakeIo);
     expect(exported, isNotEmpty);
-    for (final channel in exported) {
-      expect(channel, 4);
+    for (final voice in exported) {
+      expect(voice, 'voice.channel_5');
     }
 
     session.dispose();
@@ -87,8 +90,9 @@ void main() {
   });
 }
 
-/// The channel of every note in the last saved SMF blob.
-List<int> _decode(FakeMidiFileIo io) {
+/// The routed voice of every note in the last saved SMF blob (the reader maps
+/// each file channel back onto its voice, issue #205).
+List<String?> _decodeVoices(FakeMidiFileIo io) {
   final notes = const SmfReader().read(io.savedBytes!).notes;
-  return [for (final n in notes) n.channel];
+  return [for (final n in notes) n.voice];
 }

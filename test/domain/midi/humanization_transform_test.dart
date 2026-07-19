@@ -95,7 +95,7 @@ void main() {
       expect(t.apply(input), input);
     });
 
-    test('preserves pitch, duration, and channel', () {
+    test('preserves pitch, duration, and voice', () {
       const t = HumanizationTransform(label: 'human', seed: 1);
       final out = t.apply(const [
         MidiNote(
@@ -103,12 +103,12 @@ void main() {
           start: 1,
           duration: 0.75,
           velocity: 0.5,
-          channel: 3,
+          voice: 'voice.a',
         ),
       ]);
       expect(out.single.pitch, 64);
       expect(out.single.duration, 0.75);
-      expect(out.single.channel, 3);
+      expect(out.single.voice, 'voice.a');
     });
 
     test('copyWith flips active without losing params', () {

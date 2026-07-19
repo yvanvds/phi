@@ -24,8 +24,8 @@ class SpawnAxis {
 
   /// Convenience constructor picking sensible input domains per [source]:
   /// pitch `0..127`, time `0..16` beats (four 4/4 bars), velocity `0..1`,
-  /// channel `0..15`. Callers that need a different span pass the explicit
-  /// constructor.
+  /// voice `0..15` (the voice bucket). Callers that need a different span pass
+  /// the explicit constructor.
   factory SpawnAxis.of(
     SpawnSource source, {
     double outMin = -1.0,
@@ -35,7 +35,7 @@ class SpawnAxis {
       SpawnSource.pitch => (0.0, 127.0),
       SpawnSource.time => (0.0, 16.0),
       SpawnSource.velocity => (0.0, 1.0),
-      SpawnSource.channel => (0.0, 15.0),
+      SpawnSource.voice => (0.0, 15.0),
     };
     return SpawnAxis(
       source: source,

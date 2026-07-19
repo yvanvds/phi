@@ -1,9 +1,10 @@
 import 'midi_note.dart';
+import 'voice_hash.dart';
 
 /// Which scalar of a [MidiNote] a spawn axis reads.
 ///
 /// The four note dimensions an agent's position (or voice) can bind to — the
-/// vision's "position derives from pitch/time/velocity/channel" (§3.7). Each
+/// vision's "position derives from pitch/time/velocity/voice" (§3.7). Each
 /// case knows how to pull its raw scalar off a note; a [SpawnAxis] then remaps
 /// that raw value into a spatial coordinate.
 enum SpawnSource {
@@ -16,14 +17,15 @@ enum SpawnSource {
   /// Normalised velocity in `[0, 1]` (`MidiNote.velocity`).
   velocity,
 
-  /// Voice channel (`MidiNote.channel`).
-  channel;
+  /// The note's routed voice, folded into a stable `0..15` bucket
+  /// ([voiceHash]) — the address is not a scalar, so the axis reads its bucket.
+  voice;
 
   /// The raw scalar this source reads off [note], before any axis remapping.
   double valueOf(MidiNote note) => switch (this) {
     SpawnSource.pitch => note.pitch,
     SpawnSource.time => note.start,
     SpawnSource.velocity => note.velocity,
-    SpawnSource.channel => note.channel.toDouble(),
+    SpawnSource.voice => (voiceHash(note.voice) % 16).toDouble(),
   };
 }

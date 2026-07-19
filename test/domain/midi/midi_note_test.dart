@@ -21,14 +21,14 @@ void main() {
         start: 0.5,
         duration: 0.25,
         velocity: 0.4,
-        channel: 3,
+        voice: 'voice.bass',
       );
       final bent = n.copyWith(pitch: 60.25);
       expect(bent.pitch, 60.25);
       expect(bent.start, 0.5);
       expect(bent.duration, 0.25);
       expect(bent.velocity, 0.4);
-      expect(bent.channel, 3);
+      expect(bent.voice, 'voice.bass');
     });
 
     test('equality and hashCode distinguish fractional pitches', () {

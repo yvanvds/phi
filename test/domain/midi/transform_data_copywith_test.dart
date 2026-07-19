@@ -35,11 +35,13 @@ void main() {
   test('routing: copyWith swaps the rule list', () {
     const t = VoiceRoutingTransform(rules: [], label: 'route');
     final edited = t.copyWith(
-      rules: const [PitchRangeRule(minPitch: 0, maxPitch: 127, channel: 3)],
+      rules: const [
+        PitchRangeRule(minPitch: 0, maxPitch: 127, voice: 'voice.a'),
+      ],
     );
 
     expect(edited.rules, hasLength(1));
-    expect((edited.rules.single as PitchRangeRule).channel, 3);
+    expect((edited.rules.single as PitchRangeRule).voice, 'voice.a');
     expect(edited.label, 'route');
     expect(t.copyWith(active: false).rules, isEmpty);
   });
@@ -64,11 +66,11 @@ void main() {
       label: 'spawn',
     );
     final edited = t.copyWith(
-      x: SpawnAxis.of(SpawnSource.channel),
+      x: SpawnAxis.of(SpawnSource.voice),
       velocity: Vector3(0, 0, 1),
     );
 
-    expect(edited.x.source, SpawnSource.channel);
+    expect(edited.x.source, SpawnSource.voice);
     // Untouched axes fall through.
     expect(edited.y.source, SpawnSource.velocity);
     expect(edited.z.source, SpawnSource.time);

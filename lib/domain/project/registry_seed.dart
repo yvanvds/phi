@@ -1,6 +1,9 @@
 import '../midi/midi_clip_mode.dart';
 import '../midi/midi_clip_seed.dart';
 import '../midi/store/clip_document.dart';
+import '../synth/sine_synth.dart';
+import '../voice/voice_addresses.dart';
+import '../voice/voice_definition.dart';
 import 'entity_address.dart';
 import 'name_slug.dart';
 import 'project_registry.dart';
@@ -44,6 +47,30 @@ void seedDefaultProject(ProjectRegistry registry) {
   // The throwaway chain was only a vehicle for the default transform list; the
   // transforms and source it yielded are independent immutable values.
   chain.dispose();
+
+  // Seed the zero-config starter voice (design §6): `voice.default` →
+  // `synth.sine` → master. A fresh project can sound a note before touching a
+  // parameter — the default routing chain routes here and any unrouted note
+  // resolves here at flatten. The synth definition is created first so the
+  // voice's synth reference points at a real entity. Payloads are map-native
+  // (their codecs' `toJson`), matching the clip and mix seeds.
+  registry.createEntity(
+    EntityAddress(kind: RegistryKinds.synth, segments: const ['sine']),
+    payload: const SineSynth().toJson(),
+  );
+  registry.createEntity(
+    EntityAddress(
+      kind: RegistryKinds.voice,
+      segments: const [VoiceAddresses.defaultVoiceName],
+    ),
+    payload: VoiceDefinition.internal(
+      synth: EntityAddress(kind: RegistryKinds.synth, segments: const ['sine']),
+      output: EntityAddress(
+        kind: RegistryKinds.mix,
+        segments: const ['master'],
+      ),
+    ).toJson(),
+  );
 
   for (final domain in demoTimeDomains.domains) {
     registry.createEntity(

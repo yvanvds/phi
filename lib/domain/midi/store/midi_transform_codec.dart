@@ -1,6 +1,7 @@
 import 'package:vector_math/vector_math_64.dart';
 
 import '../../time_domains/time_domain_registry.dart';
+import '../../voice/voice_addresses.dart';
 import '../custom_transform_registry.dart';
 import '../midi_transform.dart';
 import '../midi_transform_kind.dart';
@@ -383,45 +384,47 @@ class MidiTransformCodec {
       'kind': 'pitch_range',
       'minPitch': r.minPitch,
       'maxPitch': r.maxPitch,
-      'channel': r.channel,
+      'voice': r.voice,
     },
     final VelocityRangeRule r => {
       'kind': 'velocity_range',
       'minVelocity': r.minVelocity,
       'maxVelocity': r.maxVelocity,
-      'channel': r.channel,
+      'voice': r.voice,
     },
     final ScaleDegreeRule r => {
       'kind': 'scale_degree',
       'scale': r.scale.name,
       'tonic': r.tonic,
       'degrees': r.degrees.toList()..sort(),
-      'channel': r.channel,
+      'voice': r.voice,
     },
   };
 
   VoiceRoutingRule _decodeRule(Object? json) {
     final map = _map(json);
-    final channel = _int(map['channel']);
+    // A malformed rule with no voice degrades to the seeded default rather than
+    // dropping the stage — the routing table stays well-formed.
+    final voice = map['voice'] as String? ?? VoiceAddresses.defaultVoice;
     switch (map['kind']) {
       case 'pitch_range':
         return PitchRangeRule(
           minPitch: _int(map['minPitch']),
           maxPitch: _int(map['maxPitch']),
-          channel: channel,
+          voice: voice,
         );
       case 'velocity_range':
         return VelocityRangeRule(
           minVelocity: _double(map['minVelocity']),
           maxVelocity: _double(map['maxVelocity']),
-          channel: channel,
+          voice: voice,
         );
       case 'scale_degree':
         return ScaleDegreeRule(
           scale: _enum(MusicScale.values, map['scale'], MusicScale.ionian),
           tonic: _int(map['tonic']),
           degrees: {for (final d in _list(map['degrees'])) _int(d)},
-          channel: channel,
+          voice: voice,
         );
       default:
         throw FormatException('Unknown voice-routing rule: "${map['kind']}".');
@@ -429,7 +432,7 @@ class MidiTransformCodec {
   }
 
   Map<String, Object?> _encodeSplitVoice(SplitVoice voice) => {
-    'channel': voice.channel,
+    'voice': voice.voice,
     'pitchOffset': voice.pitchOffset,
     'velocityScale': voice.velocityScale,
   };
@@ -437,7 +440,7 @@ class MidiTransformCodec {
   SplitVoice _decodeSplitVoice(Object? json) {
     final map = _map(json);
     return SplitVoice(
-      channel: _nullableInt(map['channel']),
+      voice: map['voice'] as String?,
       pitchOffset: _int(map['pitchOffset']),
       velocityScale: _double(map['velocityScale'], 1),
     );

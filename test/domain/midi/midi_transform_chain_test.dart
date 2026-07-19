@@ -191,8 +191,8 @@ void main() {
         transforms: const [
           VoiceRoutingTransform(
             rules: [
-              PitchRangeRule(minPitch: 0, maxPitch: 59, channel: 1),
-              PitchRangeRule(minPitch: 60, maxPitch: 127, channel: 2),
+              PitchRangeRule(minPitch: 0, maxPitch: 59, voice: 'voice.lo'),
+              PitchRangeRule(minPitch: 60, maxPitch: 127, voice: 'voice.hi'),
             ],
             label: 'split @ 60',
           ),
@@ -209,13 +209,18 @@ void main() {
       final out = chain.output;
 
       expect(out.map((n) => n.pitch), [50, 62, 70, 82]);
-      expect(out.map((n) => n.channel), [1, 1, 2, 2]);
+      expect(out.map((n) => n.voice), [
+        'voice.lo',
+        'voice.lo',
+        'voice.hi',
+        'voice.hi',
+      ]);
       expect(out.map((n) => n.velocity), [0.8, 0.4, 0.8, 0.4]);
 
       // Toggling the splitter off leaves the routed originals.
       chain.setActiveAt(1, false);
       expect(chain.output.map((n) => n.pitch), [50, 70]);
-      expect(chain.output.map((n) => n.channel), [1, 2]);
+      expect(chain.output.map((n) => n.voice), ['voice.lo', 'voice.hi']);
     });
 
     test('velocity-to-parameter rides the chain without changing notes', () {

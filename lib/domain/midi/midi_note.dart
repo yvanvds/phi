@@ -11,33 +11,45 @@
 /// through the transform chain; the output stage rounds to the nearest
 /// semitone and (optionally) voices the leftover cents as pitch-bend. Whole
 /// numbers behave exactly like the old `int` pitch.
+///
+/// [voice] is the note's **`voice.` registry address** in dotted string form
+/// (`voice.bass`), the keystone binding note → sound → bus (design
+/// `docs/design/racks-and-voices.md` §3, §6). A [VoiceRoutingTransform] assigns
+/// it, a [SplittingTransform] layer may carry it, and at flatten time the
+/// session maps it to the voice's allocated engine channel. `null` is an
+/// **unrouted** note: it resolves to the seeded default voice (`voice.default`).
+/// The address is stored as a plain string so a `MidiNote` stays `const`-able
+/// and its persistence/journal stays a bare JSON scalar.
 class MidiNote {
   const MidiNote({
     required this.pitch,
     required this.start,
     required this.duration,
     required this.velocity,
-    this.channel = 0,
+    this.voice,
   });
 
   final double pitch;
   final double start;
   final double duration;
   final double velocity;
-  final int channel;
+
+  /// The `voice.` address this note routes to, or `null` when unrouted (it then
+  /// resolves to the seeded default voice at flatten).
+  final String? voice;
 
   MidiNote copyWith({
     double? pitch,
     double? start,
     double? duration,
     double? velocity,
-    int? channel,
+    String? voice,
   }) => MidiNote(
     pitch: pitch ?? this.pitch,
     start: start ?? this.start,
     duration: duration ?? this.duration,
     velocity: velocity ?? this.velocity,
-    channel: channel ?? this.channel,
+    voice: voice ?? this.voice,
   );
 
   @override
@@ -48,12 +60,12 @@ class MidiNote {
           other.start == start &&
           other.duration == duration &&
           other.velocity == velocity &&
-          other.channel == channel;
+          other.voice == voice;
 
   @override
-  int get hashCode => Object.hash(pitch, start, duration, velocity, channel);
+  int get hashCode => Object.hash(pitch, start, duration, velocity, voice);
 
   @override
   String toString() =>
-      'MidiNote(p:$pitch t:$start d:$duration v:$velocity c:$channel)';
+      'MidiNote(p:$pitch t:$start d:$duration v:$velocity voice:$voice)';
 }

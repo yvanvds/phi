@@ -4,26 +4,15 @@ import 'package:phi/domain/midi/transforms/note_comparison.dart';
 import 'package:phi/domain/midi/transforms/note_condition.dart';
 import 'package:phi/domain/midi/transforms/note_field.dart';
 
-MidiNote _note({
-  double pitch = 60,
-  double velocity = 0.7,
-  int channel = 0,
-  double start = 0,
-}) => MidiNote(
-  pitch: pitch,
-  start: start,
-  duration: 0.25,
-  velocity: velocity,
-  channel: channel,
-);
+MidiNote _note({double pitch = 60, double velocity = 0.7, double start = 0}) =>
+    MidiNote(pitch: pitch, start: start, duration: 0.25, velocity: velocity);
 
 void main() {
   group('NoteField.read', () {
-    test('reads each field, widening channel to a double', () {
-      final note = _note(pitch: 64, velocity: 0.4, channel: 3, start: 1.5);
+    test('reads each scalar field as a double', () {
+      final note = _note(pitch: 64, velocity: 0.4, start: 1.5);
       expect(NoteField.pitch.read(note), 64);
       expect(NoteField.velocity.read(note), 0.4);
-      expect(NoteField.channel.read(note), 3.0);
       expect(NoteField.start.read(note), 1.5);
     });
   });
@@ -54,7 +43,7 @@ void main() {
       expect(soft.matches(_note(velocity: 0.9)), isFalse);
     });
 
-    test('gates on pitch, channel, and start too', () {
+    test('gates on pitch and start too', () {
       const top = NoteFieldCondition(
         field: NoteField.pitch,
         comparison: NoteComparison.greaterOrEqual,
@@ -62,14 +51,6 @@ void main() {
       );
       expect(top.matches(_note(pitch: 72)), isTrue);
       expect(top.matches(_note(pitch: 71)), isFalse);
-
-      const onChannel = NoteFieldCondition(
-        field: NoteField.channel,
-        comparison: NoteComparison.equal,
-        threshold: 2,
-      );
-      expect(onChannel.matches(_note(channel: 2)), isTrue);
-      expect(onChannel.matches(_note(channel: 1)), isFalse);
 
       const late = NoteFieldCondition(
         field: NoteField.start,

@@ -47,4 +47,15 @@ abstract interface class ClipSessionHost {
   /// the runtime registry's current values mirrored in — so playback and the
   /// graph preview agree on which branches are open.
   GraphEvalContext liveContext();
+
+  /// The `0..15` engine channel a note routed to [voice] flattens onto (design
+  /// `docs/design/racks-and-voices.md` §6), or `null` when [voice] resolves to
+  /// no known channel — the signal the flatten step degrades gracefully on
+  /// (silent + [onUnresolvedVoice]). A `null` [voice] is an unrouted note; it
+  /// resolves through the seeded default voice.
+  int? channelForVoice(String? voice);
+
+  /// Surface a warning that a clip routed to [voice] — an unknown voice — so
+  /// its notes played nothing. A performer-visible degradation, not a crash.
+  void onUnresolvedVoice(String voice);
 }

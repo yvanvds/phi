@@ -5,18 +5,18 @@ import 'package:phi/domain/midi/music_scale.dart';
 import 'package:phi/domain/midi/transforms/voice_routing_rule.dart';
 import 'package:phi/domain/midi/transforms/voice_routing_transform.dart';
 
-MidiNote _note({double pitch = 60, double velocity = 0.7, int channel = 0}) =>
+MidiNote _note({double pitch = 60, double velocity = 0.7, String? voice}) =>
     MidiNote(
       pitch: pitch,
       start: 0,
       duration: 1,
       velocity: velocity,
-      channel: channel,
+      voice: voice,
     );
 
 void main() {
   group('PitchRangeRule', () {
-    const rule = PitchRangeRule(minPitch: 48, maxPitch: 60, channel: 2);
+    const rule = PitchRangeRule(minPitch: 48, maxPitch: 60, voice: 'voice.p');
 
     test('matches inside the range, bounds inclusive', () {
       expect(rule.matches(_note(pitch: 48)), isTrue);
@@ -34,7 +34,7 @@ void main() {
     const rule = VelocityRangeRule(
       minVelocity: 0.5,
       maxVelocity: 0.8,
-      channel: 3,
+      voice: 'voice.v',
     );
 
     test('matches inside the range, bounds inclusive', () {
@@ -55,7 +55,7 @@ void main() {
       scale: MusicScale.dorian,
       tonic: 62,
       degrees: {1, 5},
-      channel: 4,
+      voice: 'voice.s',
     );
 
     test('matches the tonic and dominant in any octave', () {
@@ -81,26 +81,30 @@ void main() {
       expect(t.kind, MidiTransformKind.voice);
     });
 
-    test('assigns the channel of the first matching rule', () {
+    test('assigns the voice of the first matching rule', () {
       const t = VoiceRoutingTransform(
         rules: [
-          PitchRangeRule(minPitch: 0, maxPitch: 59, channel: 1),
-          PitchRangeRule(minPitch: 60, maxPitch: 127, channel: 2),
+          PitchRangeRule(minPitch: 0, maxPitch: 59, voice: 'voice.lo'),
+          PitchRangeRule(minPitch: 60, maxPitch: 127, voice: 'voice.hi'),
         ],
         label: 'split @ 60',
       );
 
       final out = t.apply([_note(pitch: 50), _note(pitch: 70)]);
 
-      expect(out[0].channel, 1);
-      expect(out[1].channel, 2);
+      expect(out[0].voice, 'voice.lo');
+      expect(out[1].voice, 'voice.hi');
     });
 
     test('first match wins when rules overlap', () {
       const t = VoiceRoutingTransform(
         rules: [
-          VelocityRangeRule(minVelocity: 0.9, maxVelocity: 1.0, channel: 5),
-          PitchRangeRule(minPitch: 0, maxPitch: 127, channel: 1),
+          VelocityRangeRule(
+            minVelocity: 0.9,
+            maxVelocity: 1.0,
+            voice: 'voice.accent',
+          ),
+          PitchRangeRule(minPitch: 0, maxPitch: 127, voice: 'voice.all'),
         ],
         label: 'accents first',
       );
@@ -110,36 +114,41 @@ void main() {
         _note(pitch: 60, velocity: 0.4),
       ]);
 
-      expect(out[0].channel, 5); // accent rule takes it before the catch-all
-      expect(out[1].channel, 1);
+      expect(
+        out[0].voice,
+        'voice.accent',
+      ); // accent rule wins over the catch-all
+      expect(out[1].voice, 'voice.all');
     });
 
-    test('a note no rule matches keeps its incoming channel', () {
+    test('a note no rule matches keeps its incoming voice', () {
       const t = VoiceRoutingTransform(
-        rules: [PitchRangeRule(minPitch: 100, maxPitch: 127, channel: 9)],
+        rules: [
+          PitchRangeRule(minPitch: 100, maxPitch: 127, voice: 'voice.hi'),
+        ],
         label: 'high only',
       );
 
-      final out = t.apply([_note(pitch: 60, channel: 3)]);
+      final out = t.apply([_note(pitch: 60, voice: 'voice.keep')]);
 
-      expect(out.single.channel, 3);
+      expect(out.single.voice, 'voice.keep');
     });
 
-    test('routing changes only the channel', () {
+    test('routing changes only the voice', () {
       const t = VoiceRoutingTransform(
-        rules: [PitchRangeRule(minPitch: 0, maxPitch: 127, channel: 7)],
+        rules: [PitchRangeRule(minPitch: 0, maxPitch: 127, voice: 'voice.all')],
         label: 'all',
       );
       final source = _note(pitch: 64, velocity: 0.6);
 
       final out = t.apply([source]).single;
 
-      expect(out, source.copyWith(channel: 7));
+      expect(out, source.copyWith(voice: 'voice.all'));
     });
 
     test('copyWith toggles active and keeps the rules', () {
       const t = VoiceRoutingTransform(
-        rules: [PitchRangeRule(minPitch: 0, maxPitch: 127, channel: 1)],
+        rules: [PitchRangeRule(minPitch: 0, maxPitch: 127, voice: 'voice.all')],
         label: 'route',
       );
 

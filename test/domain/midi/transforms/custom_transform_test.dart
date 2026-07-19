@@ -12,7 +12,13 @@ List<DslNote> _dropAll(List<DslNote> notes) => const [];
 void main() {
   group('CustomTransform', () {
     const input = [
-      MidiNote(pitch: 60, start: 0, duration: 1, velocity: 0.7, channel: 2),
+      MidiNote(
+        pitch: 60,
+        start: 0,
+        duration: 1,
+        velocity: 0.7,
+        voice: 'voice.a',
+      ),
       MidiNote(pitch: 64.5, start: 1, duration: 0.5, velocity: 0.5),
     ];
 
@@ -28,7 +34,7 @@ void main() {
 
         expect(out.map((n) => n.pitch), [72, 76.5]);
         // Non-pitch fields survive the round-trip untouched.
-        expect(out.first.channel, 2);
+        expect(out.first.voice, 'voice.a');
         expect(out.first.velocity, 0.7);
         expect(out[1].duration, 0.5);
       },

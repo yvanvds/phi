@@ -23,7 +23,7 @@ void main() {
       expect(out.single.duration, 0.25);
     });
 
-    test('leaves pitch, velocity, and channel untouched', () {
+    test('leaves pitch, velocity, and voice untouched', () {
       const t = StretchTransform(factor: 2, label: '2x');
       final out = t.apply(const [
         MidiNote(
@@ -31,12 +31,12 @@ void main() {
           start: 1,
           duration: 0.5,
           velocity: 0.42,
-          channel: 3,
+          voice: 'voice.a',
         ),
       ]);
       expect(out.single.pitch, 64);
       expect(out.single.velocity, 0.42);
-      expect(out.single.channel, 3);
+      expect(out.single.voice, 'voice.a');
     });
 
     test('factor 1 is the identity', () {

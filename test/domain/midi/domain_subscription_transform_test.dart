@@ -10,7 +10,13 @@ void main() {
     const drum = TimeDomain(name: 'drum', tempo: 124);
     const input = [
       MidiNote(pitch: 60, start: 0.5, duration: 0.25, velocity: 0.7),
-      MidiNote(pitch: 62, start: 1.0, duration: 0.5, velocity: 0.6, channel: 3),
+      MidiNote(
+        pitch: 62,
+        start: 1.0,
+        duration: 0.5,
+        velocity: 0.6,
+        voice: 'voice.a',
+      ),
     ];
 
     test('kind is time', () {
@@ -59,7 +65,7 @@ void main() {
       expect(slower.apply(input), input);
     });
 
-    test('leaves pitch, velocity, and channel untouched', () {
+    test('leaves pitch, velocity, and voice untouched', () {
       const t = DomainSubscriptionTransform(
         domainName: 'drum',
         label: 'domain · drum',
@@ -68,7 +74,7 @@ void main() {
       final out = t.apply(input);
       expect(out[1].pitch, 62);
       expect(out[1].velocity, 0.6);
-      expect(out[1].channel, 3);
+      expect(out[1].voice, 'voice.a');
     });
 
     test('an unresolved domain binds nothing (boundTempo is null)', () {

@@ -108,14 +108,14 @@ void main() {
           start: 0,
           duration: 0.5,
           velocity: 0.42,
-          channel: 2,
+          voice: 'voice.a',
         ),
       ]);
       expect(out.length, 2);
       expect(out[1].pitch, 64);
       expect(out[1].duration, 0.5);
       expect(out[1].velocity, 0.42);
-      expect(out[1].channel, 2);
+      expect(out[1].voice, 'voice.a');
       expect(out[1].start, 0.5);
     });
 
