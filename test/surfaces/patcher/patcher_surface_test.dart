@@ -86,6 +86,10 @@ void main() {
       expect(find.byType(PatchNodeFrame), findsNWidgets(3));
       expect(engine.patcher.graph.cables, hasLength(2));
       expect(patcherGateway.cables, hasLength(2));
+      // The seed mounts the patcher as a source once a `~dac` exists — the
+      // surface → controller → gateway audio path survives the multi-instance
+      // generalisation (issue #219).
+      expect(patcherGateway.mounted, isTrue);
     });
 
     testWidgets('dragging the slider pushes a sendFloat through the gateway', (

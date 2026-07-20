@@ -1,71 +1,104 @@
 import 'dart:ui';
 
 import 'package:phi/domain/patcher/patch_port_kind.dart';
+import 'package:phi/engine/bridge/patch_object_descriptor.dart';
 import 'package:phi/engine/bridge/patcher_gateway.dart';
 import 'package:phi/engine/bridge/patcher_node_snapshot.dart';
 import 'package:yse/yse.dart';
 
 /// In-memory [PatcherGateway] used in unit and widget tests.
 ///
-/// Records every call so tests can assert call sequences, and stores a
-/// minimal per-object state so the controller can be exercised end-to-end
-/// without touching `package:yse` or its native library.
+/// Models the full multi-instance lifecycle: one [FakeInstance] per id
+/// [createInstance] hands out, each with its own objects / cables / mounted
+/// state / named receivers, so a test can assert that ops on one instance
+/// never leak to another. [calls] is a flat, ordered global log of every
+/// call for sequence assertions; object handle ids are globally unique so a
+/// call string identifies its object without an instance prefix.
 class FakePatcherGateway implements PatcherGateway {
   final List<String> calls = [];
-  bool initialised = false;
-  bool mounted = false;
-  int mainOutputs = 0;
 
-  final Map<int, FakeNode> nodes = {};
-  final List<FakeCable> cables = [];
-  int _nextId = 1;
+  final Map<int, FakeInstance> instances = {};
+  int _nextInstanceId = 1;
+  int _nextObjectId = 1;
 
-  /// Override the default port topology for a given object type. Tests
-  /// can stub e.g. an exotic node with custom inlet/outlet counts.
+  /// Override the default port topology for a given object type. Tests can
+  /// stub e.g. an exotic node with custom inlet/outlet counts.
   final Map<String, PatcherNodeSnapshot> topologyOverrides = {};
 
-  @override
-  void init({int mainOutputs = 2}) {
-    calls.add('init:$mainOutputs');
-    initialised = true;
-    this.mainOutputs = mainOutputs;
-  }
+  /// Override the metadata catalogue [objectTypes] filters. When null the
+  /// built-in [_defaultCatalogue] is used. The `patcher` type is always
+  /// filtered out regardless (design §10 decision 2).
+  List<PatchObjectDescriptor>? objectTypesCatalogue;
+
+  // ─── convenience aggregates (single-instance tests) ──────────────────
+
+  /// Every object across every instance — convenient when a test uses one
+  /// instance. Prefer [FakeInstance.nodes] for isolation assertions.
+  Map<int, FakeNode> get nodes => {
+    for (final inst in instances.values) ...inst.nodes,
+  };
+
+  /// Every cable across every instance.
+  List<FakeCable> get cables => [
+    for (final inst in instances.values) ...inst.cables,
+  ];
+
+  /// Whether any instance is mounted.
+  bool get mounted => instances.values.any((i) => i.mounted);
+
+  FakeInstance _inst(int instanceId) => instances[instanceId]!;
 
   @override
-  void dispose() {
-    calls.add('dispose');
-    initialised = false;
-    mounted = false;
-    nodes.clear();
-    cables.clear();
-  }
-
-  @override
-  int createObject(String type, {String args = ''}) {
-    final id = _nextId++;
-    calls.add('createObject:$id:$type:$args');
-    nodes[id] = FakeNode(type: type, args: args);
+  int createInstance({int mainOutputs = 2}) {
+    final id = _nextInstanceId++;
+    calls.add('createInstance:$id:$mainOutputs');
+    instances[id] = FakeInstance(mainOutputs: mainOutputs);
     return id;
   }
 
   @override
-  void deleteObject(int handleId) {
+  void disposeInstance(int instanceId) {
+    calls.add('disposeInstance:$instanceId');
+    instances.remove(instanceId);
+  }
+
+  @override
+  void disposeAll() {
+    calls.add('disposeAll');
+    instances.clear();
+  }
+
+  @override
+  int createObject(int instanceId, String type, {String args = ''}) {
+    final id = _nextObjectId++;
+    calls.add('createObject:$id:$type:$args');
+    final inst = _inst(instanceId);
+    inst.nodes[id] = FakeNode(type: type, args: args);
+    // Model the named `.r` receiver so pass* can resolve it per-instance.
+    if (type == Obj.gReceive && args.isNotEmpty) inst.receivers.add(args);
+    return id;
+  }
+
+  @override
+  void deleteObject(int instanceId, int handleId) {
     calls.add('deleteObject:$handleId');
-    nodes.remove(handleId);
-    cables.removeWhere(
+    final inst = _inst(instanceId);
+    inst.nodes.remove(handleId);
+    inst.cables.removeWhere(
       (c) => c.fromHandleId == handleId || c.toHandleId == handleId,
     );
   }
 
   @override
-  void connect({
+  void connect(
+    int instanceId, {
     required int fromHandleId,
     required int outlet,
     required int toHandleId,
     required int inlet,
   }) {
     calls.add('connect:$fromHandleId:$outlet->$toHandleId:$inlet');
-    cables.add(
+    _inst(instanceId).cables.add(
       FakeCable(
         fromHandleId: fromHandleId,
         outlet: outlet,
@@ -76,14 +109,15 @@ class FakePatcherGateway implements PatcherGateway {
   }
 
   @override
-  void disconnect({
+  void disconnect(
+    int instanceId, {
     required int fromHandleId,
     required int outlet,
     required int toHandleId,
     required int inlet,
   }) {
     calls.add('disconnect:$fromHandleId:$outlet->$toHandleId:$inlet');
-    cables.removeWhere(
+    _inst(instanceId).cables.removeWhere(
       (c) =>
           c.fromHandleId == fromHandleId &&
           c.outlet == outlet &&
@@ -93,47 +127,99 @@ class FakePatcherGateway implements PatcherGateway {
   }
 
   @override
-  PatcherNodeSnapshot inspect(int handleId) {
-    final type = nodes[handleId]?.type ?? '';
+  PatcherNodeSnapshot inspect(int instanceId, int handleId) {
+    final type = _inst(instanceId).nodes[handleId]?.type ?? '';
     final override = topologyOverrides[type];
     if (override != null) return override;
     return _defaultTopologyFor(type);
   }
 
   @override
-  void setNodePosition(int handleId, Offset position) {
+  void setNodePosition(int instanceId, int handleId, Offset position) {
     calls.add(
       'setNodePosition:$handleId:${position.dx.toStringAsFixed(1)}'
       ':${position.dy.toStringAsFixed(1)}',
     );
-    nodes[handleId]?.position = position;
+    _inst(instanceId).nodes[handleId]?.position = position;
   }
 
   @override
-  Offset? getNodePosition(int handleId) => nodes[handleId]?.position;
+  Offset? getNodePosition(int instanceId, int handleId) =>
+      _inst(instanceId).nodes[handleId]?.position;
 
   @override
-  void sendFloat(int handleId, int inlet, double value) {
+  void sendFloat(int instanceId, int handleId, int inlet, double value) {
     calls.add('sendFloat:$handleId:$inlet:${value.toStringAsFixed(3)}');
-    nodes[handleId]?.lastValueByInlet[inlet] = value;
+    _inst(instanceId).nodes[handleId]?.lastValueByInlet[inlet] = value;
   }
 
   @override
-  void mountAsSound({double volume = 1.0}) {
-    calls.add('mountAsSound:${volume.toStringAsFixed(3)}');
-    mounted = true;
+  void sendBang(int instanceId, int handleId, int inlet) {
+    calls.add('sendBang:$handleId:$inlet');
+    _inst(instanceId).nodes[handleId]?.bangedInlets.add(inlet);
   }
 
   @override
-  String dumpJson() => '{"objects":${nodes.length},"cables":${cables.length}}';
+  bool passBang(int instanceId, String to) {
+    calls.add('passBang:$instanceId:$to');
+    return _inst(instanceId).receivers.contains(to);
+  }
 
   @override
-  void parseJson(String content) {
+  bool passInt(int instanceId, int value, String to) {
+    calls.add('passInt:$instanceId:$value:$to');
+    return _inst(instanceId).receivers.contains(to);
+  }
+
+  @override
+  bool passFloat(int instanceId, double value, String to) {
+    calls.add('passFloat:$instanceId:${value.toStringAsFixed(3)}:$to');
+    return _inst(instanceId).receivers.contains(to);
+  }
+
+  @override
+  bool passString(int instanceId, String value, String to) {
+    calls.add('passString:$instanceId:$value:$to');
+    return _inst(instanceId).receivers.contains(to);
+  }
+
+  @override
+  void mountAsSource(int instanceId, {int? busChannelId, double volume = 1.0}) {
+    calls.add(
+      'mountAsSource:$instanceId:$busChannelId:${volume.toStringAsFixed(3)}',
+    );
+    final inst = _inst(instanceId);
+    inst.mounted = true;
+    inst.mountedBus = busChannelId;
+  }
+
+  @override
+  void unmountSource(int instanceId) {
+    calls.add('unmountSource:$instanceId');
+    final inst = _inst(instanceId);
+    inst.mounted = false;
+    inst.mountedBus = null;
+  }
+
+  @override
+  String dumpJson(int instanceId) {
+    final inst = _inst(instanceId);
+    return '{"objects":${inst.nodes.length},"cables":${inst.cables.length}}';
+  }
+
+  @override
+  void parseJson(int instanceId, String content) {
     calls.add('parseJson:${content.length}');
   }
 
-  /// Default topology for the node types the first PR registers — keeps
-  /// tests realistic without stubbing on every call.
+  @override
+  List<PatchObjectDescriptor> objectTypes() => [
+    for (final d in objectTypesCatalogue ?? _defaultCatalogue)
+      if (d.type != Obj.patcher) d,
+  ];
+
+  /// Default topology for the node types the surface seeds — keeps tests
+  /// realistic without stubbing on every call.
   PatcherNodeSnapshot _defaultTopologyFor(String type) {
     switch (type) {
       case Obj.dSine:
@@ -165,6 +251,94 @@ class FakePatcherGateway implements PatcherGateway {
       outputKinds: [],
     );
   }
+
+  /// A small representative catalogue, including a `patcher` entry so tests
+  /// can assert [objectTypes] filters it out.
+  static final List<PatchObjectDescriptor> _defaultCatalogue = [
+    const PatchObjectDescriptor(
+      type: Obj.patcher,
+      description: 'subpatch',
+      category: PatchObjectCategory.generic,
+      isDsp: false,
+      inlets: [],
+      outlets: [],
+      params: [],
+    ),
+    const PatchObjectDescriptor(
+      type: Obj.dSine,
+      description: 'sine oscillator',
+      category: PatchObjectCategory.oscillator,
+      isDsp: true,
+      inlets: [
+        PatchInletDescriptor(
+          label: 'freq',
+          doc: 'frequency in Hz',
+          range: '0..20000',
+          accepts: {PatchInletAccept.buffer, PatchInletAccept.float},
+        ),
+      ],
+      outlets: [
+        PatchOutletDescriptor(
+          label: 'out',
+          doc: 'signal',
+          range: '',
+          type: PatchOutletType.buffer,
+        ),
+      ],
+      params: [
+        PatchParamDescriptor(
+          name: 'frequency',
+          doc: 'initial frequency',
+          defaultValue: '440',
+          range: '0..20000',
+        ),
+      ],
+    ),
+    const PatchObjectDescriptor(
+      type: Obj.gSlider,
+      description: 'horizontal slider',
+      category: PatchObjectCategory.gui,
+      isDsp: false,
+      inlets: [],
+      outlets: [
+        PatchOutletDescriptor(
+          label: 'out',
+          doc: 'value',
+          range: '0..1',
+          type: PatchOutletType.float,
+        ),
+      ],
+      params: [],
+    ),
+    const PatchObjectDescriptor(
+      type: Obj.dDac,
+      description: 'audio output',
+      category: PatchObjectCategory.generic,
+      isDsp: true,
+      inlets: [
+        PatchInletDescriptor(
+          label: 'in',
+          doc: 'signal',
+          range: '',
+          accepts: {PatchInletAccept.buffer},
+        ),
+      ],
+      outlets: [],
+      params: [],
+    ),
+  ];
+}
+
+/// One patcher instance's in-memory state.
+class FakeInstance {
+  FakeInstance({required this.mainOutputs});
+
+  final int mainOutputs;
+  final Map<int, FakeNode> nodes = {};
+  final List<FakeCable> cables = [];
+  final Set<String> receivers = {};
+  bool mounted = false;
+  int? mountedBus;
 }
 
 class FakeNode {
@@ -173,6 +347,7 @@ class FakeNode {
   final String args;
   Offset? position;
   final Map<int, double> lastValueByInlet = {};
+  final List<int> bangedInlets = [];
 }
 
 class FakeCable {

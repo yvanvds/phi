@@ -363,13 +363,16 @@ void main() {
     test('start() initialises the patcher gateway but does not mount', () {
       engine.start();
 
-      expect(patcherGateway.initialised, isTrue);
+      expect(patcherGateway.instances, isNotEmpty);
       // Mounting on an empty patcher crashes the audio thread; the
       // surface mounts after seeding a `~dac`.
       expect(patcherGateway.mounted, isFalse);
-      expect(patcherGateway.calls.any((c) => c.startsWith('init')), isTrue);
       expect(
-        patcherGateway.calls.any((c) => c.startsWith('mountAsSound')),
+        patcherGateway.calls.any((c) => c.startsWith('createInstance')),
+        isTrue,
+      );
+      expect(
+        patcherGateway.calls.any((c) => c.startsWith('mountAsSource')),
         isFalse,
       );
     });
@@ -381,7 +384,7 @@ void main() {
       engine.patcher.mountAudio();
 
       final mounts = patcherGateway.calls.where(
-        (c) => c.startsWith('mountAsSound'),
+        (c) => c.startsWith('mountAsSource'),
       );
       expect(mounts, hasLength(1));
     });
@@ -390,9 +393,9 @@ void main() {
       engine.start();
       engine.stop();
 
-      expect(patcherGateway.initialised, isFalse);
+      expect(patcherGateway.instances, isEmpty);
       expect(() => engine.patcher, throwsStateError);
-      expect(patcherGateway.calls, contains('dispose'));
+      expect(patcherGateway.calls, contains('disposeAll'));
     });
   });
 
