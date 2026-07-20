@@ -35,4 +35,10 @@ abstract final class PatchCanvasConstants {
   /// Bezier control-point x-distance from each cable endpoint. Matches
   /// the design preview's `cx1 = a.x + 60` constant.
   static const double cableControlOffset = 60;
+
+  /// Click-distance threshold for hit-testing a cable, in canvas-local pixels.
+  static const double cableHitThreshold = 8;
+
+  /// Number of sample points along a cable's cubic the hit-test walks.
+  static const int cableHitSamples = 24;
 }

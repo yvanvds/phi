@@ -12,12 +12,16 @@ class PatcherCableLayer extends StatelessWidget {
     required this.portPositions,
     required this.cableVoiceForSource,
     required this.version,
+    this.selected,
     super.key,
   });
 
   final List<PatchCable> cables;
   final Map<PatchPortId, Offset> portPositions;
   final Map<PatchPortId, int> cableVoiceForSource;
+
+  /// The currently-selected cable, drawn highlighted, or null.
+  final PatchCable? selected;
   final int version;
 
   @override
@@ -29,6 +33,7 @@ class PatcherCableLayer extends StatelessWidget {
           portPositions: portPositions,
           cableVoiceForSource: cableVoiceForSource,
           version: version,
+          selected: selected,
         ),
         child: const SizedBox.expand(),
       ),

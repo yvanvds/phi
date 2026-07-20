@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../../../domain/patcher/patch_cable.dart';
 import '../../../domain/patcher/patch_port_id.dart';
 import '../../../domain/patcher/patch_port_kind.dart';
+import '../../tokens/phi_colors.dart';
 import '../../tokens/phi_voices.dart';
 import 'patch_canvas_constants.dart';
 
@@ -17,6 +18,7 @@ class PatchCablePainter extends CustomPainter {
     required this.portPositions,
     required this.cableVoiceForSource,
     required this.version,
+    this.selected,
   });
 
   /// Cables to draw, in order (last wins on overlap).
@@ -29,6 +31,9 @@ class PatchCablePainter extends CustomPainter {
   /// Voice index (1..6) per source port — controls cable colour.
   final Map<PatchPortId, int> cableVoiceForSource;
 
+  /// The currently-selected cable, drawn with a bright highlight, or null.
+  final PatchCable? selected;
+
   /// Bumped whenever the graph changes — used by [shouldRepaint] as a
   /// cheap int comparison instead of deep-equals.
   final int version;
@@ -40,7 +45,14 @@ class PatchCablePainter extends CustomPainter {
       final b = portPositions[cable.target];
       if (a == null || b == null) continue;
       final voice = cableVoiceForSource[cable.source] ?? 1;
-      _drawCable(canvas, a, b, voice, cable.kind);
+      _drawCable(
+        canvas,
+        a,
+        b,
+        voice,
+        cable.kind,
+        isSelected: cable == selected,
+      );
     }
   }
 
@@ -49,8 +61,9 @@ class PatchCablePainter extends CustomPainter {
     Offset a,
     Offset b,
     int voice,
-    PatchPortKind kind,
-  ) {
+    PatchPortKind kind, {
+    required bool isSelected,
+  }) {
     final color = PhiVoices.color(voice);
     final glow = PhiVoices.glow(voice);
     const cx = PatchCanvasConstants.cableControlOffset;
@@ -59,15 +72,28 @@ class PatchCablePainter extends CustomPainter {
       ..moveTo(a.dx, a.dy)
       ..cubicTo(a.dx + cx, a.dy, b.dx - cx, b.dy, b.dx, b.dy);
 
+    // A selected cable wears a wide bright halo under the wire so it reads as
+    // picked regardless of its voice colour.
+    if (isSelected) {
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = PhiColors.fg0
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 5
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+      );
+    }
+
     final glowPaint = Paint()
       ..color = glow
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
     final corePaint = Paint()
-      ..color = color
+      ..color = isSelected ? PhiColors.fg0 : color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
+      ..strokeWidth = isSelected ? 2 : 1.2;
 
     canvas.drawPath(path, glowPaint);
 
@@ -103,5 +129,6 @@ class PatchCablePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant PatchCablePainter old) => old.version != version;
+  bool shouldRepaint(covariant PatchCablePainter old) =>
+      old.version != version || old.selected != selected;
 }
