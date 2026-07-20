@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../design/tokens/phi_colors.dart';
@@ -279,6 +278,13 @@ class _WorkstationState extends State<Workstation> {
       buildShellCommands(
         session: widget.session,
         onSummonSurface: _onSelect,
+        // Edit/View chords the workstation used to hard-wire, now owned by the
+        // registry (issue #255). Undo/redo follow the focused surface's stack.
+        onUndo: _undoScopes.undo,
+        onRedo: _undoScopes.redo,
+        onCycleTabForward: () => _layout.cycleTabInActivePane(),
+        onCycleTabBackward: () => _layout.cycleTabInActivePane(forward: false),
+        onOpenCommandPalette: _openCommandPalette,
         onNewProject: actions == null
             ? null
             : () => unawaited(actions.newProject(context)),
@@ -419,11 +425,6 @@ class _WorkstationState extends State<Workstation> {
     return guard.onExitRequested();
   }
 
-  void _onSaveShortcut() {
-    final actions = _actions;
-    if (actions != null) unawaited(actions.save(context));
-  }
-
   /// Opens the settings dialog (design `settings-and-devices.md` §6) over the
   /// engine and the project's single settings owner. Wired only when a project
   /// controller is present — the settings owner lives on it.
@@ -552,41 +553,14 @@ class _WorkstationState extends State<Workstation> {
 
   @override
   Widget build(BuildContext context) {
-    // Ctrl+Z/Y route to the focused surface's undo stack (#119). These bindings
-    // sit above every surface, so a key a focused widget (a piano roll, a text
-    // field) leaves unhandled bubbles up to here; a text field's own undo still
-    // wins because it consumes the combo first.
+    // The registry is the single source of truth for the app's default shortcut
+    // map (issue #255): undo/redo (following the focused surface's stack, #119),
+    // Ctrl+S save, Ctrl+Tab tab-cycling, Ctrl+Shift+P / F1 palette, and Ctrl+1…7
+    // surface focus. These bindings sit above every surface, so a key a focused
+    // widget (a piano roll, a text field) leaves unhandled bubbles up to here; a
+    // text field's own undo still wins because it consumes the combo first.
     return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.keyZ, control: true):
-            _undoScopes.undo,
-        const SingleActivator(
-          LogicalKeyboardKey.keyZ,
-          control: true,
-          shift: true,
-        ): _undoScopes.redo,
-        const SingleActivator(LogicalKeyboardKey.keyY, control: true):
-            _undoScopes.redo,
-        // Ctrl+S saves the project (choosing a location first if it is new).
-        const SingleActivator(LogicalKeyboardKey.keyS, control: true):
-            _onSaveShortcut,
-        // Ctrl+Tab cycles the focused pane's tabs; Shift reverses (design §2).
-        const SingleActivator(LogicalKeyboardKey.tab, control: true): () =>
-            _layout.cycleTabInActivePane(),
-        const SingleActivator(
-          LogicalKeyboardKey.tab,
-          control: true,
-          shift: true,
-        ): () =>
-            _layout.cycleTabInActivePane(forward: false),
-        // Ctrl+Shift+P / F1 open the command palette (design §4).
-        const SingleActivator(
-          LogicalKeyboardKey.keyP,
-          control: true,
-          shift: true,
-        ): _openCommandPalette,
-        const SingleActivator(LogicalKeyboardKey.f1): _openCommandPalette,
-      },
+      bindings: _commands.shortcutBindings(),
       child: Material(
         color: PhiColors.bg0,
         child: Column(

@@ -83,17 +83,62 @@ class CommandRegistry extends ChangeNotifier {
   }
 
   /// The default shortcut map for the shell to bind (issue #255): each command
-  /// that advertises a [PhiCommand.shortcut] maps its activator to an invocation
-  /// that goes through [invoke] — so a keystroke and the palette share the same
-  /// code path and recents bookkeeping.
+  /// that advertises a [PhiCommand.shortcut] maps every one of its
+  /// [CommandShortcut.activators] (the primary chord plus any aliases) to an
+  /// invocation that goes through [invoke] — so a keystroke and the palette
+  /// share the same code path and recents bookkeeping. This registry is the
+  /// single source of truth for the app's default shortcut map (design
+  /// `docs/design/shell-layout.md` §4).
+  ///
+  /// **Debug conflict assertion:** two commands claiming the same chord is a
+  /// programming error — the map would silently drop one binding. In debug
+  /// builds this throws so the clash fails fast in development; release builds
+  /// skip the check (the assert body does not run) and last-registered wins.
   Map<ShortcutActivator, VoidCallback> shortcutBindings() {
     final bindings = <ShortcutActivator, VoidCallback>{};
+    // Keyed by a value-comparable chord tuple, not the activator itself:
+    // `SingleActivator` has only identity equality, so two distinct instances
+    // of the same chord would never collide as map keys. `CallbackShortcuts`
+    // matches by `accepts()` regardless, so the returned map's identity keys are
+    // fine there — the tuple only guards conflict detection.
+    final claimedBy = <(int, bool, bool, bool, bool), String>{};
     for (final command in _commands) {
       final shortcut = command.shortcut;
-      if (shortcut != null) {
-        bindings[shortcut.activator] = () => invoke(command.id);
+      if (shortcut == null) continue;
+      for (final activator in shortcut.activators) {
+        final chord = (
+          activator.trigger.keyId,
+          activator.control,
+          activator.shift,
+          activator.alt,
+          activator.meta,
+        );
+        assert(() {
+          final owner = claimedBy[chord];
+          if (owner != null) {
+            throw FlutterError(
+              'Shortcut conflict: commands "$owner" and "${command.id}" both '
+              'bind ${_describe(activator)}. Each chord must map to exactly one '
+              'command (issue #255).',
+            );
+          }
+          claimedBy[chord] = command.id;
+          return true;
+        }());
+        bindings[activator] = () => invoke(command.id);
       }
     }
     return bindings;
   }
+
+  /// Human-readable chord for a conflict message, e.g. `Ctrl+Shift+P`.
+  static String _describe(SingleActivator a) => <String>[
+    if (a.control) 'Ctrl',
+    if (a.shift) 'Shift',
+    if (a.alt) 'Alt',
+    if (a.meta) 'Meta',
+    a.trigger.keyLabel.isEmpty
+        ? (a.trigger.debugName ?? '?')
+        : a.trigger.keyLabel,
+  ].join('+');
 }

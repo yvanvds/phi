@@ -8,6 +8,28 @@ import 'package:phi/shell/commands/phi_command.dart';
 /// Unit tests for the [CommandRegistry]: registration, enabled filtering,
 /// invocation routing + recents tracking, and the default shortcut map that
 /// issue #255 folds the app's bindings into.
+/// Finds a bound callback by chord — `SingleActivator` has only identity
+/// equality, so a binding map can't be probed with a fresh activator; match on
+/// the trigger key (which *does* have value equality) plus the modifiers.
+VoidCallback? _bindingFor(
+  Map<ShortcutActivator, VoidCallback> bindings,
+  LogicalKeyboardKey trigger, {
+  bool control = false,
+  bool shift = false,
+  bool alt = false,
+}) {
+  for (final entry in bindings.entries) {
+    final a = entry.key as SingleActivator;
+    if (a.trigger == trigger &&
+        a.control == control &&
+        a.shift == shift &&
+        a.alt == alt) {
+      return entry.value;
+    }
+  }
+  return null;
+}
+
 void main() {
   PhiCommand cmd(
     String id, {
@@ -127,5 +149,84 @@ void main() {
     binding.value();
     expect(ran, 1);
     expect(registry.recentIds, ['save']); // firing the chord records recents
+  });
+
+  test('shortcutBindings binds a chord and each of its aliases', () {
+    final registry = CommandRegistry();
+    addTearDown(registry.dispose);
+    var ran = 0;
+    registry.register(
+      cmd(
+        'redo',
+        invoke: () => ran++,
+        shortcut: const CommandShortcut(
+          LogicalKeyboardKey.keyZ,
+          control: true,
+          shift: true,
+          aliases: [SingleActivator(LogicalKeyboardKey.keyY, control: true)],
+        ),
+      ),
+    );
+
+    final bindings = registry.shortcutBindings();
+    // Primary Ctrl+Shift+Z and the aliased Ctrl+Y both map to the command.
+    // (Looked up by trigger + modifiers because `SingleActivator` has no value
+    // equality — a fresh instance never equals another of the same chord.)
+    expect(bindings, hasLength(2));
+    final primary = _bindingFor(
+      bindings,
+      LogicalKeyboardKey.keyZ,
+      control: true,
+      shift: true,
+    );
+    final alias = _bindingFor(bindings, LogicalKeyboardKey.keyY, control: true);
+    expect(primary, isNotNull);
+    expect(alias, isNotNull);
+
+    // Firing either chord runs the one command.
+    alias!();
+    primary!();
+    expect(ran, 2);
+  });
+
+  test('shortcutBindings asserts when two commands claim one chord', () {
+    final registry = CommandRegistry();
+    addTearDown(registry.dispose);
+    registry.registerAll([
+      cmd(
+        'a',
+        shortcut: const CommandShortcut(LogicalKeyboardKey.keyK, control: true),
+      ),
+      cmd(
+        'b',
+        shortcut: const CommandShortcut(LogicalKeyboardKey.keyK, control: true),
+      ),
+    ]);
+
+    // The debug-build conflict assertion (issue #255) fails fast: a chord must
+    // map to exactly one command. Asserts are enabled under `flutter test`.
+    expect(registry.shortcutBindings, throwsA(isA<FlutterError>()));
+  });
+
+  test('shortcutBindings detects a conflict between a chord and an alias', () {
+    final registry = CommandRegistry();
+    addTearDown(registry.dispose);
+    registry.registerAll([
+      cmd(
+        'primary',
+        shortcut: const CommandShortcut(LogicalKeyboardKey.keyY, control: true),
+      ),
+      cmd(
+        'aliased',
+        shortcut: const CommandShortcut(
+          LogicalKeyboardKey.keyZ,
+          control: true,
+          shift: true,
+          aliases: [SingleActivator(LogicalKeyboardKey.keyY, control: true)],
+        ),
+      ),
+    ]);
+
+    expect(registry.shortcutBindings, throwsA(isA<FlutterError>()));
   });
 }

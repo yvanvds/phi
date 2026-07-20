@@ -19,6 +19,7 @@ class CommandShortcut {
     this.shift = false,
     this.alt = false,
     String? triggerLabel,
+    this.aliases = const [],
   }) : _triggerLabel = triggerLabel;
 
   /// The primary key, e.g. [LogicalKeyboardKey.keyP].
@@ -31,10 +32,22 @@ class CommandShortcut {
   /// own [LogicalKeyboardKey.keyLabel] is not what we want on screen.
   final String? _triggerLabel;
 
+  /// Extra chords that also fire the command but are not shown on the palette
+  /// row — the primary [activator] is the one the row advertises. Lets a single
+  /// command own every chord that reaches it (issue #255's "one table owns
+  /// them"): e.g. redo answers to both `Ctrl+Shift+Z` and the legacy `Ctrl+Y`,
+  /// and the palette opens on `Ctrl+Shift+P` and `F1`.
+  final List<SingleActivator> aliases;
+
   /// The activator the shell binds this chord to (issue #255 folds the default
   /// map in through the registry).
   SingleActivator get activator =>
       SingleActivator(trigger, control: control, shift: shift, alt: alt);
+
+  /// Every activator that must fire the command — the primary [activator]
+  /// followed by any [aliases]. The shell binds them all; the conflict
+  /// assertion checks them all.
+  List<SingleActivator> get activators => [activator, ...aliases];
 
   /// The chord rendered for a palette row, e.g. `Ctrl+Shift+P`.
   String get label {
