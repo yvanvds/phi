@@ -25,4 +25,8 @@ abstract final class RegistryKinds {
   /// Insert-effect instances — `fx.` entities placed on mix buses (racks
   /// epic §5).
   static const String fx = 'fx';
+
+  /// Node-and-cable patchers — `patch.` entities whose payload is the engine
+  /// dump (patcher epic, `docs/design/patcher.md` §3).
+  static const String patch = 'patch';
 }
