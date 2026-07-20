@@ -35,7 +35,8 @@ import '../surfaces/state/state_surface.dart';
 import 'bottom_status/bottom_status.dart';
 import 'layout/shell_layout_controller.dart';
 import 'layout/split_tree_view.dart';
-import 'layout/surface_pane.dart';
+import 'layout/splitter_resize.dart';
+import 'layout/workstation_pane.dart';
 import 'left_rail/left_rail.dart';
 import 'left_rail/surface_id.dart';
 import 'project/close_confirm_dialog.dart';
@@ -477,6 +478,15 @@ class _WorkstationState extends State<Workstation> {
         // Ctrl+S saves the project (choosing a location first if it is new).
         const SingleActivator(LogicalKeyboardKey.keyS, control: true):
             _onSaveShortcut,
+        // Ctrl+Tab cycles the focused pane's tabs; Shift reverses (design §2).
+        const SingleActivator(LogicalKeyboardKey.tab, control: true): () =>
+            _layout.cycleTabInActivePane(),
+        const SingleActivator(
+          LogicalKeyboardKey.tab,
+          control: true,
+          shift: true,
+        ): () =>
+            _layout.cycleTabInActivePane(forward: false),
       },
       child: Material(
         color: PhiColors.bg0,
@@ -509,14 +519,44 @@ class _WorkstationState extends State<Workstation> {
   /// The centre region: the split tree of panes (design §2). In the
   /// behaviour-neutral default it is one pane whose tab stack the rail summons
   /// into — so the app looks identical to the pre-refactor single surface until
-  /// the performer splits.
-  Widget _buildCentre() =>
-      SplitTreeView(root: _layout.layout.root, buildPane: _buildPane);
+  /// the performer splits. Splitter drags route through [_onResizeSplit].
+  Widget _buildCentre() => SplitTreeView(
+    root: _layout.layout.root,
+    buildPane: _buildPane,
+    onResize: _onResizeSplit,
+  );
 
-  /// Renders one pane's resident tab stack ([SurfacePane]), routing each tab
-  /// through [_surfaceContent] so surfaces keep their identity across moves.
-  Widget _buildPane(LayoutPane pane) =>
-      SurfacePane(pane: pane, contentFor: _surfaceContent);
+  /// Renders one pane fully dressed ([WorkstationPane]): its tab strip, resident
+  /// surface content ([_surfaceContent]), the drag-to-dock zones, and — when it
+  /// is the focused pane — the focus ring.
+  Widget _buildPane(LayoutPane pane) => WorkstationPane(
+    pane: pane,
+    isActivePane: pane.id == _layout.activePaneId,
+    controller: _layout,
+    contentFor: _surfaceContent,
+    labelFor: _labelFor,
+  );
+
+  /// The tab label for a surface id — its [SurfaceId.label], or the raw id when
+  /// it names no known surface (fit-fallback would drop such a tab first).
+  String _labelFor(String surfaceId) =>
+      _surfaceIdOf(surfaceId)?.label ?? surfaceId;
+
+  /// Applies a splitter drag: re-derives the flanking fractions of [splitId]
+  /// from the *current* layout (so incremental drag deltas accumulate correctly)
+  /// and commits them, clamped to the minima.
+  void _onResizeSplit(String splitId, int leadingIndex, double deltaFraction) {
+    final node = _layout.layout.nodeById(splitId);
+    if (node is! LayoutSplit) return;
+    _layout.resize(
+      splitId,
+      resizeSiblings(
+        fractions: node.fractions,
+        leadingIndex: leadingIndex,
+        deltaFraction: deltaFraction,
+      ),
+    );
+  }
 
   /// The resident content for the surface with layout id [surfaceId]. Every
   /// surface is wrapped in its stable [GlobalKey] so moving it between panes

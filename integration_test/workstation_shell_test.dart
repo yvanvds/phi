@@ -4,7 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
 import 'package:phi/domain/session/session_state.dart';
+import 'package:phi/domain/shell_layout/drop_edge.dart';
 import 'package:phi/engine/engine.dart';
+import 'package:phi/shell/layout/pane_dock_zones.dart';
+import 'package:phi/shell/layout/pane_tab_strip.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
 import 'package:phi/surfaces/midi/midi_viewport.dart';
@@ -290,4 +293,84 @@ void main() {
       await engine.dispose();
     },
   );
+
+  testWidgets('Ctrl+Tab cycles the focused pane\'s tabs end to end (#252)', (
+    tester,
+  ) async {
+    final engine = PhiEngine(
+      FakeYseGateway(),
+      telemetryInterval: const Duration(milliseconds: 20),
+    );
+    final session = SessionState();
+
+    await tester.pumpWidget(PhiApp(engine: engine, session: session));
+    await tester.pumpAndSettle();
+
+    // Summon MIDI into the seed pane → it now stacks [mix, midi] with midi
+    // foreground; the Mix header goes offstage (skipped by the finder).
+    await tester.tap(railFor(SurfaceId.midi));
+    await tester.pumpAndSettle();
+    expect(find.byType(MidiViewport), findsOneWidget);
+    expect(find.text('MIX · 1 CHANNELS'), findsNothing);
+
+    // Ctrl+Tab wraps midi → mix: the Mix surface comes forward.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(find.text('MIX · 1 CHANNELS'), findsOneWidget);
+    expect(find.byType(MidiViewport), findsNothing);
+
+    // Ctrl+Tab again mix → midi.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(find.byType(MidiViewport), findsOneWidget);
+    expect(find.text('MIX · 1 CHANNELS'), findsNothing);
+
+    session.dispose();
+    await engine.dispose();
+  });
+
+  testWidgets('drag-to-dock splits Mix | MIDI side by side end to end (#252)', (
+    tester,
+  ) async {
+    final engine = PhiEngine(
+      FakeYseGateway(),
+      telemetryInterval: const Duration(milliseconds: 20),
+    );
+    final session = SessionState();
+
+    await tester.pumpWidget(PhiApp(engine: engine, session: session));
+    await tester.pumpAndSettle();
+
+    // Stack MIDI on top of Mix in the seed pane 'p1'. Only midi is onstage.
+    await tester.tap(railFor(SurfaceId.midi));
+    await tester.pumpAndSettle();
+    expect(find.byType(MidiViewport), findsOneWidget);
+    expect(find.text('MIX · 1 CHANNELS'), findsNothing);
+
+    // Drag the MIDI tab to the pane's right edge → split. Now Mix (left) and
+    // MIDI (right) live in two panes and both render at once.
+    final start = tester.getCenter(
+      find.byKey(PaneTabStrip.tabKey('p1', SurfaceId.midi.name)),
+    );
+    final end = tester.getCenter(
+      find.byKey(PaneDockZones.edgeZoneKey('p1', DropEdge.right)),
+    );
+    final gesture = await tester.startGesture(start);
+    await tester.pump();
+    await gesture.moveTo(end);
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MidiViewport), findsOneWidget);
+    expect(find.text('MIX · 1 CHANNELS'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    session.dispose();
+    await engine.dispose();
+  });
 }

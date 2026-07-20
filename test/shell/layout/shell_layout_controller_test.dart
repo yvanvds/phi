@@ -72,6 +72,67 @@ void main() {
     expect(controller.focusedSurface, 'midi');
   });
 
+  test('reorderTab moves a tab within its pane and notifies', () {
+    final controller = ShellLayoutController();
+    addTearDown(controller.dispose);
+    controller.summon('midi'); // p1: [mix, midi]
+    controller.summon('racks'); // p1: [mix, midi, racks]
+    var notified = 0;
+    controller.addListener(() => notified++);
+
+    controller.reorderTab('p1', 0, 2); // move mix to the end
+
+    expect(controller.layout.paneById('p1')!.tabs, ['midi', 'racks', 'mix']);
+    expect(notified, 1);
+  });
+
+  test('reorderTab that changes nothing is silent', () {
+    final controller = ShellLayoutController();
+    addTearDown(controller.dispose);
+    controller.summon('midi'); // p1: [mix, midi]
+    var notified = 0;
+    controller.addListener(() => notified++);
+
+    controller.reorderTab('p1', 0, 0); // no move
+
+    expect(notified, 0);
+  });
+
+  test('cycleTabInActivePane advances the active tab, wrapping around', () {
+    final controller = ShellLayoutController();
+    addTearDown(controller.dispose);
+    controller.summon('midi'); // p1: [mix, midi], midi active
+    controller.summon('racks'); // p1: [mix, midi, racks], racks active
+
+    controller.cycleTabInActivePane(); // racks → wrap → mix
+    expect(controller.focusedSurface, 'mix');
+
+    controller.cycleTabInActivePane(); // mix → midi
+    expect(controller.focusedSurface, 'midi');
+  });
+
+  test('cycleTabInActivePane backward steps to the previous tab', () {
+    final controller = ShellLayoutController();
+    addTearDown(controller.dispose);
+    controller.summon('midi'); // [mix, midi]
+    controller.summon('racks'); // [mix, midi, racks], racks active
+
+    controller.cycleTabInActivePane(forward: false); // racks → midi
+    expect(controller.focusedSurface, 'midi');
+  });
+
+  test('cycleTabInActivePane is silent with fewer than two tabs', () {
+    final controller = ShellLayoutController();
+    addTearDown(controller.dispose);
+    var notified = 0;
+    controller.addListener(() => notified++);
+
+    controller.cycleTabInActivePane(); // seed pane has only mix
+
+    expect(notified, 0);
+    expect(controller.focusedSurface, 'mix');
+  });
+
   test('replaceLayout swaps the tree and repoints a stale active pane', () {
     final controller = ShellLayoutController();
     addTearDown(controller.dispose);

@@ -92,6 +92,26 @@ class ShellLayoutController extends ChangeNotifier {
     _apply(next, activePaneId: next.paneIdOf(surfaceId) ?? _activePaneId);
   }
 
+  /// Reorders a tab within [paneId] from [oldIndex] to [newIndex] (a tab-strip
+  /// drag, design §2 — "within a stack to reorder"). Silent when the indices
+  /// leave the order unchanged.
+  void reorderTab(String paneId, int oldIndex, int newIndex) =>
+      _apply(_layout.reorderTab(paneId, oldIndex, newIndex));
+
+  /// Cycles the active tab of the **active pane** to the next ([forward]) or
+  /// previous tab, wrapping around (design §2 — "Ctrl+Tab cycles tabs in the
+  /// focused pane"). A no-op when the active pane holds fewer than two tabs.
+  void cycleTabInActivePane({bool forward = true}) {
+    final pane = activePane;
+    final tabs = pane.tabs;
+    if (tabs.length < 2) return;
+    final current = pane.active == null ? 0 : tabs.indexOf(pane.active!);
+    final next = forward
+        ? (current + 1) % tabs.length
+        : (current - 1 + tabs.length) % tabs.length;
+    _apply(_layout.activate(tabs[next]), activePaneId: pane.id);
+  }
+
   /// Closes [surfaceId], returning it to the summonable "closed" set (design §2).
   void close(String surfaceId) => _apply(_layout.close(surfaceId));
 
