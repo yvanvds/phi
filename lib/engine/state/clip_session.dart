@@ -10,6 +10,7 @@ import '../../domain/midi/transforms/domain_subscription_transform.dart';
 import '../../domain/midi/voice_hash.dart';
 import '../../domain/project/entity_address.dart';
 import '../../domain/scene/scene_agent.dart';
+import '../bridge/materialised_synth.dart';
 import '../bridge/midi_transport.dart';
 import '../bridge/transport_note.dart';
 import 'clip_session_host.dart';
@@ -171,6 +172,16 @@ class ClipSession {
   /// session releases exactly what it pressed if a transform overlaps voices.
   final Set<int> _sounding = <int>{};
 
+  /// The internal-voice synths this session's transport is currently connected
+  /// to, so a re-route disconnects the ones it no longer plays (design §6). Kept
+  /// by handle identity — a re-materialised synth is a fresh handle, so it
+  /// reconnects; a live-edited one keeps its handle and stays connected.
+  final Set<MaterialisedSynth> _connectedSynths = <MaterialisedSynth>{};
+
+  /// Whether this session's transport is connected to the external MIDI-out
+  /// port — driven by whether any routed voice is external (design §6).
+  bool _midiOutConnected = false;
+
   // ─── playback lifecycle ─────────────────────────────────────────────────
 
   /// Start (or restart) playback from the top of the clip. Opens the shared
@@ -252,6 +263,7 @@ class ClipSession {
     _playing = false;
     _paused = false;
     _transport?.stop();
+    _disconnectAll();
     host.gateway.allNotesOff();
     _clearOwnAgents();
     _pushedNotes = null;
@@ -388,9 +400,64 @@ class ClipSession {
         host.onUnresolvedVoice(voice);
       }
     }
+    // Connect the transport to the synths (and MIDI-out) the routed voices need,
+    // before dispatch runs (design §6, issue #208).
+    _reconcileConnections(notes);
     // Loop off pushes `loopBeats <= 0`, so the engine fires the events once and
     // stops (issue #184/#187); loop on loops the clip's declared length.
     _transport?.setEvents(events, loopBeats: loopBeats);
+  }
+
+  /// Reconcile the transport's connections against the voices [notes] route to
+  /// (design `docs/design/racks-and-voices.md` §6): `connectSynth` for every
+  /// internal voice with a materialised synth, `disconnectSynth` for one no
+  /// longer routed, and `connectMidiOut` / `disconnectMidiOut` following whether
+  /// any routed voice is external. Keyed by handle identity so a re-materialised
+  /// synth (a fresh handle) reconnects while a live-edited one stays. A no-op
+  /// until the transport is minted (first [play]).
+  void _reconcileConnections(List<MidiNote> notes) {
+    final transport = _transport;
+    if (transport == null) return;
+    final desired = <MaterialisedSynth>{};
+    var anyExternal = false;
+    final seen = <String?>{};
+    for (final note in notes) {
+      if (!seen.add(note.voice)) continue;
+      final synth = host.synthForVoice(note.voice);
+      if (synth != null) desired.add(synth);
+      if (host.isExternalVoice(note.voice)) anyExternal = true;
+    }
+    for (final synth in _connectedSynths.toList()) {
+      if (!desired.contains(synth)) {
+        transport.disconnectSynth(synth);
+        _connectedSynths.remove(synth);
+      }
+    }
+    for (final synth in desired) {
+      if (_connectedSynths.add(synth)) transport.connectSynth(synth);
+    }
+    if (anyExternal && !_midiOutConnected) {
+      transport.connectMidiOut();
+      _midiOutConnected = true;
+    } else if (!anyExternal && _midiOutConnected) {
+      transport.disconnectMidiOut();
+      _midiOutConnected = false;
+    }
+  }
+
+  /// Drop every transport connection this session holds — its internal synths
+  /// and the external MIDI-out — so a stop (or teardown) leaves the transport
+  /// unconnected and a later replay reconnects from scratch (design §6).
+  void _disconnectAll() {
+    final transport = _transport;
+    if (transport != null) {
+      for (final synth in _connectedSynths) {
+        transport.disconnectSynth(synth);
+      }
+      if (_midiOutConnected) transport.disconnectMidiOut();
+    }
+    _connectedSynths.clear();
+    _midiOutConnected = false;
   }
 
   /// The loop length the transport should run at: the clip's declared
@@ -545,6 +612,7 @@ class ClipSession {
       _playing = false;
       _paused = false;
     }
+    _disconnectAll();
     _transport?.dispose();
     _transport = null;
     _playhead.dispose();
