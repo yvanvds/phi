@@ -100,6 +100,15 @@ class ProjectController extends ChangeNotifier {
   /// source (design §9).
   final ValueNotifier<bool> isDirty = ValueNotifier<bool>(false);
 
+  /// Runs immediately before a [save] / [saveAs] / [autosaveNow] snapshots the
+  /// project — the seam a subsystem that keeps live engine state outside the
+  /// registry uses to fold it back in first. The engine wires this to flush each
+  /// open patcher's dump into its `patch.` entity (issue #220), so a save captures
+  /// the *live* patch, not the last-loaded one. Any registry updates it records
+  /// (through [recordCommand]) are picked up by the snapshot / dirty set that
+  /// follows. `null` (the default) skips the step.
+  void Function()? onBeforeSave;
+
   /// The absolute path of the open project's `.phi` folder, or `null` for a new
   /// project that has never been saved.
   final ValueNotifier<String?> location = ValueNotifier<String?>(null);
@@ -264,6 +273,7 @@ class ProjectController extends ChangeNotifier {
     if (store == null) {
       throw StateError('save() on an unsaved project — call saveAs first.');
     }
+    onBeforeSave?.call();
     await store.save(_snapshot());
     await _clearJournalAndDirty();
   }
@@ -281,6 +291,7 @@ class ProjectController extends ChangeNotifier {
     // The folder is `<name>.phi`, so a Save-As / Duplicate names the project
     // after the folder the performer chose (design §5).
     name.value = _projectNameFor(directory);
+    onBeforeSave?.call();
     await store.save(_snapshot());
     await _clearJournalAndDirty();
     _rememberRecent(directory);
@@ -346,6 +357,7 @@ class ProjectController extends ChangeNotifier {
   Future<bool> autosaveNow() async {
     final store = _store;
     if (store == null || !isDirty.value) return false;
+    onBeforeSave?.call();
     await store.save(_snapshot(), dirty: Set.of(_dirtyEntities));
     await _clearJournalAndDirty();
     return true;

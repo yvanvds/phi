@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/patcher/patch_payload.dart';
+import 'package:phi/domain/project/entity_address.dart';
 
 void main() {
   // A representative engine dump — the exact shape is opaque to Phi; it only
@@ -58,5 +59,62 @@ void main() {
     final refreshed = PatchPayload.empty.withDump(dump);
     expect(refreshed.dump, dump);
     expect(refreshed, PatchPayload(dump: dump));
+  });
+
+  group('source placement (issue #220)', () {
+    final bus = EntityAddress.parse('mix.reverb');
+
+    test('an unplaced patch omits the placement key entirely', () {
+      expect(PatchPayload(dump: dump).toJson(), {'dump': dump});
+      expect(PatchPayload(dump: dump).placement, isNull);
+    });
+
+    test('placement round-trips through the JSON envelope', () {
+      final placed = PatchPayload(dump: dump, placement: bus);
+      expect(placed.toJson()['placement'], 'mix.reverb');
+      final restored = PatchPayload.fromJson(placed.toJson());
+      expect(restored, placed);
+      expect(restored.placement, bus);
+    });
+
+    test('placement survives a real JSON string encode/decode', () {
+      final placed = PatchPayload(dump: dump, placement: bus);
+      final wire = jsonEncode(placed.toJson());
+      final decoded = jsonDecode(wire) as Map<String, Object?>;
+      expect(PatchPayload.fromJson(decoded), placed);
+    });
+
+    test('an unparseable placement degrades to unplaced', () {
+      expect(
+        PatchPayload.fromJson({'dump': dump, 'placement': 'not an address'}),
+        PatchPayload(dump: dump),
+      );
+    });
+
+    test('placement distinguishes otherwise-equal payloads', () {
+      expect(
+        PatchPayload(dump: dump, placement: bus),
+        isNot(PatchPayload(dump: dump)),
+      );
+      expect(
+        PatchPayload(dump: dump, placement: bus),
+        isNot(
+          PatchPayload(dump: dump, placement: EntityAddress.parse('mix.a')),
+        ),
+      );
+    });
+
+    test('withDump carries the placement over (the save path)', () {
+      final placed = PatchPayload(placement: bus).withDump(dump);
+      expect(placed.dump, dump);
+      expect(placed.placement, bus);
+    });
+
+    test('withPlacement swaps the bus, carrying the dump over', () {
+      final placed = PatchPayload(dump: dump).withPlacement(bus);
+      expect(placed.placement, bus);
+      expect(placed.dump, dump);
+      expect(placed.withPlacement(null).placement, isNull);
+    });
   });
 }

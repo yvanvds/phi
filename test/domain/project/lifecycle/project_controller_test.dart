@@ -132,6 +132,53 @@ void main() {
     });
   });
 
+  group('ProjectController — onBeforeSave hook (issue #220)', () {
+    test('runs before the snapshot on save / saveAs / autosave', () async {
+      final h = harness(autosaveIntervalOverride: const Duration(hours: 1));
+      var calls = 0;
+      h.controller.onBeforeSave = () => calls++;
+
+      await h.controller.saveAs(dir); // saveAs → 1
+      h.session.setTempo(140); // dirty for the next two
+      await h.controller.save(); // save → 2
+      h.session.setTempo(150);
+      await h.controller.autosaveNow(); // autosave → 3
+
+      expect(calls, 3);
+    });
+
+    test('a registry update it records lands in the very same save', () async {
+      final h = harness();
+      final address = EntityAddress.parse('patch.swirl');
+      // The hook stands in for the engine flushing a live patch into its entity.
+      h.controller.onBeforeSave = () {
+        final command = CreateEntityCommand(
+          h.controller.registry,
+          address,
+          payload: const <String, Object?>{
+            'dump': <String, Object?>{},
+            'placement': 'mix.reverb',
+          },
+        );
+        command.apply();
+        h.controller.recordCommand(command);
+      };
+
+      await h.controller.saveAs(dir);
+
+      // The entity the hook created was captured by the snapshot that followed.
+      final reloaded = await h.store.load();
+      expect(reloaded.registry.contains(address), isTrue);
+    });
+
+    test('a null hook is simply skipped', () async {
+      final h = harness();
+      h.controller.onBeforeSave = null;
+      await h.controller.saveAs(dir); // must not throw
+      expect(h.controller.isSaved, isTrue);
+    });
+  });
+
   group('ProjectController — open', () {
     test(
       'open reloads the manifest into the session and clears dirty',
