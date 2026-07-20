@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../tokens/phi_colors.dart';
@@ -134,23 +136,41 @@ class ChannelStrip extends StatelessWidget {
             ? [BoxShadow(color: voiceGlow, blurRadius: 16)]
             : null,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _header(),
-          const SizedBox(height: PhiSpacing.s2),
-          _faderWithMeter(),
-          const SizedBox(height: PhiSpacing.s2),
-          _readout(),
-          if (outputPeaks.isNotEmpty) ...[
-            const SizedBox(height: PhiSpacing.s2),
-            _outputMeters(),
-          ],
-          if (!isMaster) ...[
-            const SizedBox(height: PhiSpacing.s2),
-            _muteSoloButtons(),
-          ],
-        ],
+      // When the strip is docked in a pane shorter than its natural height
+      // (issue #287), the fader — the tallest, most elastic element — yields
+      // its height so the header, readout and mute/solo controls stay visible
+      // rather than the Column asserting a `RenderFlex overflowed`. With
+      // unbounded height (the isolated widget host) the fader keeps its full
+      // `_faderHeight`, so nothing changes when there is room to spare.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final fader = _faderWithMeter();
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _header(),
+              const SizedBox(height: PhiSpacing.s2),
+              // `Flexible` only lays out with a bounded height; under unbounded
+              // constraints a flex child would assert, so keep the fader rigid
+              // there and let it flex only when the pane actually constrains it.
+              if (constraints.maxHeight.isFinite)
+                Flexible(child: fader)
+              else
+                fader,
+              const SizedBox(height: PhiSpacing.s2),
+              _readout(),
+              if (outputPeaks.isNotEmpty) ...[
+                const SizedBox(height: PhiSpacing.s2),
+                _outputMeters(),
+              ],
+              if (!isMaster) ...[
+                const SizedBox(height: PhiSpacing.s2),
+                _muteSoloButtons(),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -218,48 +238,60 @@ class ChannelStrip extends StatelessWidget {
   Widget _faderWithMeter() {
     final clampedVolume = volume.clamp(0.0, 1.0);
     final clampedPeak = peak.clamp(0.0, 1.0);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      // A fader interaction opens a coalescing gesture on pointer-down and closes
-      // it when the interaction ends, so the engine journals one command per
-      // drag rather than one per tick. A click-to-set uses the tap recognizer
-      // (down → up); a drag uses the vertical-drag recognizer (start → end).
-      // The two are disjoint here, so each interaction fires exactly one
-      // start / end pair. (`onVerticalDragCancel` is intentionally unwired: it
-      // fires whenever the drag recognizer merely loses the arena to a tap, so
-      // it is not a reliable "gesture ended" signal — a started drag always ends
-      // via `onVerticalDragEnd`, and any stray unclosed gesture self-heals on the
-      // next `begin`.)
-      onTapDown: (d) {
-        onVolumeChangeStart?.call();
-        onVolumeChanged(_yToValue(d.localPosition.dy));
-      },
-      onTapUp: (_) => onVolumeChangeEnd?.call(),
-      onVerticalDragStart: (d) {
-        onVolumeChangeStart?.call();
-        onVolumeChanged(_yToValue(d.localPosition.dy));
-      },
-      onVerticalDragUpdate: (d) =>
-          onVolumeChanged(_yToValue(d.localPosition.dy)),
-      onVerticalDragEnd: (_) => onVolumeChangeEnd?.call(),
-      child: SizedBox(
-        key: faderHitAreaKey,
-        height: _faderHeight,
-        child: Center(
+    // Read the height actually granted (capped at `_faderHeight`, so the fader
+    // never grows past its design size in a tall pane) and drive the fader
+    // geometry — thumb, peak fill and the y→value mapping — from it, so a
+    // shrunk fader (issue #287) stays internally consistent.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final faderHeight = constraints.maxHeight.isFinite
+            ? math.min(constraints.maxHeight, _faderHeight)
+            : _faderHeight;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          // A fader interaction opens a coalescing gesture on pointer-down and
+          // closes it when the interaction ends, so the engine journals one
+          // command per drag rather than one per tick. A click-to-set uses the
+          // tap recognizer (down → up); a drag uses the vertical-drag
+          // recognizer (start → end). The two are disjoint here, so each
+          // interaction fires exactly one start / end pair.
+          // (`onVerticalDragCancel` is intentionally unwired: it fires whenever
+          // the drag recognizer merely loses the arena to a tap, so it is not a
+          // reliable "gesture ended" signal — a started drag always ends via
+          // `onVerticalDragEnd`, and any stray unclosed gesture self-heals on
+          // the next `begin`.)
+          onTapDown: (d) {
+            onVolumeChangeStart?.call();
+            onVolumeChanged(_yToValue(d.localPosition.dy, faderHeight));
+          },
+          onTapUp: (_) => onVolumeChangeEnd?.call(),
+          onVerticalDragStart: (d) {
+            onVolumeChangeStart?.call();
+            onVolumeChanged(_yToValue(d.localPosition.dy, faderHeight));
+          },
+          onVerticalDragUpdate: (d) =>
+              onVolumeChanged(_yToValue(d.localPosition.dy, faderHeight)),
+          onVerticalDragEnd: (_) => onVolumeChangeEnd?.call(),
           child: SizedBox(
-            width: _faderTrackWidth + _faderThumbOverhang * 2,
-            height: _faderHeight,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                _trackBackground(),
-                _peakFill(clampedPeak),
-                _thumb(clampedVolume),
-              ],
+            key: faderHitAreaKey,
+            height: faderHeight,
+            child: Center(
+              child: SizedBox(
+                width: _faderTrackWidth + _faderThumbOverhang * 2,
+                height: faderHeight,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    _trackBackground(),
+                    _peakFill(clampedPeak, faderHeight),
+                    _thumb(clampedVolume, faderHeight),
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -274,9 +306,9 @@ class ChannelStrip extends StatelessWidget {
     );
   }
 
-  Widget _peakFill(double peak) {
+  Widget _peakFill(double peak, double faderHeight) {
     if (muted || peak <= 0) return const SizedBox.shrink();
-    final fillHeight = (_faderHeight - 2) * peak;
+    final fillHeight = math.max(0.0, faderHeight - 2) * peak;
     final greenEnd = (0.60 / peak).clamp(0.0, 1.0);
     final amberEnd = (0.85 / peak).clamp(0.0, 1.0);
     return Positioned(
@@ -305,12 +337,16 @@ class ChannelStrip extends StatelessWidget {
     );
   }
 
-  Widget _thumb(double volume) {
-    final thumbBottom = _faderHeight * volume - _faderThumbHeight / 2;
+  Widget _thumb(double volume, double faderHeight) {
+    final thumbBottom = faderHeight * volume - _faderThumbHeight / 2;
+    // A fader squeezed shorter than the thumb (a very small dock pane) has no
+    // travel: pin the thumb at the bottom rather than passing an inverted
+    // `clamp` range, which would throw.
+    final maxBottom = math.max(0.0, faderHeight - _faderThumbHeight);
     return Positioned(
       left: 0,
       right: 0,
-      bottom: thumbBottom.clamp(0.0, _faderHeight - _faderThumbHeight),
+      bottom: thumbBottom.clamp(0.0, maxBottom),
       height: _faderThumbHeight,
       child: DecoratedBox(
         decoration: BoxDecoration(
@@ -406,9 +442,10 @@ class ChannelStrip extends StatelessWidget {
     );
   }
 
-  double _yToValue(double localY) {
-    final clamped = localY.clamp(0.0, _faderHeight);
-    return 1.0 - (clamped / _faderHeight);
+  double _yToValue(double localY, double faderHeight) {
+    if (faderHeight <= 0) return volume.clamp(0.0, 1.0);
+    final clamped = localY.clamp(0.0, faderHeight);
+    return 1.0 - (clamped / faderHeight);
   }
 
   Color _glow(double peak) {
