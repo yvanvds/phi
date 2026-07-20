@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/project/store/project_manifest.dart';
+import 'package:phi/domain/shell_layout/drop_edge.dart';
+import 'package:phi/domain/shell_layout/shell_layout.dart';
 
 void main() {
   group('ProjectManifest', () {
@@ -14,6 +16,31 @@ void main() {
       final restored = ProjectManifest.fromJson(manifest.toJson());
       expect(restored, manifest);
       expect(restored.formatVersion, ProjectManifest.currentFormatVersion);
+    });
+
+    test('the workspace layout survives the JSON round-trip', () {
+      // A two-pane arrangement — Mix beside MIDI — distinct from the seed.
+      final arranged = ShellLayout.seed().split('p1', 'midi', DropEdge.right);
+      final manifest = ProjectManifest(name: 'set', layout: arranged);
+
+      final restored = ProjectManifest.fromJson(manifest.toJson());
+
+      expect(restored.layout, arranged);
+      expect(restored.layout.paneCount, 2);
+      expect(restored.layout.placedSurfaces, {'mix', 'midi'});
+    });
+
+    test('layout defaults to the single-pane Mix seed', () {
+      const manifest = ProjectManifest(name: 'fresh');
+      expect(manifest.layout, ShellLayout.defaultSeed);
+      expect(manifest.layout.paneCount, 1);
+      expect(manifest.layout.placedSurfaces, {'mix'});
+    });
+
+    test('an older, layout-less map falls back to the seed layout', () {
+      // No `layout` key — a project saved before issue #253.
+      final manifest = ProjectManifest.fromJson(const {'name': 'legacy'});
+      expect(manifest.layout, ShellLayout.defaultSeed);
     });
 
     test('master volume/mute survive the JSON round-trip', () {
@@ -80,6 +107,14 @@ void main() {
             ),
         isFalse,
       );
+    });
+
+    test('value equality distinguishes the layout', () {
+      final arranged = ShellLayout.seed().split('p1', 'midi', DropEdge.right);
+      final base = ProjectManifest(name: 'a', layout: arranged);
+      expect(base == ProjectManifest(name: 'a', layout: arranged), isTrue);
+      // Same everything but the (default, single-pane) layout.
+      expect(base == const ProjectManifest(name: 'a'), isFalse);
     });
   });
 }

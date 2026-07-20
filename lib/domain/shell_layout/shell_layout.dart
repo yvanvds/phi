@@ -30,10 +30,18 @@ class ShellLayout {
 
   /// The seed layout: a single pane holding [mixSurfaceId] (design §3 — "a fresh
   /// project seeds the current single-pane layout with Mix open"). The id is a
-  /// `SurfaceId.name` string on the shell side; it defaults to `mix`.
-  factory ShellLayout.seed([String mixSurfaceId = 'mix']) => ShellLayout(
-    root: LayoutPane(id: 'p1', tabs: [mixSurfaceId], active: mixSurfaceId),
-  );
+  /// `SurfaceId.name` string on the shell side; it defaults to `mix`, for which
+  /// this returns the const [defaultSeed].
+  factory ShellLayout.seed([String mixSurfaceId = 'mix']) =>
+      mixSurfaceId == 'mix'
+      ? defaultSeed
+      : ShellLayout(
+          root: LayoutPane(
+            id: 'p1',
+            tabs: [mixSurfaceId],
+            active: mixSurfaceId,
+          ),
+        );
 
   /// Reads a layout from the decoded manifest section, then repairs it so the
   /// invariants always hold: duplicate surfaces and empty panes drop, lone-child
@@ -48,6 +56,14 @@ class ShellLayout {
     final version = (json['version'] as num?)?.toInt() ?? currentVersion;
     return ShellLayout(root: root, version: version)._sanitised();
   }
+
+  /// The const default single-pane layout — one pane, Mix open. It is the
+  /// [ProjectManifest]'s default layout section, so a fresh (or older,
+  /// layout-less) project boots single-pane Mix (design §3). The const twin of
+  /// `ShellLayout.seed()`.
+  static const ShellLayout defaultSeed = ShellLayout(
+    root: LayoutPane(id: 'p1', tabs: ['mix'], active: 'mix'),
+  );
 
   /// The current layout-section schema version. Bump when the shape changes in a
   /// way that needs a load-time migration.

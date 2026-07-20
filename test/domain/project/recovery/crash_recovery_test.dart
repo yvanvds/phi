@@ -8,6 +8,8 @@ import 'package:phi/domain/project/recovery/crash_recovery.dart';
 import 'package:phi/domain/project/recovery/recovery_offer.dart';
 import 'package:phi/domain/project/store/project_manifest.dart';
 import 'package:phi/domain/project/store/project_snapshot.dart';
+import 'package:phi/domain/shell_layout/drop_edge.dart';
+import 'package:phi/domain/shell_layout/shell_layout.dart';
 
 import '../test_doubles/fake_journal_store.dart';
 import '../test_doubles/fake_project_store.dart';
@@ -103,6 +105,29 @@ void main() {
     expect(snapshot.registry.entityAt(addr('clip.a')), isNotNull);
     expect(snapshot.registry.entityAt(addr('clip.b')), isNull);
     expect(await journal.isRecovering(), isFalse);
+  });
+
+  test('journal replay leaves the manifest layout untouched', () async {
+    // The last clean save carries a two-pane arrangement in its manifest …
+    final arranged = ShellLayout.seed().split('p1', 'midi', DropEdge.right);
+    final saved = ProjectRegistry()..createEntity(addr('clip.a'));
+    await store.save(
+      ProjectSnapshot(
+        manifest: ProjectManifest(name: 'set', layout: arranged),
+        registry: saved,
+      ),
+    );
+    // … while the journal holds only entity edits (layout is journal-free).
+    await journal.record(CreateEntityCommand(saved, addr('clip.b')));
+
+    final snapshot = await recovery.recover(RecoveryChoice.replayAll);
+
+    // Replay rebuilt the journaled entity …
+    expect(snapshot.registry.entityAt(addr('clip.b')), isNotNull);
+    // … but the layout is exactly the last clean save's — replay never touches
+    // it (design §3: recovery replay ignores the workspace arrangement).
+    expect(snapshot.manifest.layout, arranged);
+    expect(snapshot.manifest.layout.paneCount, 2);
   });
 
   test('resolve truncates the journal and clears the sentinel', () async {

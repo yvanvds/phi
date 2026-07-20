@@ -84,7 +84,16 @@ main + app          (orchestration)
   re-parenting verified by hand). Behaviour-neutral default: one pane, Mix open —
   the app looks identical until the performer splits (drag-to-dock UI + tab
   strips are #252). `Workstation`/`PhiApp` accept an injected controller so a
-  dock move is driveable end-to-end.
+  dock move is driveable end-to-end. Issue #253 persists the arrangement in the
+  **project manifest** (`ProjectManifest.layout`, journal-free): the
+  `ProjectController` owns the `ShellLayout` as manifest state — the shell's live
+  controller pushes edits in through `ProjectController.updateLayout` (dirties
+  the manifest so save/autosave picks it up, but never journals and is not
+  undoable), and on New/Open the controller bumps a `layoutRestored` signal the
+  shell listens to, adopting the restored layout into its live controller with
+  `ShellLayout.fit` (clamps splitter fractions, drops unknown surfaces). Recovery
+  replay never touches it — layout is workspace arrangement, not authored
+  content, so the manifest's last save wins (design §3, §7 decision 1).
 - Settings dialog (`lib/shell/settings/`, design `settings-and-devices.md`
   §6, issues #154 + #151): a modal overlay (no rail button, no OS window) opened
   from the File menu's `Settings…` item, with a left section list (AUDIO · MIDI ·
@@ -519,7 +528,8 @@ main + app          (orchestration)
   not preclude the deferred textual refactor of `code.` sources (live-coding
   epic). Issue #121 adds the persistence seam (design §5, §8) in
   `lib/domain/project/store/`: a project is a `.phi` folder whose `project.json`
-  is a `ProjectManifest` (format version + name + tempo + scene name) and whose
+  is a `ProjectManifest` (format version + name + tempo + scene name + master
+  volume/mute + the journal-free workspace `layout`, issues #166/#253) and whose
   every entity is one pretty-printed JSON file (`kind` · `version` · `name` ·
   `references` · `payload`) at a path that mirrors its address — folders are
   groups, with an optional `_group.json` per group (display order + cosmetic

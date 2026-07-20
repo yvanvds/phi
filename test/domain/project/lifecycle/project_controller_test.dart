@@ -8,6 +8,8 @@ import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/project/lifecycle/project_controller.dart';
 import 'package:phi/domain/project/recovery/recovery_offer.dart';
 import 'package:phi/domain/session/session_state.dart';
+import 'package:phi/domain/shell_layout/drop_edge.dart';
+import 'package:phi/domain/shell_layout/shell_layout.dart';
 
 import '../test_doubles/fake_app_settings_store.dart';
 import '../test_doubles/fake_journal_store.dart';
@@ -218,6 +220,77 @@ void main() {
     test('opening a non-project folder throws', () {
       final h = harness();
       expect(h.controller.open(dir), throwsA(isA<FormatException>()));
+    });
+  });
+
+  group('ProjectController — layout persistence (journal-free)', () {
+    // A two-pane arrangement — Mix beside MIDI — distinct from the seed.
+    ShellLayout arranged() =>
+        ShellLayout.seed().split('p1', 'midi', DropEdge.right);
+
+    test('updateLayout dirties the manifest but never journals', () async {
+      final h = harness();
+      await h.controller.saveAs(dir); // bound; journal empty, clean
+      expect(h.controller.isDirty.value, isFalse);
+
+      h.controller.updateLayout(arranged());
+
+      expect(h.controller.isDirty.value, isTrue); // manifest is dirty …
+      expect(h.controller.layout.paneCount, 2);
+      expect(h.journal.appendCount, 0); // … but nothing was journaled
+      expect(h.journal.lines, isEmpty);
+    });
+
+    test('an unchanged layout is a no-op (no spurious dirty)', () async {
+      final h = harness();
+      await h.controller.saveAs(dir);
+      h.controller.updateLayout(ShellLayout.seed()); // same as the seed
+      expect(h.controller.isDirty.value, isFalse);
+    });
+
+    test('save persists the layout; a reload restores it', () async {
+      final h = harness();
+      await h.controller.saveAs(dir);
+      h.controller.updateLayout(arranged());
+
+      await h.controller.save();
+      expect(h.controller.isDirty.value, isFalse);
+
+      final reloaded = await h.store.load();
+      expect(reloaded.manifest.layout, arranged());
+      expect(reloaded.manifest.layout.placedSurfaces, {'mix', 'midi'});
+    });
+
+    test('open restores the layout and fires the restore signal '
+        'without dirtying', () async {
+      final h = harness();
+      await h.controller.saveAs(dir);
+      h.controller.updateLayout(arranged());
+      await h.controller.save();
+
+      // Diverge the live layout from disk (an unsaved local rearrange).
+      h.controller.updateLayout(ShellLayout.seed());
+      expect(h.controller.isDirty.value, isTrue);
+
+      var restoreSignals = 0;
+      h.controller.layoutRestored.addListener(() => restoreSignals++);
+
+      await h.controller.open(dir);
+
+      expect(h.controller.layout, arranged()); // reverted to the saved layout
+      expect(restoreSignals, 1); // the shell was told to adopt it
+      expect(h.controller.isDirty.value, isFalse); // a clean load stays clean
+    });
+
+    test('newProject resets the layout to the single-pane seed', () async {
+      final h = harness();
+      h.controller.updateLayout(arranged());
+      expect(h.controller.layout.paneCount, 2);
+
+      h.controller.newProject();
+
+      expect(h.controller.layout, ShellLayout.defaultSeed);
+      expect(h.controller.isDirty.value, isFalse);
     });
   });
 
