@@ -76,10 +76,12 @@ void main() {
     expect(find.text('EFFECTS'), findsOneWidget);
     expect(find.byKey(DefinitionsPanel.rowKey(synthSine)), findsOneWidget);
 
-    // Right pane: the seeded voice renders (sine → master).
+    // Right pane: the seeded voice renders as an editable card binding
+    // sine → master through its synth + bus pickers (issue #211).
     expect(find.text('VOICES'), findsOneWidget);
     expect(find.byKey(VoicesPane.rowKey(voiceDefault)), findsOneWidget);
-    expect(find.textContaining('sine → master'), findsOneWidget);
+    expect(find.byKey(VoicesPane.synthKey(voiceDefault)), findsOneWidget);
+    expect(find.byKey(VoicesPane.busKey(voiceDefault)), findsOneWidget);
 
     // Center pane starts empty until a definition is selected.
     expect(find.byKey(DefinitionEditorPane.emptyKey), findsOneWidget);

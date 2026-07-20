@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import '../../domain/midi/clip_editor.dart';
 import '../../domain/midi/custom_transform_registry.dart';
 import '../../domain/midi/midi_clip_seed.dart';
+import '../../domain/midi/midi_note.dart';
 import '../../domain/midi/midi_transform_chain.dart';
 import '../../domain/midi/smf/smf_exception.dart';
 import '../../domain/runtime/runtime_variable_registry.dart';
@@ -78,6 +79,18 @@ class MidiSurface extends Surface {
   /// guards and its variables bar (issue #78). `null` falls back to the
   /// engine's, so the shell need not thread it explicitly.
   final RuntimeVariableRegistry? _runtimeVariables;
+
+  /// Preview a clicked / stepped note through its **routed voice** (design §7,
+  /// issue #211): a momentary audition on the engine's audition path, so editing
+  /// a note in the roll is heard through the voice it routes to. A no-op without
+  /// a MIDI subsystem (bare tests).
+  void _auditionNote(MidiNote note) {
+    _engine.midiOrNull?.auditionPreview(
+      note.voice,
+      note.pitch.round(),
+      velocity: (note.velocity * 127).round().clamp(1, 127),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -160,6 +173,7 @@ class MidiSurface extends Surface {
     stateGraph: _stateGraph ?? _engine.stateMachineOrNull?.graph,
     runtimeVariables: _runtimeVariables ?? _engine.runtimeVariablesOrNull,
     transport: transport,
+    onAuditionNote: _auditionNote,
     clipName: clipName ?? phraseASlug,
   );
 }

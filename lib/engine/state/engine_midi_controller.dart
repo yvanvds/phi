@@ -20,6 +20,7 @@ import '../../domain/time_domains/tempo_source_stack.dart';
 import '../../domain/voice/voice_channel_resolver.dart';
 import '../bridge/materialised_synth.dart';
 import '../bridge/midi_gateway.dart';
+import '../bridge/midi_input_event.dart';
 import '../bridge/scene_agent_sink.dart';
 import 'clip_session.dart';
 import 'clip_session_host.dart';
@@ -592,6 +593,71 @@ class EngineMidiController implements ClipSessionHost {
   /// been created, so a stale warning doesn't linger.
   void clearVoiceIssues() => _unresolvedVoices.clear();
 
+  // ─── audition (design §7) ────────────────────────────────────────────────
+
+  /// Parsed MIDI **input** note events off the gateway (design §7) — the stream
+  /// the racks voices pane arms a voice against. A passthrough of the gateway
+  /// stream so callers depend on the controller, not the bridge directly.
+  Stream<MidiInputEvent> get inputEvents => _gateway.inputEvents;
+
+  /// The preview note-off timers still pending, so [dispose] cancels them and a
+  /// momentary audition never fires after teardown.
+  final List<Timer> _previewTimers = [];
+
+  /// Immediately start [note] on [voice] (design §7) — the **audition** path for
+  /// arm-for-input and the on-screen test strip. An internal voice plays its
+  /// materialised synth directly; an external voice sends straight to the open
+  /// MIDI output on the voice's channel. A no-op for a voice with no live synth
+  /// (unmaterialised, past the channel ceiling) and no external channel — it
+  /// simply sounds nothing. [voice] `null` is the seeded default; [velocity] is
+  /// `0..127`.
+  void auditionNoteOn(String? voice, int note, {int velocity = 100}) {
+    final synth = synthForVoice(voice);
+    if (synth != null) {
+      synth.noteOn(note, velocity: (velocity / 127).clamp(0.0, 1.0));
+      return;
+    }
+    if (isExternalVoice(voice)) {
+      final channel = channelForVoice(voice);
+      if (channel != null) {
+        _gateway.sendNoteOn(channel: channel, note: note, velocity: velocity);
+      }
+    }
+  }
+
+  /// Immediately release [note] on [voice] — the note-off half of
+  /// [auditionNoteOn].
+  void auditionNoteOff(String? voice, int note) {
+    final synth = synthForVoice(voice);
+    if (synth != null) {
+      synth.noteOff(note);
+      return;
+    }
+    if (isExternalVoice(voice)) {
+      final channel = channelForVoice(voice);
+      if (channel != null) _gateway.sendNoteOff(channel: channel, note: note);
+    }
+  }
+
+  /// Sound a **momentary** preview of [note] on [voice] — the roll / step-entry
+  /// audition (design §7): a note-on now, and a note-off after [hold]. Used when
+  /// the performer clicks a note or steps one in with the caret, so the note is
+  /// heard through its routed voice without leaving a hung voice.
+  void auditionPreview(
+    String? voice,
+    int note, {
+    int velocity = 100,
+    Duration hold = const Duration(milliseconds: 350),
+  }) {
+    auditionNoteOn(voice, note, velocity: velocity);
+    late final Timer timer;
+    timer = Timer(hold, () {
+      _previewTimers.remove(timer);
+      auditionNoteOff(voice, note);
+    });
+    _previewTimers.add(timer);
+  }
+
   /// Scatter the live agents — a one-shot performer action that disperses the
   /// spawned set with a seeded, bounded random impulse and pushes the kicked set
   /// to the sink. A no-op when no agents are alive (or no Scene sink is wired).
@@ -737,6 +803,10 @@ class EngineMidiController implements ClipSessionHost {
   void dispose() {
     _timer?.cancel();
     _timer = null;
+    for (final timer in _previewTimers) {
+      timer.cancel();
+    }
+    _previewTimers.clear();
     final wasPlaying = _anyPlaying;
     for (final session in _sessions.values) {
       session.dispose();

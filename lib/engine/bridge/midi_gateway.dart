@@ -84,6 +84,21 @@ abstract interface class MidiGateway {
     required double tempo,
   });
 
+  /// Immediately send a note-on to the open output port on [channel] — the
+  /// **external-voice** audition path (design §7): arming an external voice, its
+  /// test strip, and the roll preview send straight to the hardware instead of an
+  /// internal synth. [channel] is `0..15` (the wire channel), [note] a MIDI note
+  /// number `0..127`, [velocity] `0..127`. A no-op when no output port is open.
+  void sendNoteOn({
+    required int channel,
+    required int note,
+    required int velocity,
+  });
+
+  /// Immediately send a note-off to the open output port — the note-off half of
+  /// the external-voice audition path. A no-op when no output port is open.
+  void sendNoteOff({required int channel, required int note});
+
   /// Silence every sounding note. Pass a [channel] to scope it, or `null`
   /// for all channels. Used on transport stop so a clip that stopped
   /// mid-note doesn't leave a hung voice.

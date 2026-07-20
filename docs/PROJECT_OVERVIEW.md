@@ -1166,10 +1166,15 @@ main + app          (orchestration)
     to the live project location) imports a picked `.syx` / `.sfz` / sample into
     the project's `assets/` folder and hands back the project-relative ref — both
     fakeable, both wired from the shell.
-  - **Right — `VoicesPane`**: one read-only `RackVoiceRow` per `voice.` (name,
-    the synth/channel it plays → the bus it routes to, colour swatch); a scaffold
-    here — create/bind/colour/kind editing, arm-for-input, and the audition test
-    strip land in #211.
+  - **Right — `VoicesPane`**: one **editable** card per `voice.` (issue #211) —
+    colour swatch + name + **arm** toggle, an internal / external **kind** toggle,
+    the **synth** picker (internal) or **channel** picker (external), the **bus**
+    picker (`mix.master` + user buses), and six **colour** quick-picks; a header `+`
+    adds a voice, a row `⋯` menu renames (= refactor) / deletes (with impact). Every
+    edit threads through `RackDefinitionsController.updateVoice` / `newVoice` (a
+    journaled payload command; a re-point also refreshes the back-reference index).
+    Below the cards a one-octave **test strip** auditions the armed voice from the
+    mouse. See the voices-pane / audition entry below.
   The definitions controller / view-models are unit-tested (`rack_definitions_controller_test`
   — trees, per-kind create, duplicate, rename-refactor, delete-impact, regroup,
   reorder, voices, rebind, **synth/fx decode + `updateSynth`/`updateFx` journaling**),
@@ -1182,6 +1187,37 @@ main + app          (orchestration)
   `racks_editors` integration tests drive the real shell (open Racks → select the
   seeded `synth.sine` → edit its voice count → add a VA synth → a real detune-slider
   drag mutates the payload and dirties the project).
+- **Voices pane: bind / colour / kind, arm-for-input, test strip, roll audition**
+  (issue #211, epic #203, design `docs/design/racks-and-voices.md` §7, §8) — the
+  last user-visible racks slice, turning #209's read-only voices scaffold into a
+  full editor plus the audition path. **Editing** grows `RackDefinitionsController`
+  with `voiceAt` / `updateVoice` (journaled `UpdateEntityPayloadCommand`; because a
+  voice payload is a JSON map, not a `ReferenceSource`, a re-point also
+  `setReferences` so delete-impact + rename-refactor track the new synth/bus) /
+  `newVoice` / `synthDefinitions` / `mixBuses`; `VoicesPane` renders each voice as
+  an editable card (kind toggle, synth ↔ channel picker, bus picker, six colour
+  quick-picks, arm toggle, `⋯` rename/delete) with a one-octave test strip.
+  **Audition** (design §7) is an *immediate* path, bypassing the transport: the
+  engine bridge grows `MaterialisedSynth.noteOn`/`noteOff` (internal voices → the
+  `Synth` on its channel) and `MidiGateway.sendNoteOn`/`sendNoteOff` (external voices
+  → the open MIDI-out), and `EngineMidiController` exposes `auditionNoteOn`/`Off`
+  (internal vs external dispatch), `auditionPreview` (a note-on + timed note-off for
+  the roll), and an `inputEvents` passthrough. A shell-owned
+  `VoiceAuditionController` (`lib/engine/state/`, a `ChangeNotifier`, built only with
+  a MIDI subsystem) holds the **single armed voice** (arming another disarms + releases
+  the first), subscribes to the parsed MIDI-in stream and plays the armed voice on
+  every incoming note (channel ignored — arm overrides routing), and backs the test
+  strip's press/release. **Roll audition** (design §7, closing #191's caret-sound
+  deferral): `PianoRollEditor` gains an `onAuditionNote` callback fired when a note is
+  clicked (selected or added) or stepped in with the caret; `MidiSurface` wires it to
+  `EngineMidiController.auditionPreview(note.voice, …)` so a clicked note previews
+  through its **routed voice**. Unit-tested (`rack_definitions_controller_test` voice
+  editing; `voice_audition_controller_test` single-arm + MIDI-in + strip + release;
+  `engine_midi_controller_audition_test` internal/external/preview), widget-tested
+  (`voices_pane_test` row editing, kind switch, single-arm, strip; `piano_roll_audition_test`
+  the three preview triggers), and an end-to-end `voices_pane` integration test (arm →
+  test strip sounds the materialised synth; kind switch to external; a roll click
+  previews through the routed voice).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

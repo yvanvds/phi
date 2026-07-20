@@ -63,6 +63,16 @@ class FakeMaterialisedSynth implements MaterialisedSynth {
   /// Ordered lifecycle log — see the class doc for the vocabulary.
   final List<String> calls = [];
 
+  /// Ordered log of immediate audition notes (design §7): `on:<note>@<vel>` per
+  /// [noteOn] (velocity rounded to two places) and `off:<note>` per [noteOff].
+  /// Lets a test assert the arm / test-strip / roll-preview path reached the
+  /// right synth without inspecting the whole [calls] log.
+  final List<String> noteLog = [];
+
+  /// The MIDI note numbers currently held (a [noteOn] not yet matched by a
+  /// [noteOff]) — so a test can assert a released / still-sounding audition.
+  final Set<int> heldNotes = {};
+
   @override
   SynthKind get kind => _definition.kind;
 
@@ -98,6 +108,18 @@ class FakeMaterialisedSynth implements MaterialisedSynth {
     _hasSound = true;
     bindCount++;
     calls.add('bind:$busChannelId');
+  }
+
+  @override
+  void noteOn(int note, {double velocity = 0.8}) {
+    noteLog.add('on:$note@${velocity.toStringAsFixed(2)}');
+    heldNotes.add(note);
+  }
+
+  @override
+  void noteOff(int note) {
+    noteLog.add('off:$note');
+    heldNotes.remove(note);
   }
 
   @override

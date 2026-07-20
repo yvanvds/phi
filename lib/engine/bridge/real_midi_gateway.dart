@@ -151,6 +151,17 @@ class RealMidiGateway implements MidiGateway {
   }
 
   @override
+  void sendNoteOn({
+    required int channel,
+    required int note,
+    required int velocity,
+  }) => _out?.noteOn(channel: channel, pitch: note, velocity: velocity);
+
+  @override
+  void sendNoteOff({required int channel, required int note}) =>
+      _out?.noteOff(channel: channel, pitch: note);
+
+  @override
   void allNotesOff({int? channel}) => _out?.allNotesOff(channel: channel);
 
   @override
