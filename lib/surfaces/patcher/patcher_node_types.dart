@@ -3,8 +3,12 @@ import 'package:yse/yse.dart';
 
 import '../../domain/patcher/patch_port_kind.dart';
 import '../../engine/state/node_type_registry.dart';
+import 'nodes/button_node_body.dart';
+import 'nodes/message_node_body.dart';
+import 'nodes/number_node_body.dart';
 import 'nodes/sine_node_body.dart';
 import 'nodes/slider_node_body.dart';
+import 'nodes/toggle_node_body.dart';
 
 /// Register the node types this PR supports. Idempotent — re-registering
 /// the same type overwrites the previous descriptor, so calling this
@@ -34,7 +38,8 @@ void registerBuiltInPatcherNodes() {
     NodeDescriptor(
       type: Obj.gSlider,
       title: 'slider',
-      defaultSize: const Size(80, 170),
+      // Tall enough to seat the fader plus its `guiValue` readout (issue #223).
+      defaultSize: const Size(90, 190),
       // gSlider registers no `ADD_PARAM` in its C++ constructor, so the
       // YSE parameter parser dereferences an empty vector if we pass any
       // args here — segfault. Leave empty.
@@ -58,6 +63,75 @@ void registerBuiltInPatcherNodes() {
       ],
       outputs: const [],
       buildBody: (ctx, node, controller) => const SizedBox.shrink(),
+    ),
+  );
+
+  // ─── live GUI bodies (issue #223) ──────────────────────────────────────
+  // Interactive control objects operable directly on the canvas. Each writes
+  // through the gateway (`sendFloat` / `sendBang`) and displays via `guiValue`.
+
+  registry.register(
+    NodeDescriptor(
+      type: Obj.gToggle,
+      title: 'toggle',
+      defaultSize: const Size(90, 80),
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [PortSpec(kind: PatchPortKind.control)],
+      buildBody: (ctx, node, controller) =>
+          ToggleNodeBody(node: node, controller: controller),
+    ),
+  );
+
+  registry.register(
+    NodeDescriptor(
+      type: Obj.gButton,
+      title: 'button',
+      defaultSize: const Size(90, 90),
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [PortSpec(kind: PatchPortKind.control)],
+      buildBody: (ctx, node, controller) =>
+          ButtonNodeBody(node: node, controller: controller),
+    ),
+  );
+
+  registry.register(
+    NodeDescriptor(
+      type: Obj.gFloat,
+      title: 'number · f',
+      defaultSize: const Size(110, 70),
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [PortSpec(kind: PatchPortKind.control)],
+      buildBody: (ctx, node, controller) =>
+          NumberNodeBody(node: node, controller: controller),
+    ),
+  );
+
+  registry.register(
+    NodeDescriptor(
+      type: Obj.gInt,
+      title: 'number · i',
+      defaultSize: const Size(110, 70),
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [PortSpec(kind: PatchPortKind.control)],
+      buildBody: (ctx, node, controller) =>
+          NumberNodeBody(node: node, controller: controller, integer: true),
+    ),
+  );
+
+  registry.register(
+    NodeDescriptor(
+      type: Obj.gMessage,
+      title: 'message',
+      defaultSize: const Size(120, 66),
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [PortSpec(kind: PatchPortKind.control)],
+      buildBody: (ctx, node, controller) =>
+          MessageNodeBody(node: node, controller: controller),
     ),
   );
 }

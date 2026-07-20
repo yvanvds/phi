@@ -81,6 +81,19 @@ abstract interface class PatcherGateway {
   /// message) to fire their trigger into the graph.
   void sendBang(int instanceId, int handleId, int inlet);
 
+  /// The object's live GUI display value (yse's `guiValue`) — what a control
+  /// body renders (a slider's position, a number's value, a toggle's on/off).
+  /// The empty string for an object that has no display value or an unknown
+  /// handle.
+  String guiValue(int instanceId, int handleId);
+
+  // ─── creation parameters (the metadata-driven params dialog) ─────────
+
+  /// Reconfigure [handleId] with a new whitespace-joined creation-argument
+  /// string (yse's `setParams`) — the params dialog applies documented
+  /// creation parameters this way (design `docs/design/patcher.md` §7).
+  void setParams(int instanceId, int handleId, String args);
+
   // ─── control I/O (the live-code seam) ────────────────────────────────
 
   /// Send a bang to the named `.r` receiver in [instanceId]. Returns

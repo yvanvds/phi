@@ -1422,6 +1422,33 @@ main + app          (orchestration)
   (body drag, compatible/incompatible cable drops, cable delete, marquee + shift-click,
   delete-with-cables, duplicate — each with undo/redo), and an end-to-end
   `patcher_canvas` integration test (drag · delete-with-cables · duplicate, all undo).
+- **Patcher node internals** (issue #223, patcher epic, design
+  `docs/design/patcher.md` §7, §10 decision 3) — **live GUI bodies** + a
+  **metadata params dialog**. The gateway grows two calls consumed FFI-free by the
+  surface: `guiValue` (yse's live display value) and `setParams` (reconfigure an
+  object's creation args); the controller wraps them as `guiValueOf` / `argsOf` /
+  `setNodeParams` plus the undoable `applyParams`. Five control objects are now
+  **operable directly on the canvas** (bodies under `lib/surfaces/patcher/nodes/`,
+  registered in `patcher_node_types.dart`): the generalised `.slider` (a `PhiFader`,
+  its readout the object's `guiValue`), `.t` toggle (`PhiToggle` → `sendFloat` 1/0),
+  `.b` button (a bang → `sendBang`), `.i`/`.f` number (an editable readout that pushes
+  `sendFloat` then re-reads `guiValue`, so it shows the authoritative engine value —
+  a cable into its inlet would set the same), and `.m` message (its args, fired as a
+  bang on tap). Non-GUI nodes get a **double-click params dialog**
+  (`params/patch_params_dialog.dart`) — one field per documented `PatchParamDescriptor`
+  (name · doc · default · range), seeded from the node's current args, joined back into
+  a positional arg string and applied through `setParams` as a single
+  `SetPatchParamsCommand` on the surface `undoScope` (so the whole edit round-trips
+  under one Ctrl+Z) — the same metadata-driven-editor pattern as the MIDI transform
+  editors. Double-click is detected from raw pointer timing in the canvas (a nested
+  `GestureDetector.onDoubleTap` would delay the node's single-tap select), gated to
+  non-GUI types (GUI objects are operated live). Covered by unit tests (controller
+  `guiValueOf` / `setControlBang` / `applyParams` undo/redo + unknown-handle
+  tolerance), widget tests (each body's interaction reaching the fake gateway,
+  the number body's `guiValue` display refresh, the dialog round-tripping a fake
+  type's params with undo), and an end-to-end `patcher_node_gui` integration test
+  (operate the seeded slider → `sendFloat`; double-click `~sine` → edit frequency →
+  `setParams` into the live patch).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

@@ -150,7 +150,13 @@ class FakePatcherGateway implements PatcherGateway {
   @override
   void sendFloat(int instanceId, int handleId, int inlet, double value) {
     calls.add('sendFloat:$handleId:$inlet:${value.toStringAsFixed(3)}');
-    _inst(instanceId).nodes[handleId]?.lastValueByInlet[inlet] = value;
+    final node = _inst(instanceId).nodes[handleId];
+    if (node == null) return;
+    node.lastValueByInlet[inlet] = value;
+    // A control object's "hot" inlet (0) drives its display value — a slider,
+    // number or toggle reflects the last value set into it, exactly what the
+    // native side reports back through `guiValue`.
+    if (inlet == 0) node.guiValue = _formatGui(value);
   }
 
   @override
@@ -158,6 +164,21 @@ class FakePatcherGateway implements PatcherGateway {
     calls.add('sendBang:$handleId:$inlet');
     _inst(instanceId).nodes[handleId]?.bangedInlets.add(inlet);
   }
+
+  @override
+  String guiValue(int instanceId, int handleId) =>
+      _inst(instanceId).nodes[handleId]?.guiValue ?? '';
+
+  @override
+  void setParams(int instanceId, int handleId, String args) {
+    calls.add('setParams:$handleId:$args');
+    _inst(instanceId).nodes[handleId]?.args = args;
+  }
+
+  /// A whole value renders without a trailing `.0` (`3` not `3.0`), matching
+  /// how the engine formats an integer-valued display.
+  static String _formatGui(double v) =>
+      v == v.roundToDouble() ? '${v.toInt()}' : '$v';
 
   @override
   bool passBang(int instanceId, String to) {
@@ -344,7 +365,15 @@ class FakeInstance {
 class FakeNode {
   FakeNode({required this.type, required this.args});
   final String type;
-  final String args;
+
+  /// Creation-argument string — mutable so [FakePatcherGateway.setParams] can
+  /// reconfigure the object, mirroring yse's `setParams`.
+  String args;
+
+  /// Live GUI display value (yse's `guiValue`). Updated by a `sendFloat` into
+  /// inlet 0; a test can also set it directly to simulate a cable-driven change.
+  String guiValue = '';
+
   Offset? position;
   final Map<int, double> lastValueByInlet = {};
   final List<int> bangedInlets = [];
