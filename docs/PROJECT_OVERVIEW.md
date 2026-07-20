@@ -94,6 +94,30 @@ main + app          (orchestration)
   `ShellLayout.fit` (clamps splitter fractions, drops unknown surfaces). Recovery
   replay never touches it — layout is workspace arrangement, not authored
   content, so the manifest's last save wins (design §3, §7 decision 1).
+  Issue #254 adds the **command registry + palette overlay** (`lib/shell/commands/`,
+  design §4). A `PhiCommand` value type (id · title · category · optional
+  `CommandShortcut` · enabled-predicate · `invoke`) is registered into a
+  `CommandRegistry` (ChangeNotifier) the workstation seeds with the shell commands
+  — surface summon (one per rail identity), transport play/stop (enabled-gated on
+  the transport state), projection toggle, and, when the project stack is wired,
+  project ops + settings — each `invoke` reusing the *exact* callback the
+  rail/toolbar/menu already runs, so the palette is a launcher, never a second
+  implementation. `CommandRegistry.invoke` routes execution and records recents;
+  `shortcutBindings()` exposes the default map as `{ShortcutActivator:
+  VoidCallback}` for issue #255 to fold the app's bindings in. A pure `CommandSearch`
+  (`command_search.dart`, no Flutter) ranks a query: empty → every enabled command
+  recents-first then registration order; non-empty → a subsequence fuzzy match over
+  title (then, weaker, category) rewarding contiguous runs + word-starts, best score
+  first, ties toward the more recently used. `CommandPalette` is the Ctrl+Shift+P /
+  F1 overlay (`showDialog`, top-anchored) — an autofocused field whose focus-node
+  `onKeyEvent` intercepts arrows/enter/escape ahead of the text editing shortcuts,
+  disabled commands hidden, matched glyphs highlighted, the shortcut chord shown per
+  row. `Workstation`/`PhiApp` accept an injected registry; the shell owns one
+  otherwise. Covered by unit tests (registry, pure search, shortcut label/activator),
+  a `CommandPalette` widget test (open · filter · disabled hidden · keyboard nav ·
+  Enter/tap invoke · recents float · shortcut render), and an end-to-end
+  `command_palette` integration test (Ctrl+Shift+P → filter → Enter summons MIDI;
+  play then reopen shows the now-enabled Stop; F1 opens).
 - Settings dialog (`lib/shell/settings/`, design `settings-and-devices.md`
   §6, issues #154 + #151): a modal overlay (no rail button, no OS window) opened
   from the File menu's `Settings…` item, with a left section list (AUDIO · MIDI ·
