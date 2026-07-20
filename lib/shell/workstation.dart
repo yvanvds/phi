@@ -344,6 +344,10 @@ class _WorkstationState extends State<Workstation> {
     // Open swaps the registry instance (the controller notifies on that).
     _bindEngineRegistry();
     controller.addListener(_bindEngineRegistry);
+    // The engine flushes each open patcher's live dump into its `patch.` entity
+    // just before every save / autosave (issue #220), so a save captures the live
+    // patch, not the last-loaded one. Harmless without a patcher gateway.
+    controller.onBeforeSave = widget.engine.flushPatchPayloads;
     // The manifest owns the persisted layout (issue #253); adopt it into the
     // live layout controller whenever a New / Open restores one (design §3).
     controller.layoutRestored.addListener(_onLayoutRestored);

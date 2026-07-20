@@ -56,6 +56,8 @@ import 'state/engine_midi_controller.dart';
 import 'state/engine_telemetry.dart';
 import 'state/mix_tree_node.dart';
 import 'state/mixer_channel.dart';
+import 'state/patch_placement_notice.dart';
+import 'state/patch_reconciler.dart';
 import 'state/patcher_controller.dart';
 import 'state/rack_materialiser.dart';
 import 'state/state_machine_controller.dart';
@@ -162,6 +164,49 @@ class PhiEngine {
   /// patcher subsystem failed to initialise.
   PatcherController? get patcherOrNull => _patcher;
 
+  /// The per-entity patch reconciler — the source of truth for which `patch.`
+  /// entities are open, their placement, and their running state (issue #220).
+  /// Created on [start] when a patcher gateway was injected; throws before that or
+  /// when none was wired. Use [patchesOrNull] for the nullable variant.
+  PatchReconciler get patches {
+    final p = _patchReconciler;
+    if (p == null) {
+      throw StateError(
+        'PhiEngine.patches used before start() or without a patcher gateway',
+      );
+    }
+    return p;
+  }
+
+  /// Nullable variant of [patches] — `null` before [start] *or* when no patcher
+  /// gateway was injected.
+  PatchReconciler? get patchesOrNull => _patchReconciler;
+
+  /// The last patch source-placement degradation, or `null`. A placement naming a
+  /// bus no longer in the mix leaves the patch unplaced and raises one of these
+  /// (design §4, §8); the shell surfaces it like an [lastAudioNotice].
+  ValueListenable<PatchPlacementNotice?> get lastPatchNotice =>
+      _lastPatchNotice;
+
+  /// Start the `patch.` entity at [address] as a source — mount it as a `Sound`
+  /// on its placement bus and begin sounding (design §4 role 1; issue #220).
+  /// Returns whether it started; a no-op when the patch is not open, is unplaced,
+  /// or its placement bus is stale (which surfaces a [lastPatchNotice]).
+  bool startPatchSource(EntityAddress address) =>
+      _patchReconciler?.start(address) ?? false;
+
+  /// Stop the source at [address] — unmount its `Sound`, silencing it. A no-op
+  /// when the patch is not open or not running.
+  void stopPatchSource(EntityAddress address) =>
+      _patchReconciler?.stop(address);
+
+  /// Refresh every open patch's entity payload from its live native dump — the
+  /// dump-to-payload step the shell wires to the project's save / autosave hook
+  /// (design §3, §8; issue #220). A no-op without a patcher gateway, and it writes
+  /// nothing for a patch whose dump is unchanged.
+  void flushPatchPayloads() =>
+      _patchReconciler?.flushToPayloads(_mixRegistry, _recordCommand);
+
   StateMachineController? _stateMachine;
 
   /// The state-machine subsystem. Pure Dart — no gateway, no native
@@ -257,12 +302,31 @@ class PhiEngine {
   /// §3); returns sit outside the tree (design §4).
   final Map<EntityAddress, _MaterialisedChannel> _channelsByAddress = {};
 
+  /// The conventional address of the master bus (master is implicit — not a
+  /// registry entity — so a patch placement onto it resolves specially).
+  static final EntityAddress _masterAddress = EntityAddress(
+    kind: RegistryKinds.mix,
+    segments: const ['master'],
+  );
+
   /// Reconciles the live racks — synths per internal `voice.`, insert chains per
   /// `mix.` bus — against the registry, in step with the channel sync (issue
   /// #208). `null` when no synth/fx gateway was injected (Phase-1 tests that
   /// don't exercise voices): voice/fx materialisation then no-ops. Created on
   /// [start], torn down with the channels, disposed on [stop].
   RackMaterialiser? _racks;
+
+  /// Reconciles the live native patchers — one per open `patch.` entity — against
+  /// the registry, in step with the channel sync so a placement bus resolves to a
+  /// live channel (issue #220). `null` when no patcher gateway was injected
+  /// (Phase-1 tests): patch materialisation then no-ops. Created on [start], torn
+  /// down with the channels, disposed on [stop].
+  PatchReconciler? _patchReconciler;
+
+  /// The last patch source-placement degradation (a stale placement bus), or
+  /// `null` — surfaced the same way [lastAudioNotice] is (design §4, §8).
+  final ValueNotifier<PatchPlacementNotice?> _lastPatchNotice =
+      ValueNotifier<PatchPlacementNotice?>(null);
 
   /// The materialised **non-return** channels (strips + group buses) in tree
   /// pre-order — rebuilt on every sync. Returns are excluded (their own section
@@ -560,6 +624,17 @@ class PhiEngine {
         onVoicesChanged: midi.bindVoices,
       );
     }
+    // Reconcile per-entity patchers the same way (issue #220): one native patcher
+    // per `patch.` entity (its dump parsed on open), the source placement resolved
+    // against the live mix. Runs at the tail of every channel sync (bus ids must
+    // exist first). Only wired when a patcher gateway was injected.
+    if (pg != null) {
+      _patchReconciler = PatchReconciler(
+        gateway: pg,
+        resolveBus: _resolvePatchBus,
+        onNotice: (notice) => _lastPatchNotice.value = notice,
+      );
+    }
     _gateway.startUpdateTimer();
     _sceneRenderer?.init();
     // Note: `mountAsSound` is *not* called here. The patcher is empty at
@@ -586,6 +661,12 @@ class PhiEngine {
     if (_started) {
       _patcher?.dispose();
       _patcher = null;
+      // Tear the per-entity patchers down (unmount running sources + dispose their
+      // native instances) *before* the blanket disposeAll, so teardown never
+      // touches an already-freed instance (issue #220). Nulling it first makes the
+      // later `_teardownChannels` reconciler line a no-op.
+      _patchReconciler?.teardown();
+      _patchReconciler = null;
       _patcherGateway?.disposeAll();
       _stateMachine?.dispose();
       _stateMachine = null;
@@ -615,6 +696,10 @@ class PhiEngine {
     // unbind their `Sound`s, chains detach from their channels. A later sync
     // rebuilds them from the (rebound) registry.
     _racks?.teardown();
+    // Same for the per-entity patchers (issue #220): unmount every running source
+    // and dispose its native patcher before the buses go. A later sync rebuilds
+    // them from the (rebound) registry's `patch.` entities.
+    _patchReconciler?.teardown();
     for (final mc in _channelsByAddress.values) {
       if (_started) _gateway.destroyChannel(mc.channel.id);
       mc.channel.dispose();
@@ -711,6 +796,22 @@ class PhiEngine {
     // (issue #208). Runs last so a voice's bus and a chain's placement resolve
     // to a live gateway channel id. A no-op without a rack materialiser.
     _racks?.sync(_mixRegistry);
+    // Then the per-entity patchers (issue #220): materialise / tear down native
+    // patchers per `patch.` entity and keep each running source mounted on its
+    // (now-materialised) placement bus. A no-op without a patcher gateway.
+    _patchReconciler?.sync(_mixRegistry);
+  }
+
+  /// Resolves a `patch.` source-placement bus [address] to the live gateway
+  /// channel its `Sound` mounts on, for [PatchReconciler] (issue #220): the master
+  /// bus resolves to a `null` channel id (mount routes to master), a user bus to
+  /// its materialised channel id, and a bus absent from the live mix to `null`
+  /// (the whole record) — the stale-placement signal the reconciler degrades on.
+  ({int? channelId})? _resolvePatchBus(EntityAddress address) {
+    if (address == _masterAddress) return (channelId: null);
+    final channel = _channelsByAddress[address];
+    if (channel != null) return (channelId: channel.channel.id);
+    return null;
   }
 
   /// Rebuilds the [mixTree] view from the flat, pre-ordered [desired] nodes —
@@ -1883,6 +1984,7 @@ class PhiEngine {
     _mixTree.dispose();
     _returns.dispose();
     _lastAudioNotice.dispose();
+    _lastPatchNotice.dispose();
     await _telemetry.close();
   }
 }

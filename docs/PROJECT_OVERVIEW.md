@@ -1336,6 +1336,38 @@ main + app          (orchestration)
   delete-impact surfaces the placement referent, in memory and after reload); no
   integration test. Gateway generalisation, entity↔instance reconciliation, and the
   surface are the following epic issues.
+- **Patcher engine reconciliation + source placement** (issue #220, patcher epic,
+  design `docs/design/patcher.md` §3, §4, §8) — the engine-side counterpart of
+  #218/#219 that materialises a live native patcher per open `patch.` entity. A new
+  `PatchReconciler` (`lib/engine/state/`) is the patcher analogue of the `mix.`
+  channel sync and the `RackMaterialiser`: it `sync`s one [PatcherGateway] instance
+  per `patch.` entity — **parsing the payload dump on open**, keyed by address so a
+  survivor keeps its live native graph across an unrelated re-sync — and tears the
+  instance down on delete/close. **Source placement lifecycle:** `PatchPayload`
+  grows a `placement` field (the `mix.` bus, a *soft* pointer — the patch is still
+  not a `ReferenceSource`); the reconciler mounts a placed patcher as a `Sound`
+  (`mountAsSource`) on that bus, `start`ed/`stop`ped explicitly. Placement persists;
+  running state does **not**, so a loaded project starts silent (consistent with
+  clips). A running source is kept mounted on its current bus across re-syncs; a
+  placement naming a bus absent from the live mix **degrades gracefully** — the
+  source is left unplaced and a `PatchPlacementNotice` surfaces through
+  `PhiEngine.lastPatchNotice` (the `AudioDeviceNotice` shape). **Dump-to-payload on
+  save:** the reconciler's `flushToPayloads` re-dumps each open patcher into its
+  entity payload (via `UpdateEntityPayloadCommand`, only when the dump changed),
+  wired to a new `ProjectController.onBeforeSave` hook the shell sets to
+  `PhiEngine.flushPatchPayloads` — so save/autosave captures the *live* patch, not
+  the last-loaded one, with dirty-tracking carried by the gesture commands (the
+  surface epic applies them). `PhiEngine` exposes `patches` / `patchesOrNull`,
+  `startPatchSource` / `stopPatchSource` / `flushPatchPayloads`, and `lastPatchNotice`;
+  the reconciler is created on `start`, synced at the tail of the channel sync (bus
+  ids resolve first), and torn down on project swap / stop. Covered by unit tests
+  (`patch_reconciler_test` — open/edit/save round-trips, mount/unmount/start/stop,
+  teardown on delete, graceful degradation; `patch_payload_test` placement cases),
+  an engine wiring test (`engine_patch_reconciliation_test`), a `ProjectController`
+  `onBeforeSave` hook test, and an end-to-end `patch_source_persistence` integration
+  test (edit a live patcher → save → reload re-materialises the edited patch,
+  placement intact). The surface + the gesture-command edit adapter are following
+  epic issues.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
