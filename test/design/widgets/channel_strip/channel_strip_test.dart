@@ -256,5 +256,98 @@ void main() {
 
       expect(renamedTo, 'lead synth');
     });
+
+    // A strip constrained to less than its natural height — the case that
+    // bites when a surface is docked in a small pane (issue #287).
+    Widget shortHost({
+      required double height,
+      double volume = 0.5,
+      ValueChanged<double>? onVolumeChanged,
+    }) {
+      return MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              height: height,
+              child: ChannelStrip(
+                name: 'pad',
+                volume: volume,
+                peak: 0.0,
+                muted: false,
+                soloed: false,
+                voiceColor: PhiColors.voice1,
+                voiceGlow: PhiColors.voice1Soft,
+                onVolumeChanged: onVolumeChanged ?? (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('shrinks the fader to fit rather than overflowing a short pane', (
+      tester,
+    ) async {
+      await tester.pumpWidget(shortHost(height: 160));
+
+      // No `RenderFlex overflowed` was thrown laying the strip out shorter than
+      // its natural height.
+      expect(tester.takeException(), isNull);
+
+      // The fader gave up height to fit — shorter than its full design size but
+      // still present.
+      final faderHeight = tester
+          .getSize(find.byKey(ChannelStrip.faderHitAreaKey))
+          .height;
+      expect(faderHeight, lessThan(160));
+      expect(faderHeight, greaterThan(0));
+
+      // Every control still renders — the strip degraded by shrinking, not by
+      // clipping its controls away.
+      expect(find.text('pad'), findsOneWidget);
+      expect(find.text('M'), findsOneWidget);
+      expect(find.text('S'), findsOneWidget);
+    });
+
+    testWidgets('survives a pane too short even for the fader thumb', (
+      tester,
+    ) async {
+      // An extreme squeeze — shorter than the 12px thumb. The strip may report
+      // a (soft, painted) overflow at this size, but must not throw the hard
+      // `ArgumentError` an inverted `clamp` range would while placing the thumb.
+      await tester.pumpWidget(shortHost(height: 60));
+
+      expect(tester.takeException(), isNot(isA<ArgumentError>()));
+      // It still laid the fader out (at a non-negative height).
+      final faderHeight = tester
+          .getSize(find.byKey(ChannelStrip.faderHitAreaKey))
+          .height;
+      expect(faderHeight, greaterThanOrEqualTo(0));
+    });
+
+    testWidgets('a shrunk fader still maps a bottom tap to a small volume', (
+      tester,
+    ) async {
+      double? captured;
+      await tester.pumpWidget(
+        shortHost(
+          height: 160,
+          volume: 1.0,
+          onVolumeChanged: (v) => captured = v,
+        ),
+      );
+
+      final faderRect = tester.getRect(
+        find.byKey(ChannelStrip.faderHitAreaKey),
+      );
+      await tester.tapAt(Offset(faderRect.center.dx, faderRect.bottom - 3));
+      await tester.pump();
+
+      // The y→value mapping tracks the actual (shrunk) fader height, so a tap
+      // near the bottom is still a near-zero volume.
+      expect(captured, isNotNull);
+      expect(captured!, lessThan(0.15));
+    });
   });
 }

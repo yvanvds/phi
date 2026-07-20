@@ -65,7 +65,7 @@ class MidiHeaderStrip extends StatelessWidget {
           );
 
     final onGrid = onGridChanged;
-    return Row(
+    final row = Row(
       children: [
         Text('midi · $clipName'.toUpperCase(), style: PhiType.caption()),
         const SizedBox(width: 8),
@@ -86,6 +86,22 @@ class MidiHeaderStrip extends StatelessWidget {
         const SizedBox(width: 6),
         const Capsule(label: 'domain · drum', color: PhiColors.cool),
       ],
+    );
+
+    // Docked in a pane narrower than its content (issue #287), the header
+    // scrolls horizontally instead of asserting a `RenderFlex overflowed`.
+    // `IntrinsicWidth` gives the `Expanded` caption a bounded width to divide
+    // (the row's natural width), while `minWidth: maxWidth` keeps the row
+    // filling — and the trailing capsules pinned right — whenever the pane is
+    // wide enough, so the common maximized layout is unchanged.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: constraints.maxWidth),
+          child: IntrinsicWidth(child: row),
+        ),
+      ),
     );
   }
 }
