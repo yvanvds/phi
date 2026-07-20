@@ -34,16 +34,20 @@ import 'bridge/audio_device_coordinator.dart';
 import 'bridge/audio_device_descriptor.dart';
 import 'bridge/audio_device_notice.dart';
 import 'bridge/audio_device_state.dart';
+import 'bridge/fx_gateway.dart';
 import 'bridge/macbear_scene_renderer.dart';
 import 'bridge/midi_gateway.dart';
 import 'bridge/no_op_registry_mirror.dart';
 import 'bridge/patcher_gateway.dart';
+import 'bridge/real_fx_gateway.dart';
 import 'bridge/real_midi_gateway.dart';
 import 'bridge/real_patcher_gateway.dart';
+import 'bridge/real_synth_gateway.dart';
 import 'bridge/real_yse_gateway.dart';
 import 'bridge/registry_mirror.dart';
 import 'bridge/registry_mirror_binder.dart';
 import 'bridge/scene_renderer.dart';
+import 'bridge/synth_gateway.dart';
 import 'bridge/yse_gateway.dart';
 import 'state/clip_registry_publisher.dart';
 import 'state/engine_midi_controller.dart';
@@ -51,6 +55,7 @@ import 'state/engine_telemetry.dart';
 import 'state/mix_tree_node.dart';
 import 'state/mixer_channel.dart';
 import 'state/patcher_controller.dart';
+import 'state/rack_materialiser.dart';
 import 'state/state_machine_controller.dart';
 
 /// High-level façade over the YSE audio engine.
@@ -64,11 +69,15 @@ class PhiEngine {
     SceneRenderer? sceneRenderer,
     PatcherGateway? patcherGateway,
     MidiGateway? midiGateway,
+    SynthGateway? synthGateway,
+    FxGateway? fxGateway,
     RegistryMirror registryMirror = const NoOpRegistryMirror(),
     Duration telemetryInterval = const Duration(milliseconds: 50),
   }) : _sceneRenderer = sceneRenderer,
        _patcherGateway = patcherGateway,
        _midiGateway = midiGateway,
+       _synthGateway = synthGateway,
+       _fxGateway = fxGateway,
        _mirrorBinder = RegistryMirrorBinder(registryMirror),
        _telemetryInterval = telemetryInterval {
     // The registry is the source of truth for the channel set (design §8): the
@@ -91,17 +100,30 @@ class PhiEngine {
     SceneRenderer? sceneRenderer,
     PatcherGateway? patcherGateway,
     MidiGateway? midiGateway,
-  }) => PhiEngine(
-    RealYseGateway(),
-    sceneRenderer: sceneRenderer ?? MacbearSceneRenderer(),
-    patcherGateway: patcherGateway ?? RealPatcherGateway(),
-    midiGateway: midiGateway ?? RealMidiGateway(),
-  );
+    SynthGateway? synthGateway,
+    FxGateway? fxGateway,
+  }) {
+    final yse = RealYseGateway();
+    // The synth + fx gateways resolve a mix-bus channel id into the live yse
+    // `Channel` through the same gateway that minted it — the resolver stays in
+    // the bridge so `package:yse` is never touched here (issue #208).
+    final busResolver = yse.busResolver();
+    return PhiEngine(
+      yse,
+      sceneRenderer: sceneRenderer ?? MacbearSceneRenderer(),
+      patcherGateway: patcherGateway ?? RealPatcherGateway(),
+      midiGateway: midiGateway ?? RealMidiGateway(),
+      synthGateway: synthGateway ?? RealSynthGateway(busResolver: busResolver),
+      fxGateway: fxGateway ?? RealFxGateway(busResolver: busResolver),
+    );
+  }
 
   final YseGateway _gateway;
   final SceneRenderer? _sceneRenderer;
   final PatcherGateway? _patcherGateway;
   final MidiGateway? _midiGateway;
+  final SynthGateway? _synthGateway;
+  final FxGateway? _fxGateway;
   final Duration _telemetryInterval;
 
   /// Coordinates the boot-from-settings and live-switch device rules (design §5,
@@ -231,6 +253,13 @@ class PhiEngine {
   /// live volume/peak). Groups are buses (a `mix.` group *is* a channel, design
   /// §3); returns sit outside the tree (design §4).
   final Map<EntityAddress, _MaterialisedChannel> _channelsByAddress = {};
+
+  /// Reconciles the live racks — synths per internal `voice.`, insert chains per
+  /// `mix.` bus — against the registry, in step with the channel sync (issue
+  /// #208). `null` when no synth/fx gateway was injected (Phase-1 tests that
+  /// don't exercise voices): voice/fx materialisation then no-ops. Created on
+  /// [start], torn down with the channels, disposed on [stop].
+  RackMaterialiser? _racks;
 
   /// The materialised **non-return** channels (strips + group buses) in tree
   /// pre-order — rebuilt on every sync. Returns are excluded (their own section
@@ -512,6 +541,23 @@ class PhiEngine {
         agentSink: _sceneRenderer,
       );
     }
+    // The rack materialiser (issue #208) reconciles synths per internal voice
+    // and insert chains per bus, then hands the live voice table + synth map to
+    // the MIDI controller so sessions flatten + connect by routed voice. It runs
+    // at the tail of every channel sync (bus ids must exist first). Only wired
+    // when both gateways were injected *and* the MIDI subsystem exists (the
+    // voice table has no consumer without it).
+    final sg = _synthGateway;
+    final fg = _fxGateway;
+    final midi = _midi;
+    if (sg != null && fg != null && midi != null) {
+      _racks = RackMaterialiser(
+        synthGateway: sg,
+        fxGateway: fg,
+        busChannelId: (bus) => _channelsByAddress[bus]?.channel.id,
+        onVoicesChanged: midi.bindVoices,
+      );
+    }
     _gateway.startUpdateTimer();
     _sceneRenderer?.init();
     // Note: `mountAsSound` is *not* called here. The patcher is empty at
@@ -548,6 +594,7 @@ class PhiEngine {
       _midi?.dispose();
       _midi = null;
       _teardownChannels();
+      _racks = null;
       _gateway.close();
       _sceneRenderer?.dispose();
       _started = false;
@@ -562,6 +609,10 @@ class PhiEngine {
   void _teardownChannels() {
     _volumeGestureChannel = null;
     _sendGesture = null;
+    // Tear the racks down before the buses they place onto (issue #208): synths
+    // unbind their `Sound`s, chains detach from their channels. A later sync
+    // rebuilds them from the (rebound) registry.
+    _racks?.teardown();
     for (final mc in _channelsByAddress.values) {
       if (_started) _gateway.destroyChannel(mc.channel.id);
       mc.channel.dispose();
@@ -652,6 +703,12 @@ class PhiEngine {
 
     _rebuildMixTree(desired);
     _recomputeEffectiveVolumes();
+
+    // Every bus channel now exists, so reconcile the racks against it: synths
+    // per internal voice (bound to their output bus) and insert chains per bus
+    // (issue #208). Runs last so a voice's bus and a chain's placement resolve
+    // to a live gateway channel id. A no-op without a rack materialiser.
+    _racks?.sync(_mixRegistry);
   }
 
   /// Rebuilds the [mixTree] view from the flat, pre-ordered [desired] nodes —

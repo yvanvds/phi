@@ -1,6 +1,7 @@
 import '../../domain/midi/graph/graph_eval_context.dart';
 import '../../domain/scene/scene_field.dart';
 import '../../domain/time_domains/tempo_source_stack.dart';
+import '../bridge/materialised_synth.dart';
 import '../bridge/midi_gateway.dart';
 import '../bridge/scene_agent_sink.dart';
 
@@ -54,6 +55,19 @@ abstract interface class ClipSessionHost {
   /// (silent + [onUnresolvedVoice]). A `null` [voice] is an unrouted note; it
   /// resolves through the seeded default voice.
   int? channelForVoice(String? voice);
+
+  /// The live engine synth an **internal** [voice] plays, or `null` when the
+  /// voice is external, unknown, or its synth isn't materialised — so a session
+  /// can `connectSynth` its transport to every internal voice its clip routes to
+  /// (design §6, issue #208). A `null` [voice] resolves through the seeded
+  /// default voice, like [channelForVoice].
+  MaterialisedSynth? synthForVoice(String? voice);
+
+  /// Whether [voice] is an **external** voice — one that plays the open MIDI-out
+  /// port rather than an internal synth. A session `connectMidiOut`s its
+  /// transport when any routed voice is external (design §6). A `null` [voice]
+  /// resolves through the seeded default voice.
+  bool isExternalVoice(String? voice);
 
   /// Surface a warning that a clip routed to [voice] — an unknown voice — so
   /// its notes played nothing. A performer-visible degradation, not a crash.

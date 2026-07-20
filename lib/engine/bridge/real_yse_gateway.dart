@@ -7,6 +7,7 @@ import '../../domain/project/app_settings/speaker_layout.dart';
 import 'audio_device_descriptor.dart';
 import 'audio_device_exception.dart';
 import 'audio_device_state.dart';
+import 'real_materialised_synth.dart' show MixBusResolver;
 import 'yse_gateway.dart';
 
 /// Production [YseGateway] that forwards every call to `System.instance`.
@@ -214,6 +215,15 @@ class RealYseGateway implements YseGateway {
   Channel _parentOf(int? parentId) => parentId == null
       ? Channel.master
       : (_channels[parentId] ?? Channel.master);
+
+  /// A [MixBusResolver] closing over this gateway's live channels — the seam the
+  /// synth + fx gateways use to turn a mix-bus channel id (the opaque id
+  /// [createChannel] hands out) into the live [Channel] a `Sound.fromSynth` or an
+  /// insert chain attaches to (issue #208). An id this gateway never minted (the
+  /// master bus among them) resolves to `null`, which those gateways read as the
+  /// master bus.
+  MixBusResolver busResolver() =>
+      (id) => _channels[id];
 
   @override
   double channelVolume(int channelId) => _channels[channelId]?.volume ?? 0;

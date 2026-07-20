@@ -87,9 +87,10 @@ class RealMidiTransport implements MidiTransport {
   @override
   void play() {
     if (_disposed) return;
-    // Preserve the issue-#101 behaviour: connect to the gateway's output lazily
-    // on the first play (idempotent), now expressed through [connectMidiOut].
-    connectMidiOut();
+    // The owning session drives [connectMidiOut] / [connectSynth] from its
+    // flatten step by the voices its clip routes to (design §6, issue #208) —
+    // it pushes events (and reconciles connections) just before this call — so
+    // an internal-only clip no longer bleeds to the external port.
     _clip.play();
   }
 

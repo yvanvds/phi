@@ -1083,6 +1083,44 @@ main + app          (orchestration)
   unit tests via the fakes (`FakeFxGateway`'s chain build/reorder/detach faithfully
   simulates the terminator link-walk to prove reorder never cycles; `FakeMidiGateway`
   emit helpers) plus the pure `MidiInputEvent.fromParsed` decode; no integration test.
+- **Engine voice/fx materialisation + session transport wiring** (issue #208,
+  epic #203, design `docs/design/racks-and-voices.md` §3, §5, §6) — the engine
+  layer that turns the #206/#207 gateway primitives into live sound, reconciled
+  against the registry the way `mix.` channels are. A new `RackMaterialiser`
+  (`lib/engine/state/`) runs at the tail of `PhiEngine._syncChannelsFromRegistry`
+  (bus ids must exist first) and materialises, **keyed by address so live engine
+  state survives a re-sync**: one engine synth + `Sound` per **internal `voice.`**
+  (instantiated from the voice's `synth.` definition on the voice's allocated
+  engine channel, bound to its `mix.` output bus — two voices sharing one
+  definition each get their **own** synth, so a definition edit re-applies to
+  every dependent voice; a `SynthMaterialisation.needsRematerialise` edit rebuilds
+  a fresh handle while a live edit / bus re-point mutates in place; re-pointing a
+  voice's synth swaps the sound behind its stable identity), and one linked
+  `DspObject` chain per **`mix.` bus with `inserts`** (the ordered `fx.` instances
+  materialised as handles, placed via the `FxChain`; reorder / remove / delete
+  follows the registry). It owns an internal-voice `ChannelAllocation` and hands
+  the fresh `VoiceChannelResolver` + voice→synth map to
+  `EngineMidiController.bindVoices` on every re-sync. **Session transports connect
+  by routed voice:** `ClipSession.pushEvents` now reconciles its transport's
+  connections against the voices its clip routes to — `connectSynth` for every
+  internal voice with a materialised synth (keyed by handle identity, so a
+  re-materialised synth reconnects while a live-edited one stays), `connectMidiOut`
+  when any routed voice is external, disconnecting on re-route and on stop /
+  teardown (the `ClipSessionHost` seam grew `synthForVoice` / `isExternalVoice`).
+  `RealMidiTransport.play` no longer force-connects MIDI-out (the #101 lazy
+  connect) — the session drives it — so an internal-only clip no longer bleeds to
+  the external port. Deferred-disposal ordering (retire handles only **after**
+  `bindVoices` lets playing sessions disconnect them) keeps a live re-point
+  leak-safe. An unknown / deleted voice in a playing clip still degrades
+  gracefully (notes silent + surfaced via `unresolvedVoices`). `PhiEngine.production`
+  wires `RealSynthGateway` / `RealFxGateway` with a `MixBusResolver` the real yse
+  gateway builds over its live channels; the real asset-path seam waits on the
+  racks import UI (#211). Non-user-visible engine-bridge seam (the racks UI is
+  #209–#212, real audio needs the DLL), so — like #206/#207 — covered by unit
+  tests via the fakes: an engine-level `engine_racks_test` (materialisation
+  lifecycles, live-vs-rebuild re-application reaching all dependent voices, bus /
+  synth re-point, fx chain build/reorder/detach, graceful degradation) plus
+  `clip_session_test` transport-connection cases; no integration test.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

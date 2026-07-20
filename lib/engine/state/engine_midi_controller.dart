@@ -18,6 +18,7 @@ import '../../domain/state_machine/state_graph.dart';
 import '../../domain/time_domains/fader_tempo_source.dart';
 import '../../domain/time_domains/tempo_source_stack.dart';
 import '../../domain/voice/voice_channel_resolver.dart';
+import '../bridge/materialised_synth.dart';
 import '../bridge/midi_gateway.dart';
 import '../bridge/scene_agent_sink.dart';
 import 'clip_session.dart';
@@ -525,6 +526,12 @@ class EngineMidiController implements ClipSessionHost {
   /// teach the controller the project's live voice → channel table.
   VoiceChannelResolver _voiceResolver;
 
+  /// The live engine synth each internal voice plays, keyed by dotted voice
+  /// address — handed in by the engine's rack materialiser (issue #208) so a
+  /// session can `connectSynth` its transport to the internal voices its clip
+  /// routes to. Empty until the racks are materialised.
+  Map<String, MaterialisedSynth> _voiceSynths = const {};
+
   final Set<String> _unresolvedVoices = <String>{};
 
   /// The voice → channel table sessions flatten against. Replaceable so the
@@ -538,8 +545,33 @@ class EngineMidiController implements ClipSessionHost {
     }
   }
 
+  /// Bind the project's live voice table + synth map into the controller (issue
+  /// #208) — the engine's rack materialiser calls this after every re-sync. The
+  /// [resolver] carries the internal channel allocation and external channels;
+  /// [synths] holds one materialised engine synth per internal voice. Re-pushes
+  /// every playing session so its transport re-flattens onto the new channels
+  /// **and** reconnects to the new synths / MIDI-out within one audio block.
+  void bindVoices(
+    VoiceChannelResolver resolver,
+    Map<String, MaterialisedSynth> synths,
+  ) {
+    _voiceResolver = resolver;
+    _voiceSynths = synths;
+    for (final s in _sessions.values) {
+      if (s.isPlaying) s.pushEvents();
+    }
+  }
+
   @override
   int? channelForVoice(String? voice) => _voiceResolver.channelFor(voice);
+
+  @override
+  MaterialisedSynth? synthForVoice(String? voice) =>
+      _voiceSynths[voice ?? _voiceResolver.defaultVoice];
+
+  @override
+  bool isExternalVoice(String? voice) => _voiceResolver.externalChannels
+      .containsKey(voice ?? _voiceResolver.defaultVoice);
 
   /// The distinct voices that failed to resolve since the last [clearVoiceIssues]
   /// — an unknown voice a clip routed to played nothing (design §6). Observable

@@ -7,14 +7,17 @@ import 'package:phi/domain/midi/midi_transform_chain.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
 import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/scene/scene_field.dart';
+import 'package:phi/domain/synth/sine_synth.dart';
 import 'package:phi/domain/time_domains/tempo_source_stack.dart';
 import 'package:phi/domain/voice/voice_channel_resolver.dart';
+import 'package:phi/engine/bridge/materialised_synth.dart';
 import 'package:phi/engine/bridge/midi_gateway.dart';
 import 'package:phi/engine/bridge/scene_agent_sink.dart';
 import 'package:phi/engine/state/clip_session.dart';
 import 'package:phi/engine/state/clip_session_host.dart';
 
 import '../test_doubles/fake_midi_gateway.dart';
+import '../test_doubles/fake_synth_gateway.dart';
 
 /// A minimal [ClipSessionHost] that borrows only a gateway — enough to prove a
 /// [ClipSession] plays entirely on its own, decoupled from [EngineMidiController].
@@ -42,6 +45,13 @@ class _StubHost implements ClipSessionHost {
   /// the warning was surfaced.
   final List<String> unresolvedVoices = [];
 
+  /// Internal voice → materialised synth, driving [synthForVoice] so a
+  /// connection test can assert which synths a session wires up.
+  final Map<String, MaterialisedSynth> synths = {};
+
+  /// External voice addresses, driving [isExternalVoice].
+  final Set<String> externalVoices = {};
+
   @override
   int? resolveOutputPort() => gateway.outputDeviceCount > 0 ? 0 : null;
 
@@ -50,6 +60,14 @@ class _StubHost implements ClipSessionHost {
 
   @override
   int? channelForVoice(String? voice) => voiceResolver.channelFor(voice);
+
+  @override
+  MaterialisedSynth? synthForVoice(String? voice) =>
+      synths[voice ?? voiceResolver.defaultVoice];
+
+  @override
+  bool isExternalVoice(String? voice) =>
+      externalVoices.contains(voice ?? voiceResolver.defaultVoice);
 
   @override
   void onUnresolvedVoice(String voice) => unresolvedVoices.add(voice);
@@ -389,6 +407,146 @@ void main() {
         expect(transport.loopBeats, lessThanOrEqualTo(0));
 
         session.stop();
+        session.dispose();
+      });
+    });
+  });
+
+  group('transport connections follow routed voices (#208)', () {
+    MidiTransformChain voicedChain(String? voice) => MidiTransformChain(
+      source: MidiClip(
+        bars: 1,
+        notes: [
+          MidiNote(
+            pitch: 60,
+            start: 0.0,
+            duration: 1.0,
+            velocity: 1.0,
+            voice: voice,
+          ),
+        ],
+      ),
+    );
+
+    FakeMaterialisedSynth synth({int channel = 1}) =>
+        FakeMaterialisedSynth(const SineSynth(), channel: channel);
+
+    test('play connects the internal voice synth, not the MIDI-out port', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final host = _StubHost(gateway);
+        final lead = synth();
+        host.synths['voice.lead'] = lead;
+        final session = ClipSession(
+          address: null,
+          host: host,
+          chain: voicedChain('voice.lead'),
+        );
+
+        session.play();
+        async.elapse(const Duration(milliseconds: 20));
+        final transport = gateway.transport!;
+
+        expect(transport.connectedSynths, [lead]);
+        expect(transport.midiOutConnected, isFalse);
+
+        session.dispose();
+      });
+    });
+
+    test('an external voice connects the MIDI-out port, no synth', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final host = _StubHost(gateway)..externalVoices.add('voice.hw');
+        final session = ClipSession(
+          address: null,
+          host: host,
+          chain: voicedChain('voice.hw'),
+        );
+
+        session.play();
+        async.elapse(const Duration(milliseconds: 20));
+        final transport = gateway.transport!;
+
+        expect(transport.midiOutConnected, isTrue);
+        expect(transport.connectedSynths, isEmpty);
+
+        session.dispose();
+      });
+    });
+
+    test('re-pointing a voice reconnects to the new synth', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final host = _StubHost(gateway);
+        final first = synth();
+        host.synths['voice.lead'] = first;
+        final session = ClipSession(
+          address: null,
+          host: host,
+          chain: voicedChain('voice.lead'),
+        );
+
+        session.play();
+        async.elapse(const Duration(milliseconds: 20));
+        final transport = gateway.transport!;
+        expect(transport.connectedSynths, [first]);
+
+        // Re-point voice.lead at a fresh synth handle (the engine swaps the
+        // handle on a re-materialise / synth re-point), then re-push.
+        final second = synth();
+        host.synths['voice.lead'] = second;
+        session.pushEvents();
+
+        expect(transport.connectedSynths, [second]);
+
+        session.dispose();
+      });
+    });
+
+    test('stop disconnects every synth and the MIDI-out port', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final host = _StubHost(gateway)..externalVoices.add('voice.hw');
+        final lead = synth();
+        host.synths['voice.lead'] = lead;
+        // Two notes, one internal + one external voice.
+        final session = ClipSession(
+          address: null,
+          host: host,
+          chain: MidiTransformChain(
+            source: MidiClip(
+              bars: 1,
+              notes: const [
+                MidiNote(
+                  pitch: 60,
+                  start: 0.0,
+                  duration: 1.0,
+                  velocity: 1.0,
+                  voice: 'voice.lead',
+                ),
+                MidiNote(
+                  pitch: 62,
+                  start: 0.5,
+                  duration: 0.5,
+                  velocity: 1.0,
+                  voice: 'voice.hw',
+                ),
+              ],
+            ),
+          ),
+        );
+
+        session.play();
+        async.elapse(const Duration(milliseconds: 20));
+        final transport = gateway.transport!;
+        expect(transport.connectedSynths, [lead]);
+        expect(transport.midiOutConnected, isTrue);
+
+        session.stop();
+        expect(transport.connectedSynths, isEmpty);
+        expect(transport.midiOutConnected, isFalse);
+
         session.dispose();
       });
     });
