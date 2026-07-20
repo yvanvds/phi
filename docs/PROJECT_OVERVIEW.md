@@ -31,7 +31,7 @@ One-way dependency flow — top depends on bottom, never the reverse.
 ```
 main + app          (orchestration)
 ├── shell           (workstation chrome)
-├── surfaces        (Scene · Patcher · Code · State · MIDI · Mix)
+├── surfaces        (Scene · Patcher · Code · State · MIDI · Racks · Mix)
 ├── engine          (PhiEngine façade + bridge over package:yse)
 ├── design          (tokens + reusable widgets — no domain knowledge)
 ├── domain          (pure-Dart models — session/ wired; more arrives later)
@@ -1121,6 +1121,43 @@ main + app          (orchestration)
   lifecycles, live-vs-rebuild re-application reaching all dependent voices, bus /
   synth re-point, fx chain build/reorder/detach, graceful degradation) plus
   `clip_session_test` transport-connection cases; no integration test.
+- **Racks surface shell** (issue #209, epic #203, design
+  `docs/design/racks-and-voices.md` §8) — the first *user-visible* racks slice: a
+  new **Racks** rail entry (between MIDI and Mix) opening a three-pane surface
+  (`lib/surfaces/racks/`). A shell-owned `RackDefinitionsController`
+  (`lib/engine/state/`, a `ChangeNotifier`) is the panel's single seam over the
+  `synth.` / `fx.` / `voice.` registry namespaces and the journaled command layer
+  — built whenever a project supplies the registry (no engine dependency), rebound
+  on New / Open like the clip-library controller:
+  - **Left — `DefinitionsPanel`**: the `synth.` and `fx.` namespaces as two
+    independent trees (SYNTHS above, EFFECTS below), flattened into `RackTreeNode`s
+    in registry order, each leaf tagged with its kind (`va`, `lowpass`, …). Full
+    registry affordances: a per-kind **add** menu (sine · va · fm · sampler for
+    synths; one entry per real `FxKind` — the reserved `patcherInsert` is not
+    offered — for effects) on each section header and group row, **new group**,
+    drag-**reorder** within a section, drag-**regroup** into / out of a group
+    (cross-kind drops rejected), **duplicate** (leaf), **rename** (= refactor via
+    `MoveEntityCommand`), and **delete** through the `ConfirmDialog` /
+    `DeleteImpactDialog` (a synth stranding a `voice.`, an fx an inserting `mix.`
+    bus). Every create/move/delete is a `CreateEntityCommand` /
+    `CreateGroupCommand` / `MoveEntityCommand` / `ReorderChildCommand` /
+    `RemoveEntityCommand` applied + recorded through `ProjectController.recordCommand`.
+  - **Center — `DefinitionEditorPane`**: selection (tap a definition) drives it;
+    this issue lands the *plumbing* with a routed placeholder naming the selected
+    definition + kind, the per-kind panels (VA sliders, FM bank/patch browser,
+    sampler picker, fx param rows) land in #212.
+  - **Right — `VoicesPane`**: one read-only `RackVoiceRow` per `voice.` (name,
+    the synth/channel it plays → the bus it routes to, colour swatch); a scaffold
+    here — create/bind/colour/kind editing, arm-for-input, and the audition test
+    strip land in #211.
+  The definitions controller / view-models are unit-tested (`rack_definitions_controller_test`
+  — trees, per-kind create, duplicate, rename-refactor, delete-impact, regroup,
+  reorder, voices, rebind), the panes widget-tested (`racks_surface_test` — tree +
+  chips render, selection → editor routing, per-kind add menus, group, duplicate,
+  rename, delete + delete-impact, drag reorder/regroup, null-controller hint), and
+  an end-to-end `racks_surface` integration test drives the real shell (open the
+  Racks rail → seeded `synth.sine` + `voice.default` render → select routes the
+  editor → add a VA synth).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
@@ -1133,6 +1170,7 @@ main + app          (orchestration)
 | Code     | scaffold | `lib/surfaces/code/`            |
 | State    | scaffold | `lib/surfaces/state/`           |
 | MIDI     | editor   | `lib/surfaces/midi/`            |
+| Racks    | shell    | `lib/surfaces/racks/`           |
 | Mix      | impl     | `lib/surfaces/mix/`             |
 
 ## Where things live

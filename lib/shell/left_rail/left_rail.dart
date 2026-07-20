@@ -20,6 +20,7 @@ class LeftRail extends StatelessWidget {
     SurfaceId.code: '⌨',
     SurfaceId.state: '⊞',
     SurfaceId.midi: '♪',
+    SurfaceId.racks: '▤',
     SurfaceId.mix: '≡',
   };
 
@@ -29,6 +30,7 @@ class LeftRail extends StatelessWidget {
     SurfaceId.code,
     SurfaceId.state,
     SurfaceId.midi,
+    SurfaceId.racks,
     SurfaceId.mix,
   };
 
