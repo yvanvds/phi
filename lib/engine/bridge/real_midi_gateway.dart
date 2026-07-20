@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:yse/yse.dart';
 
 import 'midi_gateway.dart';
+import 'midi_input_event.dart';
 import 'midi_transport.dart';
 import 'real_midi_transport.dart';
 
@@ -30,6 +31,8 @@ class RealMidiGateway implements MidiGateway {
   final Map<String, StreamSubscription<MidiInParsedMessage>> _inputSubs = {};
   final StreamController<String> _inputActivity =
       StreamController<String>.broadcast();
+  final StreamController<MidiInputEvent> _inputEvents =
+      StreamController<MidiInputEvent>.broadcast();
 
   System get _system => _sys ??= System.instance;
 
@@ -63,6 +66,9 @@ class RealMidiGateway implements MidiGateway {
   Stream<String> get inputActivity => _inputActivity.stream;
 
   @override
+  Stream<MidiInputEvent> get inputEvents => _inputEvents.stream;
+
+  @override
   void openInputs(List<String> names) {
     final desired = names.toSet();
     // Close ports no longer wanted.
@@ -78,7 +84,7 @@ class RealMidiGateway implements MidiGateway {
         final input = MidiIn.open(index);
         _inputs[name] = input;
         _inputSubs[name] = input.parsedMessages.listen(
-          (_) => _inputActivity.add(name),
+          (message) => _onParsedInput(name, message),
         );
       } on YseException {
         // Port claimed by another application — leave it unopened.
@@ -104,6 +110,22 @@ class RealMidiGateway implements MidiGateway {
   void _closeInput(String name) {
     _inputSubs.remove(name)?.cancel();
     _inputs.remove(name)?.dispose();
+  }
+
+  /// Fan one received message out to both input streams: the unchanged
+  /// activity tick (design §6) and, when it is a note message, the parsed note
+  /// event (design §7). One subscription drives both so a port is read once.
+  void _onParsedInput(String name, MidiInParsedMessage message) {
+    _inputActivity.add(name);
+    final event = MidiInputEvent.fromParsed(
+      status: message.status,
+      wireChannel: message.channel,
+      data1: message.data1,
+      data2: message.data2,
+      port: name,
+      timestamp: message.timestamp,
+    );
+    if (event != null) _inputEvents.add(event);
   }
 
   @override

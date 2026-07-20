@@ -1,3 +1,4 @@
+import 'midi_input_event.dart';
 import 'midi_transport.dart';
 
 /// Abstract port over `package:yse`'s MIDI **output** surface.
@@ -58,6 +59,14 @@ abstract interface class MidiGateway {
   /// received on an open input port — the settings window flashes that port's
   /// activity dot (design §6). Each emission is a received-message tick.
   Stream<String> get inputActivity;
+
+  /// Broadcast stream of **parsed note events** (note on/off + velocity +
+  /// channel + port) received on an open input port (design §7). Decoded from
+  /// the bridge's `MidiInParsedMessage`; non-note messages are filtered out.
+  /// This *replaces nothing* — [inputActivity] still ticks for every message.
+  /// Nothing routes these events yet; arming a voice and roll audition consume
+  /// them in the racks surface (design §7, issue #211).
+  Stream<MidiInputEvent> get inputEvents;
 
   /// Open the output device at [port]. A second call closes the previous
   /// port and opens the new one. No-op for an out-of-range [port].
