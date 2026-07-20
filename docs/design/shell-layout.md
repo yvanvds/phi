@@ -79,24 +79,138 @@ VS-Code-style **panes in a split tree, tabs in each pane**:
   (open question 4) — the registry-driven design makes it a cheap
   later addition to the same overlay.
 
-## 5. Multi-window — a spike, not a promise
+## 5. Multi-window — spike findings (2026-07-20)
 
 The wide-screen case is served first by splits in one maximized
-window. True multi-window (laptop + external, later the projected
-audience view) has a real technical question: Flutter's official
-desktop multi-window support is still maturing, and the community
-route (`desktop_multi_window`) runs each window in a **separate
-isolate** — Phi's registry, controllers, and sessions are
-isolate-local, while the engine is one native instance in the shared
-process. A second window therefore needs either the official
-same-isolate multi-view path (when it ships for Windows) or a
-state-mirroring protocol over ports.
+window (§2). True multi-window (laptop + external, later the projected
+audience view) had a real technical question. This section records the
+**timeboxed research spike** (issue #256, `type:task`): the two routes
+evaluated against Phi's constraint set, what one window genuinely
+fails to serve, and the decision — **defer, with the official
+same-isolate windowing API as the strategic target**.
 
-The epic ends with a **timeboxed research spike**: evaluate both
-routes against the shared-engine / isolate-local-state constraint,
-write the findings into this doc, and file the follow-up slice the
-findings justify. The projected audience view (vision §4) waits on
-that outcome by design.
+### 5.1 The constraint set (verified against the code)
+
+Two facts decide this, and both were confirmed in the tree, not
+assumed:
+
+- **Two process-wide, single-isolate singletons.** The native audio
+  engine is reached through yse's `System.instance`
+  (`RealYseGateway`), and the Scene viewport's GL renderer is
+  macbear's `M3AppEngine`, described in
+  `macbear_scene_renderer.dart` as a *process-wide singleton* mounted
+  in exactly one place. Neither can exist twice in the process.
+- **All app state is main-isolate-local.** The registry, the
+  lifecycle/shell/engine controllers, and `SessionState` all live in
+  the root isolate; there is **no `dart:isolate` usage anywhere in
+  `lib/`**. Phi has never needed a second isolate and has no
+  cross-isolate protocol to build on.
+
+So a secondary window is cheap only if it shares this one isolate and
+one engine. If it runs in its own isolate, it can touch neither
+singleton without a hand-built mirroring protocol — and the GL
+viewport, whose external `Texture` registration is *engine-scoped*,
+could not be reached at all from a second engine.
+
+### 5.2 Route A — official same-isolate multi-view / windowing
+
+Flutter's first-party windowing API (`WindowingOwner` /
+`RegularWindow` / `RegularWindowController`, layered on the multi-view
+`runWidget` + `View` / `ViewCollection` foundation, contributed by
+Canonical as the successor to flutter/flutter#30701) is **exactly**
+Phi's shape: every window shares one isolate and one engine, so the
+registry, controllers, and the yse/macbear singletons are directly
+reachable from a second window with **no ports and no state
+mirroring**, and the engine-scoped GL texture is architecturally
+shareable across views.
+
+The catch is maturity. As of this spike Phi is on **Flutter 3.44.0,
+stable channel** — and on that release the windowing API is
+**experimental, main-channel only, gated behind `flutter config
+--enable-windowing`, and explicitly "not for production."** It moved
+fast (engine foundations in 3.35, the flag + a win32 `RegularWindow`
+in 3.38, an experimental cross-desktop API in 3.44 with Canonical now
+the desktop steward, and Windows the lead platform for regular
+windows), but it is **not on Phi's channel yet**. Adopting it today
+would mean pinning off stable and absorbing API churn and open bugs.
+
+One residual unknown even on Route A: whether the ANGLE/macbear GL
+texture actually renders into a *second window's* `FlutterView`.
+Flutter's multi-view umbrella (flutter/flutter#142845) still lists
+open secondary-view texture/platform-view work, so this must be
+proven by hand, not assumed — filed as **#297**.
+
+### 5.3 Route B — `desktop_multi_window` (separate isolate)
+
+The stable-today community route (`desktop_multi_window`, mixin.dev,
+~v0.3.0) gives **each window its own Flutter engine and isolate**.
+Method channels cannot cross engines, so the second window would need
+a bespoke IPC/state-mirroring protocol over ports for the registry
+and session, per-engine plugin re-registration, and per-engine texture
+handling. For a *read-mostly* secondary window (say a static "now
+playing" or transport mirror) that protocol is a bounded but real cost
+— a snapshot pushed over a `SendPort` and rebuilt on the far side. For
+a *fully interactive* second window it is prohibitive: every
+controller mutation, undo scope, and the shared engine/GL singletons
+would have to be marshalled both ways, effectively duplicating the
+state Phi deliberately centralizes — and the GL viewport still could
+not be shared, because its texture belongs to the first engine.
+
+The decisive point: this is a large amount of scaffolding we would
+**tear out** the moment Route A reaches stable. It buys a second
+window sooner at the price of building the exact thing the official
+API exists to make unnecessary.
+
+### 5.4 Route C — wait: what one window actually fails to serve
+
+Enumerating the concrete scenarios (not a hypothetical want):
+
+1. **Laptop + external display.** Real, but **served by splits
+   today** — a maximized split-tree window on the external screen is
+   the wide-screen answer §2 already ships. The only thing one window
+   cannot do is span *two physical displays at once* (e.g. edit on the
+   laptop panel while the mix fills the external). That is an
+   ergonomic nicety, not a blocker: the performer maximizes on the
+   larger screen.
+2. **Projected audience view** (vision §4). This is the one scenario
+   splits **cannot** serve — a second output showing a different,
+   audience-facing view (the Scene, without performer chrome) on a
+   projector while the operator screen keeps the workstation. It needs
+   a genuinely separate window on a second display, and it is
+   GL-texture-bound, which is why #297 is its gating risk.
+3. **Everything else** (side-by-side mix + clip while performing,
+   panel arrangements) is already the split shell's job (§2), not a
+   multi-window need.
+
+So the honest tally: of the scenarios that motivated the question, one
+is already solved by splits, one is a nicety, and only the **projected
+audience view** is a true multi-window requirement — and it is a
+*future* feature with its own design still ahead (§6).
+
+### 5.5 Decision and follow-ups
+
+**Defer implementation. Adopt Flutter's official same-isolate
+windowing API as the strategic target; do not build a separate-isolate
+protocol we would later delete.** The only true multi-window need
+(the projected audience view) is future work, and the official route
+that fits Phi's singleton/one-isolate constraints is real but not yet
+on the stable channel. Waiting costs nothing today; building Route B
+would cost a throwaway IPC layer.
+
+Follow-ups filed:
+
+- **#296** — watch/tracking item (the recorded deferral): re-evaluate
+  when the windowing API reaches **beta/stable**, or when a concrete
+  scenario forces the projected audience view. When it fires, the
+  secondary window is designed as just another `View`/`RegularWindow`
+  over the shared session — no new isolate.
+- **#297** — timeboxed prototype (do-not-ship, main channel behind
+  `--enable-windowing`): retire the single Route-A unknown by proving
+  the ANGLE/macbear GL viewport renders into a second window's view,
+  or record the fallback.
+
+No implementation lands in this epic. The projected audience view
+(vision §4, §6) waits on #296/#297 by design.
 
 ## 6. Out of scope
 
