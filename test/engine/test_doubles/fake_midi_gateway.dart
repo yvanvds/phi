@@ -142,6 +142,17 @@ class FakeMidiGateway implements MidiGateway {
   }
 
   @override
+  void sendNoteOn({
+    required int channel,
+    required int note,
+    required int velocity,
+  }) => calls.add('sendNoteOn:$channel:$note:$velocity');
+
+  @override
+  void sendNoteOff({required int channel, required int note}) =>
+      calls.add('sendNoteOff:$channel:$note');
+
+  @override
   void allNotesOff({int? channel}) =>
       calls.add('allNotesOff:${channel ?? 'all'}');
 

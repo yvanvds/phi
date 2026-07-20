@@ -363,5 +363,129 @@ void main() {
         expect(recorded, isEmpty);
       });
     });
+
+    group('voice editing (issue #211)', () {
+      void seedVoices() {
+        registry.createEntity(
+          _addr('synth.a'),
+          payload: const SineSynth().toJson(),
+        );
+        registry.createEntity(
+          _addr('synth.b'),
+          payload: const VaSynth().toJson(),
+        );
+        registry.createEntity(
+          _addr('voice.bass'),
+          payload: VoiceDefinition.internal(
+            synth: _addr('synth.a'),
+            output: _addr('mix.master'),
+            color: 'voice1',
+          ).toJson(),
+          references: {_addr('synth.a'), _addr('mix.master')},
+        );
+      }
+
+      test('voiceAt decodes a voice; picker sources list the options', () {
+        seedVoices();
+        registry.createEntity(_addr('mix.drums'), payload: {'voice': 2});
+
+        final voice = controller.voiceAt(_addr('voice.bass'))!;
+        expect(voice.kind, VoiceKind.internal);
+        expect(voice.synth, _addr('synth.a'));
+
+        expect(controller.synthDefinitions, [
+          _addr('synth.a'),
+          _addr('synth.b'),
+        ]);
+        // Master is always offered first, then user buses in tree order.
+        expect(controller.mixBuses, [_addr('mix.master'), _addr('mix.drums')]);
+        // A wrong-shape lookup returns null rather than throwing.
+        expect(controller.voiceAt(_addr('synth.a')), isNull);
+      });
+
+      test('newVoice adds an internal voice bound to the first synth', () {
+        seedVoices();
+        recorded.clear();
+
+        final address = controller.newVoice();
+
+        expect(recorded, hasLength(1));
+        final voice = controller.voiceAt(address)!;
+        expect(voice.kind, VoiceKind.internal);
+        expect(voice.synth, _addr('synth.a'));
+        expect(voice.output, _addr('mix.master'));
+      });
+
+      test('newVoice with no synths falls back to an external voice', () {
+        registry.createEntity(
+          _addr('voice.default'),
+          payload: VoiceDefinition.external(
+            channel: 1,
+            output: _addr('mix.master'),
+          ).toJson(),
+        );
+
+        final address = controller.newVoice();
+        final voice = controller.voiceAt(address)!;
+        expect(voice.kind, VoiceKind.external);
+        expect(voice.channel, 1);
+      });
+
+      test('updateVoice re-points the synth and refreshes the back-refs', () {
+        seedVoices();
+        recorded.clear();
+
+        controller.updateVoice(
+          _addr('voice.bass'),
+          controller
+              .voiceAt(_addr('voice.bass'))!
+              .copyWith(synth: _addr('synth.b')),
+        );
+
+        expect(recorded, hasLength(1));
+        expect(
+          controller.voiceAt(_addr('voice.bass'))!.synth,
+          _addr('synth.b'),
+        );
+        // The delete-impact index followed the re-point: synth.a is now free,
+        // synth.b is referenced by the voice.
+        expect(controller.impactOf(_addr('synth.a')).hasReferrers, isFalse);
+        expect(
+          controller
+              .impactOf(_addr('synth.b'))
+              .referrers
+              .map((r) => r.format()),
+          contains('voice.bass'),
+        );
+      });
+
+      test('updateVoice can switch kind internal → external', () {
+        seedVoices();
+
+        controller.updateVoice(
+          _addr('voice.bass'),
+          VoiceDefinition.external(
+            channel: 7,
+            output: _addr('mix.master'),
+            color: 'voice1',
+          ),
+        );
+
+        final voice = controller.voiceAt(_addr('voice.bass'))!;
+        expect(voice.kind, VoiceKind.external);
+        expect(voice.channel, 7);
+        expect(voice.synth, isNull);
+        // The old synth binding is dropped from the back-ref index.
+        expect(controller.impactOf(_addr('synth.a')).hasReferrers, isFalse);
+      });
+
+      test('updateVoice on a missing voice is a no-op', () {
+        controller.updateVoice(
+          _addr('voice.ghost'),
+          VoiceDefinition.external(channel: 1, output: _addr('mix.master')),
+        );
+        expect(recorded, isEmpty);
+      });
+    });
   });
 }

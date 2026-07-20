@@ -33,6 +33,7 @@ class PianoRollEditor extends StatefulWidget {
     this.playhead,
     this.view,
     this.onViewChanged,
+    this.onAuditionNote,
     super.key,
   });
 
@@ -43,6 +44,13 @@ class PianoRollEditor extends StatefulWidget {
   final int beatsPerBar;
   final int minPitch;
   final int maxPitch;
+
+  /// Called to **preview** a note through its routed voice (design §7, issue
+  /// #211): fired when the performer clicks a note (selecting or adding one) or
+  /// steps one in with the caret. The surface plays a momentary audition of the
+  /// note's `voice`; `null` (bare tests / no MIDI subsystem) makes editing
+  /// silent.
+  final void Function(MidiNote note)? onAuditionNote;
 
   /// The engine player's beat position (issue #29). When `null` the roll
   /// paints no playhead; otherwise it animates as the player advances.
@@ -242,19 +250,21 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
     final hit = _geo.hitTest(_editor.clip.notes, d.localPosition);
     if (hit != null) {
       _shift ? _editor.toggle(hit.index) : _editor.selectOnly(hit.index);
+      // Preview the clicked note through its routed voice (design §7).
+      widget.onAuditionNote?.call(_editor.clip.notes[hit.index]);
       return;
     }
     // Empty cell → add a note snapped to the grid at the clicked lane.
-    _editor.addNote(
-      MidiNote(
-        pitch: _geo.pitchForY(d.localPosition.dy).toDouble(),
-        start: _snap(
-          _geo.beatForX(d.localPosition.dx),
-        ).clamp(0.0, double.infinity),
-        duration: _step,
-        velocity: 0.7,
-      ),
+    final added = MidiNote(
+      pitch: _geo.pitchForY(d.localPosition.dy).toDouble(),
+      start: _snap(
+        _geo.beatForX(d.localPosition.dx),
+      ).clamp(0.0, double.infinity),
+      duration: _step,
+      velocity: 0.7,
     );
+    _editor.addNote(added);
+    widget.onAuditionNote?.call(added);
   }
 
   // ── Drag: move / resize / marquee ─────────────────────────────────────────
@@ -431,14 +441,15 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
   /// notes end to end. The add goes through [ClipEditor], so it undoes normally.
   void _dropAtCaret() {
     final c = _caret ?? _home;
-    _editor.addNote(
-      MidiNote(
-        pitch: c.pitch.toDouble(),
-        start: c.beat,
-        duration: _step,
-        velocity: 0.7,
-      ),
+    final added = MidiNote(
+      pitch: c.pitch.toDouble(),
+      start: c.beat,
+      duration: _step,
+      velocity: 0.7,
     );
+    _editor.addNote(added);
+    // Preview the stepped-in note through its routed voice (design §7).
+    widget.onAuditionNote?.call(added);
     setState(() => _caret = c.copyWith(beat: c.beat + _step));
   }
 

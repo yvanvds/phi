@@ -66,12 +66,18 @@ class MidiViewport extends StatefulWidget {
     this.runtimeVariables,
     this.transport,
     this.onImportSmf,
+    this.onAuditionNote,
     this.clipName = phraseASlug,
     super.key,
   });
 
   final MidiTransformChain chain;
   final ClipEditor? editor;
+
+  /// Preview a note through its routed voice when the performer clicks or steps
+  /// it in (design §7, issue #211). Forwarded to the [PianoRollEditor]; `null`
+  /// (no MIDI subsystem) makes editing silent.
+  final void Function(MidiNote note)? onAuditionNote;
 
   /// Import handler wired by the surface when a clip library is live (issue
   /// #191): dropping / importing a `.mid` lands it as a **new** clip entity in
@@ -449,6 +455,7 @@ class _MidiViewportState extends State<MidiViewport> {
             playhead: widget.playhead,
             view: _view,
             onViewChanged: (view) => setState(() => _view = view),
+            onAuditionNote: widget.onAuditionNote,
           ),
         ),
         const SizedBox(height: 8),

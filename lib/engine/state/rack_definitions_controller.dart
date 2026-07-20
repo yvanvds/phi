@@ -406,19 +406,8 @@ class RackDefinitionsController extends ChangeNotifier {
   }
 
   RackVoiceRow? _voiceRowAt(EntityAddress address) {
-    final payload = _registry.entityAt(address)?.payload;
-    final VoiceDefinition definition;
-    if (payload is VoiceDefinition) {
-      definition = payload;
-    } else if (payload is Map) {
-      try {
-        definition = VoiceDefinition.fromJson(payload.cast<String, Object?>());
-      } on FormatException {
-        return null;
-      }
-    } else {
-      return null;
-    }
+    final definition = voiceAt(address);
+    if (definition == null) return null;
     return RackVoiceRow(
       address: address,
       kind: definition.kind,
@@ -428,6 +417,122 @@ class RackDefinitionsController extends ChangeNotifier {
       colorToken: definition.color,
     );
   }
+
+  /// The `voice.` definition at [address] decoded into its typed
+  /// [VoiceDefinition], or `null` when nothing voice-shaped sits there — the
+  /// voices pane reads this to edit a row (bind / colour / kind).
+  VoiceDefinition? voiceAt(EntityAddress address) {
+    final payload = _registry.entityAt(address)?.payload;
+    if (payload is VoiceDefinition) return payload;
+    if (payload is Map) {
+      try {
+        return VoiceDefinition.fromJson(payload.cast<String, Object?>());
+      } on FormatException {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /// Write an edited voice [definition] to the entity at [address] as one
+  /// journaled payload command — the voices pane's bind / colour / kind commit
+  /// path (design §8). Its `synth` / `output` references feed the registry's
+  /// back-reference index. A no-op when [address] holds no entity.
+  void updateVoice(EntityAddress address, VoiceDefinition definition) {
+    if (_registry.entityAt(address) == null) return;
+    _apply(UpdateEntityPayloadCommand(_registry, address, definition.toJson()));
+    // The payload is a JSON map (the journal contract), not a `ReferenceSource`,
+    // so the registry keeps the *old* references on a payload edit. Re-point the
+    // back-reference index at the voice's new synth / bus so delete-impact and
+    // rename-refactor stay correct after a re-bind (design §4). The payload map
+    // remains the binding's source of truth either way.
+    _registry.setReferences(address, definition.references);
+  }
+
+  /// Create a new `voice.` under [group] (top-level when null) and select
+  /// nothing (voices have no editor pane). An internal voice pointing at the
+  /// first available `synth.` definition and out of master when a synth exists;
+  /// otherwise an external voice on channel 1 (so a project with no synths can
+  /// still add a playable hardware voice). Its colour is the next quick-pick in
+  /// the `voice1..voice6` cycle. Returns the new voice's address.
+  EntityAddress newVoice({EntityAddress? group}) {
+    final address = _freshAddress(
+      kind: RegistryKinds.voice,
+      group: group,
+      desired: NameSlug.of('voice', fallback: 'voice'),
+    );
+    final synths = synthDefinitions;
+    final master = EntityAddress(
+      kind: RegistryKinds.mix,
+      segments: const ['master'],
+    );
+    final color = _nextVoiceColor();
+    final definition = synths.isEmpty
+        ? VoiceDefinition.external(channel: 1, output: master, color: color)
+        : VoiceDefinition.internal(
+            synth: synths.first,
+            output: master,
+            color: color,
+          );
+    _apply(
+      CreateEntityCommand(
+        _registry,
+        address,
+        payload: definition.toJson(),
+        references: definition.references,
+      ),
+    );
+    return address;
+  }
+
+  /// Every `synth.` definition address, groups flattened depth-first in registry
+  /// order — the voices pane's synth picker options.
+  List<EntityAddress> get synthDefinitions {
+    final out = <EntityAddress>[];
+    _collectLeaves(
+      _registry.childrenOfKind(RegistryKinds.synth),
+      RegistryKinds.synth,
+      const [],
+      out,
+    );
+    return out;
+  }
+
+  /// The mix buses a voice can route to — `mix.master` (always present, though it
+  /// is not a registry entity) followed by every user `mix.` bus in tree order.
+  /// The voices pane's bus picker options.
+  List<EntityAddress> get mixBuses {
+    final out = <EntityAddress>[
+      EntityAddress(kind: RegistryKinds.mix, segments: const ['master']),
+    ];
+    _collectLeaves(
+      _registry.childrenOfKind(RegistryKinds.mix),
+      RegistryKinds.mix,
+      const [],
+      out,
+    );
+    return out;
+  }
+
+  void _collectLeaves(
+    List<RegistryNode> nodes,
+    String kind,
+    List<String> prefix,
+    List<EntityAddress> out,
+  ) {
+    for (final node in nodes) {
+      final segments = [...prefix, node.name];
+      if (node is RegistryGroup) {
+        _collectLeaves(node.children.toList(), kind, segments, out);
+      } else {
+        out.add(EntityAddress(kind: kind, segments: segments));
+      }
+    }
+  }
+
+  /// The next quick-pick colour token for a fresh voice — cycles `voice1..voice6`
+  /// by the current voice count so successive adds don't all read the same hue.
+  String _nextVoiceColor() => 'voice${(voices.length % 6) + 1}';
 
   // ─── helpers ────────────────────────────────────────────────────────────────
 

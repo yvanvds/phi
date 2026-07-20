@@ -21,6 +21,7 @@ import '../engine/bridge/no_op_code_evaluator.dart';
 import '../engine/engine.dart';
 import '../engine/state/clip_library_controller.dart';
 import '../engine/state/rack_definitions_controller.dart';
+import '../engine/state/voice_audition_controller.dart';
 import '../surfaces/code/code_surface.dart';
 import '../surfaces/midi/midi_file_io.dart';
 import '../surfaces/midi/midi_surface.dart';
@@ -136,6 +137,11 @@ class _WorkstationState extends State<Workstation> {
   /// dependency); rebound alongside the engine whenever New / Open swaps it.
   RackDefinitionsController? _rackDefinitions;
 
+  /// Drives arm-for-input + audition in the racks voices pane (issue #211) —
+  /// the single armed voice, the MIDI-in subscription, and the test strip. Built
+  /// only when the engine has a MIDI subsystem; disposed with the shell.
+  VoiceAuditionController? _voiceAudition;
+
   /// Imports FM banks / SFZ instruments / samples into the open project's
   /// `assets/` folder for the Racks editors (issue #210), resolving the live
   /// project location on each pick. Constructing it touches no plugins.
@@ -220,6 +226,12 @@ class _WorkstationState extends State<Workstation> {
       registry: controller.registry,
       recordCommand: controller.recordCommand,
     );
+    // Arm-for-input + audition need the MIDI subsystem (the parsed input stream
+    // and the voice → synth audition path); build the seam only when it exists
+    // (issue #211). The voices pane degrades to editing-only without it.
+    if (midi != null) {
+      _voiceAudition = VoiceAuditionController(midi: midi);
+    }
     // The engine consumes the registry as its channel source of truth (design
     // §8): bind it to the controller's registry now, and rebind whenever New /
     // Open swaps the registry instance (the controller notifies on that).
@@ -328,6 +340,7 @@ class _WorkstationState extends State<Workstation> {
     widget.projectController?.removeListener(_bindEngineRegistry);
     _libraryController?.dispose();
     _rackDefinitions?.dispose();
+    _voiceAudition?.dispose();
     _exitListener?.dispose();
     widget.session.transport.removeListener(_onTransport);
     widget.session.tempo.removeListener(_onTempo);
@@ -471,6 +484,7 @@ class _WorkstationState extends State<Workstation> {
       case SurfaceId.racks:
         return RacksSurface(
           controller: _rackDefinitions,
+          audition: _voiceAudition,
           assetSource: _rackAssetSource,
           bankReader: _fmBankReader,
         );

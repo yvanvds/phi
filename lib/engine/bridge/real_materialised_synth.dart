@@ -98,6 +98,13 @@ class RealMaterialisedSynth implements MaterialisedSynth {
   }
 
   @override
+  void noteOn(int note, {double velocity = 0.8}) =>
+      _synth.noteOn(note, channel: channel, velocity: velocity);
+
+  @override
+  void noteOff(int note) => _synth.noteOff(note, channel: channel);
+
+  @override
   void dispose() {
     // Sound before synth: the audio thread renders the synth's voices *through*
     // the sound, so the sound must be gone first.

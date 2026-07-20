@@ -49,6 +49,17 @@ abstract interface class MaterialisedSynth {
   /// existing sound — the voice re-pointing behind a stable identity (design §3).
   void bindToBus(int? busChannelId);
 
+  /// Immediately start [note] (a MIDI note number, `0..127`) on this synth's
+  /// [channel] — the **audition** path (design §7). Bypasses the transport for
+  /// zero-latency response, so arming a voice, the on-screen test strip, and the
+  /// roll preview all sound the moment the performer acts. [velocity] is
+  /// normalised `[0, 1]`.
+  void noteOn(int note, {double velocity});
+
+  /// Immediately release [note] on this synth's [channel] — the note-off half of
+  /// the audition path.
+  void noteOff(int note);
+
   /// Release the engine resources — the `Sound` first, then the `Synth` — the
   /// order the engine requires to avoid a dangling voice-pool render. Idempotent.
   void dispose();

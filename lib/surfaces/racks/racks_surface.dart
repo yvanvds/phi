@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../design/tokens/phi_colors.dart';
 import '../../domain/synth/fm_bank_reader.dart';
 import '../../engine/state/rack_definitions_controller.dart';
+import '../../engine/state/voice_audition_controller.dart';
 import '../surface.dart';
 import 'definition_editor_pane.dart';
 import 'definitions_panel.dart';
@@ -17,8 +18,8 @@ import 'voices_pane.dart';
 ///   delete-with-impact).
 /// - **center** — [DefinitionEditorPane]: the selected definition's editor
 ///   (a routed placeholder here; per-kind panels land in #212).
-/// - **right** — [VoicesPane]: one row per `voice.` (a scaffold here; binding /
-///   colour / kind editing + audition land in #211).
+/// - **right** — [VoicesPane]: one editable row per `voice.` (bind / colour /
+///   kind, arm-for-input, and the audition test strip; issue #211).
 ///
 /// It binds to the shell-owned [RackDefinitionsController]. That is `null` only
 /// in the bare Phase-1 tests that wire no project; the surface then shows a hint
@@ -31,12 +32,19 @@ import 'voices_pane.dart';
 class RacksSurface extends Surface {
   const RacksSurface({
     required this.controller,
+    this.audition,
     this.assetSource,
     this.bankReader,
     super.key,
   });
 
   final RackDefinitionsController? controller;
+
+  /// Arm-for-input + audition seam driving the voices pane (issue #211). `null`
+  /// in the bare Phase-1 tests / projects with no MIDI subsystem — the voices
+  /// pane then disables arming and the test strip but still edits rows.
+  final VoiceAuditionController? audition;
+
   final RackAssetSource? assetSource;
   final FmBankReader? bankReader;
 
@@ -67,7 +75,7 @@ class RacksSurface extends Surface {
               bankReader: bankReader,
             ),
           ),
-          VoicesPane(controller: controller),
+          VoicesPane(controller: controller, audition: audition),
         ],
       ),
     );
