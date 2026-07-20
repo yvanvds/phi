@@ -15,6 +15,7 @@ import '../domain/project/lifecycle/project_controller.dart';
 import '../domain/project/lifecycle/project_directory_picker.dart';
 import '../domain/project/undo_scopes.dart';
 import '../domain/session/session_state.dart';
+import '../domain/shell_layout/layout_node.dart';
 import '../engine/bridge/code_evaluator.dart';
 import '../engine/bridge/dx7_fm_bank_reader.dart';
 import '../engine/bridge/no_op_code_evaluator.dart';
@@ -32,6 +33,9 @@ import '../surfaces/racks/racks_surface.dart';
 import '../surfaces/scene/scene_surface.dart';
 import '../surfaces/state/state_surface.dart';
 import 'bottom_status/bottom_status.dart';
+import 'layout/shell_layout_controller.dart';
+import 'layout/split_tree_view.dart';
+import 'layout/surface_pane.dart';
 import 'left_rail/left_rail.dart';
 import 'left_rail/surface_id.dart';
 import 'project/close_confirm_dialog.dart';
@@ -55,11 +59,18 @@ class Workstation extends StatefulWidget {
     this.midiFileIo,
     this.codeEvaluator,
     this.customTransformRegistry,
+    this.layoutController,
     super.key,
   });
 
   final PhiEngine engine;
   final SessionState session;
+
+  /// The workspace layout controller — the split tree + tab stacks the centre
+  /// renders (design `docs/design/shell-layout.md` §2). `null` lets the shell
+  /// build its own seeded controller (one pane, Mix open); tests inject one to
+  /// drive dock moves and assert state survives a re-parent.
+  final ShellLayoutController? layoutController;
 
   /// The project lifecycle controller. When present (with [directoryPicker]),
   /// the toolbar shows the project menu + dirty indicator, Ctrl+S saves, and the
@@ -97,7 +108,26 @@ class Workstation extends StatefulWidget {
 }
 
 class _WorkstationState extends State<Workstation> {
-  SurfaceId _selected = SurfaceId.mix;
+  /// Owns the split tree + tab stacks the centre renders; the rail summons
+  /// surfaces into it and the Scene visibility + undo focus follow its focused
+  /// surface. Built here (seed: one pane, Mix open) unless a test injected one.
+  late final ShellLayoutController _layout;
+  late final bool _ownsLayout;
+
+  /// One stable key per surface, so a surface keeps its element (and all its
+  /// state) when it re-parents from one pane to another — single-instance
+  /// content moves, it never rebuilds (design §2). Scene is the exception: it
+  /// mounts only while it is the visible tab, so its slot is keyless when
+  /// offstage.
+  final Map<SurfaceId, GlobalKey> _surfaceKeys = {
+    for (final id in SurfaceId.values) id: GlobalKey(debugLabel: id.name),
+  };
+
+  /// Tracks the last Scene-visibility signal so the renderer is only told when
+  /// it actually flips (a layout change that leaves Scene where it was is
+  /// silent).
+  bool? _sceneVisible;
+
   late final CodeEvaluator _codeEvaluator;
   late final bool _ownsCodeEvaluator;
   late final CustomTransformRegistry _customTransforms;
@@ -174,16 +204,20 @@ class _WorkstationState extends State<Workstation> {
     _customTransforms =
         widget.customTransformRegistry ?? CustomTransformRegistry();
 
+    _ownsLayout = widget.layoutController == null;
+    _layout = widget.layoutController ?? ShellLayoutController();
+    _layout.addListener(_onLayoutChanged);
+
     final midi = widget.engine.midiOrNull;
     _ownsMidiState = midi == null;
     _midiChain = midi?.chain ?? defaultDemoChain();
     _midiEditor = midi?.editor ?? ClipEditor(_midiChain.source);
 
     _undoScopes.register(_midiEditor.undoScope);
-    _undoScopes.focus(_scopeIdFor(_selected));
+    _undoScopes.focus(_scopeIdFor(_layout.focusedSurface));
 
     // The app boots on Mix, so the Scene surface starts offstage — tell the
-    // renderer to keep its ticker paused until Scene is first selected.
+    // renderer to keep its ticker paused until Scene is first summoned.
     _syncSceneVisibility();
 
     // Transport play/stop drives the MIDI player at the session tempo; tempo
@@ -337,6 +371,8 @@ class _WorkstationState extends State<Workstation> {
 
   @override
   void dispose() {
+    _layout.removeListener(_onLayoutChanged);
+    if (_ownsLayout) _layout.dispose();
     widget.projectController?.removeListener(_bindEngineRegistry);
     _libraryController?.dispose();
     _rackDefinitions?.dispose();
@@ -379,23 +415,46 @@ class _WorkstationState extends State<Workstation> {
   void _onMasterMuted() =>
       widget.engine.setMasterMuted(muted: widget.session.masterMuted.value);
 
-  void _onSelect(SurfaceId id) {
-    setState(() => _selected = id);
+  /// A rail tap summons the surface (design §2, §3): focus it wherever it is
+  /// docked, or open it in the active pane if closed.
+  void _onSelect(SurfaceId id) => _layout.summon(id.name);
+
+  /// Reacts to a layout change (a summon, a dock move): repaint the centre + rail
+  /// and follow the focused surface with the Scene ticker and the undo focus.
+  void _onLayoutChanged() {
+    setState(() {});
     _syncSceneVisibility();
-    // Undo follows focus: point Ctrl+Z/Y at the newly active surface's stack.
-    _undoScopes.focus(_scopeIdFor(id));
+    // Undo follows focus: point Ctrl+Z/Y at the focused surface's stack.
+    _undoScopes.focus(_scopeIdFor(_layout.focusedSurface));
   }
 
-  /// The undo-scope id owned by surface [id], or `null` for surfaces that have
-  /// no undo stack yet. Only the MIDI surface has one today.
-  String? _scopeIdFor(SurfaceId id) =>
-      id == SurfaceId.midi ? _midiEditor.undoScope.id : null;
+  /// The undo-scope id owned by the surface with layout id [surfaceId], or `null`
+  /// for surfaces (or an empty focus) with no undo stack yet. Only the MIDI
+  /// surface has one today.
+  String? _scopeIdFor(String? surfaceId) =>
+      surfaceId == SurfaceId.midi.name ? _midiEditor.undoScope.id : null;
+
+  /// The focused surface as a [SurfaceId], or null when the active pane is empty
+  /// — what the rail highlights.
+  SurfaceId? get _focusedSurfaceId {
+    final focused = _layout.focusedSurface;
+    return focused == null ? null : _surfaceIdOf(focused);
+  }
+
+  /// Whether the Scene surface is the visible (active) tab of whatever pane holds
+  /// it — Scene is single-instance, so it is active in at most one pane.
+  bool get _sceneOnstage =>
+      _layout.layout.panes.any((p) => p.active == SurfaceId.scene.name);
 
   /// Pause macbear's render ticker whenever Scene is offstage; resume it when
-  /// Scene is the selected surface. Keeps the shell renderer-agnostic — the
-  /// macbear specifics stay inside `MacbearSceneRenderer`.
+  /// Scene is the visible surface. Only signals the renderer on an actual flip,
+  /// so a layout change elsewhere stays silent. Keeps the shell
+  /// renderer-agnostic — the macbear specifics stay inside `MacbearSceneRenderer`.
   void _syncSceneVisibility() {
-    widget.engine.sceneRenderer?.setVisible(_selected == SurfaceId.scene);
+    final visible = _sceneOnstage;
+    if (visible == _sceneVisible) return;
+    _sceneVisible = visible;
+    widget.engine.sceneRenderer?.setVisible(visible);
   }
 
   @override
@@ -434,7 +493,7 @@ class _WorkstationState extends State<Workstation> {
             Expanded(
               child: Row(
                 children: [
-                  LeftRail(selected: _selected, onSelect: _onSelect),
+                  LeftRail(selected: _focusedSurfaceId, onSelect: _onSelect),
                   Expanded(child: _buildCentre()),
                   RightInspector(session: widget.session),
                 ],
@@ -447,32 +506,42 @@ class _WorkstationState extends State<Workstation> {
     );
   }
 
-  Widget _buildCentre() {
-    // Every surface except Scene stays resident: IndexedStack keeps each in the
-    // element tree so its transient UI state (scroll, selection, in-progress
-    // edits) survives rail switches while only the selected one paints.
-    //
-    // Scene is the exception. It hosts macbear's `M3View`, which drives a
-    // process-wide GL context, so we mount it only while Scene is selected —
-    // keeping ANGLE init off the boot path when the app opens elsewhere and
-    // letting the GPU context idle when Scene is offstage. The fork's
-    // `M3AppEngine.unmount()`/`remount()` (issue #19) keeps the engine warm, so
-    // leaving and re-entering Scene is cheap and crash-free.
-    return IndexedStack(
-      index: SurfaceId.values.indexOf(_selected),
-      sizing: StackFit.expand,
-      children: [for (final id in SurfaceId.values) _surfaceSlot(id)],
-    );
+  /// The centre region: the split tree of panes (design §2). In the
+  /// behaviour-neutral default it is one pane whose tab stack the rail summons
+  /// into — so the app looks identical to the pre-refactor single surface until
+  /// the performer splits.
+  Widget _buildCentre() =>
+      SplitTreeView(root: _layout.layout.root, buildPane: _buildPane);
+
+  /// Renders one pane's resident tab stack ([SurfacePane]), routing each tab
+  /// through [_surfaceContent] so surfaces keep their identity across moves.
+  Widget _buildPane(LayoutPane pane) =>
+      SurfacePane(pane: pane, contentFor: _surfaceContent);
+
+  /// The resident content for the surface with layout id [surfaceId]. Every
+  /// surface is wrapped in its stable [GlobalKey] so moving it between panes
+  /// re-parents the element (its state survives) instead of rebuilding.
+  ///
+  /// Scene is the exception: its `M3View` drives a process-wide GL context, so
+  /// it mounts only while it is its pane's [active] (visible) tab — keeping ANGLE
+  /// init off the boot path when the app opens elsewhere and letting the GPU
+  /// context idle when Scene is a background tab or closed. Re-parenting an
+  /// *active* Scene between panes is the one interaction verified by hand (the
+  /// GL path is not CI-testable); the fork's `M3AppEngine` keeps the engine warm.
+  Widget _surfaceContent(String surfaceId, {required bool active}) {
+    final id = _surfaceIdOf(surfaceId);
+    if (id == null) return const SizedBox.shrink();
+    if (id == SurfaceId.scene && !active) return const SizedBox.shrink();
+    return KeyedSubtree(key: _surfaceKeys[id], child: _surfaceFor(id));
   }
 
-  /// The child for [id]'s IndexedStack slot. Every surface is built eagerly
-  /// except Scene, whose `M3View` is kept out of the tree until Scene is
-  /// selected (see [_buildCentre]); its slot is an empty box while offstage.
-  Widget _surfaceSlot(SurfaceId id) {
-    if (id == SurfaceId.scene && _selected != SurfaceId.scene) {
-      return const SizedBox.shrink();
+  /// The [SurfaceId] whose [SurfaceId.name] is [surfaceId], or null when the id
+  /// names no known surface (fit-fallback drops such tabs, so this is defensive).
+  SurfaceId? _surfaceIdOf(String surfaceId) {
+    for (final id in SurfaceId.values) {
+      if (id.name == surfaceId) return id;
     }
-    return _surfaceFor(id);
+    return null;
   }
 
   Widget _surfaceFor(SurfaceId id) {

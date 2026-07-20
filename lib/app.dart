@@ -15,6 +15,7 @@ import 'domain/project/store/registry_codecs.dart';
 import 'domain/session/session_state.dart';
 import 'engine/bridge/code_evaluator.dart';
 import 'engine/engine.dart';
+import 'shell/layout/shell_layout_controller.dart';
 import 'shell/project/file_selector_project_directory_picker.dart';
 import 'shell/workstation.dart';
 import 'surfaces/midi/midi_file_io.dart';
@@ -30,6 +31,7 @@ class PhiApp extends StatefulWidget {
     this.midiFileIo,
     this.codeEvaluator,
     this.customTransformRegistry,
+    this.layoutController,
   });
 
   /// Optional engine override — tests inject a fake-backed engine here so
@@ -67,6 +69,11 @@ class PhiApp extends StatefulWidget {
   /// [codeEvaluator] so a fake evaluator registers into the same instance the
   /// MIDI `+` menu reads (issue #38).
   final CustomTransformRegistry? customTransformRegistry;
+
+  /// Optional workspace layout controller (design `docs/design/shell-layout.md`
+  /// §2). `null` lets the workstation seed its own (one pane, Mix open); tests
+  /// inject one to drive dock moves and assert surface state survives.
+  final ShellLayoutController? layoutController;
 
   @override
   State<PhiApp> createState() => _PhiAppState();
@@ -165,6 +172,7 @@ class _PhiAppState extends State<PhiApp> {
         midiFileIo: widget.midiFileIo,
         codeEvaluator: widget.codeEvaluator,
         customTransformRegistry: widget.customTransformRegistry,
+        layoutController: widget.layoutController,
       ),
     );
   }

@@ -67,6 +67,24 @@ main + app          (orchestration)
   play/stop transport, time-domain placeholder, projection toggle), left
   rail (6 buttons, only Mix enabled), bottom status (LIVE dot, CPU + drops),
   right inspector (tap to expand 28→320px, hosts a master-volume fader)
+- Shell layout — dockable single-instance surfaces in a split tree (design
+  `docs/design/shell-layout.md`, epic #249). The pure-Dart layout domain
+  (`lib/domain/shell_layout/`, issue #250) — `ShellLayout` over a `LayoutNode`
+  split tree of tab-stack `LayoutPane`s + `LayoutSplit`s, with split / join /
+  move / reorder / activate / close / resize ops, fraction geometry, JSON
+  round-trip and fit-fallback. Issue #251 wired it into the centre: a shell-side
+  `ShellLayoutController` (`lib/shell/layout/`, `ChangeNotifier`) owns the tree +
+  the active pane and turns the **rail into identity + summon** (a tap focuses a
+  surface wherever it is docked, or opens it in the active pane if closed);
+  `SplitTreeView` renders the tree into nested rows/columns and `SurfacePane`
+  renders each pane's resident tab stack (active tab paints, others stay mounted
+  offstage). Each surface is wrapped in a stable `GlobalKey` so a **dock move
+  re-parents its element rather than rebuilding it** — its state survives the
+  move; Scene stays the exception (mounted only while it is the visible tab, GL
+  re-parenting verified by hand). Behaviour-neutral default: one pane, Mix open —
+  the app looks identical until the performer splits (drag-to-dock UI + tab
+  strips are #252). `Workstation`/`PhiApp` accept an injected controller so a
+  dock move is driveable end-to-end.
 - Settings dialog (`lib/shell/settings/`, design `settings-and-devices.md`
   §6, issues #154 + #151): a modal overlay (no rail button, no OS window) opened
   from the File menu's `Settings…` item, with a left section list (AUDIO · MIDI ·

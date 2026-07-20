@@ -214,6 +214,18 @@ class ShellLayout {
     );
   }
 
+  /// Makes [surfaceId] the active (foreground) tab of whichever pane holds it —
+  /// the layout side of a rail summon focusing an already-placed surface (design
+  /// §2 — "clicking a rail entry focuses the surface wherever it lives"). A no-op
+  /// when the surface is closed or is already its pane's active tab.
+  ShellLayout activate(String surfaceId) {
+    final paneId = paneIdOf(surfaceId);
+    if (paneId == null) return this;
+    final pane = paneById(paneId)!;
+    if (pane.active == surfaceId) return this;
+    return _replacing(paneId, pane.copyWith(active: surfaceId));
+  }
+
   /// Reorders a tab within [paneId] from [oldIndex] to [newIndex], keeping the
   /// active tab (design §2 — "within a stack to reorder"). Out-of-range indices
   /// or an unknown pane → no-op.
