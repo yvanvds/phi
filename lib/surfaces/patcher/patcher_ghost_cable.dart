@@ -1,25 +1,26 @@
 import 'package:flutter/widgets.dart';
 
-import '../../design/tokens/phi_voices.dart';
 import '../../design/widgets/patcher/patch_canvas_constants.dart';
 import '../../domain/patcher/patch_port_kind.dart';
 
 /// In-flight cable drawn while the user drags from an output port toward
 /// a (yet-unknown) target. The head follows the pointer; the tail anchors
-/// at the source port. Dashed when the source carries control-rate data,
-/// matching the rendered cable style.
+/// at the source port. Coloured by the source outlet's data type ([color]),
+/// dashed when it carries control-rate messages — matching the rendered cable.
 class PatcherGhostCable extends StatelessWidget {
   const PatcherGhostCable({
     required this.source,
     required this.cursor,
-    required this.voice,
+    required this.color,
+    required this.glow,
     required this.kind,
     super.key,
   });
 
   final Offset source;
   final Offset cursor;
-  final int voice;
+  final Color color;
+  final Color glow;
   final PatchPortKind kind;
 
   @override
@@ -29,7 +30,8 @@ class PatcherGhostCable extends StatelessWidget {
         painter: _GhostPainter(
           source: source,
           cursor: cursor,
-          voice: voice,
+          color: color,
+          glow: glow,
           kind: kind,
         ),
         child: const SizedBox.expand(),
@@ -42,13 +44,15 @@ class _GhostPainter extends CustomPainter {
   _GhostPainter({
     required this.source,
     required this.cursor,
-    required this.voice,
+    required this.color,
+    required this.glow,
     required this.kind,
   });
 
   final Offset source;
   final Offset cursor;
-  final int voice;
+  final Color color;
+  final Color glow;
   final PatchPortKind kind;
 
   @override
@@ -64,9 +68,6 @@ class _GhostPainter extends CustomPainter {
         cursor.dx,
         cursor.dy,
       );
-
-    final color = PhiVoices.color(voice);
-    final glow = PhiVoices.glow(voice);
 
     canvas.drawPath(
       path,
@@ -115,5 +116,5 @@ class _GhostPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _GhostPainter old) =>
-      old.cursor != cursor || old.source != source || old.kind != kind;
+      old.cursor != cursor || old.source != source || old.color != color;
 }

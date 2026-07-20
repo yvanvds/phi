@@ -134,6 +134,73 @@ void main() {
     });
   });
 
+  group('PatchGraph selection', () {
+    test('selectNodes replaces the set and clears a cable selection', () {
+      final g = PatchGraph();
+      final cable = PatchCable(
+        source: _out(1, 0),
+        target: _in(2, 0),
+        kind: PatchPortKind.audio,
+      );
+      g.selectCable(cable);
+      expect(g.selectedCable, cable);
+
+      g.selectNodes({const PatchNodeId(1), const PatchNodeId(2)});
+
+      expect(g.selectedNodes, {const PatchNodeId(1), const PatchNodeId(2)});
+      expect(g.selectedCable, isNull);
+      expect(g.isNodeSelected(const PatchNodeId(1)), isTrue);
+    });
+
+    test('toggleNode adds then removes one node', () {
+      final g = PatchGraph();
+      g.toggleNode(const PatchNodeId(3));
+      expect(g.selectedNodes, {const PatchNodeId(3)});
+      g.toggleNode(const PatchNodeId(3));
+      expect(g.selectedNodes, isEmpty);
+    });
+
+    test('selectCable clears node selection', () {
+      final g = PatchGraph();
+      g.selectNodes({const PatchNodeId(1)});
+      final cable = PatchCable(
+        source: _out(1, 0),
+        target: _in(2, 0),
+        kind: PatchPortKind.control,
+      );
+      g.selectCable(cable);
+      expect(g.selectedNodes, isEmpty);
+      expect(g.selectedCable, cable);
+    });
+
+    test('removeNode prunes a selected node and a cable that touched it', () {
+      final g = PatchGraph();
+      g.addNode(_node(1));
+      g.selectNodes({const PatchNodeId(1)});
+      final cable = PatchCable(
+        source: _out(1, 0),
+        target: _in(2, 0),
+        kind: PatchPortKind.audio,
+      );
+      g.addCable(cable);
+      g.selectCable(cable); // clears node selection
+      g.selectNodes({const PatchNodeId(1)}); // reselect the node
+
+      g.removeNode(const PatchNodeId(1));
+
+      expect(g.isNodeSelected(const PatchNodeId(1)), isFalse);
+      expect(g.selectedCable, isNull);
+    });
+
+    test('clearSelection empties both node and cable selection', () {
+      final g = PatchGraph();
+      g.selectNodes({const PatchNodeId(1)});
+      g.clearSelection();
+      expect(g.selectedNodes, isEmpty);
+      expect(g.selectedCable, isNull);
+    });
+  });
+
   group('PatchPortId', () {
     test('value equality + hashCode', () {
       const a = PatchPortId(

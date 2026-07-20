@@ -1391,8 +1391,37 @@ main + app          (orchestration)
   absent, DSP accent, full-metadata render, empty state), surface widget tests
   (drag-create landing a node at the drop point; tap-a-node → reference), and an
   end-to-end `patcher_palette` integration test (summon → sections → tap-to-document
-  → drag-create). Canvas rework (body-drag, marquee, typed cables) and per-node live
-  GUI bodies / params dialog are following epic issues.
+  → drag-create). Per-node live GUI bodies / params dialog are a following epic issue.
+- **Patcher canvas interactions** (issue #222, patcher epic, design
+  `docs/design/patcher.md` §6) — the canvas rework that makes the surface editable.
+  **Body dragging** replaces the old select-an-outlet-first move: a drag anywhere on
+  a node moves it (and the rest of the selection) live, committing one
+  `MovePatchNodesCommand` on release. **Typed cables:** a drag from an outlet colours
+  the ghost by the outlet's `OutType` (`patchOutletColor`, `lib/surfaces/patcher/`),
+  compatible inlets light up, and an incompatible drop is refused with a visible
+  reject banner — compatibility is a pure `patchPinsCompatible`
+  (`lib/engine/bridge/patch_pin_compatibility.dart`, buffer→DSP inlet, float/int
+  interchangeable, etc.) over the catalogue's `accepts` mask + `isDspInput`, exposed
+  on the controller as `outletTypeOf` / `inletAcceptsOf` / `canConnect` (the low-level
+  `connect` stays permissive for the seed). Clicking a cable selects it (bezier
+  hit-test via `PatchCableGeometry`); `Delete` removes it. **Selection** rides the
+  `PatchGraph` (a node set + an optional cable): click / shift-click / marquee over
+  empty canvas; `Delete` removes selected nodes with their cables; `Ctrl+D`
+  duplicates the selection (objects + intra-selection cables, offset one grid step).
+  Every mutation is a `ProjectCommand` on the controller's per-surface `undoScope`
+  (`lib/engine/state/patcher_commands/` — move / connect / delete-cable /
+  delete-nodes / duplicate), so `Ctrl+Z/Y` walk them; a delete's undo restores each
+  object under its **same logical id** (the controller decouples `PatchNodeId` from
+  the churning native handle via an id map), keeping cables and lower undo commands
+  valid. The canvas hosts the scene in a plain pan/zoom `Transform` (not an
+  `InteractiveViewer`, whose scale recogniser swallowed node/cable drags): middle-drag
+  pans, the wheel zooms, a left-drag over empty canvas marquees, and the surface takes
+  keyboard focus on release (after the pane's own grab) so the editor keys land.
+  Covered by unit tests (compat, graph selection, and every gesture command's
+  apply/undo/redo incl. logical-id stability across a delete), canvas widget tests
+  (body drag, compatible/incompatible cable drops, cable delete, marquee + shift-click,
+  delete-with-cables, duplicate — each with undo/redo), and an end-to-end
+  `patcher_canvas` integration test (drag · delete-with-cables · duplicate, all undo).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
