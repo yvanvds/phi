@@ -33,6 +33,9 @@ import '../surfaces/racks/racks_surface.dart';
 import '../surfaces/scene/scene_surface.dart';
 import '../surfaces/state/state_surface.dart';
 import 'bottom_status/bottom_status.dart';
+import 'commands/command_palette.dart';
+import 'commands/command_registry.dart';
+import 'commands/shell_commands.dart';
 import 'layout/shell_layout_controller.dart';
 import 'layout/split_tree_view.dart';
 import 'layout/splitter_resize.dart';
@@ -61,11 +64,18 @@ class Workstation extends StatefulWidget {
     this.codeEvaluator,
     this.customTransformRegistry,
     this.layoutController,
+    this.commandRegistry,
     super.key,
   });
 
   final PhiEngine engine;
   final SessionState session;
+
+  /// The command registry backing the command palette (design
+  /// `docs/design/shell-layout.md` §4). `null` lets the shell build and own one,
+  /// seeded with the shell commands; tests inject one to inspect what was
+  /// registered or to drive it directly.
+  final CommandRegistry? commandRegistry;
 
   /// The workspace layout controller — the split tree + tab stacks the centre
   /// renders (design `docs/design/shell-layout.md` §2). `null` lets the shell
@@ -114,6 +124,11 @@ class _WorkstationState extends State<Workstation> {
   /// surface. Built here (seed: one pane, Mix open) unless a test injected one.
   late final ShellLayoutController _layout;
   late final bool _ownsLayout;
+
+  /// Backs the command palette (design §4). Built and owned here (seeded with the
+  /// shell commands) unless a test injected one.
+  late final CommandRegistry _commands;
+  late final bool _ownsCommands;
 
   /// One stable key per surface, so a surface keeps its element (and all its
   /// state) when it re-parents from one pane to another — single-instance
@@ -247,7 +262,46 @@ class _WorkstationState extends State<Workstation> {
     _onMasterMuted();
 
     _setUpProject();
+
+    // Seed the command registry once the project actions are known (so the
+    // project-op commands are only registered when the project stack is wired).
+    _ownsCommands = widget.commandRegistry == null;
+    _commands = widget.commandRegistry ?? CommandRegistry();
+    _registerShellCommands();
   }
+
+  /// Registers the shell's seed commands (design §4) — surface summon, transport,
+  /// projection, and, when the project stack is wired, project ops + settings.
+  /// Each invoke reuses the exact callback the rail / toolbar / menu already runs.
+  void _registerShellCommands() {
+    final actions = _actions;
+    _commands.registerAll(
+      buildShellCommands(
+        session: widget.session,
+        onSummonSurface: _onSelect,
+        onNewProject: actions == null
+            ? null
+            : () => unawaited(actions.newProject(context)),
+        onOpenProject: actions == null
+            ? null
+            : () => unawaited(actions.open(context)),
+        onSaveProject: actions == null
+            ? null
+            : () => unawaited(actions.save(context)),
+        onDuplicateProject: actions == null
+            ? null
+            : () => unawaited(actions.duplicate(context)),
+        onRenameProject: actions == null
+            ? null
+            : () => unawaited(actions.rename(context)),
+        onOpenSettings: widget.projectController == null ? null : _openSettings,
+      ),
+    );
+  }
+
+  /// Opens the command palette overlay (design §4) on Ctrl+Shift+P / F1.
+  void _openCommandPalette() =>
+      unawaited(CommandPalette.show(context, registry: _commands));
 
   /// Wires the engine's registry-backed channel sync, the project menu, the
   /// confirm-on-close guard, and (when asked) the launch-time restore + recovery
@@ -389,6 +443,7 @@ class _WorkstationState extends State<Workstation> {
   void dispose() {
     _layout.removeListener(_onLayoutChanged);
     if (_ownsLayout) _layout.dispose();
+    if (_ownsCommands) _commands.dispose();
     widget.projectController?.removeListener(_bindEngineRegistry);
     widget.projectController?.layoutRestored.removeListener(_onLayoutRestored);
     _libraryController?.dispose();
@@ -524,6 +579,13 @@ class _WorkstationState extends State<Workstation> {
           shift: true,
         ): () =>
             _layout.cycleTabInActivePane(forward: false),
+        // Ctrl+Shift+P / F1 open the command palette (design §4).
+        const SingleActivator(
+          LogicalKeyboardKey.keyP,
+          control: true,
+          shift: true,
+        ): _openCommandPalette,
+        const SingleActivator(LogicalKeyboardKey.f1): _openCommandPalette,
       },
       child: Material(
         color: PhiColors.bg0,

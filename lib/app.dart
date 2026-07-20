@@ -15,6 +15,7 @@ import 'domain/project/store/registry_codecs.dart';
 import 'domain/session/session_state.dart';
 import 'engine/bridge/code_evaluator.dart';
 import 'engine/engine.dart';
+import 'shell/commands/command_registry.dart';
 import 'shell/layout/shell_layout_controller.dart';
 import 'shell/project/file_selector_project_directory_picker.dart';
 import 'shell/workstation.dart';
@@ -32,6 +33,7 @@ class PhiApp extends StatefulWidget {
     this.codeEvaluator,
     this.customTransformRegistry,
     this.layoutController,
+    this.commandRegistry,
   });
 
   /// Optional engine override — tests inject a fake-backed engine here so
@@ -74,6 +76,11 @@ class PhiApp extends StatefulWidget {
   /// §2). `null` lets the workstation seed its own (one pane, Mix open); tests
   /// inject one to drive dock moves and assert surface state survives.
   final ShellLayoutController? layoutController;
+
+  /// Optional command registry (design `docs/design/shell-layout.md` §4). `null`
+  /// lets the workstation build and own one seeded with the shell commands; tests
+  /// inject one to inspect what the shell registered.
+  final CommandRegistry? commandRegistry;
 
   @override
   State<PhiApp> createState() => _PhiAppState();
@@ -173,6 +180,7 @@ class _PhiAppState extends State<PhiApp> {
         codeEvaluator: widget.codeEvaluator,
         customTransformRegistry: widget.customTransformRegistry,
         layoutController: widget.layoutController,
+        commandRegistry: widget.commandRegistry,
       ),
     );
   }
