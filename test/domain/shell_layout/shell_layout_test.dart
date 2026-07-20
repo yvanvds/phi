@@ -176,6 +176,38 @@ void main() {
     });
   });
 
+  group('activate', () {
+    test('makes a background tab the active one, keeping the stack', () {
+      final layout = ShellLayout.seed()
+          .join('p1', 'midi')
+          .join('p1', 'scene'); // stack [mix, midi, scene], active scene
+      expect(layout.paneById('p1')!.active, 'scene');
+
+      final activated = layout.activate('mix');
+      expectValidLayout(activated);
+      expect(activated.paneById('p1')!.tabs, ['mix', 'midi', 'scene']);
+      expect(activated.paneById('p1')!.active, 'mix');
+    });
+
+    test('focuses a surface in whichever pane holds it', () {
+      // Split so mix and midi live in different panes, midi active in its own.
+      final layout = ShellLayout.seed().split('p1', 'midi', DropEdge.right);
+      final midiPane = layout.paneIdOf('midi');
+      expect(midiPane, isNotNull);
+
+      // Activating mix touches only mix's pane; midi stays its pane's active.
+      final activated = layout.activate('mix');
+      expect(activated.paneIdOf('mix'), isNot(midiPane));
+      expect(activated.paneById(midiPane!)!.active, 'midi');
+    });
+
+    test('a closed surface, or one already active, is a no-op', () {
+      final layout = ShellLayout.seed().join('p1', 'midi'); // active midi
+      expect(layout.activate('scene'), layout); // scene is closed
+      expect(layout.activate('midi'), layout); // already active
+    });
+  });
+
   group('close', () {
     test('removes a tab and picks a neighbouring active', () {
       const layout = ShellLayout(
