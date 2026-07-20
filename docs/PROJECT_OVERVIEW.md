@@ -1302,6 +1302,40 @@ main + app          (orchestration)
   drag reorder, remove, the move confirm + its cancel), and an end-to-end
   `mix_inserts` integration test (place three, reorder, move across strips → save
   → reload restores each bus's chain in order).
+- **Patcher domain foundation** (issue #218, patcher epic, design
+  `docs/design/patcher.md` §3) — the pure-Dart entities the patcher epic binds on,
+  a new `patch.` registry kind (`RegistryKinds.patch` + `defaultEntityCodecs()`),
+  TDD, no user-visible surface. **The payload is the engine dump.** `PatchPayload`
+  (`lib/domain/patcher/`) wraps the engine `dumpJson` (graph *and* layout — node
+  positions ride in the object GUI properties the shipped gateway writes) under a
+  `dump` key; there is **no parallel Phi-side graph model**. It compares by value
+  (a deep, order-independent JSON compare over the opaque dump) so a round-trip
+  asserts identity, and — a patch references no other entity — it is **not** a
+  `ReferenceSource`. `PatchCodec` (schema v1) keeps it map-native, the same journal
+  contract the `mix.`/`fx.` codecs honour. **Edits are journaled gesture commands.**
+  A pure-domain `PatchEditGateway` seam names the incremental patcher operations
+  (create / restore / remove / connect / disconnect / move / setParam, plus the
+  reads a reversible delete captures) that the engine's per-entity gateway will
+  implement (epic issue 2); six `ProjectCommand`s in `lib/domain/patcher/commands/`
+  forward one gesture each and `revert` its inverse — `AddObjectCommand`,
+  `DeleteObjectCommand` (captures the object spec + its cables so undo restores
+  both), `ConnectCommand`, `DisconnectCommand`, `MoveNodeCommand`,
+  `ParamChangeCommand` — each `entitiesTouched` = the `patch.` address (so save
+  re-dumps it) and `toJson`-serialisable for the journal. `restoreObject` recreates
+  a deleted object under its **same id** so cables and later gestures stay valid
+  across an undo/redo cycle. Value types `PatchPoint` / `PatchConnection` /
+  `PatchObjectSpec` (`lib/domain/patcher/`, pure Dart — no `dart:ui`) are the
+  gesture vocabulary; the old Flutter-coupled `PatchGraph`/`PatchNode` demo-canvas
+  model is untouched (the surface rework is a later epic issue). The **back-reference
+  seam** rides the registry's existing generic index: a future `fx.` placement of
+  kind `patcherInsert` wrapping a `patch.` reference registers, so delete-impact
+  lists it. Pure-domain issue (no surface, no gateway wiring), so — like #204 —
+  covered by unit tests via a `FakePatchEditGateway` test double (payload/codec/
+  value-type round-trips, every command apply/revert incl. LIFO undo of a mixed
+  stack) plus a `patch_round_trip` acceptance test (store save/load identity +
+  delete-impact surfaces the placement referent, in memory and after reload); no
+  integration test. Gateway generalisation, entity↔instance reconciliation, and the
+  surface are the following epic issues.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
