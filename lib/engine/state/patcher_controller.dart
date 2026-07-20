@@ -21,6 +21,7 @@ import 'patcher_commands/delete_cable_command.dart';
 import 'patcher_commands/delete_patch_nodes_command.dart';
 import 'patcher_commands/duplicate_patch_selection_command.dart';
 import 'patcher_commands/move_patch_nodes_command.dart';
+import 'patcher_commands/set_patch_params_command.dart';
 
 /// Engine-side mediator between user gestures and the native patcher.
 ///
@@ -288,6 +289,20 @@ class PatcherController {
     _gateway.sendBang(instanceId, native, inlet);
   }
 
+  /// The live GUI display value of a node (`guiValue`) — what a control body
+  /// (`.slider`, `.f`, `.i`, `.t`) shows. Empty for a node with no native
+  /// handle or no display value.
+  String guiValueOf(PatchNodeId id) {
+    final native = _nativeByNode[id];
+    if (native == null) return '';
+    return _gateway.guiValue(instanceId, native);
+  }
+
+  /// The creation-argument string a node was last made / reconfigured with —
+  /// what the params dialog seeds its fields from and what
+  /// [SetPatchParamsCommand] captures for undo.
+  String argsOf(PatchNodeId id) => _argsByNode[id] ?? '';
+
   // ─── typed-pin queries (drag-time compatibility) ─────────────────────
 
   /// The data type an outlet emits (`OutType`), read from the object catalogue
@@ -445,6 +460,15 @@ class PatcherController {
     );
   }
 
+  /// Apply a new creation-argument string to a node from the params dialog
+  /// (design §7), journaled as one [SetPatchParamsCommand] so Ctrl+Z restores
+  /// the prior parameters. A no-op when the args are unchanged, so re-opening
+  /// the dialog and pressing done without an edit records nothing.
+  void applyParams(PatchNodeId id, String args) {
+    if (argsOf(id) == args) return;
+    undoScope.run(SetPatchParamsCommand(this, id, args));
+  }
+
   void undo() => undoScope.undo();
 
   void redo() => undoScope.redo();
@@ -458,6 +482,17 @@ class PatcherController {
     n.moveTo(position);
     final native = _nativeByNode[id];
     if (native != null) _gateway.setNodePosition(instanceId, native, position);
+  }
+
+  /// Reconfigure the object at [id] with a new creation-argument string,
+  /// persisting it to the native object via `setParams`. Primitive called by
+  /// [SetPatchParamsCommand]; author through [applyParams] so the change is
+  /// undoable.
+  void setNodeParams(PatchNodeId id, String args) {
+    final native = _nativeByNode[id];
+    if (native == null) return;
+    _gateway.setParams(instanceId, native, args);
+    _argsByNode[id] = args;
   }
 
   /// Wire [cable] into the native patcher and the Dart mirror.

@@ -154,6 +154,15 @@ class RealPatcherGateway implements PatcherGateway {
   }
 
   @override
+  String guiValue(int instanceId, int handleId) =>
+      _inst(instanceId).handles[handleId]?.guiValue ?? '';
+
+  @override
+  void setParams(int instanceId, int handleId, String args) {
+    _inst(instanceId).handles[handleId]?.setParams(args);
+  }
+
+  @override
   bool passBang(int instanceId, String to) =>
       _inst(instanceId).patcher.passBang(to);
 

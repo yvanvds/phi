@@ -13,6 +13,7 @@ import '../../engine/state/node_type_registry.dart';
 import '../../engine/state/patcher_controller.dart';
 import '../surface.dart';
 import 'palette/patcher_palette.dart';
+import 'params/patch_params_dialog.dart';
 import 'patcher_canvas.dart';
 import 'patcher_node_types.dart';
 import 'reference/patch_reference_panel.dart';
@@ -79,6 +80,21 @@ class _PatcherViewportState extends State<_PatcherViewport> {
     widget.engine.patcher.addObject(desc: desc, position: position);
   }
 
+  /// Double-click on a non-GUI node opens the metadata params dialog (design
+  /// §7). GUI objects are operated through their live bodies, so they are left
+  /// to their body; nodes with no documented parameters have nothing to edit.
+  void _editParams(PatchNode node) {
+    final desc = _descriptorForType(node.type);
+    if (desc == null || desc.category == PatchObjectCategory.gui) return;
+    if (desc.params.isEmpty) return;
+    showPatchParamsDialog(
+      context,
+      controller: widget.engine.patcher,
+      node: node,
+      descriptor: desc,
+    );
+  }
+
   PatchObjectDescriptor? _descriptorForType(String type) {
     for (final d in _objectTypes) {
       if (d.type == type) return d;
@@ -137,6 +153,7 @@ class _PatcherViewportState extends State<_PatcherViewport> {
             controller: widget.engine.patcher,
             onCreateObject: _createObject,
             onNodeTap: _selectNode,
+            onNodeDoubleTap: _editParams,
           ),
         ),
         PatchReferencePanel(descriptor: _selected),

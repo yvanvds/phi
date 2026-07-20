@@ -49,6 +49,7 @@ class PatcherCanvas extends StatefulWidget {
     required this.controller,
     this.onCreateObject,
     this.onNodeTap,
+    this.onNodeDoubleTap,
     super.key,
   });
 
@@ -62,6 +63,11 @@ class PatcherCanvas extends StatefulWidget {
   /// Called when a node is tapped — drives the reference panel. Selection is
   /// handled by the canvas regardless.
   final void Function(PatchNode node)? onNodeTap;
+
+  /// Called when a node is double-clicked — opens the metadata params dialog
+  /// for a non-GUI node (design §7). Detected from raw pointer timing so it
+  /// never adds a disambiguation delay to the node's own single-tap select.
+  final void Function(PatchNode node)? onNodeDoubleTap;
 
   /// Key on the transient reject banner shown when a cable drop is incompatible.
   static const Key rejectKey = Key('PatcherCanvas.reject');
@@ -84,6 +90,11 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
 
   // Middle-mouse pan.
   bool _panning = false;
+
+  // Double-tap tracking (raw pointer timing, so single-tap select stays
+  // instant — a nested GestureDetector.onDoubleTap would delay it).
+  PatchNodeId? _lastTapNode;
+  Duration _lastTapAt = Duration.zero;
 
   // Transient reject cue for an incompatible cable drop.
   String? _reject;
@@ -302,8 +313,18 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       return;
     }
     // Presses that land on a node belong to the node's own gesture detector —
-    // never a marquee.
-    if (_nodeAt(scene) != null) {
+    // never a marquee. A second quick press on the same node is a double-click:
+    // fire the params-dialog hook (selection still runs via the node's own tap).
+    final node = _nodeAt(scene);
+    if (node != null) {
+      final now = event.timeStamp;
+      if (_lastTapNode == node.id && now - _lastTapAt <= kDoubleTapTimeout) {
+        _lastTapNode = null;
+        widget.onNodeDoubleTap?.call(node);
+      } else {
+        _lastTapNode = node.id;
+        _lastTapAt = now;
+      }
       _pressScene = null;
       return;
     }
