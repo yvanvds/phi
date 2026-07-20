@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../../session/session_state.dart';
+import '../../shell_layout/shell_layout.dart';
 import '../app_settings/app_settings_controller.dart';
 import '../app_settings/audio_settings.dart';
 import '../app_settings/midi_settings.dart';
@@ -118,6 +119,24 @@ class ProjectController extends ChangeNotifier {
 
   /// The live registry — the source of truth for the open project's entities.
   ProjectRegistry get registry => _registry;
+
+  /// The workspace [ShellLayout] persisted in the manifest (design
+  /// `docs/design/shell-layout.md` §3). Owned here so a save writes it and an
+  /// open restores it, but **journal-free**: the shell's live layout controller
+  /// is the editing owner and pushes changes in through [updateLayout], which
+  /// dirties the manifest without ever touching the command journal. Seeds the
+  /// single-pane Mix layout for a fresh project.
+  ShellLayout _layout = ShellLayout.defaultSeed;
+
+  /// The workspace layout the manifest carries — what a save persists.
+  ShellLayout get layout => _layout;
+
+  /// Bumped every time a load ([open]/[newProject]) applies a manifest layout,
+  /// so the shell can adopt the restored arrangement into its live layout
+  /// controller (with fit-fallback) without polling. A monotonic revision — not
+  /// the layout itself — so a reopen that restores the *same* layout the shell
+  /// currently shows still fires (an unsaved local rearrange is discarded).
+  final ValueNotifier<int> layoutRestored = ValueNotifier<int>(0);
 
   ProjectStore? _store;
   CommandJournal? _journal;
@@ -289,6 +308,23 @@ class ProjectController extends ChangeNotifier {
     }
   }
 
+  /// Records a new workspace [layout] from the shell's live layout controller —
+  /// the persistence side of a split / dock move / resize (design
+  /// `docs/design/shell-layout.md` §3). It dirties the manifest so the next
+  /// save/autosave writes the arrangement, but is deliberately **journal-free**:
+  /// it never appends to the command journal and is not undoable (layout is
+  /// workspace arrangement, not authored content — recovery replay ignores it).
+  /// A no-op when the layout is unchanged, so an idempotent relayout — or the
+  /// shell echoing a just-restored layout back — never spuriously dirties the
+  /// set. Ignored while a snapshot is being applied, so a load never looks
+  /// unsaved.
+  void updateLayout(ShellLayout layout) {
+    if (_applyingSnapshot) return;
+    if (layout == _layout) return;
+    _layout = layout;
+    markDirty();
+  }
+
   /// Records an applied registry [command] against the open project (design §6,
   /// §7): adds its touched entities to the dirty set and, when a project is
   /// bound, appends it to the journal. The seam the entity-migration epic (#124)
@@ -400,6 +436,7 @@ class ProjectController extends ChangeNotifier {
     sceneName: _session.sceneName.value,
     masterVolume: _session.masterVolume.value,
     masterMuted: _session.masterMuted.value,
+    layout: _layout,
   );
 
   void _applyManifest(ProjectManifest manifest) {
@@ -410,9 +447,14 @@ class ProjectController extends ChangeNotifier {
       _session.renameScene(manifest.sceneName);
       _session.setMasterVolume(manifest.masterVolume);
       _session.setMasterMuted(manifest.masterMuted);
+      _layout = manifest.layout;
     } finally {
       _applyingSnapshot = false;
     }
+    // Signal the shell to adopt the restored workspace layout (journal-free
+    // state the shell owns the *editing* of). A monotonic bump so every load
+    // fires, even one restoring the layout the shell already shows.
+    layoutRestored.value = layoutRestored.value + 1;
   }
 
   void _replaceRegistry(ProjectRegistry next) {
@@ -489,6 +531,7 @@ class ProjectController extends ChangeNotifier {
     location.dispose();
     recentProjects.dispose();
     pinnedProjects.dispose();
+    layoutRestored.dispose();
     _registry.dispose();
     super.dispose();
   }

@@ -129,6 +129,18 @@ class _WorkstationState extends State<Workstation> {
   /// silent).
   bool? _sceneVisible;
 
+  /// True while a manifest-restored layout is being pushed into [_layout], so
+  /// the resulting change notification is not echoed straight back to the
+  /// project controller as a fresh edit (which would dirty a just-opened
+  /// project). Editing flows the other way — [_layout] → controller.
+  bool _restoringLayout = false;
+
+  /// Every surface id the app knows — the universe fit-fallback keeps a restored
+  /// layout within (a tab naming a surface not in here is dropped, design §3).
+  static final Set<String> _knownSurfaceIds = {
+    for (final id in SurfaceId.values) id.name,
+  };
+
   late final CodeEvaluator _codeEvaluator;
   late final bool _ownsCodeEvaluator;
   late final CustomTransformRegistry _customTransforms;
@@ -272,6 +284,9 @@ class _WorkstationState extends State<Workstation> {
     // Open swaps the registry instance (the controller notifies on that).
     _bindEngineRegistry();
     controller.addListener(_bindEngineRegistry);
+    // The manifest owns the persisted layout (issue #253); adopt it into the
+    // live layout controller whenever a New / Open restores one (design §3).
+    controller.layoutRestored.addListener(_onLayoutRestored);
 
     final picker = widget.directoryPicker;
     if (picker != null) {
@@ -375,6 +390,7 @@ class _WorkstationState extends State<Workstation> {
     _layout.removeListener(_onLayoutChanged);
     if (_ownsLayout) _layout.dispose();
     widget.projectController?.removeListener(_bindEngineRegistry);
+    widget.projectController?.layoutRestored.removeListener(_onLayoutRestored);
     _libraryController?.dispose();
     _rackDefinitions?.dispose();
     _voiceAudition?.dispose();
@@ -427,6 +443,27 @@ class _WorkstationState extends State<Workstation> {
     _syncSceneVisibility();
     // Undo follows focus: point Ctrl+Z/Y at the focused surface's stack.
     _undoScopes.focus(_scopeIdFor(_layout.focusedSurface));
+    // Persist the new arrangement into the manifest — journal-free (issue #253).
+    // Suppressed while adopting a restored layout, so an open never self-dirties.
+    if (!_restoringLayout) {
+      widget.projectController?.updateLayout(_layout.layout);
+    }
+  }
+
+  /// Adopts the project's manifest-restored layout into the live [_layout]
+  /// controller on a New / Open (design §3). Fit-fallback clamps splitter
+  /// fractions and drops any tab whose surface the app no longer knows, so a set
+  /// arranged on a wider screen still opens usable here. Guarded so the resulting
+  /// notification is not pushed back to the controller as an edit.
+  void _onLayoutRestored() {
+    final controller = widget.projectController;
+    if (controller == null) return;
+    _restoringLayout = true;
+    try {
+      _layout.replaceLayout(controller.layout.fit(_knownSurfaceIds));
+    } finally {
+      _restoringLayout = false;
+    }
   }
 
   /// The undo-scope id owned by the surface with layout id [surfaceId], or `null`
