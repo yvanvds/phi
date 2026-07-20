@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../domain/fx/fx_definition.dart';
+import '../domain/fx/fx_kind.dart';
 import '../domain/midi/custom_transform_registry.dart';
 import '../domain/midi/midi_clip_seed.dart';
 import '../domain/midi/store/clip_document.dart';
@@ -1569,6 +1571,156 @@ class PhiEngine {
     return senders;
   }
 
+  // ─── Insert effects (racks design §5) ────────────────────────────────────
+
+  /// The ordered `fx.` insert chain stored on [channel] — the addresses the Mix
+  /// surface's INSERTS area renders as a linked effect chain (racks design §5).
+  /// Empty when the channel has no backing strip (e.g. the master) or carries no
+  /// inserts. Read from the stored payload, so it reflects the last *persisted*
+  /// order; the engine's [RackMaterialiser] turns it into a live `DspObject`
+  /// chain on the ensuing re-sync.
+  List<EntityAddress> channelInserts(MixerChannel channel) {
+    final address = _addressOf(channel);
+    if (address == null) return const [];
+    return _storedStrip(address)?.inserts ?? const [];
+  }
+
+  /// The `fx.` instances that can be **placed** on [channel] — every fx entity in
+  /// the project not already on this bus, in address order. An fx already sitting
+  /// on *another* bus is still offered: choosing it **moves** it here (an instance
+  /// lives on at most one bus, racks design §5), which the surface confirms
+  /// through the impact dialog after checking [busHoldingInsert]. Empty when the
+  /// project defines no fx.
+  List<EntityAddress> availableFxFor(MixerChannel channel) {
+    final address = _addressOf(channel);
+    final current = address == null
+        ? const <EntityAddress>[]
+        : (_storedStrip(address)?.inserts ?? const []);
+    return [
+      for (final fx in _allFxAddresses())
+        if (!current.contains(fx)) fx,
+    ];
+  }
+
+  /// The mix bus (strip or group) whose stored `inserts` currently hold [fx], or
+  /// `null` when the fx is unplaced. Drives the move-with-impact warning: an fx
+  /// placed elsewhere is *moved* (removed there, appended here), so the surface
+  /// names the losing bus before it confirms (racks design §5).
+  EntityAddress? busHoldingInsert(EntityAddress fx) {
+    for (final key in _channelsByAddress.keys) {
+      if (_storedStrip(key)?.inserts.contains(fx) ?? false) return key;
+    }
+    return null;
+  }
+
+  /// The [FxKind] of the `fx.` instance at [fx], or `null` when nothing
+  /// fx-shaped sits there — the label the INSERTS row shows beside the name.
+  FxKind? fxKindOf(EntityAddress fx) {
+    final payload = _mixRegistry.entityAt(fx)?.payload;
+    if (payload is FxDefinition) return payload.kind;
+    if (payload is Map) {
+      try {
+        return FxDefinition.fromJson(payload.cast<String, Object?>()).kind;
+      } on FormatException {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /// Places [fx] at the tail of [channel]'s insert chain (racks design §5) — a
+  /// journaled strip-payload edit the ensuing sync materialises. Enforces the
+  /// **one-bus** invariant: if [fx] already sits on another bus it is first
+  /// removed there (its own journaled edit), so the placement *moves* it. A no-op
+  /// before [start], for a channel with no backing strip, or when [fx] is already
+  /// on this channel. The surface raises the move-impact dialog before calling
+  /// this when [busHoldingInsert] reports another bus.
+  void addChannelInsert(MixerChannel channel, EntityAddress fx) {
+    if (!_started) return;
+    final address = _addressOf(channel);
+    if (address == null) return;
+    final strip = _storedStrip(address);
+    if (strip == null || strip.inserts.contains(fx)) return;
+    final owner = busHoldingInsert(fx);
+    if (owner != null && owner != address) {
+      final ownerStrip = _storedStrip(owner);
+      if (ownerStrip != null) {
+        _persistInserts(owner, [
+          for (final insert in ownerStrip.inserts)
+            if (insert != fx) insert,
+        ]);
+      }
+    }
+    // Re-read after the possible move: address ≠ owner, so its inserts are
+    // unchanged, but reading fresh keeps the append robust to that re-sync.
+    final current = _storedStrip(address)?.inserts ?? const [];
+    _persistInserts(address, [...current, fx]);
+  }
+
+  /// Removes the insert in [slot] of [channel] (racks design §5) — a journaled
+  /// payload edit the sync detaches from the gateway chain. The fx entity itself
+  /// survives (only its placement clears); it can be placed again. No-op when the
+  /// slot is out of range.
+  void removeChannelInsert(MixerChannel channel, int slot) {
+    if (!_started || slot < 0) return;
+    final address = _addressOf(channel);
+    if (address == null) return;
+    final strip = _storedStrip(address);
+    if (strip == null || slot >= strip.inserts.length) return;
+    _persistInserts(address, [...strip.inserts]..removeAt(slot));
+  }
+
+  /// Reorders [channel]'s insert chain by moving [fx] to the slot immediately
+  /// **before** [before] (racks design §5, the drag-to-reorder gesture) — mirrors
+  /// [moveChannelBefore] for strips. When [before] is not in the chain, [fx] goes
+  /// to the tail. A journaled payload edit; no-op when [fx] is absent or the two
+  /// are the same.
+  void moveChannelInsertBefore(
+    MixerChannel channel,
+    EntityAddress fx,
+    EntityAddress before,
+  ) {
+    if (!_started || fx == before) return;
+    final address = _addressOf(channel);
+    if (address == null) return;
+    final strip = _storedStrip(address);
+    if (strip == null) return;
+    final next = [...strip.inserts];
+    final fromIndex = next.indexOf(fx);
+    if (fromIndex < 0) return;
+    next.removeAt(fromIndex);
+    final target = next.indexOf(before);
+    next.insert(target < 0 ? next.length : target, fx);
+    _persistInserts(address, next);
+  }
+
+  /// Every `fx.` instance address in the registry, walking groups so a grouped
+  /// effect is reached at its real address, in stable address order. Only entities
+  /// that decode to a valid [FxDefinition] are returned (a group node or a
+  /// malformed payload is skipped).
+  List<EntityAddress> _allFxAddresses() {
+    final out = <EntityAddress>[];
+    void visit(RegistryNode node, EntityAddress address) {
+      if (node is RegistryEntity && fxKindOf(address) != null) {
+        out.add(address);
+      }
+      if (node is RegistryGroup) {
+        for (final child in node.children) {
+          visit(child, address.child(child.name));
+        }
+      }
+    }
+
+    for (final child in _mixRegistry.childrenOfKind(RegistryKinds.fx)) {
+      visit(
+        child,
+        EntityAddress(kind: RegistryKinds.fx, segments: [child.name]),
+      );
+    }
+    out.sort((a, b) => a.format().compareTo(b.format()));
+    return out;
+  }
+
   void _flushSendGesture(({EntityAddress address, int slot}) gesture) {
     final strip = _storedStrip(gesture.address);
     if (strip == null || gesture.slot >= strip.sends.length) return;
@@ -1615,7 +1767,26 @@ class PhiEngine {
   void _persistSends(EntityAddress address, List<MixSend> sends) {
     final strip = _storedStrip(address);
     if (strip == null) return;
-    final payload = strip.copyWith(sends: sends).toJson();
+    _persistStripPayload(address, strip.copyWith(sends: sends).toJson());
+  }
+
+  /// Writes [inserts] into the `mix.` node at [address] as a journaled payload
+  /// command (racks design §5) — the placement/reorder/remove path, de-duped by
+  /// JSON; the ensuing sync re-materialises the bus's insert chain.
+  void _persistInserts(EntityAddress address, List<EntityAddress> inserts) {
+    final strip = _storedStrip(address);
+    if (strip == null) return;
+    _persistStripPayload(address, strip.copyWith(inserts: inserts).toJson());
+  }
+
+  /// Applies [payload] to the `mix.` entity **or group bus** at [address] as a
+  /// journaled payload command, de-duped by encoded JSON so a write landing on the
+  /// stored value never dirties the project or bloats the journal. The shared tail
+  /// of every strip-payload edit (sends, inserts).
+  void _persistStripPayload(
+    EntityAddress address,
+    Map<String, Object?> payload,
+  ) {
     final node = _mixRegistry.nodeAt(address);
     final currentPayload = node is RegistryGroup
         ? node.payload

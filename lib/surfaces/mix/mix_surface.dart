@@ -7,6 +7,7 @@ import '../../design/tokens/phi_type.dart';
 import '../../design/tokens/phi_voices.dart';
 import '../../design/widgets/button/primary_button.dart';
 import '../../design/widgets/channel_strip/channel_strip.dart';
+import '../../design/widgets/dialog/confirm_dialog.dart';
 import '../../design/widgets/dialog/delete_impact_dialog.dart';
 import '../../design/widgets/select/phi_select.dart';
 import '../../design/widgets/select/phi_select_option.dart';
@@ -66,6 +67,24 @@ class MixSurface extends Surface {
   /// can target a specific return.
   static Key returnRemoveKey(String name) =>
       Key('MixSurface.returnRemove.$name');
+
+  /// Key on a strip's **add-insert** picker, by channel name — the fx picker that
+  /// places (or moves) an effect onto the strip's insert chain.
+  static Key addInsertKey(String name) => Key('MixSurface.addInsert.$name');
+
+  /// Key on an insert row, by channel name + fx leaf name — the drop target a
+  /// reorder drag lands on (drop places the dragged insert immediately before it).
+  static Key insertRowKey(String name, String fx) =>
+      Key('MixSurface.insertRow.$name.$fx');
+
+  /// Key on an insert row's **drag grip**, by channel name + fx leaf name — the
+  /// grip a reorder drag starts from.
+  static Key insertDragKey(String name, String fx) =>
+      Key('MixSurface.insertDrag.$name.$fx');
+
+  /// Key on an insert row's **remove** control, by channel name + slot.
+  static Key insertRemoveKey(String name, int slot) =>
+      Key('MixSurface.insertRemove.$name.$slot');
 
   @override
   Widget build(BuildContext context) {
@@ -390,6 +409,7 @@ class _LeafStrip extends StatelessWidget {
               onRename: (name) => engine.renameChannel(node.channel, name),
               onRemove: () => engine.removeChannel(node.channel),
             ),
+            _InsertsArea(engine: engine, channel: node.channel),
             _SendsArea(engine: engine, channel: node.channel),
           ],
         ),
@@ -439,6 +459,7 @@ class _BusStrip extends StatelessWidget {
             onRename: (name) => engine.renameChannel(node.channel, name),
             onRemove: () => engine.removeChannel(node.channel),
           ),
+          _InsertsArea(engine: engine, channel: node.channel),
           _SendsArea(engine: engine, channel: node.channel),
         ],
       ),
@@ -530,6 +551,281 @@ class _DragHandle extends StatelessWidget {
           key: MixSurface.dragHandleKey(channel.name),
           size: 14,
           color: PhiColors.fg3,
+        ),
+      ),
+    );
+  }
+}
+
+/// The compact **INSERTS** area beneath a strip or group-bus header (racks
+/// design §5): the bus's ordered `fx.` chain — one [_InsertRow] per placed
+/// effect (drag a row's grip onto another to reorder, `×` to remove), plus an
+/// [_AddInsertRow] picker while the project defines an fx that isn't already
+/// here. Hidden entirely when the channel carries no inserts and no fx is
+/// available to place, so a project with no effects shows nothing.
+///
+/// Reads the chain off the engine (`channelInserts`), which comes from the
+/// stored payload, so every structural edit (place / move / reorder / remove)
+/// lands through the ordinary journaled payload-command path and re-renders on
+/// the ensuing re-sync — the engine's [RackMaterialiser] turns the order into a
+/// live `DspObject` chain (issue #208).
+class _InsertsArea extends StatelessWidget {
+  const _InsertsArea({required this.engine, required this.channel});
+
+  final PhiEngine engine;
+  final MixerChannel channel;
+
+  @override
+  Widget build(BuildContext context) {
+    final inserts = engine.channelInserts(channel);
+    final available = engine.availableFxFor(channel);
+    if (inserts.isEmpty && available.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: ChannelStrip.width,
+      margin: const EdgeInsets.only(top: PhiSpacing.s1),
+      padding: const EdgeInsets.all(PhiSpacing.s1),
+      decoration: BoxDecoration(
+        color: PhiColors.bg0,
+        border: Border.all(color: PhiColors.line1),
+        borderRadius: PhiRadii.all1,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('INSERTS', style: PhiType.caption()),
+          const SizedBox(height: PhiSpacing.s1),
+          for (var slot = 0; slot < inserts.length; slot++) ...[
+            _InsertRow(
+              engine: engine,
+              channel: channel,
+              slot: slot,
+              fx: inserts[slot],
+            ),
+            const SizedBox(height: PhiSpacing.s1),
+          ],
+          if (available.isNotEmpty)
+            _AddInsertRow(
+              engine: engine,
+              channel: channel,
+              available: available,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One insert row: a drag grip (reorder) · the fx name + kind · a remove `×`
+/// (racks design §5). The whole row is a [DragTarget] so dropping another
+/// insert's grip onto it reorders that insert to just before this one; the grip
+/// itself is the [Draggable]. Removing detaches the placement (the fx entity
+/// survives).
+class _InsertRow extends StatelessWidget {
+  const _InsertRow({
+    required this.engine,
+    required this.channel,
+    required this.slot,
+    required this.fx,
+  });
+
+  final PhiEngine engine;
+  final MixerChannel channel;
+  final int slot;
+  final EntityAddress fx;
+
+  @override
+  Widget build(BuildContext context) {
+    final kind = engine.fxKindOf(fx);
+    return DragTarget<EntityAddress>(
+      onWillAcceptWithDetails: (details) => details.data != fx,
+      onAcceptWithDetails: (details) =>
+          engine.moveChannelInsertBefore(channel, details.data, fx),
+      builder: (context, candidate, rejected) => Container(
+        key: MixSurface.insertRowKey(channel.name, fx.name),
+        padding: const EdgeInsets.symmetric(
+          horizontal: PhiSpacing.s0,
+          vertical: PhiSpacing.s0,
+        ),
+        decoration: BoxDecoration(
+          color: candidate.isNotEmpty ? PhiColors.bg2 : PhiColors.bg1,
+          border: Border.all(
+            color: candidate.isNotEmpty ? PhiColors.lineHot : PhiColors.line1,
+          ),
+          borderRadius: PhiRadii.all1,
+        ),
+        child: Row(
+          children: [
+            _InsertDragGrip(channel: channel, fx: fx),
+            const SizedBox(width: PhiSpacing.s0),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    fx.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: PhiType.monoS().copyWith(color: PhiColors.fg0),
+                  ),
+                  if (kind != null)
+                    Text(
+                      kind.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: PhiType.monoS().copyWith(
+                        fontSize: 8,
+                        color: PhiColors.fg3,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: PhiSpacing.s0),
+            _InsertRemoveButton(
+              buttonKey: MixSurface.insertRemoveKey(channel.name, slot),
+              onPressed: () => engine.removeChannelInsert(channel, slot),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The grip that starts a reorder drag on an insert row. Its feedback is a
+/// compact floating chip of the fx name, mirroring the strip drag handle.
+class _InsertDragGrip extends StatelessWidget {
+  const _InsertDragGrip({required this.channel, required this.fx});
+
+  final MixerChannel channel;
+  final EntityAddress fx;
+
+  @override
+  Widget build(BuildContext context) {
+    return Draggable<EntityAddress>(
+      data: fx,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: Material(
+        color: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: PhiSpacing.s2,
+            vertical: PhiSpacing.s1,
+          ),
+          decoration: BoxDecoration(
+            color: PhiColors.bg3,
+            border: Border.all(color: PhiColors.line2),
+            borderRadius: PhiRadii.all1,
+          ),
+          child: Text(
+            fx.name,
+            style: PhiType.monoS().copyWith(color: PhiColors.fg0),
+          ),
+        ),
+      ),
+      childWhenDragging: const Icon(
+        Icons.drag_indicator,
+        size: 12,
+        color: PhiColors.line2,
+      ),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: Icon(
+          Icons.drag_indicator,
+          key: MixSurface.insertDragKey(channel.name, fx.name),
+          size: 12,
+          color: PhiColors.fg3,
+        ),
+      ),
+    );
+  }
+}
+
+/// The add-insert picker: the fx instances that can be placed on this bus. An fx
+/// already on **another** bus is offered with an `· on {bus}` annotation —
+/// choosing it *moves* it here behind a [ConfirmDialog] naming the losing bus
+/// (racks design §5, "an instance lives on at most one bus"). An unplaced fx is
+/// appended straight to the chain.
+class _AddInsertRow extends StatelessWidget {
+  const _AddInsertRow({
+    required this.engine,
+    required this.channel,
+    required this.available,
+  });
+
+  final PhiEngine engine;
+  final MixerChannel channel;
+  final List<EntityAddress> available;
+
+  Future<void> _place(BuildContext context, EntityAddress fx) async {
+    final owner = engine.busHoldingInsert(fx);
+    if (owner != null) {
+      final confirmed = await ConfirmDialog.show(
+        context,
+        title: 'move insert',
+        message:
+            '${fx.name} is on ${owner.name}. Moving it to ${channel.name} '
+            'removes it from ${owner.name}.',
+        confirmLabel: 'move',
+      );
+      if (!confirmed) return;
+    }
+    engine.addChannelInsert(channel, fx);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PhiSelect<EntityAddress>.flat(
+      key: MixSurface.addInsertKey(channel.name),
+      value: null,
+      placeholder: '+ insert',
+      options: [
+        for (final fx in available)
+          PhiSelectOption<EntityAddress>(value: fx, label: _labelFor(fx)),
+      ],
+      onChanged: (fx) => _place(context, fx),
+    );
+  }
+
+  /// The picker label for [fx]: its leaf name, annotated with the bus it sits on
+  /// when it is placed elsewhere (so the performer knows a pick will move it).
+  String _labelFor(EntityAddress fx) {
+    final owner = engine.busHoldingInsert(fx);
+    return owner == null ? fx.name : '${fx.name} · on ${owner.name}';
+  }
+}
+
+/// An insert row's remove control — a small `×` box mirroring the send row's
+/// remove affordance. Clearing detaches the placement (racks design §5).
+class _InsertRemoveButton extends StatelessWidget {
+  const _InsertRemoveButton({required this.buttonKey, required this.onPressed});
+
+  final Key buttonKey;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: Container(
+          key: buttonKey,
+          width: 16,
+          height: 16,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: PhiColors.bg0,
+            border: Border.all(color: PhiColors.line1),
+            borderRadius: PhiRadii.all1,
+          ),
+          child: Text(
+            '×',
+            style: PhiType.monoS().copyWith(color: PhiColors.fg2, height: 1),
+          ),
         ),
       ),
     );

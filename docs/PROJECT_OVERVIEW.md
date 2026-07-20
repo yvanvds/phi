@@ -108,7 +108,10 @@ main + app          (orchestration)
   `System.audioTest` toggle. Each strip carries voice-swatch + name + fader
   with overlaid peak meter + mute/solo buttons. A user strip's header name is
   inline-editable and carries a `×` remove control (issue #141) — the master
-  strip has neither.
+  strip has neither. Beneath each leaf strip and group-bus header sit an
+  **INSERTS** area (the ordered `fx.` insert chain — place / reorder / remove /
+  move-with-impact, issue #212) and a **SENDS** area (aux sends to return buses);
+  see the racks-epic and mix-epic entries below.
 - Scene surface: renderer-agnostic `SceneRenderer` bridge in
   `lib/engine/bridge/`, backed in production by `MacbearSceneRenderer`
   (`macbear_3d` on ANGLE). Renders one placeholder agent as a
@@ -1218,6 +1221,35 @@ main + app          (orchestration)
   the three preview triggers), and an end-to-end `voices_pane` integration test (arm →
   test strip sounds the materialised synth; kind switch to external; a roll click
   previews through the routed voice).
+- **Mix INSERTS area: fx placement, reorder, move-with-impact** (issue #212, epic
+  #203, design `docs/design/racks-and-voices.md` §5) — the last racks slice, the
+  user-visible home for the `mix.inserts` schema (#204) + fx gateway/engine
+  (#207/#208) + fx editors (#210). Each leaf strip and group-bus header in the Mix
+  surface (`lib/surfaces/mix/mix_surface.dart`) gains an **INSERTS** area beneath
+  the strip (mirroring the SENDS area): the bus's ordered `fx.` chain as one row
+  per placed effect (name + kind), a `+ insert` `PhiSelect` picker over the fx not
+  already on this bus, drag-to-reorder by a per-row grip (`Draggable`/`DragTarget`,
+  drop places the dragged insert before the target — the strip-reorder idiom), and
+  a per-row `×` remove; hidden entirely when the project defines no fx. Placement
+  is a **journaled `mix.` payload edit** the engine's `RackMaterialiser` (#208)
+  turns into a live `DspObject` chain on the ensuing re-sync — the surface only
+  edits the ordered `inserts` list. The **one-bus invariant** (racks §5): the
+  picker annotates an fx already on another bus (`big_delay · on drums`), and
+  choosing it **moves** it — a `ConfirmDialog` names the losing bus, then the
+  engine removes it there and appends here (each its own journaled command). New
+  `PhiEngine` surface (all reading/writing the strip payload through the shared
+  `_persistStripPayload` de-dupe): `channelInserts` / `availableFxFor` /
+  `busHoldingInsert` / `fxKindOf` (reads) and `addChannelInsert` (append + move) /
+  `removeChannelInsert` / `moveChannelInsertBefore` (edits). Live-code addressing
+  is already satisfied — fx params reach by entity address through the registry
+  (`fx.big_delay`), so no new seam here. Reverb stays engine-default (no UI, §9);
+  the master strip and returns carry no inserts (no backing `mix.` strip / out of
+  the issue's "strip + group-bus header" scope). Covered by unit tests
+  (`engine_mix_inserts_test` — read surface, add/remove, move-with-impact,
+  reorder, journaling), widget tests (`mix_inserts_test` — place from the picker,
+  drag reorder, remove, the move confirm + its cancel), and an end-to-end
+  `mix_inserts` integration test (place three, reorder, move across strips → save
+  → reload restores each bus's chain in order).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
