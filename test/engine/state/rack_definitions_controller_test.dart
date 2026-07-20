@@ -1,0 +1,294 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/domain/fx/fx_kind.dart';
+import 'package:phi/domain/project/entity_address.dart';
+import 'package:phi/domain/project/project_command.dart';
+import 'package:phi/domain/project/project_registry.dart';
+import 'package:phi/domain/synth/fm_synth.dart';
+import 'package:phi/domain/synth/sampler_synth.dart';
+import 'package:phi/domain/synth/sine_synth.dart';
+import 'package:phi/domain/synth/synth_kind.dart';
+import 'package:phi/domain/synth/va_synth.dart';
+import 'package:phi/domain/voice/voice_definition.dart';
+import 'package:phi/domain/voice/voice_kind.dart';
+import 'package:phi/engine/state/rack_definitions_controller.dart';
+
+EntityAddress _addr(String dotted) => EntityAddress.parse(dotted);
+
+void main() {
+  group('RackDefinitionsController', () {
+    late ProjectRegistry registry;
+    late List<ProjectCommand> recorded;
+    late RackDefinitionsController controller;
+
+    setUp(() {
+      registry = ProjectRegistry();
+      recorded = [];
+      controller = RackDefinitionsController(
+        registry: registry,
+        recordCommand: recorded.add,
+      );
+    });
+
+    tearDown(() {
+      controller.dispose();
+      registry.dispose();
+    });
+
+    void seed() {
+      registry.createEntity(
+        _addr('synth.lead'),
+        payload: const VaSynth().toJson(),
+      );
+      registry.createEntity(
+        _addr('synth.keys.piano'),
+        payload: const SineSynth().toJson(),
+      );
+      registry.createEntity(_addr('fx.reverb'), payload: {'kind': 'lowpass'});
+    }
+
+    test(
+      'renders the synth./fx. namespaces as ordered trees with kind tags',
+      () {
+        seed();
+
+        final synths = controller.synthTree;
+        expect(synths.map((n) => n.name), ['lead', 'keys']);
+        expect(synths.first.isGroup, isFalse);
+        expect(synths.first.kindTag, 'va');
+
+        final keys = synths[1];
+        expect(keys.isGroup, isTrue);
+        expect(keys.children.single.name, 'piano');
+        expect(keys.children.single.kindTag, 'sine');
+
+        final fx = controller.fxTree;
+        expect(fx.single.name, 'reverb');
+        expect(fx.single.kindTag, 'lowpass');
+      },
+    );
+
+    test('notifies when the registry mutates', () {
+      var notifications = 0;
+      controller.addListener(() => notifications++);
+
+      registry.createEntity(
+        _addr('synth.lead'),
+        payload: const SineSynth().toJson(),
+      );
+
+      expect(notifications, greaterThan(0));
+      expect(controller.synthTree, hasLength(1));
+    });
+
+    test(
+      'newSynth creates, records, selects with the kind default payload',
+      () {
+        for (final kind in SynthKind.values) {
+          recorded.clear();
+          final address = controller.newSynth(kind);
+          expect(registry.entityAt(address), isNotNull);
+          expect(controller.selected, address);
+          expect(controller.kindTagAt(address), kind.name);
+          expect(recorded, hasLength(1));
+        }
+        // Distinct default addresses per kind.
+        expect(registry.contains(_addr('synth.sine')), isTrue);
+        expect(registry.contains(_addr('synth.va')), isTrue);
+        expect(registry.contains(_addr('synth.fm')), isTrue);
+        expect(registry.contains(_addr('synth.sampler')), isTrue);
+      },
+    );
+
+    test('newSynth defaults are the right subclass', () {
+      final va = controller.newSynth(SynthKind.va);
+      final fm = controller.newSynth(SynthKind.fm);
+      final sampler = controller.newSynth(SynthKind.sampler);
+      Map<String, Object?> payloadOf(EntityAddress a) =>
+          (registry.entityAt(a)!.payload as Map).cast<String, Object?>();
+      expect(VaSynth.fromJson(payloadOf(va)), isA<VaSynth>());
+      expect(FmSynth.fromJson(payloadOf(fm)), isA<FmSynth>());
+      expect(SamplerSynth.fromJson(payloadOf(sampler)), isA<SamplerSynth>());
+    });
+
+    test('newFx creates the fx instance, records, selects', () {
+      final address = controller.newFx(FxKind.phaser);
+      expect(address, _addr('fx.phaser'));
+      expect(controller.kindTagAt(address), 'phaser');
+      expect(controller.selected, address);
+      expect(recorded, hasLength(1));
+    });
+
+    test('newGroup creates a group folder in the namespace + records', () {
+      final group = controller.newGroup('fx');
+      expect(registry.groupAt(group), isNotNull);
+      expect(group.kind, 'fx');
+      expect(recorded, hasLength(1));
+    });
+
+    test('fresh names suffix to stay unique among siblings', () {
+      final a = controller.newSynth(SynthKind.sine);
+      final b = controller.newSynth(SynthKind.sine);
+      expect(a, _addr('synth.sine'));
+      expect(b, _addr('synth.sine_2'));
+    });
+
+    test('duplicate copies the payload to <name>_copy beside it + selects', () {
+      registry.createEntity(_addr('fx.reverb'), payload: {'kind': 'lowpass'});
+
+      final copy = controller.duplicate(_addr('fx.reverb'));
+
+      expect(copy, _addr('fx.reverb_copy'));
+      expect(controller.kindTagAt(copy!), 'lowpass');
+      expect(controller.selected, copy);
+    });
+
+    test('duplicate of a missing entity is a no-op', () {
+      expect(controller.duplicate(_addr('synth.nope')), isNull);
+    });
+
+    test('rename moves the entity (refactor) and keeps the selection', () {
+      registry.createEntity(
+        _addr('synth.lead'),
+        payload: const VaSynth().toJson(),
+      );
+      controller.select(_addr('synth.lead'));
+
+      controller.rename(_addr('synth.lead'), 'Big Lead');
+
+      expect(registry.contains(_addr('synth.lead')), isFalse);
+      expect(registry.contains(_addr('synth.big_lead')), isTrue);
+      expect(controller.selected, _addr('synth.big_lead'));
+    });
+
+    test('rename to a blank or unchanged slug is a no-op', () {
+      registry.createEntity(
+        _addr('synth.lead'),
+        payload: const VaSynth().toJson(),
+      );
+      controller.rename(_addr('synth.lead'), '   ');
+      controller.rename(_addr('synth.lead'), 'lead');
+      expect(registry.contains(_addr('synth.lead')), isTrue);
+    });
+
+    test('impactOf reports referents; delete removes and clears selection', () {
+      registry.createEntity(
+        _addr('synth.lead'),
+        payload: const VaSynth().toJson(),
+      );
+      // A voice that instantiates the synth — a referent that would be stranded.
+      registry.createEntity(
+        _addr('voice.bells'),
+        payload: VoiceDefinition.internal(
+          synth: _addr('synth.lead'),
+          output: _addr('mix.master'),
+        ),
+      );
+      controller.select(_addr('synth.lead'));
+
+      final impact = controller.impactOf(_addr('synth.lead'));
+      expect(impact.hasReferrers, isTrue);
+      expect(impact.referrers, contains(_addr('voice.bells')));
+
+      controller.delete(_addr('synth.lead'));
+      expect(registry.contains(_addr('synth.lead')), isFalse);
+      expect(controller.selected, isNull);
+    });
+
+    test('regroup re-parents within a kind; cross-kind is a no-op', () {
+      registry.createEntity(
+        _addr('synth.lead'),
+        payload: const VaSynth().toJson(),
+      );
+      registry.createGroup(_addr('synth.keys'));
+      registry.createGroup(_addr('fx.bus'));
+
+      // Cross-kind drop rejected.
+      controller.regroup(_addr('synth.lead'), _addr('fx.bus'));
+      expect(registry.contains(_addr('synth.lead')), isTrue);
+
+      // Same-kind regroup into a group.
+      controller.regroup(_addr('synth.lead'), _addr('synth.keys'));
+      expect(registry.contains(_addr('synth.keys.lead')), isTrue);
+      expect(registry.contains(_addr('synth.lead')), isFalse);
+    });
+
+    test('reorderBefore reorders siblings', () {
+      registry.createEntity(
+        _addr('synth.a'),
+        payload: const SineSynth().toJson(),
+      );
+      registry.createEntity(
+        _addr('synth.b'),
+        payload: const SineSynth().toJson(),
+      );
+      registry.createEntity(
+        _addr('synth.c'),
+        payload: const SineSynth().toJson(),
+      );
+      expect(controller.synthTree.map((n) => n.name), ['a', 'b', 'c']);
+
+      controller.reorderBefore(_addr('synth.c'), _addr('synth.a'));
+
+      expect(controller.synthTree.map((n) => n.name), ['c', 'a', 'b']);
+    });
+
+    test('voices flattens the voice. namespace into read-only rows', () {
+      registry.createEntity(
+        _addr('synth.lead'),
+        payload: const VaSynth().toJson(),
+      );
+      registry.createEntity(
+        _addr('voice.bells'),
+        payload: VoiceDefinition.internal(
+          synth: _addr('synth.lead'),
+          output: _addr('mix.master'),
+          color: 'voice3',
+        ).toJson(),
+      );
+      registry.createEntity(
+        _addr('voice.keys'),
+        payload: VoiceDefinition.external(
+          channel: 5,
+          output: _addr('mix.master'),
+        ).toJson(),
+      );
+
+      final voices = controller.voices;
+      expect(voices.map((v) => v.name), containsAll(['bells', 'keys']));
+
+      final bells = voices.firstWhere((v) => v.name == 'bells');
+      expect(bells.kind, VoiceKind.internal);
+      expect(bells.synth, _addr('synth.lead'));
+      expect(bells.output, _addr('mix.master'));
+      expect(bells.colorToken, 'voice3');
+
+      final keys = voices.firstWhere((v) => v.name == 'keys');
+      expect(keys.kind, VoiceKind.external);
+      expect(keys.channel, 5);
+    });
+
+    test('rebind swaps the registry and clears selection', () {
+      registry.createEntity(
+        _addr('synth.lead'),
+        payload: const VaSynth().toJson(),
+      );
+      controller.select(_addr('synth.lead'));
+      expect(controller.selected, isNotNull);
+
+      final next = ProjectRegistry();
+      addTearDown(next.dispose);
+      controller.rebind(registry: next, recordCommand: recorded.add);
+
+      expect(controller.selected, isNull);
+      expect(controller.synthTree, isEmpty);
+      // Mutations on the old registry no longer notify.
+      var notified = false;
+      controller.addListener(() => notified = true);
+      registry.createEntity(
+        _addr('synth.x'),
+        payload: const SineSynth().toJson(),
+      );
+      expect(notified, isFalse);
+    });
+  });
+}

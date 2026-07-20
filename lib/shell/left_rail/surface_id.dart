@@ -1,4 +1,4 @@
-/// Identity of the six performer surfaces. Used by the left rail to pick
+/// Identity of the performer surfaces. Used by the left rail to pick
 /// which surface the centre region renders.
 enum SurfaceId {
   scene('Scene'),
@@ -6,6 +6,7 @@ enum SurfaceId {
   code('Code'),
   state('State'),
   midi('MIDI'),
+  racks('Racks'),
   mix('Mix');
 
   const SurfaceId(this.label);

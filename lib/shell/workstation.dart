@@ -18,11 +18,13 @@ import '../engine/bridge/code_evaluator.dart';
 import '../engine/bridge/no_op_code_evaluator.dart';
 import '../engine/engine.dart';
 import '../engine/state/clip_library_controller.dart';
+import '../engine/state/rack_definitions_controller.dart';
 import '../surfaces/code/code_surface.dart';
 import '../surfaces/midi/midi_file_io.dart';
 import '../surfaces/midi/midi_surface.dart';
 import '../surfaces/mix/mix_surface.dart';
 import '../surfaces/patcher/patcher_surface.dart';
+import '../surfaces/racks/racks_surface.dart';
 import '../surfaces/scene/scene_surface.dart';
 import '../surfaces/state/state_surface.dart';
 import 'bottom_status/bottom_status.dart';
@@ -125,6 +127,12 @@ class _WorkstationState extends State<Workstation> {
   /// rebound alongside the engine whenever New / Open swaps the registry.
   ClipLibraryController? _libraryController;
 
+  /// Drives the Racks surface's definitions panel (issue #209) — the `synth.` /
+  /// `fx.` trees, selection routing to the editor pane, and the voices scaffold.
+  /// Built only when a project controller supplies the registry (no engine
+  /// dependency); rebound alongside the engine whenever New / Open swaps it.
+  RackDefinitionsController? _rackDefinitions;
+
   /// Listens for OS exit requests so a dirty project can confirm-on-close
   /// (design §9). Present only when the project stack is wired.
   AppLifecycleListener? _exitListener;
@@ -185,6 +193,12 @@ class _WorkstationState extends State<Workstation> {
         transformCodec: MidiTransformCodec(customRegistry: _customTransforms),
       );
     }
+    // The Racks definitions panel reads the same registry — no MIDI dependency,
+    // so build it whenever a project supplies the registry (issue #209).
+    _rackDefinitions = RackDefinitionsController(
+      registry: controller.registry,
+      recordCommand: controller.recordCommand,
+    );
     // The engine consumes the registry as its channel source of truth (design
     // §8): bind it to the controller's registry now, and rebind whenever New /
     // Open swaps the registry instance (the controller notifies on that).
@@ -217,6 +231,10 @@ class _WorkstationState extends State<Workstation> {
     // The library panel reads the same registry — rebind it too so a New / Open
     // that swaps the registry re-points the clip tree.
     _libraryController?.rebind(
+      registry: controller.registry,
+      recordCommand: controller.recordCommand,
+    );
+    _rackDefinitions?.rebind(
       registry: controller.registry,
       recordCommand: controller.recordCommand,
     );
@@ -288,6 +306,7 @@ class _WorkstationState extends State<Workstation> {
   void dispose() {
     widget.projectController?.removeListener(_bindEngineRegistry);
     _libraryController?.dispose();
+    _rackDefinitions?.dispose();
     _exitListener?.dispose();
     widget.session.transport.removeListener(_onTransport);
     widget.session.tempo.removeListener(_onTempo);
@@ -428,6 +447,8 @@ class _WorkstationState extends State<Workstation> {
         return SceneSurface(engine: widget.engine);
       case SurfaceId.mix:
         return MixSurface(engine: widget.engine);
+      case SurfaceId.racks:
+        return RacksSurface(controller: _rackDefinitions);
       case SurfaceId.patcher:
         return PatcherSurface(engine: widget.engine);
       case SurfaceId.code:
