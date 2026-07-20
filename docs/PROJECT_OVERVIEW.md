@@ -1143,21 +1143,45 @@ main + app          (orchestration)
     `CreateGroupCommand` / `MoveEntityCommand` / `ReorderChildCommand` /
     `RemoveEntityCommand` applied + recorded through `ProjectController.recordCommand`.
   - **Center — `DefinitionEditorPane`**: selection (tap a definition) drives it;
-    this issue lands the *plumbing* with a routed placeholder naming the selected
-    definition + kind, the per-kind panels (VA sliders, FM bank/patch browser,
-    sampler picker, fx param rows) land in #212.
+    it renders a titled header (`name` + `namespace · kind`) and dispatches the
+    body to the per-kind editor (issue #210, `lib/surfaces/racks/editors/`):
+    `SineSynthEditor` (voice count), the full sectioned `VaSynthEditor`
+    (oscillator stack with add/remove, wavetable, filter, amp + filter envelopes,
+    LFO, gain, voice count), `FmSynthEditor` (bank picker, a patch browser listing
+    the bank's `patchName`s, algorithm/feedback/transpose, the 6-operator grid),
+    `SamplerSynthEditor` (SFZ *or* single-sample recipe + range fields), and
+    `FxEditor` (one labelled row per param — universal `impact`/`bypass` plus the
+    kind's params from `fxParamsFor`). Rows are shared token-built controls
+    (`EditorSection`, `EditorSliderRow`, `EditorNumberRow`, `EditorChoiceRow` over
+    `PhiSelect`, `EditorToggleRow` over `PhiToggle`). **Every edit is a journaled
+    payload command** through `RackDefinitionsController.updateSynth`/`updateFx`
+    (one `UpdateEntityPayloadCommand` recorded via `ProjectController.recordCommand`);
+    **continuous sliders gesture-coalesce** — `EditorSliderRow` holds a transient
+    value while dragging and commits **once** on pointer-up, so a slider sweep is
+    one undoable edit. Two injected seams feed the asset-backed editors: a
+    `FmBankReader` (`lib/domain/synth/`, production `Dx7FmBankReader` in
+    `lib/engine/bridge/` over `Dx7Bank`) browses a bank's patch names, and a
+    `RackAssetSource` (`lib/surfaces/racks/`, production
+    `FileSelectorRackAssetSource` = `file_selector` + a `FileAssetImporter` bound
+    to the live project location) imports a picked `.syx` / `.sfz` / sample into
+    the project's `assets/` folder and hands back the project-relative ref — both
+    fakeable, both wired from the shell.
   - **Right — `VoicesPane`**: one read-only `RackVoiceRow` per `voice.` (name,
     the synth/channel it plays → the bus it routes to, colour swatch); a scaffold
     here — create/bind/colour/kind editing, arm-for-input, and the audition test
     strip land in #211.
   The definitions controller / view-models are unit-tested (`rack_definitions_controller_test`
   — trees, per-kind create, duplicate, rename-refactor, delete-impact, regroup,
-  reorder, voices, rebind), the panes widget-tested (`racks_surface_test` — tree +
-  chips render, selection → editor routing, per-kind add menus, group, duplicate,
-  rename, delete + delete-impact, drag reorder/regroup, null-controller hint), and
-  an end-to-end `racks_surface` integration test drives the real shell (open the
-  Racks rail → seeded `synth.sine` + `voice.default` render → select routes the
-  editor → add a VA synth).
+  reorder, voices, rebind, **synth/fx decode + `updateSynth`/`updateFx` journaling**),
+  the panes + editors widget-tested (`racks_surface_test` — tree + chips render,
+  selection → editor routing, per-kind add menus, group, duplicate, rename, delete +
+  delete-impact, drag reorder/regroup, null-controller hint; `definition_editors_test`
+  — VA slider drag coalesces to one command, wave select, sine voice count, FM patch
+  browser populating from a fake bank + patch select + bank import, sampler sample
+  import, fx param slider + bypass toggle), and end-to-end `racks_surface` +
+  `racks_editors` integration tests drive the real shell (open Racks → select the
+  seeded `synth.sine` → edit its voice count → add a VA synth → a real detune-slider
+  drag mutates the payload and dirties the project).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

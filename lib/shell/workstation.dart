@@ -3,6 +3,7 @@ import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 
 import '../design/tokens/phi_colors.dart';
 import '../domain/midi/clip_editor.dart';
@@ -15,6 +16,7 @@ import '../domain/project/lifecycle/project_directory_picker.dart';
 import '../domain/project/undo_scopes.dart';
 import '../domain/session/session_state.dart';
 import '../engine/bridge/code_evaluator.dart';
+import '../engine/bridge/dx7_fm_bank_reader.dart';
 import '../engine/bridge/no_op_code_evaluator.dart';
 import '../engine/engine.dart';
 import '../engine/state/clip_library_controller.dart';
@@ -24,6 +26,7 @@ import '../surfaces/midi/midi_file_io.dart';
 import '../surfaces/midi/midi_surface.dart';
 import '../surfaces/mix/mix_surface.dart';
 import '../surfaces/patcher/patcher_surface.dart';
+import '../surfaces/racks/file_selector_rack_asset_source.dart';
 import '../surfaces/racks/racks_surface.dart';
 import '../surfaces/scene/scene_surface.dart';
 import '../surfaces/state/state_surface.dart';
@@ -132,6 +135,24 @@ class _WorkstationState extends State<Workstation> {
   /// Built only when a project controller supplies the registry (no engine
   /// dependency); rebound alongside the engine whenever New / Open swaps it.
   RackDefinitionsController? _rackDefinitions;
+
+  /// Imports FM banks / SFZ instruments / samples into the open project's
+  /// `assets/` folder for the Racks editors (issue #210), resolving the live
+  /// project location on each pick. Constructing it touches no plugins.
+  late final FileSelectorRackAssetSource _rackAssetSource =
+      FileSelectorRackAssetSource(
+        directoryProvider: () => widget.projectController?.location.value,
+      );
+
+  /// Browses an FM bank's patch names for the Racks FM editor (issue #210),
+  /// resolving a definition's project-relative `.syx` ref against the open
+  /// project's folder. No yse is touched until a bank is actually read.
+  late final Dx7FmBankReader _fmBankReader = Dx7FmBankReader(
+    resolveAsset: (ref) {
+      final location = widget.projectController?.location.value;
+      return location == null ? ref : p.join(location, ref);
+    },
+  );
 
   /// Listens for OS exit requests so a dirty project can confirm-on-close
   /// (design §9). Present only when the project stack is wired.
@@ -448,7 +469,11 @@ class _WorkstationState extends State<Workstation> {
       case SurfaceId.mix:
         return MixSurface(engine: widget.engine);
       case SurfaceId.racks:
-        return RacksSurface(controller: _rackDefinitions);
+        return RacksSurface(
+          controller: _rackDefinitions,
+          assetSource: _rackAssetSource,
+          bankReader: _fmBankReader,
+        );
       case SurfaceId.patcher:
         return PatcherSurface(engine: widget.engine);
       case SurfaceId.code:

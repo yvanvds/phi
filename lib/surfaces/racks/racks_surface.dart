@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../design/tokens/phi_colors.dart';
+import '../../domain/synth/fm_bank_reader.dart';
 import '../../engine/state/rack_definitions_controller.dart';
 import '../surface.dart';
 import 'definition_editor_pane.dart';
 import 'definitions_panel.dart';
+import 'rack_asset_source.dart';
 import 'voices_pane.dart';
 
 /// The **Racks** surface (issue #209, design `docs/design/racks-and-voices.md`
@@ -21,10 +23,22 @@ import 'voices_pane.dart';
 /// It binds to the shell-owned [RackDefinitionsController]. That is `null` only
 /// in the bare Phase-1 tests that wire no project; the surface then shows a hint
 /// so the rail entry still renders.
+///
+/// The center editor's per-kind panels (issue #210) reach two injected seams:
+/// [assetSource] imports `.syx` / `.sfz` / sample files into the project's
+/// `assets/` folder, and [bankReader] browses an FM bank's patch names. Both are
+/// optional — the panels degrade gracefully when a bare test leaves them null.
 class RacksSurface extends Surface {
-  const RacksSurface({required this.controller, super.key});
+  const RacksSurface({
+    required this.controller,
+    this.assetSource,
+    this.bankReader,
+    super.key,
+  });
 
   final RackDefinitionsController? controller;
+  final RackAssetSource? assetSource;
+  final FmBankReader? bankReader;
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +60,13 @@ class RacksSurface extends Surface {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           DefinitionsPanel(controller: controller),
-          Expanded(child: DefinitionEditorPane(controller: controller)),
+          Expanded(
+            child: DefinitionEditorPane(
+              controller: controller,
+              assetSource: assetSource,
+              bankReader: bankReader,
+            ),
+          ),
           VoicesPane(controller: controller),
         ],
       ),
