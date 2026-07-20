@@ -1,11 +1,15 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
+import '../../design/widgets/patcher/patch_canvas_constants.dart';
 import '../../domain/patcher/patch_cable.dart';
 import '../../domain/patcher/patch_graph.dart';
 import '../../domain/patcher/patch_node.dart';
 import '../../domain/patcher/patch_node_id.dart';
 import '../../domain/patcher/patch_port.dart';
 import '../../domain/patcher/patch_port_id.dart';
+import '../bridge/patch_object_descriptor.dart';
 import '../bridge/patcher_gateway.dart';
 import 'node_type_registry.dart';
 
@@ -81,6 +85,91 @@ class PatcherController {
     );
     graph.addNode(node);
     return node;
+  }
+
+  /// The engine's full object catalogue as FFI-free descriptors — what the
+  /// palette and reference panel render (design §5). Forwards straight to the
+  /// gateway's process-wide registry passthrough; the `patcher` (subpatch) type
+  /// is already filtered out there (design §10 decision 2).
+  List<PatchObjectDescriptor> objectTypes() => _gateway.objectTypes();
+
+  /// Create a node straight from a palette [desc] at [position] — the
+  /// **drag-to-create** gesture (design §5).
+  ///
+  /// Unlike [addNode] (which takes a hand-authored [NodeDescriptor] for the
+  /// seeded demo bodies), this creates *any* engine object from its palette
+  /// metadata: it seeds the native object with the descriptor's documented
+  /// default args, reads the port topology back from `gateway.inspect` (the
+  /// native side is authoritative), and sizes the node to fit. The header shows
+  /// the object's `type` id (e.g. `~sine`), matching the palette. When the type
+  /// has a hand-authored body (the seeded control objects), that body's tuned
+  /// [NodeDescriptor.defaultSize] is reused so the live widget fits; otherwise
+  /// the box is sized to seat the ports. Per-node live GUI bodies for arbitrary
+  /// objects are a later epic issue.
+  PatchNode addObject({
+    required PatchObjectDescriptor desc,
+    required Offset position,
+    int voice = 1,
+  }) {
+    final id = _gateway.createObject(
+      instanceId,
+      desc.type,
+      args: _defaultArgsFor(desc),
+    );
+    _gateway.setNodePosition(instanceId, id, position);
+    final snapshot = _gateway.inspect(instanceId, id);
+    final bodied = NodeTypeRegistry.instance.find(desc.type);
+    final node = PatchNode(
+      id: PatchNodeId(id),
+      type: desc.type,
+      title: desc.type,
+      voice: voice,
+      position: position,
+      size:
+          bodied?.defaultSize ??
+          _sizeForPorts(snapshot.inputs, snapshot.outputs),
+      inputs: [
+        for (var i = 0; i < snapshot.inputs; i++)
+          PatchPort(
+            index: i,
+            side: PatchPortSide.input,
+            kind: snapshot.inputKinds[i],
+            voice: voice,
+          ),
+      ],
+      outputs: [
+        for (var i = 0; i < snapshot.outputs; i++)
+          PatchPort(
+            index: i,
+            side: PatchPortSide.output,
+            kind: snapshot.outputKinds[i],
+            voice: voice,
+          ),
+      ],
+    );
+    graph.addNode(node);
+    return node;
+  }
+
+  /// The documented creation-argument string for [desc] — its params' default
+  /// values, space-joined. An object with no documented params (e.g. `.slider`,
+  /// which registers none and crashes if handed any) yields an empty string.
+  String _defaultArgsFor(PatchObjectDescriptor desc) => [
+    for (final p in desc.params)
+      if (p.defaultValue.isNotEmpty) p.defaultValue,
+  ].join(' ');
+
+  /// A node box tall enough to seat its ports (which sit at fixed vertical
+  /// spacing measured from the header). One-port minimum so a portless object
+  /// still gets a visible body.
+  Size _sizeForPorts(int inputs, int outputs) {
+    final rows = math.max(1, math.max(inputs, outputs));
+    return Size(
+      120,
+      PatchCanvasConstants.headerHeight +
+          PatchCanvasConstants.firstPortOffset +
+          rows * PatchCanvasConstants.portSpacing,
+    );
   }
 
   /// Remove a node and any cables touching it.

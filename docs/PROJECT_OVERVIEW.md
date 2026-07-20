@@ -1368,6 +1368,31 @@ main + app          (orchestration)
   test (edit a live patcher → save → reload re-materialises the edited patch,
   placement intact). The surface + the gesture-command edit adapter are following
   epic issues.
+- **Patcher palette + reference panel** (issue #221, patcher epic, design
+  `docs/design/patcher.md` §5) — the epic's first UI slice, driven entirely by the
+  gateway metadata. A left `PatcherPalette` (`lib/surfaces/patcher/palette/`) reads
+  `PatcherController.objectTypes()` (the gateway's `PatchObjectDescriptor`
+  passthrough), groups the catalogue into `PatchObjectCategory` sections, filters
+  live on name + description, and draws DSP (`~`) entries in the cool accent vs
+  control (`.`) grey; the subpatch type is already filtered upstream (§10 decision
+  2). Each entry is a `Draggable<PatchObjectDescriptor>` — **drag-to-create**
+  resolves the drop point to canvas-local coords through the live pan/zoom
+  transform and creates the object there via a new `PatcherController.addObject`
+  (documented default args from the descriptor's params, ports read back from
+  `inspect`, box sized to fit — reusing a hand-authored body's `defaultSize` when
+  the type has one). A right `PatchReferencePanel` (`lib/surfaces/patcher/reference/`)
+  renders the engine's own documentation for the selected palette entry **or a
+  tapped canvas node** — description, per-inlet accepted-kinds + range, per-outlet
+  data type + range, creation params + defaults; no hardcoded catalogue.
+  `PatcherNodeView` now headers from the node's own title and renders a
+  hand-authored body only when the type has one (else empty), so any dropped engine
+  object lands as a real node rather than an error placeholder. Covered by palette +
+  reference-panel widget tests (sections, search on name/description, subpatch
+  absent, DSP accent, full-metadata render, empty state), surface widget tests
+  (drag-create landing a node at the drop point; tap-a-node → reference), and an
+  end-to-end `patcher_palette` integration test (summon → sections → tap-to-document
+  → drag-create). Canvas rework (body-drag, marquee, typed cables) and per-node live
+  GUI bodies / params dialog are following epic issues.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
@@ -1376,7 +1401,7 @@ main + app          (orchestration)
 | Surface  | Status   | Folder                          |
 |----------|----------|---------------------------------|
 | Scene    | picking  | `lib/surfaces/scene/`           |
-| Patcher  | skeleton | `lib/surfaces/patcher/`         |
+| Patcher  | palette  | `lib/surfaces/patcher/`         |
 | Code     | scaffold | `lib/surfaces/code/`            |
 | State    | scaffold | `lib/surfaces/state/`           |
 | MIDI     | editor   | `lib/surfaces/midi/`            |

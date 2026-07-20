@@ -2,9 +2,11 @@ import 'package:flutter/widgets.dart';
 
 import '../../design/widgets/patcher/patch_canvas_constants.dart';
 import '../../design/widgets/patcher/patch_grid_painter.dart';
+import '../../domain/patcher/patch_node.dart';
 import '../../domain/patcher/patch_port.dart';
 import '../../domain/patcher/patch_port_id.dart';
 import '../../domain/patcher/patch_port_kind.dart';
+import '../../engine/bridge/patch_object_descriptor.dart';
 import '../../engine/state/patcher_controller.dart';
 import 'patcher_cable_layer.dart';
 import 'patcher_ghost_cable.dart';
@@ -13,10 +15,28 @@ import 'patcher_node_view.dart';
 /// The pan/zoom canvas itself. Hosts the grid backdrop, the cable layer,
 /// every [PatchNode]'s widget, and the in-flight ghost cable. Tracks the
 /// cursor's canvas-local position so the ghost cable can follow it.
+///
+/// When [onCreateObject] is supplied the whole viewport is a drop target for a
+/// palette entry: a dropped [PatchObjectDescriptor] resolves to the canvas-local
+/// point under the pointer (through the live pan/zoom transform) and is reported
+/// back so the surface can create the object there (design §5, drag-to-create).
 class PatcherCanvas extends StatefulWidget {
-  const PatcherCanvas({required this.controller, super.key});
+  const PatcherCanvas({
+    required this.controller,
+    this.onCreateObject,
+    this.onNodeTap,
+    super.key,
+  });
 
   final PatcherController controller;
+
+  /// Called with a dropped palette entry and the canvas-local point it landed
+  /// on. Null disables drop-to-create.
+  final void Function(PatchObjectDescriptor desc, Offset canvasPosition)?
+  onCreateObject;
+
+  /// Called when a node body is tapped — drives the reference panel.
+  final void Function(PatchNode node)? onNodeTap;
 
   @override
   State<PatcherCanvas> createState() => _PatcherCanvasState();
@@ -28,7 +48,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
-    return Listener(
+    final viewport = Listener(
       onPointerMove: (e) => _updateCursor(e.localPosition),
       onPointerHover: (e) => _updateCursor(e.localPosition),
       onPointerUp: (e) => _onPointerUp(e.localPosition),
@@ -84,6 +104,9 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
                         node: n,
                         controller: controller,
                         onOutputPortDown: _onOutputPortDown,
+                        onTap: widget.onNodeTap == null
+                            ? null
+                            : () => widget.onNodeTap!(n),
                       ),
                     ),
                   if (graph.dragSourcePort != null)
@@ -102,6 +125,24 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
         ),
       ),
     );
+
+    final onCreate = widget.onCreateObject;
+    if (onCreate == null) return viewport;
+    return DragTarget<PatchObjectDescriptor>(
+      onAcceptWithDetails: (details) =>
+          onCreate(details.data, _toCanvas(details.offset)),
+      builder: (context, candidate, rejected) => viewport,
+    );
+  }
+
+  /// Convert a global drop point to canvas-local (scene) coordinates, undoing
+  /// the viewport offset and the live pan/zoom transform.
+  Offset _toCanvas(Offset global) {
+    final box = context.findRenderObject() as RenderBox?;
+    final local = box?.globalToLocal(global) ?? global;
+    final inverse = Matrix4.tryInvert(widget.controller.transform.value);
+    if (inverse == null) return local;
+    return MatrixUtils.transformPoint(inverse, local);
   }
 
   void _updateCursor(Offset local) {

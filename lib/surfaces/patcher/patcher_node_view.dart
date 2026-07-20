@@ -19,6 +19,7 @@ class PatcherNodeView extends StatelessWidget {
     required this.node,
     required this.controller,
     required this.onOutputPortDown,
+    this.onTap,
     super.key,
   });
 
@@ -30,14 +31,17 @@ class PatcherNodeView extends StatelessWidget {
   final void Function(PatchPortId portId, Offset globalPosition)
   onOutputPortDown;
 
+  /// Called when the node body is tapped — the surface uses this to show the
+  /// node's reference (design §5, "the selected palette entry or canvas node").
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
+    // A hand-authored descriptor supplies the live GUI body for the seeded
+    // demo nodes; a drag-created engine object has none yet (a later epic
+    // issue), so its body is empty. Either way the header shows the node's own
+    // title and the frame renders — no type is ever an error placeholder.
     final desc = NodeTypeRegistry.instance.find(node.type);
-    if (desc == null) {
-      // Unknown type — render a minimal placeholder so the canvas does
-      // not blow up. Adding a registry entry will replace this.
-      return const _UnknownNodePlaceholder();
-    }
     return ListenableBuilder(
       listenable: node,
       builder: (context, _) {
@@ -45,12 +49,13 @@ class PatcherNodeView extends StatelessWidget {
         final outputYs = _portYs(node.outputs);
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
+          onTap: onTap,
           onPanUpdate: (d) => controller.moveNode(node.id, d.delta),
           child: Stack(
             clipBehavior: Clip.none,
             children: [
               PatchNodeFrame(
-                title: desc.title,
+                title: node.title,
                 voice: node.voice,
                 armed: node.armed,
                 inputPortYs: inputYs,
@@ -59,7 +64,9 @@ class PatcherNodeView extends StatelessWidget {
                 outputVoices: [for (final p in node.outputs) p.voice],
                 body: Padding(
                   padding: const EdgeInsets.all(8),
-                  child: desc.buildBody(context, node, controller),
+                  child:
+                      desc?.buildBody(context, node, controller) ??
+                      const SizedBox.shrink(),
                 ),
               ),
               for (var i = 0; i < node.outputs.length; i++)
@@ -135,16 +142,4 @@ Map<PatchPortId, Offset> portPositionsFor(PatchNode node) {
     );
   }
   return out;
-}
-
-class _UnknownNodePlaceholder extends StatelessWidget {
-  const _UnknownNodePlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return const DecoratedBox(
-      decoration: BoxDecoration(color: Color(0x33FF0000)),
-      child: SizedBox(width: 80, height: 40),
-    );
-  }
 }
