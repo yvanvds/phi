@@ -10,6 +10,7 @@ import 'package:phi/shell/layout/pane_dock_zones.dart';
 import 'package:phi/shell/layout/pane_tab_strip.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
+import 'package:phi/shell/top_toolbar/top_toolbar.dart';
 import 'package:phi/surfaces/midi/midi_viewport.dart';
 import 'package:phi/surfaces/midi/piano_roll_editor.dart';
 import 'package:phi/surfaces/midi/piano_roll_painter.dart';
@@ -160,9 +161,12 @@ void main() {
     expect(find.byType(PianoRollEditor), findsOneWidget);
     expect(engine.midi.playhead.value, 0);
 
-    // Hit the toolbar play button. A periodic player timer now runs, so drive
-    // it with explicit pumps — pumpAndSettle would spin on the per-tick frames.
-    await tester.tap(find.byTooltip('play'));
+    // Hit the toolbar play button. Target it by key: the MIDI surface renders
+    // its own `play` tooltips (per-clip transport, library-panel row previews),
+    // so `find.byTooltip('play')` is ambiguous here (#288/#290/#292). A periodic
+    // player timer now runs, so drive it with explicit pumps — pumpAndSettle
+    // would spin on the per-tick frames.
+    await tester.tap(find.byKey(TopToolbar.playKey));
     await tester.pump(); // process the tap → transport.play()
     await tester.pump(const Duration(milliseconds: 500));
 
@@ -188,8 +192,8 @@ void main() {
     expect(midiGateway.transport!.events, isNotEmpty);
 
     // Stop rewinds the playhead, stops the transport, and silences any held
-    // note.
-    await tester.tap(find.byTooltip('stop'));
+    // note. Target the toolbar stop by key for the same reason as play above.
+    await tester.tap(find.byKey(TopToolbar.stopKey));
     await tester.pump();
     expect(engine.midi.playhead.value, 0);
     expect(midiGateway.transport!.isPlaying, isFalse);

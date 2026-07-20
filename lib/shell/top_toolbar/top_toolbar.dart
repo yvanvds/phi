@@ -46,6 +46,14 @@ class TopToolbar extends StatelessWidget {
   /// `settings-and-devices.md` §6). `null` omits the "Settings…" item.
   final VoidCallback? onOpenSettings;
 
+  /// Keys so tests can target the toolbar transport unambiguously. Since the
+  /// MIDI surface renders its own `play`/`stop` tooltips (per-clip transport in
+  /// `ClipTransportRow`, per-row previews in the library panel), a bare
+  /// `find.byTooltip('play')` is ambiguous once MIDI is onstage (issues
+  /// #288/#290/#292). Match the same key convention those controls already use.
+  static const Key playKey = Key('TopToolbar.play');
+  static const Key stopKey = Key('TopToolbar.stop');
+
   @override
   Widget build(BuildContext context) {
     final controller = projectController;
@@ -120,6 +128,7 @@ class _TransportControls extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           TransportButton(
+            key: TopToolbar.playKey,
             icon: Icons.play_arrow,
             tooltip: 'play',
             isActive: state == TransportState.playing,
@@ -127,6 +136,7 @@ class _TransportControls extends StatelessWidget {
           ),
           const SizedBox(width: PhiSpacing.s2),
           TransportButton(
+            key: TopToolbar.stopKey,
             icon: Icons.stop,
             tooltip: 'stop',
             isActive: false,
