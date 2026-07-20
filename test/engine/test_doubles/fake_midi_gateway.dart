@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:phi/engine/bridge/midi_gateway.dart';
+import 'package:phi/engine/bridge/midi_input_event.dart';
 import 'package:phi/engine/bridge/midi_transport.dart';
 
 import 'fake_midi_transport.dart';
@@ -40,6 +41,8 @@ class FakeMidiGateway implements MidiGateway {
   final List<String> _openInputs = [];
   final StreamController<String> _inputActivity =
       StreamController<String>.broadcast();
+  final StreamController<MidiInputEvent> _inputEvents =
+      StreamController<MidiInputEvent>.broadcast();
 
   @override
   int get outputDeviceCount => deviceNames.length;
@@ -63,6 +66,9 @@ class FakeMidiGateway implements MidiGateway {
   Stream<String> get inputActivity => _inputActivity.stream;
 
   @override
+  Stream<MidiInputEvent> get inputEvents => _inputEvents.stream;
+
+  @override
   void openInputs(List<String> names) {
     calls.add('openInputs:${names.join(',')}');
     // Open exactly the requested names that resolve to a known port; an unknown
@@ -81,6 +87,38 @@ class FakeMidiGateway implements MidiGateway {
   /// Push a synthetic activity tick for [portName] — drives [inputActivity]
   /// listeners as if that open port had delivered a MIDI message.
   void emitInputActivity(String portName) => _inputActivity.add(portName);
+
+  /// Emit a parsed input [event] on [inputEvents] — the fake-side counterpart
+  /// of the real gateway decoding a `MidiInParsedMessage`. Also ticks
+  /// [inputActivity] for [event.port], mirroring the real gateway's single
+  /// subscription driving both streams.
+  void emitInputEvent(MidiInputEvent event) {
+    _inputActivity.add(event.port);
+    _inputEvents.add(event);
+  }
+
+  /// Convenience: emit a note-on on [port] (channel 1-based, default 1).
+  void emitNoteOn(String port, int note, int velocity, {int channel = 1}) =>
+      emitInputEvent(
+        MidiInputEvent(
+          type: MidiInputEventType.noteOn,
+          note: note,
+          velocity: velocity,
+          channel: channel,
+          port: port,
+        ),
+      );
+
+  /// Convenience: emit a note-off on [port] (channel 1-based, default 1).
+  void emitNoteOff(String port, int note, {int channel = 1}) => emitInputEvent(
+    MidiInputEvent(
+      type: MidiInputEventType.noteOff,
+      note: note,
+      velocity: 0,
+      channel: channel,
+      port: port,
+    ),
+  );
 
   @override
   bool get isOpen => openPort != null;
@@ -113,7 +151,8 @@ class FakeMidiGateway implements MidiGateway {
     openPort = null;
   }
 
-  /// Close the input-activity stream controller. Call from test teardown to keep
+  /// Close the input stream controllers. Call from test teardown to keep
   /// `flutter test` from leaking a pending broadcast controller.
-  Future<void> dispose() => _inputActivity.close();
+  Future<void> dispose() =>
+      Future.wait([_inputActivity.close(), _inputEvents.close()]);
 }

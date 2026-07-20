@@ -1054,6 +1054,35 @@ main + app          (orchestration)
   test, exactly as the earlier bridge seams (`RegistryMirror`, the clip transport).
   VA/FM/sampler pools register omni until `dart-yse` grows a channel parameter on
   their `add*Voices` (filed upstream); sine already registers on its channel.
+- **Gateway fx surface + parsed MIDI-in** (issue #207, epic #203, design
+  `docs/design/racks-and-voices.md` §5, §7) — the engine-bridge fx half plus the
+  input stream, same Real/Fake split. `FxGateway` (`lib/engine/bridge/`) has two
+  primitives: `materialiseFx(definition)` mints a `MaterialisedFx` handle (one
+  `DspObject`/`Compressor` per `FxKind`, its flat `params` map applied through
+  click-free setters — a same-kind edit applies live, a kind change rebuilds), and
+  `createChain(busChannelId:)` mints an `FxChain` that links a bus's `inserts`
+  handles head-to-tail and places the head pre-fader via `Channel.dsp`.
+  `FxChain.setInserts(ordered)` is build (first call) · reorder (new order) ·
+  detach (empty list) in one, borrowing the handles (the owner disposes them).
+  `RealMaterialisedFx` maps each kind to its factory + recognised param keys
+  (`frequency`/`q`/`impact`/taps/`grain*`/compressor curve …); `patcherInsert` is
+  **reserved** — it builds no object (`isPlaceable == false`) and a chain skips it
+  until the patcher epic wires it. Reorder is cycle-safe **without** a wrapper
+  unlink (the wrapper's `DspObject.link` can't clear a `next`; the native API can —
+  filed **yvanvds/dart-yse#42**): `RealFxChain` keeps a permanent bypassed
+  **terminator** `DspObject` as the tail, re-linking every real object to its
+  successor (the next insert or the terminator) on each placement, so no stale edge
+  survives and the walk always ends at the terminator. The **parsed MIDI-in stream**
+  grows `MidiGateway` with `inputEvents` — a `Stream<MidiInputEvent>` (note on/off +
+  velocity + 1-based channel + port) decoded from the bridge's `MidiInParsedMessage`
+  by the pure, yse-free `MidiInputEvent.fromParsed` (velocity-0 note-on → note-off;
+  non-note messages filtered); one `RealMidiGateway` subscription drives both the
+  unchanged activity tick (design §6) and the new note stream (design §7). Nothing
+  routes these events yet (arm/audition is #211) and the fx gateway has no UI
+  consumer yet (#212), so — like #206 — this is a non-user-visible seam covered by
+  unit tests via the fakes (`FakeFxGateway`'s chain build/reorder/detach faithfully
+  simulates the terminator link-walk to prove reorder never cycles; `FakeMidiGateway`
+  emit helpers) plus the pure `MidiInputEvent.fromParsed` decode; no integration test.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
