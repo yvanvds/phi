@@ -113,7 +113,8 @@ class PhiEngine {
     return PhiEngine(
       yse,
       sceneRenderer: sceneRenderer ?? MacbearSceneRenderer(),
-      patcherGateway: patcherGateway ?? RealPatcherGateway(),
+      patcherGateway:
+          patcherGateway ?? RealPatcherGateway(busResolver: busResolver),
       midiGateway: midiGateway ?? RealMidiGateway(),
       synthGateway: synthGateway ?? RealSynthGateway(busResolver: busResolver),
       fxGateway: fxGateway ?? RealFxGateway(busResolver: busResolver),
@@ -513,8 +514,7 @@ class PhiEngine {
     // end-to-end on the loaded libyse.dll.
     final pg = _patcherGateway;
     if (pg != null) {
-      pg.init(mainOutputs: 1);
-      _patcher = PatcherController(pg);
+      _patcher = PatcherController(pg, mainOutputs: 1);
     }
     final sm = StateMachineController();
     _stateMachine = sm;
@@ -586,7 +586,7 @@ class PhiEngine {
     if (_started) {
       _patcher?.dispose();
       _patcher = null;
-      _patcherGateway?.dispose();
+      _patcherGateway?.disposeAll();
       _stateMachine?.dispose();
       _stateMachine = null;
       _runtimeVariables?.dispose();

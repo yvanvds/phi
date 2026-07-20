@@ -15,10 +15,18 @@ import 'node_type_registry.dart';
 /// [TransformationController] for pan/zoom. Every mutation routes through
 /// the [PatcherGateway] first, then updates the graph — so the Dart model
 /// only contains nodes the native patcher has accepted.
+///
+/// One controller drives one gateway instance (one open `patch.` entity,
+/// design §8): it creates its [instanceId] on construction and keys every
+/// gateway call by it, so a second controller's patcher stays untouched.
 class PatcherController {
-  PatcherController(this._gateway);
+  PatcherController(this._gateway, {int mainOutputs = 2})
+    : instanceId = _gateway.createInstance(mainOutputs: mainOutputs);
 
   final PatcherGateway _gateway;
+
+  /// This controller's gateway instance — the patcher every op is keyed to.
+  final int instanceId;
 
   /// The dart-side graph mirror. Listen for add/remove/cable changes.
   final PatchGraph graph = PatchGraph();
@@ -38,9 +46,13 @@ class PatcherController {
     required Offset position,
     int voice = 1,
   }) {
-    final id = _gateway.createObject(desc.type, args: desc.defaultArgs);
-    _gateway.setNodePosition(id, position);
-    final snapshot = _gateway.inspect(id);
+    final id = _gateway.createObject(
+      instanceId,
+      desc.type,
+      args: desc.defaultArgs,
+    );
+    _gateway.setNodePosition(instanceId, id, position);
+    final snapshot = _gateway.inspect(instanceId, id);
     final node = PatchNode(
       id: PatchNodeId(id),
       type: desc.type,
@@ -78,13 +90,14 @@ class PatcherController {
         .toList();
     for (final c in cablesTouching) {
       _gateway.disconnect(
+        instanceId,
         fromHandleId: c.source.nodeId.value,
         outlet: c.source.index,
         toHandleId: c.target.nodeId.value,
         inlet: c.target.index,
       );
     }
-    _gateway.deleteObject(id.value);
+    _gateway.deleteObject(instanceId, id.value);
     graph.removeNode(id); // also drops the cables from the Dart side
   }
 
@@ -95,7 +108,7 @@ class PatcherController {
     if (n == null) return;
     final next = n.position + delta;
     n.moveTo(next);
-    _gateway.setNodePosition(id.value, next);
+    _gateway.setNodePosition(instanceId, id.value, next);
   }
 
   // ─── cable lifecycle ─────────────────────────────────────────────────
@@ -118,6 +131,7 @@ class PatcherController {
     if (source.index >= srcNode.outputs.length) return false;
     if (target.index >= dstNode.inputs.length) return false;
     _gateway.connect(
+      instanceId,
       fromHandleId: source.nodeId.value,
       outlet: source.index,
       toHandleId: target.nodeId.value,
@@ -142,20 +156,44 @@ class PatcherController {
     required int inlet,
     required double value,
   }) {
-    _gateway.sendFloat(id.value, inlet, value);
+    _gateway.sendFloat(instanceId, id.value, inlet, value);
   }
 
-  /// Route the patcher's `~dac` output to the master channel so audio is
-  /// heard. Must be called after at least one `~dac` exists in the graph;
-  /// calling it on an empty patcher crashes the audio thread. Idempotent.
+  /// Bang a node's inlet — used by trigger-style control bodies (`.b`, `.t`,
+  /// message) to fire into the graph. The `sendBang` companion to
+  /// [setControlValue].
+  void setControlBang(PatchNodeId id, {required int inlet}) {
+    _gateway.sendBang(instanceId, id.value, inlet);
+  }
+
+  /// Route the patcher's `~dac` output to a mix bus so audio is heard —
+  /// [busChannelId] is the opaque channel id (`null` = master). Must be
+  /// called after at least one `~dac` exists in the graph; mounting an empty
+  /// patcher crashes the audio thread. Idempotent per bus: re-calling with a
+  /// different bus re-mounts, so a placement change follows.
   bool _mounted = false;
-  void mountAudio({double volume = 1.0}) {
-    if (_mounted) return;
-    _gateway.mountAsSound(volume: volume);
+  int? _mountedBus;
+  void mountAudio({int? busChannelId, double volume = 1.0}) {
+    if (_mounted && _mountedBus == busChannelId) return;
+    _gateway.mountAsSource(
+      instanceId,
+      busChannelId: busChannelId,
+      volume: volume,
+    );
     _mounted = true;
+    _mountedBus = busChannelId;
+  }
+
+  /// Detach the mounted [Sound], silencing the patcher's source role.
+  void unmountAudio() {
+    if (!_mounted) return;
+    _gateway.unmountSource(instanceId);
+    _mounted = false;
+    _mountedBus = null;
   }
 
   void dispose() {
+    _gateway.disposeInstance(instanceId);
     transform.dispose();
     graph.dispose();
   }

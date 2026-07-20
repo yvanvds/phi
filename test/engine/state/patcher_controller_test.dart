@@ -45,7 +45,7 @@ void main() {
     late PatcherController controller;
 
     setUp(() {
-      gateway = FakePatcherGateway()..init();
+      gateway = FakePatcherGateway();
       controller = PatcherController(gateway);
     });
 
@@ -57,7 +57,7 @@ void main() {
         position: const Offset(40, 60),
       );
 
-      expect(gateway.calls.first, startsWith('init'));
+      expect(gateway.calls.first, startsWith('createInstance'));
       expect(
         gateway.calls,
         containsAllInOrder(<String>[
