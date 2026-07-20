@@ -97,9 +97,14 @@ void main() {
     expect(session.isPlaying, isTrue);
     expect(find.byType(CommandPalette), findsNothing);
 
-    // Reopen: Play is now disabled (can't play while playing) and hidden; Stop
-    // has become enabled and shows — the enabled-predicate filtering, live.
+    // Reopen and filter to transport: Play is now disabled (can't play while
+    // playing) and hidden; Stop has become enabled and shows — the
+    // enabled-predicate filtering, live. (Filtered so the row is on screen: the
+    // default map — issue #255 — seeds enough commands that an unfiltered list
+    // scrolls Stop below the fold.)
     await pressCtrlShiftP(tester);
+    await tester.enterText(paletteField(), 'Sto');
+    await tester.pumpAndSettle();
     expect(find.text('Play'), findsNothing);
     expect(find.text('Stop'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
