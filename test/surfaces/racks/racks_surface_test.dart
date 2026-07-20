@@ -126,16 +126,18 @@ void main() {
 
     expect(controller.selected, _addr('synth.lead'));
     expect(find.byKey(DefinitionEditorPane.titleKey), findsOneWidget);
-    expect(find.byKey(DefinitionEditorPane.placeholderKey), findsOneWidget);
-    // The title names the selected definition; the subtitle names its kind.
+    // The title names the selected definition; the subtitle names its kind; and
+    // the VA panel renders its sections (issue #210).
     expect(find.widgetWithText(Column, 'lead'), findsWidgets);
     expect(find.text('synth · va'), findsOneWidget);
+    expect(find.text('FILTER'), findsOneWidget);
 
-    // Selecting the fx re-routes.
+    // Selecting the fx re-routes to the fx param rows.
     await tester.tap(find.byKey(DefinitionsPanel.rowKey(_addr('fx.reverb'))));
     await tester.pumpAndSettle();
     expect(controller.selected, _addr('fx.reverb'));
     expect(find.text('effect · lowpass'), findsOneWidget);
+    expect(find.text('MIX'), findsOneWidget);
   });
 
   testWidgets('SYNTHS add menu creates a synth per kind and selects it', (

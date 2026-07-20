@@ -9,6 +9,7 @@ import '../../domain/project/commands/create_group_command.dart';
 import '../../domain/project/commands/move_entity_command.dart';
 import '../../domain/project/commands/remove_entity_command.dart';
 import '../../domain/project/commands/reorder_child_command.dart';
+import '../../domain/project/commands/update_entity_payload_command.dart';
 import '../../domain/project/delete_impact.dart';
 import '../../domain/project/entity_address.dart';
 import '../../domain/project/name_slug.dart';
@@ -156,6 +157,57 @@ class RackDefinitionsController extends ChangeNotifier {
     final payload = _registry.entityAt(address)?.payload;
     if (payload is Map) return payload['kind'] as String?;
     return null;
+  }
+
+  // ─── editor decode / mutate (issue #210) ────────────────────────────────────
+
+  /// The `synth.` definition at [address] decoded into its typed
+  /// [SynthDefinition] (dispatched on the payload `kind`), or `null` when nothing
+  /// synth-shaped sits there — the center editor reads this to build its panel.
+  SynthDefinition? synthAt(EntityAddress address) {
+    final payload = _registry.entityAt(address)?.payload;
+    if (payload is SynthDefinition) return payload;
+    if (payload is Map) {
+      try {
+        return SynthDefinition.fromJson(payload.cast<String, Object?>());
+      } on FormatException {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /// The `fx.` instance at [address] decoded into its typed [FxDefinition], or
+  /// `null` when nothing fx-shaped sits there.
+  FxDefinition? fxAt(EntityAddress address) {
+    final payload = _registry.entityAt(address)?.payload;
+    if (payload is FxDefinition) return payload;
+    if (payload is Map) {
+      try {
+        return FxDefinition.fromJson(payload.cast<String, Object?>());
+      } on FormatException {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /// Write an edited synth [definition] to the entity at [address] as one
+  /// journaled payload command (design §8: "all edits are journaled payload
+  /// commands"). Continuous controls coalesce a whole drag into a single call —
+  /// the editor commits once, on gesture end — so a slider sweep is one undoable
+  /// edit, not dozens. A no-op when [address] holds no entity.
+  void updateSynth(EntityAddress address, SynthDefinition definition) {
+    if (_registry.entityAt(address) == null) return;
+    _apply(UpdateEntityPayloadCommand(_registry, address, definition.toJson()));
+  }
+
+  /// Write an edited fx [definition] to the entity at [address] as one journaled
+  /// payload command — the fx param rows' commit path. A no-op when [address]
+  /// holds no entity.
+  void updateFx(EntityAddress address, FxDefinition definition) {
+    if (_registry.entityAt(address) == null) return;
+    _apply(UpdateEntityPayloadCommand(_registry, address, definition.toJson()));
   }
 
   // ─── add ────────────────────────────────────────────────────────────────────

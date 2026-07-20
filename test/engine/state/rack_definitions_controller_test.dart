@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/domain/fx/fx_definition.dart';
 import 'package:phi/domain/fx/fx_kind.dart';
 import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/project/project_command.dart';
@@ -289,6 +290,78 @@ void main() {
         payload: const SineSynth().toJson(),
       );
       expect(notified, isFalse);
+    });
+
+    group('editor decode / update (issue #210)', () {
+      test('synthAt decodes each synth kind; fxAt decodes an fx', () {
+        registry.createEntity(
+          _addr('synth.va'),
+          payload: const VaSynth().toJson(),
+        );
+        registry.createEntity(
+          _addr('synth.fm'),
+          payload: const FmSynth(patchIndex: 3).toJson(),
+        );
+        registry.createEntity(
+          _addr('fx.delay'),
+          payload: const FxDefinition(kind: FxKind.lowpassDelay).toJson(),
+        );
+
+        expect(controller.synthAt(_addr('synth.va')), isA<VaSynth>());
+        expect(
+          (controller.synthAt(_addr('synth.fm'))! as FmSynth).patchIndex,
+          3,
+        );
+        expect(controller.fxAt(_addr('fx.delay'))!.kind, FxKind.lowpassDelay);
+        // Wrong-shape lookups return null rather than throw.
+        expect(controller.synthAt(_addr('fx.delay')), isNull);
+        expect(controller.fxAt(_addr('synth.va')), isNull);
+        expect(controller.synthAt(_addr('synth.missing')), isNull);
+      });
+
+      test(
+        'updateSynth writes the payload and records one journaled command',
+        () {
+          registry.createEntity(
+            _addr('synth.va'),
+            payload: const VaSynth().toJson(),
+          );
+          recorded.clear();
+
+          controller.updateSynth(
+            _addr('synth.va'),
+            const VaSynth().copyWith(voiceCount: 12, gain: 0.5),
+          );
+
+          expect(recorded, hasLength(1));
+          final stored = controller.synthAt(_addr('synth.va'))! as VaSynth;
+          expect(stored.voiceCount, 12);
+          expect(stored.gain, 0.5);
+        },
+      );
+
+      test('updateFx writes the fx payload and records one command', () {
+        registry.createEntity(
+          _addr('fx.delay'),
+          payload: const FxDefinition(kind: FxKind.lowpassDelay).toJson(),
+        );
+        recorded.clear();
+
+        controller.updateFx(
+          _addr('fx.delay'),
+          const FxDefinition(
+            kind: FxKind.lowpassDelay,
+          ).withParam('tap1Time', 250),
+        );
+
+        expect(recorded, hasLength(1));
+        expect(controller.fxAt(_addr('fx.delay'))!.params['tap1Time'], 250);
+      });
+
+      test('update on a missing entity is a no-op', () {
+        controller.updateSynth(_addr('synth.ghost'), const VaSynth());
+        expect(recorded, isEmpty);
+      });
     });
   });
 }
