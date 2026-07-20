@@ -3,15 +3,19 @@ import 'package:yse/yse.dart';
 
 import '../../design/tokens/phi_colors.dart';
 import '../../design/tokens/phi_type.dart';
+import '../../domain/patcher/patch_node.dart';
 import '../../domain/patcher/patch_node_id.dart';
 import '../../domain/patcher/patch_port.dart';
 import '../../domain/patcher/patch_port_id.dart';
+import '../../engine/bridge/patch_object_descriptor.dart';
 import '../../engine/engine.dart';
 import '../../engine/state/node_type_registry.dart';
 import '../../engine/state/patcher_controller.dart';
 import '../surface.dart';
+import 'palette/patcher_palette.dart';
 import 'patcher_canvas.dart';
 import 'patcher_node_types.dart';
+import 'reference/patch_reference_panel.dart';
 
 /// Patcher surface — pan/zoom canvas of nodes and cables.
 ///
@@ -48,11 +52,38 @@ class _PatcherViewport extends StatefulWidget {
 }
 
 class _PatcherViewportState extends State<_PatcherViewport> {
+  /// The engine's object catalogue — stable for the surface's lifetime, so it
+  /// is read once rather than on every rebuild.
+  late final List<PatchObjectDescriptor> _objectTypes;
+
+  /// The type reflected in the reference panel (from a palette tap or a canvas
+  /// node tap), or null for the empty state.
+  PatchObjectDescriptor? _selected;
+
   @override
   void initState() {
     super.initState();
     registerBuiltInPatcherNodes();
     _seedDefaultGraphIfEmpty(widget.engine.patcher);
+    _objectTypes = widget.engine.patcher.objectTypes();
+  }
+
+  void _select(PatchObjectDescriptor desc) => setState(() => _selected = desc);
+
+  void _selectNode(PatchNode node) {
+    final desc = _descriptorForType(node.type);
+    if (desc != null) setState(() => _selected = desc);
+  }
+
+  void _createObject(PatchObjectDescriptor desc, Offset position) {
+    widget.engine.patcher.addObject(desc: desc, position: position);
+  }
+
+  PatchObjectDescriptor? _descriptorForType(String type) {
+    for (final d in _objectTypes) {
+      if (d.type == type) return d;
+    }
+    return null;
   }
 
   void _seedDefaultGraphIfEmpty(PatcherController controller) {
@@ -93,8 +124,25 @@ class _PatcherViewportState extends State<_PatcherViewport> {
       PatchPortId(nodeId: id, side: side, index: index);
 
   @override
-  Widget build(BuildContext context) =>
-      PatcherCanvas(controller: widget.engine.patcher);
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        PatcherPalette(
+          objectTypes: _objectTypes,
+          selected: _selected,
+          onSelect: _select,
+        ),
+        Expanded(
+          child: PatcherCanvas(
+            controller: widget.engine.patcher,
+            onCreateObject: _createObject,
+            onNodeTap: _selectNode,
+          ),
+        ),
+        PatchReferencePanel(descriptor: _selected),
+      ],
+    );
+  }
 }
 
 class _Offline extends StatelessWidget {
