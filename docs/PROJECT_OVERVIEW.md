@@ -1592,6 +1592,30 @@ main + app          (orchestration)
   (`python/tests/test_mirror_scripts.py`, run by the same Dart harness) that
   `exec`s the literal mirror-emitted strings — bound-proxy rename-following, the
   blank-interpreter `_sync_replace` re-sync, and unmodelled-kind tolerance.
+- **The `phi.ctl` control plane** (issue #233, live-coding epic, design
+  `docs/design/live-coding.md` §4) — the host-side counterpart to the mirror:
+  where `RealRegistryMirror` pushes host→interpreter, `ControlPlaneDispatcher`
+  (`lib/engine/bridge/control_plane_dispatcher.dart`) routes interpreter→host.
+  It subscribes to the `BusTap` (#229) `phi.ctl` prefix, decodes each tapped
+  `(address, value)` frame, and dispatches to the owning controller: clip
+  play/stop/pause/loop + group verbs + namespace-wide stop-all, voice note/off
+  (the immediate audition path), `var.x = v` assignment, `state[.<machine>].fire`,
+  and `domain.<d>.tempo`. Each controller is reached through a small **port**
+  interface (`ClipControlPort` · `VoiceControlPort` · `VariableControlPort` ·
+  `StateControlPort` · `TempoControlPort`), so the dispatcher lands with fakes
+  and is testable standalone — the real controllers wire in as epics #183
+  (clip sessions) and #203 (voices) merge (design §4 cross-epic note). Malformed
+  frames, unknown namespaces (host-mediated `fx.` params are decoded here too but
+  are out of this issue's scope — filed separately), unknown verbs, and
+  wrong-typed values **degrade gracefully** — a `ControlPlaneNotice` (logged via
+  `debugPrint` by default), never a throw, guarded so a bad frame never tears
+  down the subscription. Not yet wired into `PhiEngine` in production (the tap is
+  still `NoOpBusTap` until the engine dependency lands, mirroring #229's
+  present-but-silent seam). Covered by `control_plane_dispatcher_test.dart` —
+  every verb's dispatch to a fake controller, the graceful-degradation paths, and
+  an end-to-end fake flow (publish through the real `FakeBusTap` broadcast stream
+  → dispatcher → controller effect). The Python emission side is unchanged
+  (already shipped + tested by #230's `test_verbs.py`).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
