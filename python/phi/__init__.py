@@ -61,7 +61,11 @@ NAMESPACES = ('voice', 'clip', 'mix', 'fx', 'patch', 'domain', 'var', 'state')
 #: Reserved host-mediated control-plane prefix (design §4).
 CTL_PREFIX = 'phi.ctl'
 
-#: Engine-owned bus prefixes per engine-direct kind (design §2, §4).
+#: Engine-owned bus prefixes per engine-direct kind (design §2, §4). Both were
+#: verified live against yse's DSL spec for issue #234 (``channel.`` →
+#: yse-soundengine #123, ``patcher.`` → #122), so these verbs stay engine-direct
+#: with no ``phi.ctl`` fallback. Reaching a phi patcher over ``patcher.`` also
+#: needs the native instance named after its entity address — tracked in #318.
 _ENGINE_PREFIX = {'mix': 'channel', 'patch': 'patcher'}
 
 #: The single implicit parameter for kinds whose verbs take a value with no
