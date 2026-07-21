@@ -1449,6 +1449,44 @@ main + app          (orchestration)
   type's params with undo), and an end-to-end `patcher_node_gui` integration test
   (operate the seeded slider → `sendFloat`; double-click `~sine` → edit frequency →
   `setParams` into the live patch).
+- **Patcher entity strip + source-on-bus placement** (issue #224, patcher epic,
+  design `docs/design/patcher.md` §3, §4, §8) — the slice that joins the surface
+  (which until now edited a single hardwired demo patcher) to the per-entity world
+  #218–#220 built. A new `PatchLibraryController` (`lib/engine/state/`, the patcher
+  analogue of `ClipLibraryController`) drives an **entity strip**
+  (`lib/surfaces/patcher/library/patch_entity_strip.dart`) over the `patch.`
+  namespace: a collapsible tree (groups + ordering) with the standard affordances —
+  new / duplicate / rename (= refactor) / delete (impact dialog) / new group /
+  drag-regroup / reorder — each a journaled registry command via a pure-domain
+  `PatchLibrary` (`lib/domain/patcher/`, `newPatch` / `duplicate`) or the shared
+  registry commands, recorded through the project controller like every other edit.
+  **Opening** a patch (one at a time in v1) binds a cached `PatcherController.bound`
+  editor to the [PatchReconciler]'s **live native instance** for that entity
+  (`instanceIdOf`) — the surface edits the *same* patcher the reconciler mounts, so
+  the editor never owns the instance and switching leaks nothing (cached editors are
+  disposed only on delete / project swap, never touching the reconciler's native
+  patcher). `PhiEngine.patcher` is now the *open* editor; the engine seeds a default
+  `patch.` entity when a patcher-enabled project carries none (the entity-strip
+  analogue of the demo clip seed) and opens it, so existing surface flows keep a
+  patch to edit. **Source placement:** a `PatchPlacementBar`
+  (`lib/surfaces/patcher/placement/`) pairs a `PhiSelect` over the placeable mix
+  buses (`PhiEngine.patchBusOptions` → master + strips + group buses + returns as
+  `PatchBusOption`s) with a start / stop toggle; picking a bus records the placement
+  in the payload (`UpdateEntityPayloadCommand`, so it persists + journals) and
+  re-syncs the reconciler, start / stop mount / unmount the source through the
+  reconciler. Placement persists; running state does not (a loaded project starts
+  silent); unplaced patches stay editable silently. Covered by unit tests
+  (`patch_library_test`, `patch_library_controller_test` — tree, open/switch with no
+  instance leaks, every affordance, placement + start/stop + persistence), widget
+  tests (`patch_entity_strip_test`, `patch_placement_bar_test` — each affordance and
+  the placement UI against the fake gateway), and an end-to-end
+  `patcher_entity_strip` integration test (switch patches → place on master →
+  start/stop; a placement round-trips a save/reload). **Known v1 limitation:**
+  opening a patch loaded from disk (or renaming the open one) shows an empty canvas
+  until edited — rebuilding the editor's node mirror from a reloaded engine dump
+  needs a gateway object-enumeration call that does not exist yet (a `dart-yse`
+  capability); the audio (reconciler-materialised graph) is unaffected. Filed as a
+  follow-up.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
@@ -1457,7 +1495,7 @@ main + app          (orchestration)
 | Surface  | Status   | Folder                          |
 |----------|----------|---------------------------------|
 | Scene    | picking  | `lib/surfaces/scene/`           |
-| Patcher  | palette  | `lib/surfaces/patcher/`         |
+| Patcher  | editor   | `lib/surfaces/patcher/`         |
 | Code     | scaffold | `lib/surfaces/code/`            |
 | State    | scaffold | `lib/surfaces/state/`           |
 | MIDI     | editor   | `lib/surfaces/midi/`            |

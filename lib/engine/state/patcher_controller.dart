@@ -39,16 +39,35 @@ import 'patcher_commands/set_patch_params_command.dart';
 /// lower undo commands that named it valid.
 ///
 /// One controller drives one gateway instance (one open `patch.` entity,
-/// design §8): it creates its [instanceId] on construction and keys every
-/// gateway call by it, so a second controller's patcher stays untouched.
+/// design §8): it keys every gateway call by its [instanceId], so a second
+/// controller's patcher stays untouched.
+///
+/// Two ways to obtain the instance. The default constructor **creates** a fresh
+/// native patcher and owns it — [dispose] tears it down. [PatcherController.bound]
+/// instead **binds** to an instance minted elsewhere (the [PatchReconciler]'s
+/// per-entity patcher, issue #224): the editor edits that live instance without
+/// owning it, so [dispose] leaves the native patcher to the reconciler that
+/// created it.
 class PatcherController {
   PatcherController(this._gateway, {int mainOutputs = 2})
-    : instanceId = _gateway.createInstance(mainOutputs: mainOutputs);
+    : instanceId = _gateway.createInstance(mainOutputs: mainOutputs),
+      _ownsInstance = true;
+
+  /// Bind an editor to an already-created gateway [instanceId] (the reconciler's
+  /// per-entity patcher). The controller drives edits on it but does **not** own
+  /// it: [dispose] frees only the Dart-side resources, leaving the native patcher
+  /// to whoever minted the instance.
+  PatcherController.bound(this._gateway, {required this.instanceId})
+    : _ownsInstance = false;
 
   final PatcherGateway _gateway;
 
   /// This controller's gateway instance — the patcher every op is keyed to.
   final int instanceId;
+
+  /// Whether this controller created (and therefore disposes) its [instanceId].
+  /// `false` for a [PatcherController.bound] editor over a reconciler instance.
+  final bool _ownsInstance;
 
   /// The dart-side graph mirror. Listen for add/remove/cable/selection changes.
   final PatchGraph graph = PatchGraph();
@@ -637,7 +656,7 @@ class PatcherController {
   }
 
   void dispose() {
-    _gateway.disposeInstance(instanceId);
+    if (_ownsInstance) _gateway.disposeInstance(instanceId);
     undoScope.dispose();
     transform.dispose();
     graph.dispose();
