@@ -209,7 +209,31 @@ main + app          (orchestration)
   turning the eval flash red when it maps onto the just-run block —
   callback-origin tracebacks (no matching editor line) still render. The
   `RealRegistryMirror` production wiring (live `phi` name table) is deferred
-  to #314.
+  to #314. Issue #235 gives scripts a home in the registry: a new `code.`
+  entity kind whose payload is a `CodeScript` (source text under one `source`
+  key; `lib/domain/code/`, `CodeScriptCodec` at schema v1, registered in
+  `defaultEntityCodecs`) — so a saved script reopens byte-identical, and the
+  `phi` library models no `code` namespace (the mirror silently ignores the
+  kind). A fresh project is seeded with `code.scratch` (its source the shared
+  `codeScratchSource`, also the surface's project-less fallback) so the editor
+  is never empty. A **script library panel** (`CodeLibraryPanel`, mirroring the
+  MIDI clip library, minus play/loop) docks on the Code surface's left, driven
+  by a `CodeLibraryController` (`lib/engine/state/`, ChangeNotifier over the
+  `code.` namespace): the tree, new / duplicate / rename-refactor / delete
+  (+ groups, drag-regroup / reorder — the usual registry affordances via the
+  journaled command layer), and **select-to-open** (the editor swaps its content
+  to the picked script; an in-flight edit to the previous one is flushed first —
+  the ordinary dirty-tracking guard). Edits are **coalesced per idle pause**:
+  typing restarts a debounce, and the settled burst journals one
+  `UpdateEntityPayloadCommand` (de-duped by content), never one per keystroke.
+  Evaluation is unchanged — what has been evaluated is performance state, never
+  persisted. The surface takes an optional `libraryController`; without one (the
+  bare Phase-1 path) it stays a single seeded buffer with no panel. Covered by
+  unit (`CodeScript`, `CodeLibrary` + byte-identical save/load round-trip,
+  `CodeScriptCodec`), controller, and `CodeLibraryPanel` widget tests, plus an
+  end-to-end `code_library` integration test (scratch shows → add a script →
+  type → save → a second launch restores the source verbatim; selection swaps
+  the editor content).
 - MIDI surface — editable piano roll plus a 250px transformation-chain
   sidebar of eight chips. Domain in `lib/domain/midi/`: pure-Dart
   `MidiNote` / `MidiClip` (now **mutable**) / `MidiTransform` +

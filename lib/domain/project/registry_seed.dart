@@ -1,3 +1,5 @@
+import '../code/code_script.dart';
+import '../code/code_script_seed.dart';
 import '../midi/midi_clip_mode.dart';
 import '../midi/midi_clip_seed.dart';
 import '../midi/store/clip_document.dart';
@@ -81,4 +83,12 @@ void seedDefaultProject(ProjectRegistry registry) {
       payload: domain,
     );
   }
+
+  // Seed the scratch script (design live-coding §5): a fresh project's Code
+  // surface opens `code.scratch` so it is never empty. The payload is map-native
+  // (its codec's `toJson`), matching the clip / mix / domain seeds.
+  registry.createEntity(
+    EntityAddress(kind: RegistryKinds.code, segments: const ['scratch']),
+    payload: const CodeScript(source: codeScratchSource).toJson(),
+  );
 }

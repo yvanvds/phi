@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/tokens/phi_colors.dart';
 import 'package:phi/design/widgets/toggle/phi_toggle.dart';
+import 'package:phi/domain/code/code_script.dart';
+import 'package:phi/domain/project/entity_address.dart';
+import 'package:phi/domain/project/project_registry.dart';
 import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/bridge/code_evaluator.dart';
 import 'package:phi/engine/bridge/no_op_code_evaluator.dart';
 import 'package:phi/engine/engine.dart';
+import 'package:phi/engine/state/code_library_controller.dart';
 import 'package:phi/surfaces/code/code_editor_view.dart';
 import 'package:phi/surfaces/code/code_error_strip.dart';
+import 'package:phi/surfaces/code/code_library_panel.dart';
 import 'package:phi/surfaces/code/code_projected_view.dart';
 import 'package:phi/surfaces/code/code_surface.dart';
 import 'package:re_editor/re_editor.dart';
@@ -256,5 +261,100 @@ void main() {
     await tester.pump(const Duration(milliseconds: 20));
 
     expect(flashRgb(tester), PhiColors.hot.toARGB32() & 0x00FFFFFF);
+  });
+
+  // ── script library wiring (#235) ─────────────────────────────────────────
+
+  Future<void> pumpWithLibrary(
+    WidgetTester tester,
+    CodeLibraryController library,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CodeSurface(
+            engine: engine,
+            session: session,
+            evaluator: evaluator,
+            libraryController: library,
+            seedSource: _seed,
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+  }
+
+  testWidgets('an empty script library falls back to the seed in the editor', (
+    tester,
+  ) async {
+    final registry = ProjectRegistry();
+    final library = CodeLibraryController(registry: registry);
+    addTearDown(() {
+      library.dispose();
+      registry.dispose();
+    });
+
+    await pumpWithLibrary(tester, library);
+
+    // No script exists to open, so the surface is never blank — it shows the
+    // seed fallback rather than an empty buffer.
+    expect(editorController(tester).text, _seed);
+    // The panel still docks (a library controller is present).
+    expect(find.byType(CodeLibraryPanel), findsOneWidget);
+  });
+
+  testWidgets('the open script is loaded into the editor on mount', (
+    tester,
+  ) async {
+    final registry = ProjectRegistry();
+    registry.createEntity(
+      EntityAddress.parse('code.a'),
+      payload: const CodeScript(source: 'open me\n').toJson(),
+    );
+    final library = CodeLibraryController(registry: registry);
+    addTearDown(() {
+      library.dispose();
+      registry.dispose();
+    });
+
+    await pumpWithLibrary(tester, library);
+
+    // The controller auto-opened code.a; the editor shows its source.
+    expect(library.openAddress, EntityAddress.parse('code.a'));
+    expect(editorController(tester).text, 'open me\n');
+  });
+
+  testWidgets('selecting another script swaps the editor content', (
+    tester,
+  ) async {
+    final registry = ProjectRegistry();
+    registry.createEntity(
+      EntityAddress.parse('code.a'),
+      payload: const CodeScript(source: 'aaa\n').toJson(),
+    );
+    registry.createEntity(
+      EntityAddress.parse('code.b'),
+      payload: const CodeScript(source: 'bbb\n').toJson(),
+    );
+    final library = CodeLibraryController(registry: registry);
+    addTearDown(() {
+      library.dispose();
+      registry.dispose();
+    });
+
+    await pumpWithLibrary(tester, library);
+    final opened = library.openAddress;
+    final other = opened == EntityAddress.parse('code.a')
+        ? EntityAddress.parse('code.b')
+        : EntityAddress.parse('code.a');
+
+    library.select(other);
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(
+      editorController(tester).text,
+      other.name == 'a' ? 'aaa\n' : 'bbb\n',
+    );
   });
 }

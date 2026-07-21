@@ -1,16 +1,8 @@
-/// Seed source loaded into the Code surface on first mount.
-///
-/// Demonstrates the editor without leaning on a DSL that doesn't exist
-/// yet — keep it idiomatic Python. The block splitter must produce
-/// exactly three blocks for the widget test to assert against.
-const String codeSurfaceSeed = '''
-# phi · scratchpad
-# ctrl+enter evaluates the block under the cursor
+import '../../domain/code/code_script_seed.dart';
 
-import math
-
-def gain(db):
-    return 10 ** (db / 20)
-
-print(gain(-6))
-''';
+/// Seed source loaded into the Code surface when no script library is wired
+/// (the bare, project-less Phase-1 path). With a project, the library panel
+/// opens the seeded `code.scratch` entity instead — this and that share one
+/// canonical source ([codeScratchSource]), so the fallback and the seeded
+/// script read identically.
+const String codeSurfaceSeed = codeScratchSource;

@@ -8,11 +8,13 @@ import '../../domain/code/python_traceback.dart';
 import '../../domain/session/session_state.dart';
 import '../../engine/bridge/code_evaluator.dart';
 import '../../engine/engine.dart';
+import '../../engine/state/code_library_controller.dart';
 import '../surface.dart';
 import 'code_editor_view.dart';
 import 'code_error_strip.dart';
 import 'code_eval_flash.dart';
 import 'code_header.dart';
+import 'code_library_panel.dart';
 import 'code_projected_view.dart';
 import 'code_seed.dart';
 
@@ -23,6 +25,12 @@ import 'code_seed.dart';
 /// tracebacks from the engine surface in a strip pinned under the editor
 /// (design `docs/design/live-coding.md` §5).
 ///
+/// When a [libraryController] is supplied (the app has a project), a script
+/// **library panel** docks on the left: selecting a script swaps the editor's
+/// content to it, and edits are journaled per idle pause into the `code.` entity
+/// (issue #235). Without one (the bare Phase-1 path) the editor is a single
+/// [seedSource]-seeded buffer.
+///
 /// The working/projected switch listens to [SessionState.projection],
 /// so the top toolbar's projection toggle drives both this surface and
 /// the rest of the workstation in lock-step.
@@ -31,6 +39,7 @@ class CodeSurface extends Surface {
     required this.engine,
     required this.session,
     required this.evaluator,
+    this.libraryController,
     String? seedSource,
     super.key,
   }) : _seedSource = seedSource;
@@ -38,6 +47,12 @@ class CodeSurface extends Surface {
   final PhiEngine engine;
   final SessionState session;
   final CodeEvaluator evaluator;
+
+  /// Drives the script library panel + the open-script editor swap. `null` in
+  /// the bare Phase-1 path (no project); then the editor is a single seeded
+  /// buffer with no panel.
+  final CodeLibraryController? libraryController;
+
   final String? _seedSource;
 
   @override
@@ -45,6 +60,7 @@ class CodeSurface extends Surface {
     return _CodeViewport(
       session: session,
       evaluator: evaluator,
+      libraryController: libraryController,
       seedSource: _seedSource ?? codeSurfaceSeed,
     );
   }
@@ -54,11 +70,13 @@ class _CodeViewport extends StatefulWidget {
   const _CodeViewport({
     required this.session,
     required this.evaluator,
+    required this.libraryController,
     required this.seedSource,
   });
 
   final SessionState session;
   final CodeEvaluator evaluator;
+  final CodeLibraryController? libraryController;
   final String seedSource;
 
   @override
@@ -73,18 +91,77 @@ class _CodeViewportState extends State<_CodeViewport> {
       ValueNotifier<PythonTraceback?>(null);
   StreamSubscription<EvalEvent>? _eventsSub;
 
+  /// True while [_controller]'s text is being replaced from the library (a
+  /// script swap), so the resulting change notification isn't mistaken for a
+  /// performer edit and re-journaled.
+  bool _applyingRemote = false;
+
+  /// The last library revision the editor loaded, and the last text it forwarded
+  /// — so a cursor move (which also notifies) doesn't churn the edit journal.
+  int _appliedRevision = 0;
+  String _lastEditorText = '';
+
   /// The editor range (and `fresh` state) of the most recently dispatched
   /// block — what a later traceback line maps back onto for the error flash.
   ({int startLine, int endLine, bool fresh})? _lastBlock;
 
+  CodeLibraryController? get _library => widget.libraryController;
+
+  /// The text the editor should show for the current library state: the open
+  /// script's source, or — when nothing is open (no library, or an empty `code.`
+  /// namespace) — the [seedSource] fallback, so the surface is never blank. A
+  /// genuinely open but empty script still shows empty.
+  String _textForLibrary() {
+    final library = _library;
+    if (library == null || library.openAddress == null) {
+      return widget.seedSource;
+    }
+    return library.openSource;
+  }
+
   @override
   void initState() {
     super.initState();
-    _controller = CodeLineEditingController.fromText(widget.seedSource);
+    final library = _library;
+    final initialText = _textForLibrary();
+    _controller = CodeLineEditingController.fromText(initialText);
+    _lastEditorText = initialText;
     _flash = CodeEvalFlash();
+    if (library != null) {
+      _appliedRevision = library.openRevision;
+      library.addListener(_onLibraryChanged);
+      _controller.addListener(_onEditorChanged);
+    }
     // The evaluator republishes engine tracebacks as EvalStderr frames; each one
     // fills the strip and, when it maps onto the last block, turns the flash red.
     _eventsSub = widget.evaluator.events.listen(_onEvalEvent);
+  }
+
+  /// Reload the editor from the library when a genuine swap moved the open
+  /// revision — a selection, a rename-of-open, or a project rebind. Guarded so
+  /// the programmatic text replacement isn't re-journaled as a performer edit.
+  void _onLibraryChanged() {
+    final library = _library;
+    if (library == null) return;
+    if (library.openRevision == _appliedRevision) return;
+    _appliedRevision = library.openRevision;
+    final text = _textForLibrary();
+    _applyingRemote = true;
+    _controller.text = text;
+    _applyingRemote = false;
+    _lastEditorText = text;
+  }
+
+  /// Forward a performer edit to the library for coalesced journaling. Skips the
+  /// programmatic swap (guarded) and pure cursor moves (text unchanged).
+  void _onEditorChanged() {
+    if (_applyingRemote) return;
+    final library = _library;
+    if (library == null) return;
+    final text = _controller.text;
+    if (text == _lastEditorText) return;
+    _lastEditorText = text;
+    library.onEditorChanged(text);
   }
 
   void _onEvalEvent(EvalEvent event) {
@@ -124,6 +201,13 @@ class _CodeViewportState extends State<_CodeViewport> {
 
   @override
   void dispose() {
+    final library = _library;
+    if (library != null) {
+      _controller.removeListener(_onEditorChanged);
+      library.removeListener(_onLibraryChanged);
+      // Commit any un-journaled edit before the surface goes away.
+      library.flushPendingEdits();
+    }
     _eventsSub?.cancel();
     _error.dispose();
     _fresh.dispose();
@@ -134,43 +218,54 @@ class _CodeViewportState extends State<_CodeViewport> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: PhiColors.bg0,
-      child: Column(
-        children: [
-          CodeHeader(fresh: _fresh),
-          Expanded(
-            child: ValueListenableBuilder<bool>(
-              valueListenable: widget.session.projection,
-              builder: (context, projected, _) {
-                if (projected) {
-                  return CodeProjectedView(
-                    controller: _controller,
-                    flash: _flash,
-                  );
-                }
-                return CodeEditorView(
+    final editorColumn = Column(
+      children: [
+        CodeHeader(fresh: _fresh),
+        Expanded(
+          child: ValueListenableBuilder<bool>(
+            valueListenable: widget.session.projection,
+            builder: (context, projected, _) {
+              if (projected) {
+                return CodeProjectedView(
                   controller: _controller,
-                  evaluator: widget.evaluator,
                   flash: _flash,
-                  fresh: _fresh,
-                  onEvaluated: _onBlockEvaluated,
                 );
-              },
-            ),
-          ),
-          ValueListenableBuilder<PythonTraceback?>(
-            valueListenable: _error,
-            builder: (context, traceback, _) {
-              if (traceback == null) return const SizedBox.shrink();
-              return CodeErrorStrip(
-                traceback: traceback,
-                onDismiss: () => _error.value = null,
+              }
+              return CodeEditorView(
+                controller: _controller,
+                evaluator: widget.evaluator,
+                flash: _flash,
+                fresh: _fresh,
+                onEvaluated: _onBlockEvaluated,
               );
             },
           ),
-        ],
-      ),
+        ),
+        ValueListenableBuilder<PythonTraceback?>(
+          valueListenable: _error,
+          builder: (context, traceback, _) {
+            if (traceback == null) return const SizedBox.shrink();
+            return CodeErrorStrip(
+              traceback: traceback,
+              onDismiss: () => _error.value = null,
+            );
+          },
+        ),
+      ],
+    );
+
+    final library = _library;
+    return Container(
+      color: PhiColors.bg0,
+      child: library == null
+          ? editorColumn
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                CodeLibraryPanel(controller: library),
+                Expanded(child: editorColumn),
+              ],
+            ),
     );
   }
 }
