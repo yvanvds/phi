@@ -3,6 +3,7 @@ import '../code/code_script_seed.dart';
 import '../midi/midi_clip_mode.dart';
 import '../midi/midi_clip_seed.dart';
 import '../midi/store/clip_document.dart';
+import '../state_machine/store/state_seed.dart';
 import '../synth/sine_synth.dart';
 import '../voice/voice_addresses.dart';
 import '../voice/voice_definition.dart';
@@ -90,5 +91,26 @@ void seedDefaultProject(ProjectRegistry registry) {
   registry.createEntity(
     EntityAddress(kind: RegistryKinds.code, segments: const ['scratch']),
     payload: const CodeScript(source: codeScratchSource).toJson(),
+  );
+
+  // Seed the default state graph (design state-graph §3, issue #240):
+  // `state.intro` → `state.verse`, the pair the State surface has always
+  // shown. Payloads are map-native (the journal contract), so each document's
+  // outgoing references are declared explicitly — that is how `intro`'s
+  // transition to `verse` enters the back-reference index (delete-impact on
+  // `verse` lists `intro`; a rename of `verse` remaps the edge). Which state
+  // is *live* is performance state and is not seeded here (§8 decision 2);
+  // the registry-backed controller (issue #241) keys the seeded live state.
+  final intro = introStateDocument();
+  registry.createEntity(
+    introStateAddress,
+    payload: intro.toJson(),
+    references: intro.references,
+  );
+  final verse = verseStateDocument();
+  registry.createEntity(
+    verseStateAddress,
+    payload: verse.toJson(),
+    references: verse.references,
   );
 }

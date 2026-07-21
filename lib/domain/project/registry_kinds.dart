@@ -35,4 +35,9 @@ abstract final class RegistryKinds {
   /// not addressed from within a script, so the `phi` library models no `code`
   /// namespace — the registry mirror silently ignores the kind.
   static const String code = 'code';
+
+  /// Performance states — `state.` entities carrying canvas position,
+  /// transitions and captured slices (state-graph epic,
+  /// `docs/design/state-graph.md` §3).
+  static const String state = 'state';
 }

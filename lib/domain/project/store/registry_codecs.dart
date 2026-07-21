@@ -3,6 +3,7 @@ import '../../fx/fx_codec.dart';
 import '../../midi/midi_clip_codec.dart';
 import '../../mix/mix_strip_codec.dart';
 import '../../patcher/patch_codec.dart';
+import '../../state_machine/store/state_document_codec.dart';
 import '../../synth/synth_codec.dart';
 import '../../time_domains/time_domain_codec.dart';
 import '../../voice/voice_codec.dart';
@@ -25,6 +26,7 @@ Map<String, EntityPayloadCodec> defaultEntityCodecs() => const {
   RegistryKinds.fx: FxCodec(),
   RegistryKinds.patch: PatchCodec(),
   RegistryKinds.code: CodeScriptCodec(),
+  RegistryKinds.state: StateDocumentCodec(),
 };
 
 /// The kinds whose *groups* carry a persisted payload in `_group.json` (issue
