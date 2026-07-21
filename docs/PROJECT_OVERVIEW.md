@@ -518,6 +518,20 @@ main + app          (orchestration)
   live behind a `MidiFileIo` seam (`FileSelectorMidiFileIo` in production,
   faked in tests) so the flow is driveable end-to-end; `desktop_drop` +
   `file_selector` own the OS shell only.
+  MIDI **recording** (design `docs/design/midi-recording.md`, epic #259) begins
+  with the capture spine (issue #260): a pure-Dart `TakeRecorder`
+  (`lib/domain/midi/record/`) turns live MIDI-in into a clip's *source* notes.
+  Driven by injected note-on/off calls + an injected beat-clock reader (no
+  engine, no UI — that wiring is #261), it pairs on/off by pitch into `MidiNote`s
+  stamped straight off the clock (**raw always** — pitch as played, velocity
+  normalised, no snapping; design §2 / §8 decision 1), tags each with the armed
+  `voice` (§8 decision 3), edge-closes notes held at **stop** (at the stop beat)
+  and across a **loop wrap** (closed at `MidiClip.totalBeats`, reopened at beat 0
+  as a new note), drops orphan note-offs, and commits **each loop pass as one
+  batch** through the ordinary clip-edit command layer (a bare `AddNoteCommand`,
+  or a `CompositeClipCommand` for a multi-note pass) so Ctrl+Z removes a whole
+  pass. Pure-domain, unit-tested against a fake keyboard + fake clock; not yet
+  wired anywhere (record arm + transport-row flow is #261).
 - State surface scaffold: pan/zoom canvas (reuses the patcher's 16px
   dot grid backdrop) of rounded-square `PerformanceState` nodes with
   four voice-coloured corner pins, plus directed `StateTransition`
