@@ -96,6 +96,31 @@ starts):
   host-mediated to engine-direct *transparently* (the `phi` verb
   doesn't change).
 
+> **Verification — engine-direct prefixes (2026-07-21, issue #234).**
+> Both reserved prefixes the engine-direct plane rides were checked
+> against yse's authoritative DSL spec (`docs/design/live_coding_dsl.md`
+> §"Address grammar") and the shipped engine:
+>
+> - **`channel.<name>.volume` — live.** yse-soundengine #123 shipped
+>   (closed via #131). Phi names every engine channel through
+>   `createChannel(name)`, so `mix.<bus>.volume` set/fade publishes
+>   engine-direct to `channel.<address>.volume` with no `phi.ctl`
+>   fallback.
+> - **`patcher.<name>.<slot>` — prefix live, instance naming pending.**
+>   yse-soundengine #122 shipped (closed via #130), and `patch.<name>`
+>   verbs emit the spec'd `patcher.<address>.<slot>` address. The spec
+>   makes only *named* patcher instances bus-addressable, though, and
+>   phi still creates patchers anonymously (dart-yse exposes no
+>   `Patcher.name(...)`; #219 landed without threading it). The verb
+>   stays engine-direct — forward-correct, it starts working the moment
+>   the instance is named — and the naming gap (a gateway/FFI concern
+>   outside the live-coding verb layer) is tracked in **#318**.
+>
+> Set and fade emitted addresses/values are asserted in
+> `python/tests/test_engine_direct.py`; `fade` is control-rate — it steps
+> the value once per tick through `yse.schedule`, assuming no engine ramp
+> API.
+
 ## 5. Evaluation — the Code surface grows up
 
 - **`RealCodeEvaluator`** over `LiveCoding.run` replaces the no-op
