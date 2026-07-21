@@ -375,6 +375,30 @@ class PhiEngine {
     )..bindToBus(null); // master
   }
 
+  /// Panic — one unmissable, idempotent stop-everything (issue #264, design
+  /// `docs/design/midi-recording.md` §6). The status-bar button, the palette
+  /// command and the permanent shortcut all route here. It:
+  ///
+  /// 1. stops every playing clip session (each rewinds; an armed take ends but
+  ///    **keeps its notes** — authored content) and clears pending scene spawns;
+  /// 2. all-notes-off the MIDI output port and every materialised synth — the
+  ///    voice synths (through the MIDI subsystem) and the reserved click voice;
+  ///    and
+  /// 3. stops the click.
+  ///
+  /// Safe to mash: every underlying call is idempotent, so a second panic changes
+  /// nothing. A no-op before [start].
+  void panic() {
+    if (!_started) return;
+    // Sessions + armed take + voice synths + MIDI-out port + scene agents.
+    // `null` in setups without a MIDI gateway (the click voice is handled below).
+    _midi?.panic();
+    // Stop the click, then release the reserved click voice outright — it is a
+    // materialised synth too, so it gets the same all-notes-off safety net.
+    _metronome?.setEnabled(false);
+    _clickSynth?.allNotesOff();
+  }
+
   Timer? _telemetryTimer;
   final StreamController<EngineTelemetry> _telemetry =
       StreamController<EngineTelemetry>.broadcast();

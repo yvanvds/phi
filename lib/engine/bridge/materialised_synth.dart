@@ -60,6 +60,14 @@ abstract interface class MaterialisedSynth {
   /// the audition path.
   void noteOff(int note);
 
+  /// Release **every** held note on this synth, on all channels — the panic
+  /// safety net (issue #264, design `docs/design/midi-recording.md` §6). Unlike
+  /// the transport's scoped stop, this reaches notes started outside any
+  /// transport (a held arm-for-input / test-strip audition), so a hung voice
+  /// never survives a panic. Voices enter their normal release; they are not cut.
+  /// Idempotent — safe to call when nothing is sounding.
+  void allNotesOff();
+
   /// Release the engine resources — the `Sound` first, then the `Synth` — the
   /// order the engine requires to avoid a dangling voice-pool render. Idempotent.
   void dispose();

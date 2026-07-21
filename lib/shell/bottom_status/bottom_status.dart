@@ -7,30 +7,48 @@ import '../../domain/session/session_state.dart';
 import '../../engine/engine.dart';
 import '../../engine/state/engine_telemetry.dart';
 import 'midi_activity_dot.dart';
+import 'panic_button.dart';
 import 'status_chip.dart';
 
 /// Bottom status strip — 24px. Shows live engine telemetry (CPU, buffer,
-/// latency, drops), a `LIVE` dot that lights up when projection mode is on,
-/// and a MIDI activity indicator that flashes on incoming MIDI.
+/// latency, drops), a `LIVE` dot that lights up when projection mode is on, the
+/// **panic** button right of the dot (issue #264), and a MIDI activity indicator
+/// that flashes on incoming MIDI.
 class BottomStatus extends StatelessWidget {
-  /// Production constructor — binds to a live [PhiEngine].
-  BottomStatus({required PhiEngine engine, required this.session, super.key})
-    : telemetry = engine.telemetry,
-      midiActivity = engine.midiActivity;
+  /// Production constructor — binds to a live [PhiEngine]. [onPanic] routes the
+  /// status-bar panic button (issue #264); the shell passes a handler that also
+  /// resets the toolbar transport, defaulting to the engine's own
+  /// [PhiEngine.panic] when a caller wires nothing extra.
+  BottomStatus({
+    required PhiEngine engine,
+    required this.session,
+    VoidCallback? onPanic,
+    super.key,
+  }) : telemetry = engine.telemetry,
+       midiActivity = engine.midiActivity,
+       onPanic = onPanic ?? engine.panic;
 
   /// Constructor for widget tests — accepts the streams directly so they
   /// can be driven from a `StreamController` without spinning up the
-  /// engine's periodic timer.
+  /// engine's periodic timer. [onPanic] defaults to a no-op so a test that
+  /// doesn't exercise panic can omit it.
   const BottomStatus.fromStreams({
     required this.telemetry,
     required this.midiActivity,
     required this.session,
+    this.onPanic = _noPanic,
     super.key,
   });
 
   final Stream<EngineTelemetry> telemetry;
   final Stream<void> midiActivity;
   final SessionState session;
+
+  /// The panic action the status-bar button runs (issue #264) — the shell wires
+  /// this to `PhiEngine.panic`.
+  final VoidCallback onPanic;
+
+  static void _noPanic() {}
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +67,8 @@ class BottomStatus extends StatelessWidget {
             children: [
               const SizedBox(width: PhiSpacing.s3),
               _LiveDot(session: session),
+              const SizedBox(width: PhiSpacing.s3),
+              PanicButton(onPanic: onPanic),
               const Spacer(),
               StatusChip(label: 'CPU', value: formatCpu(t.cpuLoad)),
               StatusChip(

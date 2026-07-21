@@ -123,6 +123,14 @@ class FakeMaterialisedSynth implements MaterialisedSynth {
   }
 
   @override
+  void allNotesOff() {
+    // Mirror the real handle's panic safety net (issue #264): release every held
+    // note. Logged as `allNotesOff` so a test can assert panic reached this synth.
+    noteLog.add('allNotesOff');
+    heldNotes.clear();
+  }
+
+  @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;

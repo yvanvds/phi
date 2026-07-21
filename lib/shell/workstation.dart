@@ -292,6 +292,9 @@ class _WorkstationState extends State<Workstation> {
         onCycleTabForward: () => _layout.cycleTabInActivePane(),
         onCycleTabBackward: () => _layout.cycleTabInActivePane(forward: false),
         onOpenCommandPalette: _openCommandPalette,
+        // Panic routes through the shell handler (issue #264) — the same action
+        // the status-bar button fires.
+        onPanic: _onPanic,
         onNewProject: actions == null
             ? null
             : () => unawaited(actions.newProject(context)),
@@ -315,6 +318,18 @@ class _WorkstationState extends State<Workstation> {
   /// Opens the command palette overlay (design §4) on Ctrl+Shift+P / F1.
   void _openCommandPalette() =>
       unawaited(CommandPalette.show(context, registry: _commands));
+
+  /// Runs the shell-wide **panic** (issue #264, design
+  /// `docs/design/midi-recording.md` §6): the engine's one stop-everything —
+  /// stop every clip session (an armed take ends but keeps its notes),
+  /// all-notes-off the MIDI-out port and every materialised synth, clear pending
+  /// scene spawns, stop the click — plus resetting the toolbar transport so the
+  /// UI reflects the stop too. The status-bar button, the palette command, and
+  /// the permanent F12 shortcut all route here. Idempotent — safe to mash.
+  void _onPanic() {
+    widget.engine.panic();
+    if (widget.session.isPlaying) widget.session.stop();
+  }
 
   /// Wires the engine's registry-backed channel sync, the project menu, the
   /// confirm-on-close guard, and (when asked) the launch-time restore + recovery
@@ -610,7 +625,11 @@ class _WorkstationState extends State<Workstation> {
                 ],
               ),
             ),
-            BottomStatus(engine: widget.engine, session: widget.session),
+            BottomStatus(
+              engine: widget.engine,
+              session: widget.session,
+              onPanic: _onPanic,
+            ),
           ],
         ),
       ),

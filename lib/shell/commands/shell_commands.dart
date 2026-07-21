@@ -43,6 +43,7 @@ List<PhiCommand> buildShellCommands({
   required VoidCallback onCycleTabForward,
   required VoidCallback onCycleTabBackward,
   required VoidCallback onOpenCommandPalette,
+  required VoidCallback onPanic,
   VoidCallback? onNewProject,
   VoidCallback? onOpenProject,
   VoidCallback? onSaveProject,
@@ -134,6 +135,23 @@ List<PhiCommand> buildShellCommands({
       category: 'Transport',
       invoke: session.stop,
       isEnabled: () => session.isPlaying,
+    ),
+    // Panic — the one unmissable, mashable stop-everything (design
+    // `docs/design/midi-recording.md` §6, issue #264): stop every clip session,
+    // all-notes-off, clear scene spawns, stop the click. Always enabled (safe to
+    // run at any time — idempotent) and bound to a permanent, layout-stable
+    // shortcut (F12); the status-bar button and this command share the one
+    // `onPanic` code path (`PhiEngine.panic`), so the palette is a launcher, not a
+    // second implementation.
+    PhiCommand(
+      id: 'transport.panic',
+      title: 'Panic',
+      category: 'Transport',
+      invoke: onPanic,
+      shortcut: const CommandShortcut(
+        LogicalKeyboardKey.f12,
+        triggerLabel: 'F12',
+      ),
     ),
     PhiCommand(
       id: 'view.projection',

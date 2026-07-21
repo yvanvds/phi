@@ -7,6 +7,7 @@ import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/state/engine_telemetry.dart';
 import 'package:phi/shell/bottom_status/bottom_status.dart';
 import 'package:phi/shell/bottom_status/midi_activity_dot.dart';
+import 'package:phi/shell/bottom_status/panic_button.dart';
 
 import '../../engine/test_doubles/fake_yse_gateway.dart';
 
@@ -48,7 +49,16 @@ void main() {
       await midi.close();
     });
 
+    // The status strip is a full-width bar: the LIVE dot + panic button + four
+    // telemetry chips + the MIDI dot need more than the 800px test default, so
+    // size the surface to a performance width (as the real-app tests do).
+    Future<void> widenSurface(WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+    }
+
     Future<void> pump(WidgetTester tester) async {
+      await widenSurface(tester);
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -104,6 +114,31 @@ void main() {
 
       expect(find.byType(MidiActivityDot), findsOneWidget);
       expect(find.text('MIDI'), findsOneWidget);
+    });
+
+    testWidgets('the panic button runs onPanic (issue #264)', (tester) async {
+      await widenSurface(tester);
+      var panicked = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: BottomStatus.fromStreams(
+              telemetry: telemetry.stream,
+              midiActivity: midi.stream,
+              session: session,
+              onPanic: () => panicked++,
+            ),
+          ),
+        ),
+      );
+
+      // Unmissable in the strip, right of the LIVE dot.
+      expect(find.byKey(PanicButton.buttonKey), findsOneWidget);
+      expect(find.text('PANIC'), findsOneWidget);
+
+      await tester.tap(find.byKey(PanicButton.buttonKey));
+      await tester.pump();
+      expect(panicked, 1);
     });
   });
 

@@ -596,6 +596,27 @@ main + app          (orchestration)
   0-bar immediate, meter-driven length), a `MetronomeControl` widget test (the
   picker), and an end-to-end `count_in` integration test (set count-in → play
   waits → stop aborts).
+  Issue #264 adds **panic** (design §6) — the one unmissable, idempotent
+  stop-everything. `EngineMidiController.panic` ends any armed take **keeping its
+  notes** (the held notes close at the current beat and commit as authored
+  content, done before the transports rewind so the beat is real), aborts a
+  running count-in, stops every clip session (each rewinding and clearing its own
+  scene agents), then — beyond the per-session stop — all-notes-off the MIDI-out
+  port and every materialised voice synth (releasing a held arm-for-input / test
+  strip audition the transport never dispatched — `MaterialisedSynth.allNotesOff`,
+  a thin wrap of yse's `Synth.allNotesOff`) and clears every remaining live scene
+  agent (the whole field, so pending spawns despawn). `PhiEngine.panic` composes
+  that with stopping the click and silencing the reserved click voice; every step
+  is idempotent, so a double-panic is a no-op. The shell surfaces it three ways
+  that share one code path (`PhiEngine.panic` plus a toolbar-transport reset): a
+  `PanicButton` in the bottom status right of the `LIVE` dot, a permanent `F12`
+  shortcut, and a `transport.panic` palette command (design shell-layout §4).
+  Covered by `EngineMidiController` panic unit tests (the four steps against
+  fakes, take-note survival, idempotency), `PhiEngine` panic tests (click stop +
+  click-voice silence, session stop + port all-notes-off, before-start no-op), a
+  `BottomStatus` widget test (the button runs `onPanic`), a `shell_commands` test
+  (the permanent F12 Transport command), and an end-to-end `panic` integration
+  test (F12 and the button each stop the click, the session, and the transport).
 - State surface scaffold: pan/zoom canvas (reuses the patcher's 16px
   dot grid backdrop) of rounded-square `PerformanceState` nodes with
   four voice-coloured corner pins, plus directed `StateTransition`
