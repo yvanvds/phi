@@ -192,13 +192,24 @@ main + app          (orchestration)
   well-separated static agents (`pickDemoAgents`, `lib/domain/scene/`) into the
   shared field so pick/select/grab can be exercised at leisure; toggling off
   (or a transport stop) clears them.
-- Code surface scaffold: `re_editor`-backed Python editor with custom
+- Code surface: `re_editor`-backed Python editor with custom
   Phi-flavoured highlight theme, projected view (full-line comments
   stripped, blank-line runs collapsed) driven by
   `SessionState.projection`, and Ctrl+Enter dispatching the block under
-  the cursor to a `CodeEvaluator` abstraction. The shell wires in
-  `NoOpCodeEvaluator` by default — real Python execution
-  (embedded-C++ vs. subprocess vs. Dart-FFI) is the next layer's call.
+  the cursor to a `CodeEvaluator` abstraction. Issue #232 makes it real:
+  `RealCodeEvaluator` runs blocks through the engine's embedded CPython
+  (`LiveCoding.run`) and republishes `LiveCoding.errors` as `EvalStderr`
+  frames; the app wires it in production when the build has Python
+  (`buildCodeEvaluator()` gated on `LiveCoding.enabled`), falling back to
+  `NoOpCodeEvaluator` otherwise (tests keep the no-op default). The header
+  carries a **`fresh` toggle** (off by default — layering; on prefixes each
+  evaluation with `yse.cancel_all()`) with a visible mode indicator, and an
+  inline **traceback strip** pinned under the editor renders the newest
+  Python error verbatim (`PythonTraceback` parses the `"<script>"` line),
+  turning the eval flash red when it maps onto the just-run block —
+  callback-origin tracebacks (no matching editor line) still render. The
+  `RealRegistryMirror` production wiring (live `phi` name table) is deferred
+  to #314.
 - MIDI surface — editable piano roll plus a 250px transformation-chain
   sidebar of eight chips. Domain in `lib/domain/midi/`: pure-Dart
   `MidiNote` / `MidiClip` (now **mutable**) / `MidiTransform` +

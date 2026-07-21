@@ -14,6 +14,7 @@ import 'domain/project/store/real_project_store.dart';
 import 'domain/project/store/registry_codecs.dart';
 import 'domain/session/session_state.dart';
 import 'engine/bridge/code_evaluator.dart';
+import 'engine/bridge/code_evaluator_factory.dart';
 import 'engine/engine.dart';
 import 'shell/commands/command_registry.dart';
 import 'shell/layout/shell_layout_controller.dart';
@@ -89,6 +90,12 @@ class PhiApp extends StatefulWidget {
 class _PhiAppState extends State<PhiApp> {
   late final PhiEngine _engine;
   late final bool _ownsEngine;
+
+  /// The Code-surface evaluator the app built for production (a
+  /// [RealCodeEvaluator] when the engine has CPython, else a no-op) — held so it
+  /// can be disposed. `null` when a test injected its own evaluator, or when an
+  /// injected engine means we never took the production path (issue #232).
+  CodeEvaluator? _ownedCodeEvaluator;
   late final SessionState _session;
   late final bool _ownsSession;
   late final ProjectController _projectController;
@@ -110,6 +117,12 @@ class _PhiAppState extends State<PhiApp> {
     } else {
       _engine = PhiEngine.production();
       _ownsEngine = true;
+      // Production only: wire real Python end-to-end when the engine build has
+      // CPython, else the no-op. Gated behind the bridge factory so this layer
+      // never imports `package:yse`. Skipped when a test injected an evaluator.
+      if (widget.codeEvaluator == null) {
+        _ownedCodeEvaluator = buildCodeEvaluator();
+      }
     }
     _engine.start();
 
@@ -158,6 +171,7 @@ class _PhiAppState extends State<PhiApp> {
     if (_ownsEngine) {
       _engine.stop();
     }
+    _ownedCodeEvaluator?.dispose();
     if (_ownsSession) {
       _session.dispose();
     }
@@ -177,7 +191,7 @@ class _PhiAppState extends State<PhiApp> {
         directoryPicker: _directoryPicker,
         autoStartProject: widget.autoStartProject,
         midiFileIo: widget.midiFileIo,
-        codeEvaluator: widget.codeEvaluator,
+        codeEvaluator: widget.codeEvaluator ?? _ownedCodeEvaluator,
         customTransformRegistry: widget.customTransformRegistry,
         layoutController: widget.layoutController,
         commandRegistry: widget.commandRegistry,
