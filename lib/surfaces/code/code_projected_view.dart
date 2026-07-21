@@ -32,6 +32,9 @@ class CodeProjectedView extends StatelessWidget {
           fontSize: 16,
           height: 1.45,
         );
+        final tint = flash.kind == CodeEvalFlashKind.error
+            ? PhiColors.hot
+            : PhiColors.voice1Soft;
         return Container(
           color: PhiColors.bg0,
           padding: const EdgeInsets.symmetric(
@@ -49,7 +52,7 @@ class CodeProjectedView extends StatelessWidget {
                       text: lines[i],
                       style: flash.covers(i)
                           ? baseStyle.copyWith(
-                              backgroundColor: PhiColors.voice1Soft.withAlpha(
+                              backgroundColor: tint.withAlpha(
                                 (0x40 * flash.intensity).round(),
                               ),
                             )

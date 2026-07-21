@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:re_editor/re_editor.dart';
@@ -15,6 +16,16 @@ import 'code_highlight_theme.dart';
 class EvaluateBlockIntent extends Intent {
   const EvaluateBlockIntent();
 }
+
+/// Reports the block a Ctrl+Enter just dispatched — its editor line range and
+/// whether the `fresh` prefix was applied — so the surface can map a later
+/// traceback line back onto the editor for the error flash (issue #232).
+typedef OnBlockEvaluated =
+    void Function({
+      required int startLine,
+      required int endLine,
+      required bool fresh,
+    });
 
 /// Custom shortcut activator builder: identical to re_editor's default
 /// except Ctrl+Enter is removed from `newLine`, so it falls through to
@@ -47,12 +58,27 @@ class CodeEditorView extends StatefulWidget {
     required this.controller,
     required this.evaluator,
     required this.flash,
+    required this.fresh,
+    this.onEvaluated,
     super.key,
   });
+
+  /// Key on the flash tint overlay, so a test can read which colour the flash
+  /// painted (fuchsia for a clean eval, red for an error).
+  static const Key flashOverlayKey = ValueKey('code-eval-flash-overlay');
 
   final CodeLineEditingController controller;
   final CodeEvaluator evaluator;
   final CodeEvalFlash flash;
+
+  /// The live `fresh` flag from the header. When set, the block dispatched by
+  /// Ctrl+Enter is prefixed with `yse.cancel_all()` so it replaces (rather than
+  /// layers on) what is scheduled (design §5, §8 decision 3).
+  final ValueListenable<bool> fresh;
+
+  /// Notified with the block range each Ctrl+Enter dispatched, for the surface's
+  /// error-line mapping. Optional so the view stays usable without it.
+  final OnBlockEvaluated? onEvaluated;
 
   @override
   State<CodeEditorView> createState() => _CodeEditorViewState();
@@ -73,8 +99,20 @@ class _CodeEditorViewState extends State<CodeEditorView> {
     if (blocks.isEmpty) return;
     final caretLine = widget.controller.selection.extentIndex;
     final block = blockAtLine(blocks, caretLine) ?? blocks.last;
+    final fresh = widget.fresh.value;
+    // Green (ok) flash up front; a later traceback re-fires it red (issue #232).
     widget.flash.fire(startLine: block.startLine, endLine: block.endLine);
-    await widget.evaluator.evaluate(block.source);
+    widget.onEvaluated?.call(
+      startLine: block.startLine,
+      endLine: block.endLine,
+      fresh: fresh,
+    );
+    // Layering is the default; `fresh` prefixes `yse.cancel_all()` so the block
+    // replaces what is scheduled rather than stacking on it (design §5).
+    final submitted = fresh
+        ? 'yse.cancel_all()\n${block.source}'
+        : block.source;
+    await widget.evaluator.evaluate(submitted);
   }
 
   @override
@@ -150,10 +188,12 @@ class _FlashOverlay extends StatelessWidget {
       animation: flash,
       builder: (context, _) {
         if (flash.intensity <= 0.0) return const SizedBox.shrink();
+        final tint = flash.kind == CodeEvalFlashKind.error
+            ? PhiColors.hot
+            : PhiColors.voice1Soft;
         return ColoredBox(
-          color: PhiColors.voice1Soft.withAlpha(
-            (0x20 * flash.intensity).round(),
-          ),
+          key: CodeEditorView.flashOverlayKey,
+          color: tint.withAlpha((0x20 * flash.intensity).round()),
         );
       },
     );

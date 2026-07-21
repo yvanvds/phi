@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/design/tokens/phi_colors.dart';
+import 'package:phi/design/widgets/toggle/phi_toggle.dart';
 import 'package:phi/domain/session/session_state.dart';
+import 'package:phi/engine/bridge/code_evaluator.dart';
 import 'package:phi/engine/bridge/no_op_code_evaluator.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/surfaces/code/code_editor_view.dart';
+import 'package:phi/surfaces/code/code_error_strip.dart';
 import 'package:phi/surfaces/code/code_projected_view.dart';
 import 'package:phi/surfaces/code/code_surface.dart';
 import 'package:re_editor/re_editor.dart';
@@ -127,5 +131,130 @@ void main() {
     final outcome = await noop.evaluate('x = 1');
     expect(outcome.ok, isTrue);
     await noop.dispose();
+  });
+
+  // ── fresh toggle ─────────────────────────────────────────────────────────
+
+  Future<void> evaluateFirstBlock(WidgetTester tester) async {
+    final controller = editorController(tester);
+    // Line 0 ("a = 1") is a one-line block.
+    controller.selection = const CodeLineSelection(
+      baseIndex: 0,
+      baseOffset: 0,
+      extentIndex: 0,
+      extentOffset: 0,
+    );
+    await tester.pump();
+    Actions.invoke(
+      tester.element(find.byType(CodeEditor)),
+      const EvaluateBlockIntent(),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+  }
+
+  testWidgets('fresh off (default) submits the block source unchanged', (
+    tester,
+  ) async {
+    await pumpSurface(tester);
+    await evaluateFirstBlock(tester);
+
+    expect(evaluator.calls.single, 'a = 1');
+  });
+
+  testWidgets('fresh on prefixes the block with yse.cancel_all()', (
+    tester,
+  ) async {
+    await pumpSurface(tester);
+    await tester.tap(find.byType(PhiToggle));
+    await tester.pump();
+
+    await evaluateFirstBlock(tester);
+
+    expect(evaluator.calls.single, 'yse.cancel_all()\na = 1');
+  });
+
+  // ── traceback strip ──────────────────────────────────────────────────────
+
+  testWidgets('a script-origin traceback renders in the strip with its line', (
+    tester,
+  ) async {
+    await pumpSurface(tester);
+    await evaluateFirstBlock(tester);
+
+    evaluator.emit(
+      const EvalStderr(
+        'Traceback (most recent call last):\n'
+        '  File "<script>", line 1, in <module>\n'
+        "NameError: name 'a' is not defined",
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(find.byType(CodeErrorStrip), findsOneWidget);
+    expect(find.text('error · line 1'), findsOneWidget);
+    expect(
+      find.textContaining("NameError: name 'a' is not defined"),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a callback-origin traceback still renders, verbatim', (
+    tester,
+  ) async {
+    await pumpSurface(tester);
+    // No evaluation — a scheduled callback raises with no <script> frame.
+    evaluator.emit(
+      const EvalStderr(
+        'Traceback (most recent call last):\n'
+        '  File "phi/__init__.py", line 90, in _tick\n'
+        'RuntimeError: callback boom',
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(find.byType(CodeErrorStrip), findsOneWidget);
+    expect(find.text('error · callback'), findsOneWidget);
+    expect(find.textContaining('RuntimeError: callback boom'), findsOneWidget);
+  });
+
+  testWidgets('the strip dismisses', (tester) async {
+    await pumpSurface(tester);
+    evaluator.emit(const EvalStderr('SyntaxError: bad'));
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(find.byType(CodeErrorStrip), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pump();
+
+    expect(find.byType(CodeErrorStrip), findsNothing);
+  });
+
+  // ── red / green flash ────────────────────────────────────────────────────
+
+  int flashRgb(WidgetTester tester) {
+    final box = tester.widget<ColoredBox>(
+      find.byKey(CodeEditorView.flashOverlayKey),
+    );
+    return box.color.toARGB32() & 0x00FFFFFF;
+  }
+
+  testWidgets('a clean eval flashes the fuchsia (ok) tint', (tester) async {
+    await pumpSurface(tester);
+    await evaluateFirstBlock(tester);
+
+    expect(flashRgb(tester), PhiColors.voice1Soft.toARGB32() & 0x00FFFFFF);
+  });
+
+  testWidgets('a matching traceback turns the flash red', (tester) async {
+    await pumpSurface(tester);
+    await evaluateFirstBlock(tester);
+    expect(flashRgb(tester), PhiColors.voice1Soft.toARGB32() & 0x00FFFFFF);
+
+    evaluator.emit(
+      const EvalStderr('  File "<script>", line 1, in <module>\nBoom'),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(flashRgb(tester), PhiColors.hot.toARGB32() & 0x00FFFFFF);
   });
 }
