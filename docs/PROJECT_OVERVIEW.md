@@ -1525,6 +1525,37 @@ main + app          (orchestration)
   off the offer), and an end-to-end `mix_patcher_insert` integration test (pick a
   patcher insert in the real app → both-direction delete-impact → save → reload
   restores the insert and its `fx → patch` reference).
+- **The `phi` live-coding library core** (issue #230, live-coding epic, design
+  `docs/design/live-coding.md` §3–§4) — the friendly object layer the Code
+  surface will run, shipped as **plain Python source** in the repo under
+  `python/phi/` (review decision 4; not Dart, not under `lib/`). Dot-access
+  namespaces (`voice` · `clip` · `mix` · `fx` · `patch` · `domain` · `var` ·
+  `state`) are `__getattr__` proxies over a name table; group proxies nest
+  (`clip.drums.intro_fill`), iterate, and carry group verbs, and `dir()`
+  reflects the table for completion parity. A proxy references a mutable table
+  **entry**, never an address string, so a bound proxy (`pad = voice.bells`)
+  **follows a rename** when `_sync` mutates the entry in place ("resolve once,
+  bind the object"). The host-facing `_sync` protocol is full-table replace plus
+  incremental create / rename / regroup / delete (issue #231 will drive it from
+  the `RegistryMirror`). The verb skeleton is verb-first —
+  `play`/`stop`/`pause`/`loop` (clips, groups), `note`/`off` (voices),
+  `set`/`fade` (mix, fx, patcher slots), `fire` (state), `every`/`after` (sugar
+  over `yse.schedule`) — each emitting on one of the two planes (design §4),
+  invisible at the call site: **engine-direct** for mix/patch
+  (`channel.<addr>.volume` / `patcher.<addr>.<slot>`) and **host-mediated**
+  `phi.ctl.*` for everything structural (clip/voice/state/var/domain/fx), which
+  the bus tap (#229) and control plane (#233) will dispatch. The module
+  `install`s its namespaces into a script's global scope and registers under
+  `sys.modules['phi']` so `import phi` works; the actual boot exec over
+  `LiveCoding.run` lands with the real evaluator (#232). No Dart `lib/` code and
+  no user-visible surface yet. Covered by a pure-Python `unittest` suite under
+  `python/tests/` (a fake `yse` bus records every publish, so each test submits
+  verbs and asserts the exact emitted address/value) — table sync,
+  rename-following bound proxies, group iteration, every verb shape, and the
+  bootstrap — driven inside `flutter test` by a Dart harness
+  (`test/engine/python/phi_library_test.dart`) that runs the suite through the
+  system Python (skipped only if no interpreter is on PATH; CI's Ubuntu runner
+  always has `python3`).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
@@ -1544,6 +1575,10 @@ main + app          (orchestration)
 
 - **Design source-of-truth:** `design system/colors_and_type.css` — the
   Dart tokens under `lib/design/tokens/` are derived. Hand-maintained for now.
+- **The `phi` live-coding library:** `python/phi/` — pure Python source shipped
+  in the repo (issue #230, design `docs/design/live-coding.md` §3), with its
+  `unittest` suite + fake `yse` bus under `python/tests/`. Not Dart, not under
+  `lib/`; run inside `flutter test` via `test/engine/python/phi_library_test.dart`.
 - **Design previews:** `design system/preview/*.html` and
   `design system/ui_kits/phi-workstation/*.jsx` — open these when sketching
   new surfaces in Flutter.
