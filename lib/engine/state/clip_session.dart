@@ -525,6 +525,12 @@ class ClipSession implements RecordTarget {
   /// never rewrites note times, so bending tempo never forces a re-push.
   double get _effectiveTempo => host.tempoSources.apply(_baseTempo);
 
+  /// The tempo this session's clock runs at — its [_baseTempo] bent by the shared
+  /// tempo-source seam. Exposed so a count-in clock (issue #263) can pace itself
+  /// to the session before playback begins, so the count counts on the session's
+  /// own domain tempo (design §5).
+  double get effectiveTempo => _effectiveTempo;
+
   /// Cross the Scene agent field over every note whose absolute beat falls in
   /// `[from, to)`. Note events repeat every `totalBeats` (the clip loops), so the
   /// same source event is mapped into each loop iteration the window spans.

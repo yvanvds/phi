@@ -599,6 +599,7 @@ class _WorkstationState extends State<Workstation> {
                   ? _openSettings
                   : null,
               metronome: widget.engine.metronomeOrNull,
+              countIn: widget.engine.midiOrNull?.countIn,
             ),
             Expanded(
               child: Row(

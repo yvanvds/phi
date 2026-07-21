@@ -10,6 +10,7 @@ import '../../domain/project/lifecycle/project_controller.dart';
 import '../../domain/project/lifecycle/project_directory_picker.dart';
 import '../../domain/session/session_state.dart';
 import '../../domain/session/transport_state.dart';
+import '../../engine/state/count_in_controller.dart';
 import '../../engine/state/metronome_controller.dart';
 import '../project/dirty_indicator.dart';
 import '../project/project_menu.dart';
@@ -30,6 +31,7 @@ class TopToolbar extends StatelessWidget {
     this.directoryPicker,
     this.onOpenSettings,
     this.metronome,
+    this.countIn,
     super.key,
   });
 
@@ -40,6 +42,11 @@ class TopToolbar extends StatelessWidget {
   /// `null` (a bare Phase-1 widget test, or an engine without a MIDI subsystem)
   /// keeps the "no time domains yet" placeholder.
   final MetronomeController? metronome;
+
+  /// The count-in setting the metronome popover exposes (issue #263); `null`
+  /// hides the count-in field. Wired from the MIDI subsystem alongside
+  /// [metronome].
+  final CountInController? countIn;
 
   /// The project lifecycle controller. When present (and [directoryPicker] is
   /// too), the toolbar shows the project menu and the dirty indicator ahead of
@@ -107,7 +114,10 @@ class TopToolbar extends StatelessWidget {
                 ? const _DomainSummary()
                 : Align(
                     alignment: Alignment.centerLeft,
-                    child: MetronomeControl(controller: metronome!),
+                    child: MetronomeControl(
+                      controller: metronome!,
+                      countIn: countIn,
+                    ),
                   ),
           ),
           const SizedBox(width: PhiSpacing.s4),

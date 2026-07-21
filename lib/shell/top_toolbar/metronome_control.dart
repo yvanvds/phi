@@ -5,17 +5,23 @@ import '../../design/tokens/phi_radii.dart';
 import '../../design/tokens/phi_spacing.dart';
 import '../../design/tokens/phi_type.dart';
 import '../../design/widgets/transport_button/transport_button.dart';
+import '../../engine/state/count_in_controller.dart';
 import '../../engine/state/metronome_controller.dart';
 import 'metronome_popover.dart';
 
 /// The toolbar metronome control (issue #262, design §4): a click toggle plus a
 /// popover opener that summons the [MetronomePopover] (domain, meter, accent,
-/// volume). Binds to the live [MetronomeController]; the click is performance
-/// state, so nothing here is ever persisted.
+/// volume, and the count-in length). Binds to the live [MetronomeController] and,
+/// when wired, the [CountInController]; both are performance state, so nothing
+/// here is ever persisted.
 class MetronomeControl extends StatefulWidget {
-  const MetronomeControl({required this.controller, super.key});
+  const MetronomeControl({required this.controller, this.countIn, super.key});
 
   final MetronomeController controller;
+
+  /// The count-in setting the popover exposes (issue #263), or `null` when no
+  /// recording flow is wired — the count-in field is then hidden.
+  final CountInController? countIn;
 
   static const Key toggleKey = Key('MetronomeControl.toggle');
   static const Key popoverButtonKey = Key('MetronomeControl.popover');
@@ -45,7 +51,9 @@ class _MetronomeControlState extends State<MetronomeControl> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: widget.controller,
+      // Rebuild on either the click state or the count-in setting so the popover
+      // pickers reflect live changes (issue #263).
+      animation: Listenable.merge([widget.controller, widget.countIn]),
       builder: (context, _) {
         final controller = widget.controller;
         final domainLabel = controller.domainName ?? 'session';
@@ -96,7 +104,10 @@ class _MetronomeControlState extends State<MetronomeControl> {
             alignment: Alignment.topLeft,
             child: Material(
               color: Colors.transparent,
-              child: MetronomePopover(controller: widget.controller),
+              child: MetronomePopover(
+                controller: widget.controller,
+                countIn: widget.countIn,
+              ),
             ),
           ),
         ),
