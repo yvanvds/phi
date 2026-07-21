@@ -6,10 +6,14 @@ import 'package:re_editor/re_editor.dart';
 import '../../design/tokens/phi_colors.dart';
 import '../../design/tokens/phi_spacing.dart';
 import '../../design/tokens/phi_type.dart';
+import '../../domain/code/completion/phi_completion_resolver.dart';
 import '../../domain/code/python_block_splitter.dart';
+import '../../domain/project/project_registry.dart';
 import '../../engine/bridge/code_evaluator.dart';
 import 'code_eval_flash.dart';
 import 'code_highlight_theme.dart';
+import 'completion/phi_completion_list_view.dart';
+import 'completion/phi_completion_prompts_builder.dart';
 
 /// Sent when Ctrl+Enter is pressed inside the editor — handled by the
 /// `Actions` wrapper around the [CodeEditor].
@@ -59,6 +63,7 @@ class CodeEditorView extends StatefulWidget {
     required this.evaluator,
     required this.flash,
     required this.fresh,
+    this.registry,
     this.onEvaluated,
     super.key,
   });
@@ -70,6 +75,11 @@ class CodeEditorView extends StatefulWidget {
   final CodeLineEditingController controller;
   final CodeEvaluator evaluator;
   final CodeEvalFlash flash;
+
+  /// The live registry the completion popup reads (design §6). When `null`
+  /// (the bare Phase-1 path with no project), the editor hosts no completion —
+  /// plain Python typing only.
+  final ProjectRegistry? registry;
 
   /// The live `fresh` flag from the header. When set, the block dispatched by
   /// Ctrl+Enter is prefixed with `yse.cancel_all()` so it replaces (rather than
@@ -87,10 +97,30 @@ class CodeEditorView extends StatefulWidget {
 class _CodeEditorViewState extends State<CodeEditorView> {
   late final CodeHighlightTheme _highlightTheme;
 
+  /// The registry-driven completion adapter, rebuilt when the registry changes.
+  /// `null` when no registry is supplied — then the editor hosts no popup.
+  PhiCompletionPromptsBuilder? _prompts;
+
   @override
   void initState() {
     super.initState();
     _highlightTheme = buildPythonHighlightTheme();
+    _rebuildPrompts();
+  }
+
+  @override
+  void didUpdateWidget(covariant CodeEditorView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(widget.registry, oldWidget.registry)) {
+      _rebuildPrompts();
+    }
+  }
+
+  void _rebuildPrompts() {
+    final registry = widget.registry;
+    _prompts = registry == null
+        ? null
+        : PhiCompletionPromptsBuilder(PhiCompletionResolver(registry));
   }
 
   Future<void> _evaluateBlockUnderCursor() async {
@@ -133,46 +163,62 @@ class _CodeEditorViewState extends State<CodeEditorView> {
         },
         child: Stack(
           children: [
-            CodeEditor(
-              controller: widget.controller,
-              wordWrap: false,
-              autofocus: false,
-              shortcutsActivatorsBuilder: const _PhiCodeShortcuts(),
-              style: CodeEditorStyle(
-                fontSize: 13,
-                fontFamily: 'JetBrainsMono',
-                backgroundColor: PhiColors.bg0,
-                textColor: PhiColors.fg1,
-                cursorColor: PhiColors.voice1,
-                cursorLineColor: PhiColors.bg1,
-                selectionColor: PhiColors.voice1Soft,
-                codeTheme: _highlightTheme,
-              ),
-              padding: const EdgeInsets.symmetric(
-                horizontal: PhiSpacing.s3,
-                vertical: PhiSpacing.s2,
-              ),
-              indicatorBuilder:
-                  (context, editingController, chunkController, notifier) {
-                    return Row(
-                      children: [
-                        DefaultCodeLineNumber(
-                          controller: editingController,
-                          notifier: notifier,
-                          textStyle: PhiType.monoS().copyWith(
-                            color: PhiColors.fg3,
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-            ),
+            _withCompletion(_buildEditor()),
             Positioned.fill(
               child: IgnorePointer(child: _FlashOverlay(flash: widget.flash)),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  /// Wraps [editor] in `re_editor`'s [CodeAutocomplete] when a registry is
+  /// available, hosting the registry-driven popup (design §6); otherwise returns
+  /// the plain editor so a project-less surface has no completion.
+  Widget _withCompletion(Widget editor) {
+    final prompts = _prompts;
+    if (prompts == null) return editor;
+    return CodeAutocomplete(
+      viewBuilder: (context, notifier, onSelected) =>
+          PhiCompletionListView(notifier: notifier, onSelected: onSelected),
+      promptsBuilder: prompts,
+      child: editor,
+    );
+  }
+
+  Widget _buildEditor() {
+    return CodeEditor(
+      controller: widget.controller,
+      wordWrap: false,
+      autofocus: false,
+      shortcutsActivatorsBuilder: const _PhiCodeShortcuts(),
+      style: CodeEditorStyle(
+        fontSize: 13,
+        fontFamily: 'JetBrainsMono',
+        backgroundColor: PhiColors.bg0,
+        textColor: PhiColors.fg1,
+        cursorColor: PhiColors.voice1,
+        cursorLineColor: PhiColors.bg1,
+        selectionColor: PhiColors.voice1Soft,
+        codeTheme: _highlightTheme,
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: PhiSpacing.s3,
+        vertical: PhiSpacing.s2,
+      ),
+      indicatorBuilder:
+          (context, editingController, chunkController, notifier) {
+            return Row(
+              children: [
+                DefaultCodeLineNumber(
+                  controller: editingController,
+                  notifier: notifier,
+                  textStyle: PhiType.monoS().copyWith(color: PhiColors.fg3),
+                ),
+              ],
+            );
+          },
     );
   }
 }
