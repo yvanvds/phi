@@ -11,6 +11,7 @@ import '../domain/midi/store/clip_document.dart';
 import '../domain/midi/store/midi_transform_codec.dart';
 import '../domain/mix/mix_send.dart';
 import '../domain/mix/mix_strip.dart';
+import '../domain/patcher/patch_payload.dart';
 import '../domain/project/app_settings/audio_settings.dart';
 import '../domain/project/app_settings/midi_settings.dart';
 import '../domain/project/commands/create_entity_command.dart';
@@ -56,6 +57,8 @@ import 'state/engine_midi_controller.dart';
 import 'state/engine_telemetry.dart';
 import 'state/mix_tree_node.dart';
 import 'state/mixer_channel.dart';
+import 'state/patch_bus_option.dart';
+import 'state/patch_library_controller.dart';
 import 'state/patch_placement_notice.dart';
 import 'state/patch_reconciler.dart';
 import 'state/patcher_controller.dart';
@@ -146,23 +149,59 @@ class PhiEngine {
   /// don't exercise the Scene surface.
   SceneRenderer? get sceneRenderer => _sceneRenderer;
 
-  PatcherController? _patcher;
+  PatchLibraryController? _patchLibrary;
 
-  /// The patcher subsystem. Created lazily on [start]; throws before that
-  /// or if `package:yse`'s `Patcher` constructor failed at start (e.g. an
-  /// `libyse.dll` without the patcher ABI). Use [patcherOrNull] when the
-  /// caller needs to render a fallback.
+  /// The conventional name of the patch seeded when a patcher-enabled project
+  /// carries none, so the surface always has one open (the entity-strip analogue
+  /// of the demo clip seed).
+  static const String _defaultPatchName = 'patch_1';
+
+  /// The editor for the currently-open `patch.` entity (issue #224) — bound to
+  /// the reconciler's live native instance for that patch. Created on [start]
+  /// when a patcher gateway was injected; throws before that or when no patch is
+  /// open. Use [patcherOrNull] when the caller needs to render a fallback.
   PatcherController get patcher {
-    final p = _patcher;
+    final p = _patchLibrary?.openEditor;
     if (p == null) {
-      throw StateError('PhiEngine.patcher used before start()');
+      throw StateError(
+        'PhiEngine.patcher used before start() or no patch open',
+      );
     }
     return p;
   }
 
-  /// Nullable variant of [patcher] — `null` before [start] *or* when the
-  /// patcher subsystem failed to initialise.
-  PatcherController? get patcherOrNull => _patcher;
+  /// Nullable variant of [patcher] — `null` before [start], when no patcher
+  /// gateway was injected, or when no patch is open.
+  PatcherController? get patcherOrNull => _patchLibrary?.openEditor;
+
+  /// The patcher entity strip's controller — the source of truth for which
+  /// `patch.` entity is open, the entity affordances (new / duplicate / rename /
+  /// delete / group), and source placement (issue #224). Created on [start] when
+  /// a patcher gateway was injected. Use [patchLibraryOrNull] for the nullable
+  /// variant.
+  PatchLibraryController get patchLibrary {
+    final l = _patchLibrary;
+    if (l == null) {
+      throw StateError(
+        'PhiEngine.patchLibrary used before start() or without a patcher gateway',
+      );
+    }
+    return l;
+  }
+
+  /// Nullable variant of [patchLibrary] — `null` before [start] *or* when no
+  /// patcher gateway was injected.
+  PatchLibraryController? get patchLibraryOrNull => _patchLibrary;
+
+  /// The placeable mix buses a patch source can mount onto — master, plus every
+  /// materialised user strip / group bus / return (issue #224, design §4 role 1).
+  /// The patcher placement picker renders these; the reconciler resolves the
+  /// chosen [PatchBusOption.address] back to a live channel id.
+  List<PatchBusOption> patchBusOptions() => [
+    PatchBusOption(address: _masterAddress, label: 'master'),
+    for (final entry in _channelsByAddress.entries)
+      PatchBusOption(address: entry.key, label: entry.value.channel.name),
+  ];
 
   /// The per-entity patch reconciler — the source of truth for which `patch.`
   /// entities are open, their placement, and their running state (issue #220).
@@ -453,6 +492,10 @@ class PhiEngine {
     _teardownChannels();
     _syncChannelsFromRegistry();
     _adoptClipAndRebindPublisher();
+    // Rebind the patcher entity strip to the new project's `patch.` namespace,
+    // seeding a default patch when it carries none, and open the first (issue
+    // #224). No-op before [start] (no reconciler yet — start runs it once).
+    _setupPatchLibrary();
   }
 
   /// Adopt the bound registry's `clip.` document into the live MIDI objects, then
@@ -570,16 +613,11 @@ class PhiEngine {
     if (_started) return;
     _audio.boot(audioSettings);
     // Patcher subsystem is optional — tests that don't inject a
-    // PatcherGateway get an engine without a patcher (engine.patcher
-    // throws). When wired, the patcher must be created *before*
-    // `startUpdateTimer` — otherwise the audio thread can race the
-    // constructor. `mainOutputs: 1` matches dart-yse's
-    // demo13_patcher.dart and is the only value we've verified
-    // end-to-end on the loaded libyse.dll.
+    // PatcherGateway get an engine without a patcher (engine.patcher throws).
+    // When wired, the native patchers are created per `patch.` entity by the
+    // [PatchReconciler] (below) as it syncs, and the editor binds to the open
+    // entity's instance through the [PatchLibraryController] (issue #224).
     final pg = _patcherGateway;
-    if (pg != null) {
-      _patcher = PatcherController(pg, mainOutputs: 1);
-    }
     final sm = StateMachineController();
     _stateMachine = sm;
     final rv = RuntimeVariableRegistry();
@@ -652,6 +690,49 @@ class PhiEngine {
     // carries and wire the clip-edit publisher (bindProject may have run before
     // start). A no-op for the default empty registry.
     _adoptClipAndRebindPublisher();
+    // Set up the patcher entity strip (issue #224): seed a default patch when the
+    // project carries none, build the library controller, and open the first
+    // patch so the surface has an editor. No-op without a patcher gateway.
+    _setupPatchLibrary();
+  }
+
+  /// Build (or, after a project swap, rebind) the [PatchLibraryController] and
+  /// open the first `patch.` entity (issue #224). Seeds a default empty patch
+  /// when a patcher-enabled project carries none, so the surface always has a
+  /// patch to open — the entity-strip analogue of the demo clip seed. No-op
+  /// without a patcher gateway or reconciler.
+  void _setupPatchLibrary() {
+    final pg = _patcherGateway;
+    final reconciler = _patchReconciler;
+    if (pg == null || reconciler == null) return;
+    if (_mixRegistry.childrenOfKind(RegistryKinds.patch).isEmpty) {
+      _mixRegistry.createEntity(
+        EntityAddress(
+          kind: RegistryKinds.patch,
+          segments: const [_defaultPatchName],
+        ),
+        payload: PatchPayload.empty.toJson(),
+      );
+    }
+    reconciler.sync(_mixRegistry);
+    final library = _patchLibrary;
+    if (library == null) {
+      _patchLibrary = PatchLibraryController(
+        registry: _mixRegistry,
+        patches: reconciler,
+        gateway: pg,
+        busOptions: patchBusOptions,
+        recordCommand: _recordCommand,
+      )..openFirst();
+    } else {
+      library.rebind(
+        registry: _mixRegistry,
+        patches: reconciler,
+        busOptions: patchBusOptions,
+        recordCommand: _recordCommand,
+      );
+      library.openFirst();
+    }
   }
 
   /// Stop telemetry, close the engine.
@@ -659,12 +740,14 @@ class PhiEngine {
     _telemetryTimer?.cancel();
     _telemetryTimer = null;
     if (_started) {
-      _patcher?.dispose();
-      _patcher = null;
-      // Tear the per-entity patchers down (unmount running sources + dispose their
-      // native instances) *before* the blanket disposeAll, so teardown never
-      // touches an already-freed instance (issue #220). Nulling it first makes the
+      // Dispose the editor controllers first (Dart-side only — they don't own
+      // their native instances, the reconciler does), then tear the per-entity
+      // patchers down (unmount running sources + dispose their native instances)
+      // *before* the blanket disposeAll, so teardown never touches an
+      // already-freed instance (issue #220/#224). Nulling the reconciler makes the
       // later `_teardownChannels` reconciler line a no-op.
+      _patchLibrary?.dispose();
+      _patchLibrary = null;
       _patchReconciler?.teardown();
       _patchReconciler = null;
       _patcherGateway?.disposeAll();

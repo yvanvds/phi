@@ -12,10 +12,12 @@ import '../../engine/engine.dart';
 import '../../engine/state/node_type_registry.dart';
 import '../../engine/state/patcher_controller.dart';
 import '../surface.dart';
+import 'library/patch_entity_strip.dart';
 import 'palette/patcher_palette.dart';
 import 'params/patch_params_dialog.dart';
 import 'patcher_canvas.dart';
 import 'patcher_node_types.dart';
+import 'placement/patch_placement_bar.dart';
 import 'reference/patch_reference_panel.dart';
 
 /// Patcher surface — pan/zoom canvas of nodes and cables.
@@ -141,23 +143,61 @@ class _PatcherViewportState extends State<_PatcherViewport> {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        PatcherPalette(
-          objectTypes: _objectTypes,
-          selected: _selected,
-          onSelect: _select,
-        ),
-        Expanded(
-          child: PatcherCanvas(
-            controller: widget.engine.patcher,
-            onCreateObject: _createObject,
-            onNodeTap: _selectNode,
-            onNodeDoubleTap: _editParams,
-          ),
-        ),
-        PatchReferencePanel(descriptor: _selected),
-      ],
+    final library = widget.engine.patchLibrary;
+    return ListenableBuilder(
+      listenable: library,
+      builder: (context, _) {
+        final editor = library.openEditor;
+        return Row(
+          children: [
+            PatchEntityStrip(controller: library),
+            PatcherPalette(
+              objectTypes: _objectTypes,
+              selected: _selected,
+              onSelect: _select,
+            ),
+            Expanded(
+              child: Column(
+                children: [
+                  PatchPlacementBar(controller: library),
+                  Expanded(
+                    child: editor == null
+                        ? const _NoPatchOpen()
+                        : PatcherCanvas(
+                            // Re-key on the open address so switching patches
+                            // rebuilds the canvas against the new editor.
+                            key: ValueKey(library.openAddress),
+                            controller: editor,
+                            onCreateObject: _createObject,
+                            onNodeTap: _selectNode,
+                            onNodeDoubleTap: _editParams,
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            PatchReferencePanel(descriptor: _selected),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Shown in the canvas area when the `patch.` namespace is empty — every patch
+/// was deleted, so there is nothing to edit until one is created from the strip.
+class _NoPatchOpen extends StatelessWidget {
+  const _NoPatchOpen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: PhiColors.bg0,
+      alignment: Alignment.center,
+      child: Text(
+        'no patch open · add one from the strip'.toUpperCase(),
+        style: PhiType.caption(),
+      ),
     );
   }
 }
