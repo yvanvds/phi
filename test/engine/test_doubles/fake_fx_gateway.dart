@@ -22,8 +22,11 @@ class FakeFxGateway implements FxGateway {
   FakeMaterialisedFx? get lastHandle => handles.isEmpty ? null : handles.last;
 
   @override
-  MaterialisedFx materialiseFx(FxDefinition definition) {
-    final fx = FakeMaterialisedFx(definition);
+  MaterialisedFx materialiseFx(
+    FxDefinition definition, {
+    int? patchInstanceId,
+  }) {
+    final fx = FakeMaterialisedFx(definition, patchInstanceId: patchInstanceId);
     handles.add(fx);
     return fx;
   }
@@ -44,12 +47,18 @@ class FakeFxGateway implements FxGateway {
 /// (`materialise:<kind>` / `apply:<kind>` / `dispose`). Mirrors the real handle:
 /// a same-kind edit applies live; a kind change rebuilds.
 class FakeMaterialisedFx implements MaterialisedFx {
-  FakeMaterialisedFx(this._definition) {
+  FakeMaterialisedFx(this._definition, {this.patchInstanceId}) {
     calls.add('materialise:${_definition.kind.name}');
   }
 
   FxDefinition _definition;
   bool _disposed = false;
+
+  /// The live patcher instance a [FxKind.patcherInsert] borrows, or `null` for
+  /// every other kind (and an unresolved patcher insert). Drives [isPlaceable]:
+  /// a patcher insert with no live patcher is skipped by the chain, exactly as
+  /// the real handle builds no `DspObject` (issue #225).
+  final int? patchInstanceId;
 
   /// How many times the effect was (re)built — 1 at construction, +1 per
   /// kind-changing edit.
@@ -68,7 +77,8 @@ class FakeMaterialisedFx implements MaterialisedFx {
   FxDefinition get definition => _definition;
 
   @override
-  bool get isPlaceable => _definition.kind != FxKind.patcherInsert;
+  bool get isPlaceable =>
+      _definition.kind != FxKind.patcherInsert ? true : patchInstanceId != null;
 
   /// Whether [dispose] has run.
   bool get isDisposed => _disposed;

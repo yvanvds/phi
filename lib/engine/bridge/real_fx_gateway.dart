@@ -2,6 +2,7 @@ import '../../domain/fx/fx_definition.dart';
 import 'fx_chain.dart';
 import 'fx_gateway.dart';
 import 'materialised_fx.dart';
+import 'patcher_insert_source.dart';
 import 'real_fx_chain.dart';
 import 'real_materialised_fx.dart';
 import 'real_materialised_synth.dart' show MixBusResolver;
@@ -16,20 +17,34 @@ import 'real_materialised_synth.dart' show MixBusResolver;
 /// wires the real resolver in issue #208. Effects carry no assets, so — unlike
 /// the synth gateway — there is no asset-path seam here.
 ///
+/// A [PatcherInsertSource] (the real patcher gateway) lets a
+/// [FxKind.patcherInsert] handle borrow the live native patcher for its wrapped
+/// `patch.` entity (issue #225); `null` leaves patcher inserts non-placeable.
+///
 /// Requires `libyse.dll` discoverable at runtime — see README.md. The heavy
 /// lifting lives on the [RealMaterialisedFx] handles and [RealFxChain]s each
 /// call mints.
 class RealFxGateway implements FxGateway {
-  RealFxGateway({MixBusResolver? busResolver})
-    : _busResolver = busResolver ?? _masterBus;
+  RealFxGateway({
+    MixBusResolver? busResolver,
+    PatcherInsertSource? patcherInsertSource,
+  }) : _busResolver = busResolver ?? _masterBus,
+       _patcherInsertSource = patcherInsertSource;
 
   static Null _masterBus(int _) => null;
 
   final MixBusResolver _busResolver;
+  final PatcherInsertSource? _patcherInsertSource;
 
   @override
-  MaterialisedFx materialiseFx(FxDefinition definition) =>
-      RealMaterialisedFx(definition);
+  MaterialisedFx materialiseFx(
+    FxDefinition definition, {
+    int? patchInstanceId,
+  }) => RealMaterialisedFx(
+    definition,
+    patcherInsertSource: _patcherInsertSource,
+    patchInstanceId: patchInstanceId,
+  );
 
   @override
   FxChain createChain({required int busChannelId}) =>

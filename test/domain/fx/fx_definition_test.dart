@@ -1,8 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/fx/fx_definition.dart';
 import 'package:phi/domain/fx/fx_kind.dart';
+import 'package:phi/domain/project/entity_address.dart';
+import 'package:phi/domain/project/registry_kinds.dart';
 
 void main() {
+  EntityAddress patch(String name) =>
+      EntityAddress(kind: RegistryKinds.patch, segments: [name]);
+
   group('FxDefinition', () {
     test('round-trips through JSON', () {
       const fx = FxDefinition(
@@ -75,6 +80,73 @@ void main() {
         final fx = FxDefinition(kind: kind);
         expect(FxDefinition.fromJson(fx.toJson()).kind, kind);
       }
+    });
+
+    group('patcher-insert reference (issue #225)', () {
+      test('a patcher insert carries and round-trips its wrapped patch', () {
+        final fx = FxDefinition(
+          kind: FxKind.patcherInsert,
+          patch: patch('swirl'),
+        );
+        expect(fx.toJson()['patch'], 'patch.swirl');
+        expect(FxDefinition.fromJson(fx.toJson()), fx);
+        expect(FxDefinition.fromJson(fx.toJson()).patch, patch('swirl'));
+      });
+
+      test('references the wrapped patch — nothing for any other kind', () {
+        expect(
+          FxDefinition(
+            kind: FxKind.patcherInsert,
+            patch: patch('swirl'),
+          ).references,
+          {patch('swirl')},
+        );
+        expect(const FxDefinition(kind: FxKind.lowpass).references, isEmpty);
+        // A patcher insert without a patch (malformed) references nothing.
+        expect(
+          const FxDefinition(kind: FxKind.patcherInsert).references,
+          isEmpty,
+        );
+      });
+
+      test('withReferenceUpdated repoints the wrapped patch', () {
+        final fx = FxDefinition(
+          kind: FxKind.patcherInsert,
+          patch: patch('swirl'),
+        );
+        final moved = fx.withReferenceUpdated(patch('swirl'), patch('swirl_2'));
+        expect(moved.patch, patch('swirl_2'));
+        // The inverse restores the original (undo round-trips).
+        expect(
+          moved.withReferenceUpdated(patch('swirl_2'), patch('swirl')).patch,
+          patch('swirl'),
+        );
+        // A reference it does not hold is left untouched.
+        expect(
+          fx.withReferenceUpdated(patch('other'), patch('x')).patch,
+          patch('swirl'),
+        );
+      });
+
+      test('equality is by value including the wrapped patch', () {
+        expect(
+          FxDefinition(kind: FxKind.patcherInsert, patch: patch('a')),
+          FxDefinition(kind: FxKind.patcherInsert, patch: patch('a')),
+        );
+        expect(
+          FxDefinition(kind: FxKind.patcherInsert, patch: patch('a')),
+          isNot(FxDefinition(kind: FxKind.patcherInsert, patch: patch('b'))),
+        );
+      });
+
+      test('a plain effect emits no patch key', () {
+        expect(
+          const FxDefinition(
+            kind: FxKind.lowpass,
+          ).toJson().containsKey('patch'),
+          isFalse,
+        );
+      });
     });
   });
 }

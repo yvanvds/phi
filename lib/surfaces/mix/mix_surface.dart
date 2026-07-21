@@ -13,6 +13,7 @@ import '../../design/widgets/select/phi_select.dart';
 import '../../design/widgets/select/phi_select_option.dart';
 import '../../domain/mix/mix_send.dart';
 import '../../domain/project/entity_address.dart';
+import '../../domain/project/registry_kinds.dart';
 import '../../engine/engine.dart';
 import '../../engine/state/mix_tree_node.dart';
 import '../../engine/state/mixer_channel.dart';
@@ -579,7 +580,12 @@ class _InsertsArea extends StatelessWidget {
   Widget build(BuildContext context) {
     final inserts = engine.channelInserts(channel);
     final available = engine.availableFxFor(channel);
-    if (inserts.isEmpty && available.isEmpty) return const SizedBox.shrink();
+    // Patches with no wrapper yet are offered as patcher inserts (issue #225);
+    // ones that already have a wrapper flow through `available` like any other fx.
+    final availablePatches = engine.availablePatchesToInsert(channel);
+    if (inserts.isEmpty && available.isEmpty && availablePatches.isEmpty) {
+      return const SizedBox.shrink();
+    }
     return Container(
       width: ChannelStrip.width,
       margin: const EdgeInsets.only(top: PhiSpacing.s1),
@@ -604,11 +610,12 @@ class _InsertsArea extends StatelessWidget {
             ),
             const SizedBox(height: PhiSpacing.s1),
           ],
-          if (available.isNotEmpty)
+          if (available.isNotEmpty || availablePatches.isNotEmpty)
             _AddInsertRow(
               engine: engine,
               channel: channel,
               available: available,
+              availablePatches: availablePatches,
             ),
         ],
       ),
@@ -743,36 +750,46 @@ class _InsertDragGrip extends StatelessWidget {
   }
 }
 
-/// The add-insert picker: the fx instances that can be placed on this bus. An fx
+/// The add-insert picker: the fx instances that can be placed on this bus, plus
+/// the project's patches offered as **patcher inserts** (issue #225). An fx
 /// already on **another** bus is offered with an `· on {bus}` annotation —
 /// choosing it *moves* it here behind a [ConfirmDialog] naming the losing bus
 /// (racks design §5, "an instance lives on at most one bus"). An unplaced fx is
-/// appended straight to the chain.
+/// appended straight to the chain. Picking a patch (labelled `patcher · {name}`)
+/// creates its wrapping `fx.` entity and places it — thereafter it is a normal
+/// insert.
 class _AddInsertRow extends StatelessWidget {
   const _AddInsertRow({
     required this.engine,
     required this.channel,
     required this.available,
+    required this.availablePatches,
   });
 
   final PhiEngine engine;
   final MixerChannel channel;
   final List<EntityAddress> available;
+  final List<EntityAddress> availablePatches;
 
-  Future<void> _place(BuildContext context, EntityAddress fx) async {
-    final owner = engine.busHoldingInsert(fx);
+  Future<void> _place(BuildContext context, EntityAddress choice) async {
+    // A `patch.` choice creates + places its wrapper (no owner to move off).
+    if (choice.kind == RegistryKinds.patch) {
+      engine.addPatchInsert(channel, choice);
+      return;
+    }
+    final owner = engine.busHoldingInsert(choice);
     if (owner != null) {
       final confirmed = await ConfirmDialog.show(
         context,
         title: 'move insert',
         message:
-            '${fx.name} is on ${owner.name}. Moving it to ${channel.name} '
+            '${choice.name} is on ${owner.name}. Moving it to ${channel.name} '
             'removes it from ${owner.name}.',
         confirmLabel: 'move',
       );
       if (!confirmed) return;
     }
-    engine.addChannelInsert(channel, fx);
+    engine.addChannelInsert(channel, choice);
   }
 
   @override
@@ -784,8 +801,13 @@ class _AddInsertRow extends StatelessWidget {
       options: [
         for (final fx in available)
           PhiSelectOption<EntityAddress>(value: fx, label: _labelFor(fx)),
+        for (final patch in availablePatches)
+          PhiSelectOption<EntityAddress>(
+            value: patch,
+            label: 'patcher · ${patch.name}',
+          ),
       ],
-      onChanged: (fx) => _place(context, fx),
+      onChanged: (choice) => _place(context, choice),
     );
   }
 

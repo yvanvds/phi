@@ -1,4 +1,5 @@
 import '../../domain/fx/fx_definition.dart';
+import '../../domain/fx/fx_kind.dart';
 import '../../domain/mix/mix_strip.dart';
 import '../../domain/project/entity_address.dart';
 import '../../domain/project/project_registry.dart';
@@ -73,10 +74,12 @@ class RackMaterialiser {
     required FxGateway fxGateway,
     required int? Function(EntityAddress bus) busChannelId,
     required VoicesChanged onVoicesChanged,
+    int? Function(EntityAddress patch)? patchInstanceId,
   }) : _synthGateway = synthGateway,
        _fxGateway = fxGateway,
        _busChannelId = busChannelId,
-       _onVoicesChanged = onVoicesChanged;
+       _onVoicesChanged = onVoicesChanged,
+       _patchInstanceId = patchInstanceId;
 
   final SynthGateway _synthGateway;
   final FxGateway _fxGateway;
@@ -86,6 +89,14 @@ class RackMaterialiser {
   final int? Function(EntityAddress bus) _busChannelId;
 
   final VoicesChanged _onVoicesChanged;
+
+  /// Resolves a wrapped `patch.` address to the live native patcher instance id
+  /// a [FxKind.patcherInsert] borrows, or `null` when the patch is not
+  /// materialised (issue #225). The engine gates this on the patch entity still
+  /// existing, so a wrapper whose patch was removed becomes non-placeable and is
+  /// dropped from the chain *before* the reconciler frees the native patcher.
+  /// `null` when no patcher subsystem is wired — patcher inserts then no-op.
+  final int? Function(EntityAddress patch)? _patchInstanceId;
 
   /// The internal-voice channel-allocation table, grown/shrunk as voices come
   /// and go (design §3). Stable: a surviving voice keeps its channel across a
@@ -102,6 +113,11 @@ class RackMaterialiser {
 
   /// The live effect handle for each `fx.` instance, keyed by its address.
   final Map<EntityAddress, MaterialisedFx> _fxByAddress = {};
+
+  /// The patcher instance id each [FxKind.patcherInsert] handle was built
+  /// against, so a wrapped patch appearing / vanishing rebuilds the handle
+  /// (its borrowed patcher changed) rather than re-applying in place (issue #225).
+  final Map<EntityAddress, int?> _patchInstanceByFx = {};
 
   /// The insert chain placed on each mix bus that carries `inserts`, keyed by
   /// bus address.
@@ -321,12 +337,41 @@ class RackMaterialiser {
 
     final rebuilt = <EntityAddress>{};
     for (final entry in present.entries) {
+      final def = entry.value;
+      final wantInstance = _patchInstanceFor(def);
       final existing = _fxByAddress[entry.key];
       if (existing == null) {
-        _fxByAddress[entry.key] = _fxGateway.materialiseFx(entry.value);
-      } else if (existing.definition != entry.value) {
-        final kindChanged = existing.kind != entry.value.kind;
-        existing.applyDefinition(entry.value);
+        _fxByAddress[entry.key] = _fxGateway.materialiseFx(
+          def,
+          patchInstanceId: wantInstance,
+        );
+        _patchInstanceByFx[entry.key] = wantInstance;
+        continue;
+      }
+      // A patcher insert borrows a live native patcher, so its placeability rides
+      // on the resolved instance — rebuild the whole handle whenever the wrapped
+      // patch, its instance, or the kind changed (a fresh `DspObject.patcherInsert`
+      // borrowing the new patcher), and only apply an impact/bypass edit in place.
+      final patcherInvolved =
+          def.kind == FxKind.patcherInsert ||
+          existing.kind == FxKind.patcherInsert;
+      if (patcherInvolved) {
+        if (existing.kind != def.kind ||
+            existing.definition.patch != def.patch ||
+            _patchInstanceByFx[entry.key] != wantInstance) {
+          existing.dispose();
+          _fxByAddress[entry.key] = _fxGateway.materialiseFx(
+            def,
+            patchInstanceId: wantInstance,
+          );
+          _patchInstanceByFx[entry.key] = wantInstance;
+          rebuilt.add(entry.key);
+        } else if (existing.definition != def) {
+          existing.applyDefinition(def);
+        }
+      } else if (existing.definition != def) {
+        final kindChanged = existing.kind != def.kind;
+        existing.applyDefinition(def);
         if (kindChanged) rebuilt.add(entry.key);
       }
     }
@@ -336,6 +381,7 @@ class RackMaterialiser {
     for (final address in _fxByAddress.keys.toList()) {
       if (!present.containsKey(address)) {
         goneFx.add(_fxByAddress.remove(address)!);
+        _patchInstanceByFx.remove(address);
       }
     }
 
@@ -344,6 +390,16 @@ class RackMaterialiser {
     for (final handle in goneFx) {
       handle.dispose();
     }
+  }
+
+  /// The live patcher instance id a [FxKind.patcherInsert] wraps, or `null` for
+  /// any other kind, a wrapper with no `patch` reference, or when no patcher
+  /// subsystem is wired (issue #225).
+  int? _patchInstanceFor(FxDefinition def) {
+    if (def.kind != FxKind.patcherInsert) return null;
+    final patch = def.patch;
+    if (patch == null) return null;
+    return _patchInstanceId?.call(patch);
   }
 
   void _syncChains(ProjectRegistry registry, Set<EntityAddress> rebuilt) {
@@ -405,6 +461,7 @@ class RackMaterialiser {
       fx.dispose();
     }
     _fxByAddress.clear();
+    _patchInstanceByFx.clear();
     for (final synth in _synthByVoice.values) {
       synth.dispose();
     }

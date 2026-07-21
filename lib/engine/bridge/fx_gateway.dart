@@ -33,7 +33,14 @@ abstract interface class FxGateway {
   /// Returns a [MaterialisedFx] handle carrying the rest of the lifecycle
   /// (re-application, disposal). Not yet placed on any bus — hand it to an
   /// [FxChain] for that.
-  MaterialisedFx materialiseFx(FxDefinition definition);
+  ///
+  /// [patchInstanceId] is the live native patcher instance a
+  /// [FxKind.patcherInsert] wraps (design `docs/design/patcher.md` §4 role 2,
+  /// issue #225) — the id the [PatchReconciler] resolved for the definition's
+  /// wrapped `patch.` entity. `null` for every other kind, and for a patcher
+  /// insert whose patch is not (yet) materialised: the handle is then not
+  /// placeable, so the chain skips it until a later re-sync resolves it.
+  MaterialisedFx materialiseFx(FxDefinition definition, {int? patchInstanceId});
 
   /// Create an (initially empty) insert chain bound to the mix bus with id
   /// [busChannelId] — the opaque id `YseGateway.createChannel` hands out; the
