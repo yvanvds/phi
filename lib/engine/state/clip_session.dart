@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../domain/midi/clip_editor.dart';
+import '../../domain/midi/midi_clip.dart';
 import '../../domain/midi/midi_clip_mode.dart';
 import '../../domain/midi/midi_note.dart';
 import '../../domain/midi/midi_transform_chain.dart';
@@ -9,12 +10,14 @@ import '../../domain/midi/transforms/agent_spawn_transform.dart';
 import '../../domain/midi/transforms/domain_subscription_transform.dart';
 import '../../domain/midi/voice_hash.dart';
 import '../../domain/project/entity_address.dart';
+import '../../domain/project/undo_scope.dart';
 import '../../domain/scene/scene_agent.dart';
 import '../bridge/materialised_synth.dart';
 import '../bridge/midi_transport.dart';
 import '../bridge/transport_note.dart';
 import 'clip_session_host.dart';
 import 'midi_graph_controller.dart';
+import 'record_target.dart';
 
 /// One clip's live playback + authoring bundle (issue #186).
 ///
@@ -38,7 +41,7 @@ import 'midi_graph_controller.dart';
 /// [MidiGraphController.mode] (issue #77): a **chain** clip reads the linear
 /// [MidiTransformChain.output]; a **graph** clip reads the branching
 /// [MidiTransformGraph]'s `evaluate` against the host's live [GraphEvalContext].
-class ClipSession {
+class ClipSession implements RecordTarget {
   ClipSession({
     required EntityAddress? address,
     required this.host,
@@ -62,6 +65,7 @@ class ClipSession {
   /// boot session, which exists before any project clip is opened. Re-keyed once
   /// when the engine reconciles the boot session with the project's first clip on
   /// open (issue #197) — see [rekey].
+  @override
   EntityAddress? get address => _address;
 
   /// The shared engine pieces this session borrows for playback.
@@ -89,6 +93,29 @@ class ClipSession {
   /// [MidiTransformChain.output]). Exposed so the surface binds its chip panel
   /// and ghost layer to the same instance.
   MidiTransformChain get chain => _chain;
+
+  // ─── RecordTarget (issue #261) ────────────────────────────────────────────
+
+  /// The source clip a take captures into — the chain's source (design §3).
+  @override
+  MidiClip get clip => _chain.source;
+
+  /// The undo scope each recorded pass commits through, so a pass is undoable
+  /// exactly like a drawn note.
+  @override
+  UndoScope get undoScope => editor.undoScope;
+
+  /// Whether recording past the end grows the clip (auto-extend on) or the loop
+  /// wraps and passes overdub (off) — the editor's live flag.
+  @override
+  bool get autoExtend => editor.autoExtend;
+
+  /// The transport's play-relative beat — beats elapsed since [play], read off
+  /// the free-running engine clock (issue #103); `0` while stopped or paused, so
+  /// a take stamps nothing across a pause.
+  @override
+  double get recordBeat =>
+      _playing ? (_transport?.beatPosition ?? 0) - _originBeat : 0;
 
   /// The shared authoring controller. Gestures on the piano roll edit the same
   /// clip this session reads.
@@ -133,6 +160,7 @@ class ClipSession {
 
   /// Whether this session's transport is currently running. `false` while paused
   /// — the manager's frame ticker only advances playing sessions.
+  @override
   bool get isPlaying => _playing;
 
   bool _paused = false;

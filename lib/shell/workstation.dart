@@ -351,6 +351,10 @@ class _WorkstationState extends State<Workstation> {
     // (issue #211). The voices pane degrades to editing-only without it.
     if (midi != null) {
       _voiceAudition = VoiceAuditionController(midi: midi);
+      // Recorded notes carry the armed voice, and monitoring is that same racks
+      // audition path (issue #261, design §3) — so the record flow reads the
+      // voice from the audition controller rather than plumbing a second arm.
+      midi.record.armedVoice = () => _voiceAudition?.armed?.format();
     }
     // The engine consumes the registry as its channel source of truth (design
     // §8): bind it to the controller's registry now, and rebind whenever New /
