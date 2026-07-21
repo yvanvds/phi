@@ -520,6 +520,11 @@ class PhiEngine {
     _clipCustomTransforms = customTransforms;
     _mixRegistry.addListener(_syncChannelsFromRegistry);
     _mirrorBinder.bind(_mixRegistry);
+    // The new tree wholesale replaces the old one — push a full sync so the
+    // Python name table matches it, rather than leaking the previous project's
+    // names (design §3, issue #231). The incremental event stream keeps it in
+    // step from here.
+    _mirrorBinder.resync();
     _teardownChannels();
     _syncChannelsFromRegistry();
     _adoptClipAndRebindPublisher();
@@ -733,6 +738,12 @@ class PhiEngine {
     // project carries none, build the library controller, and open the first
     // patch so the surface has an editor. No-op without a patcher gateway.
     _setupPatchLibrary();
+    // Boot / re-init full sync (design §3, issue #231): the embedded interpreter
+    // is (re)ready here — on the first start, and again after a stop → start
+    // re-inits the `System` and blanks its Python — so push the whole tree at the
+    // mirror to repopulate the name table. A no-op for the production
+    // `NoOpRegistryMirror`; the live-coding shell wiring hangs a real mirror here.
+    _mirrorBinder.resync();
   }
 
   /// Build (or, after a project swap, rebind) the [PatchLibraryController] and

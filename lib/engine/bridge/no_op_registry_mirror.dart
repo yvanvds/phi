@@ -21,4 +21,7 @@ class NoOpRegistryMirror implements RegistryMirror {
 
   @override
   void onDelete(EntityAddress address) {}
+
+  @override
+  void syncAll(Iterable<EntityAddress> addresses) {}
 }

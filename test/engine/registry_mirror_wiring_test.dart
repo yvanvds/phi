@@ -70,4 +70,50 @@ void main() {
 
     expect(mirror.creates, [mix('bass')]);
   });
+
+  test('start performs a boot full sync (issue #231)', () async {
+    engine.start();
+    await pumpEventQueue();
+
+    // Exactly one full sync fired at boot — the empty default registry, so an
+    // empty snapshot, but the re-sync path is proven present.
+    expect(mirror.fullSyncs, hasLength(1));
+    expect(mirror.fullSyncs.single, isEmpty);
+  });
+
+  test('a stop → start re-init re-pushes a full sync (issue #231)', () async {
+    engine.start();
+    engine.addChannel(name: 'drums');
+    await pumpEventQueue();
+    expect(mirror.fullSyncs, hasLength(1));
+
+    // Restarting re-inits the engine's `System`, blanking the embedded Python —
+    // the mirror must re-push the whole tree so the fresh table matches it.
+    engine.stop();
+    engine.start();
+    await pumpEventQueue();
+
+    expect(mirror.fullSyncs, hasLength(2));
+    expect(mirror.fullSyncs.last, [mix('drums')]);
+  });
+
+  test('bindProject full-syncs the new tree (issue #231)', () async {
+    engine.start();
+    final project = ProjectRegistry();
+    addTearDown(project.dispose);
+    project.createEntity(
+      mix('bass'),
+      payload: const MixStrip(voice: 4).toJson(),
+    );
+    project.createEntity(
+      mix('pads'),
+      payload: const MixStrip(voice: 5).toJson(),
+    );
+
+    engine.bindProject(project);
+    await pumpEventQueue();
+
+    // The last full sync is the one bindProject pushed for the new tree.
+    expect(mirror.fullSyncs.last, [mix('bass'), mix('pads')]);
+  });
 }

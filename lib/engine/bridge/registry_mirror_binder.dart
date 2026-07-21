@@ -3,6 +3,8 @@ import 'dart:async';
 import '../../domain/project/entity_address.dart';
 import '../../domain/project/project_registry.dart';
 import '../../domain/project/registry_event.dart';
+import '../../domain/project/registry_group.dart';
+import '../../domain/project/registry_node.dart';
 import 'registry_mirror.dart';
 
 /// Pumps a [ProjectRegistry]'s lifecycle events into a [RegistryMirror],
@@ -37,11 +39,47 @@ class RegistryMirrorBinder {
     _subscription = registry.events.listen(_forward);
   }
 
+  /// Push a **full sync** of the bound registry to the mirror — every group and
+  /// entity, parents before children — via [RegistryMirror.syncAll]. A no-op
+  /// before the first [bind].
+  ///
+  /// This is the boot / re-init entry point (design `docs/design/live-coding.md`
+  /// §3): the engine calls it once the interpreter is (re)ready — at start, and
+  /// again after a `System` close/init blanks the embedded Python — so the fresh
+  /// name table is repopulated from the current tree. Idempotent: the incremental
+  /// [bind] stream keeps the mirror in step from there.
+  void resync() {
+    final registry = _boundRegistry;
+    if (registry == null) return;
+    _mirror.syncAll(_allAddresses(registry));
+  }
+
   /// Stop mirroring and release the subscription.
   void dispose() {
     _subscription?.cancel();
     _subscription = null;
     _boundRegistry = null;
+  }
+
+  /// Every node address in [registry] across all kinds, in pre-order (a group
+  /// precedes its descendants) so a full sync rebuilds parents first.
+  static List<EntityAddress> _allAddresses(ProjectRegistry registry) {
+    final addresses = <EntityAddress>[];
+    void visit(RegistryNode node, EntityAddress address) {
+      addresses.add(address);
+      if (node is RegistryGroup) {
+        for (final child in node.children) {
+          visit(child, address.child(child.name));
+        }
+      }
+    }
+
+    for (final kind in registry.kinds) {
+      for (final child in registry.childrenOfKind(kind)) {
+        visit(child, EntityAddress(kind: kind, segments: [child.name]));
+      }
+    }
+    return addresses;
   }
 
   void _forward(RegistryEvent event) {

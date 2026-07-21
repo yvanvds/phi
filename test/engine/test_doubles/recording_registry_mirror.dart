@@ -9,6 +9,11 @@ class RecordingRegistryMirror implements RegistryMirror {
   final List<(EntityAddress, EntityAddress)> renames = [];
   final List<(EntityAddress, EntityAddress)> regroups = [];
 
+  /// One entry per [syncAll] (full sync) call — the snapshot of addresses each
+  /// received, so a test can assert the boot / re-init re-sync fired and with
+  /// what tree.
+  final List<List<EntityAddress>> fullSyncs = [];
+
   @override
   void onCreate(EntityAddress address) => creates.add(address);
 
@@ -22,4 +27,8 @@ class RecordingRegistryMirror implements RegistryMirror {
   @override
   void onRegroup(EntityAddress from, EntityAddress to) =>
       regroups.add((from, to));
+
+  @override
+  void syncAll(Iterable<EntityAddress> addresses) =>
+      fullSyncs.add(addresses.toList());
 }
