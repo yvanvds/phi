@@ -1556,6 +1556,31 @@ main + app          (orchestration)
   (`test/engine/python/phi_library_test.dart`) that runs the suite through the
   system Python (skipped only if no interpreter is on PATH; CI's Ubuntu runner
   always has `python3`).
+- **`RegistryMirror` becomes real** (issue #231, live-coding epic, design
+  `docs/design/live-coding.md` §3) — the no-op seam #125 shipped gains a live
+  implementation. `lib/engine/bridge/real_registry_mirror.dart` turns each
+  registry lifecycle change into a `phi._sync_*(...)` script and pushes it
+  through the shared `CodeEvaluator`: `onCreate`/`onDelete`/`onRename`/`onRegroup`
+  map 1:1 onto the library's incremental sync functions (#230), and a new
+  `RegistryMirror.syncAll(addresses)` pushes a full `phi._sync_replace([...])`.
+  Pushes are submitted synchronously in event order onto the same evaluator queue
+  the Code surface runs user blocks on, so a script run right after a rename sees
+  the renamed table. Every kind is forwarded verbatim; the `phi` library now
+  ignores kinds it does not model (`synth.`, …) in its incremental ops too — the
+  same tolerance `_sync_replace` already applied — so the mirror needs no per-kind
+  knowledge. `RegistryMirrorBinder` gains `resync()` (a pre-order snapshot of every
+  node across kinds → `syncAll`), and `PhiEngine` drives it at the **boot** full
+  sync (end of `start`, and again after a `stop → start` re-inits the `System`,
+  blanking the embedded Python — the **re-init re-sync**) and on every
+  `bindProject` swap. Production still wires the `NoOpRegistryMirror`; hanging the
+  real mirror on the shell's live evaluator lands with the real evaluator (#232).
+  Covered by unit tests (the real mirror's emitted script for each op + ordering +
+  a swallowed rejected push; the binder's `resync` traversal), engine wiring tests
+  (boot / re-init / project-swap full syncs, and the real mirror over a fake
+  evaluator emitting the actual `_sync_*` scripts end-to-end), and a Python module
+  (`python/tests/test_mirror_scripts.py`, run by the same Dart harness) that
+  `exec`s the literal mirror-emitted strings — bound-proxy rename-following, the
+  blank-interpreter `_sync_replace` re-sync, and unmodelled-kind tolerance.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

@@ -163,15 +163,23 @@ def _ensure_group(kind, path):
 # The _sync protocol (host -> interpreter; issue #231 drives it)             #
 # --------------------------------------------------------------------------- #
 def _sync_create(address):
-    """Add ``address`` to the table (creating any missing parent groups)."""
+    """Add ``address`` to the table (creating any missing parent groups).
+
+    A kind phi does not model (``synth.``, and anything else outside
+    :data:`NAMESPACES`) is silently ignored, so the host mirror can forward
+    registry events *across all kinds* without knowing which ones phi exposes —
+    the same tolerance :func:`_sync_replace` already applies (issue #231)."""
     kind, path = _split(address)
+    if kind not in _roots:
+        return None
     return _ensure_group(kind, path)
 
 
 def _sync_delete(address):
-    """Remove ``address`` (and its subtree) from the table."""
+    """Remove ``address`` (and its subtree) from the table. A kind phi does not
+    model is ignored (see :func:`_sync_create`)."""
     kind, path = _split(address)
-    if not path:
+    if kind not in _roots or not path:
         return
     parent = _roots[kind]
     for seg in path[:-1]:
@@ -205,6 +213,10 @@ def _move(old_address, new_address):
     old_parent.children.pop(opath[-1], None)
 
     nkind, npath = _split(new_address)
+    if nkind not in _roots:
+        # Moved out of a namespace phi models — the old entry is already
+        # detached, so there is nothing left to add.
+        return None
     new_parent = _ensure_group(nkind, npath[:-1])
     new_parent.children[npath[-1]] = entry
     _rebase(entry, new_address)

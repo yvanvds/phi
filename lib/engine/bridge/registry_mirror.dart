@@ -14,7 +14,8 @@ import '../../domain/project/entity_address.dart';
 ///
 /// A `RegistryMirrorBinder` adapts the registry's neutral event stream onto
 /// this interface, classifying a move into [onRename] (same parent group) or
-/// [onRegroup] (a new parent) — the two distinctions the design calls out.
+/// [onRegroup] (a new parent) — the two distinctions the design calls out, and
+/// snapshots the whole tree through [syncAll].
 abstract interface class RegistryMirror {
   /// A new entity or group appeared at [address].
   void onCreate(EntityAddress address);
@@ -27,4 +28,16 @@ abstract interface class RegistryMirror {
 
   /// The node at [address] — and, for a group, its subtree — was removed.
   void onDelete(EntityAddress address);
+
+  /// Replace the mirror's whole view with exactly [addresses] — every group and
+  /// entity currently in the registry, parents before children.
+  ///
+  /// This is the **full-sync** path the live-coding epic drives at two moments
+  /// (design `docs/design/live-coding.md` §3): the **boot sync** right after the
+  /// `phi` library is bootstrapped into a fresh interpreter, and the
+  /// **re-init re-sync** after a `System` close/init blanks that interpreter —
+  /// the mirror must notice the table went empty and re-push everything. Unlike
+  /// the incremental [onCreate]/[onDelete] events, a full sync is idempotent, so
+  /// re-running it can only converge the interpreter onto the current tree.
+  void syncAll(Iterable<EntityAddress> addresses);
 }

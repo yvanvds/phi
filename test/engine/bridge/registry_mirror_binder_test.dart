@@ -114,6 +114,39 @@ void main() {
     },
   );
 
+  test('resync full-syncs every node across kinds, parents first', () async {
+    binder.bind(registry);
+    registry.createEntity(addr('clip.drums.intro_fill'));
+    registry.createEntity(addr('voice.bells'));
+    await pumpEventQueue();
+
+    binder.resync();
+
+    // One full sync, listing the group before its child and covering both kinds.
+    expect(spy.fullSyncs, hasLength(1));
+    expect(spy.fullSyncs.single, [
+      addr('clip.drums'),
+      addr('clip.drums.intro_fill'),
+      addr('voice.bells'),
+    ]);
+  });
+
+  test('resync before any bind is a no-op', () async {
+    binder.resync();
+    expect(spy.fullSyncs, isEmpty);
+  });
+
+  test('resync after dispose is a no-op', () async {
+    binder.bind(registry);
+    registry.createEntity(addr('clip.lead'));
+    await pumpEventQueue();
+    binder.dispose();
+
+    binder.resync();
+
+    expect(spy.fullSyncs, isEmpty);
+  });
+
   test('dispose detaches: later events do not reach the mirror', () async {
     binder.bind(registry);
     binder.dispose();
@@ -135,6 +168,7 @@ void main() {
       registry.createEntity(addr('clip.lead'));
       registry.move(addr('clip.lead'), addr('clip.melody'));
       registry.remove(addr('clip.melody'));
+      noop.resync();
 
       await expectLater(pumpEventQueue(), completes);
     },
