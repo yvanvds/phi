@@ -10,8 +10,10 @@ import '../../domain/project/lifecycle/project_controller.dart';
 import '../../domain/project/lifecycle/project_directory_picker.dart';
 import '../../domain/session/session_state.dart';
 import '../../domain/session/transport_state.dart';
+import '../../engine/state/metronome_controller.dart';
 import '../project/dirty_indicator.dart';
 import '../project/project_menu.dart';
+import 'metronome_control.dart';
 
 /// Top toolbar — 36px strip.
 ///
@@ -27,10 +29,17 @@ class TopToolbar extends StatelessWidget {
     this.projectController,
     this.directoryPicker,
     this.onOpenSettings,
+    this.metronome,
     super.key,
   });
 
   final SessionState session;
+
+  /// The metronome — the click session on a chosen time domain (issue #262).
+  /// When present the toolbar's domain area hosts the click toggle + popover;
+  /// `null` (a bare Phase-1 widget test, or an engine without a MIDI subsystem)
+  /// keeps the "no time domains yet" placeholder.
+  final MetronomeController? metronome;
 
   /// The project lifecycle controller. When present (and [directoryPicker] is
   /// too), the toolbar shows the project menu and the dirty indicator ahead of
@@ -93,7 +102,14 @@ class TopToolbar extends StatelessWidget {
           const SizedBox(width: PhiSpacing.s5),
           _TransportControls(session: session),
           const SizedBox(width: PhiSpacing.s5),
-          const Expanded(child: _DomainSummary()),
+          Expanded(
+            child: metronome == null
+                ? const _DomainSummary()
+                : Align(
+                    alignment: Alignment.centerLeft,
+                    child: MetronomeControl(controller: metronome!),
+                  ),
+          ),
           const SizedBox(width: PhiSpacing.s4),
           _ProjectionToggle(session: session),
         ],

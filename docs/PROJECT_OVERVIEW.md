@@ -550,6 +550,32 @@ main + app          (orchestration)
   overdub + undo peeling, auto-extend grow/wrap, armed-voice tagging, live ghost),
   a `MidiSurface` record widget test, and an end-to-end `midi_record_arm`
   integration test (arm → play → a played note lands in the clip → undo).
+  Issue #262 adds the **metronome** — the click to record against (design §4).
+  A pure-Dart `ClickPattern` (`lib/domain/metronome/`) generates a one-bar click
+  per meter (`beatsPerBar` + downbeat `accent`) as `ClickBeat`s. A
+  `MetronomeController` (`lib/engine/state/`, ChangeNotifier) turns it into a
+  **click session** built on the ordinary transport machinery: it mints a
+  `MidiTransport` on its own reserved clock (`phi.metronome`), pushes the pattern
+  flattened into `TransportNote`s (looping the meter) and lets the engine
+  dispatch every click — paced from the **bound domain's tempo** (the session
+  tempo when none is bound), so switching the domain, or editing the bound
+  domain's tempo (`refreshDomains`), re-paces the running click without ever
+  re-pushing the note list. The click plays a reserved, seeded **click voice** —
+  a sine synth `PhiEngine` materialises **lazily** on first enable, on a reserved
+  channel routed to master, and connects the click transport to (a project that
+  never clicks pays nothing, and the racks stay untouched). Click state is
+  performance state — enabled / domain / meter / accent / volume — never
+  persisted, so a loaded project starts silent. The toolbar `MetronomeControl`
+  (`lib/shell/top_toolbar/`) replaces the domain-summary placeholder: a click
+  toggle plus a popover (`MetronomePopover`) with a `PhiSelect` over the `domain.`
+  entities, beats-per-bar, the accent toggle, and a volume slider. Covered by
+  `ClickPattern` unit tests (per meter, accent placement), `MetronomeController`
+  unit tests (enable/disable, domain re-binding + tempo re-pacing via
+  beat-position math, meter/accent/volume re-push, click-voice connect), an
+  `engine_metronome` wiring test (lazy click-synth materialisation on master), a
+  `MetronomeControl` widget test (toggle + popover controls), and an end-to-end
+  `metronome_click` integration test (toolbar enable → bind `drum @ 124` →
+  re-pace → change meter → stop).
 - State surface scaffold: pan/zoom canvas (reuses the patcher's 16px
   dot grid backdrop) of rounded-square `PerformanceState` nodes with
   four voice-coloured corner pins, plus directed `StateTransition`
