@@ -664,7 +664,7 @@ class EngineMidiController implements ClipSessionHost {
 
   @override
   GraphEvalContext liveContext() => GraphEvalContext(
-    activeStateId: _stateGraph?.activeStateId,
+    activeState: _stateGraph?.activeStateAddress,
     variables: _runtimeVariables?.snapshot() ?? const {},
   );
 

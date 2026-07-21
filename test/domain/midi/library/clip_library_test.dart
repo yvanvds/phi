@@ -15,7 +15,6 @@ import 'package:phi/domain/midi/store/clip_document.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
 import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/project/project_registry.dart';
-import 'package:phi/domain/state_machine/performance_state_id.dart';
 
 void main() {
   EntityAddress addr(String dotted) => EntityAddress.parse(dotted);
@@ -142,7 +141,7 @@ void main() {
       graph.connect(
         n0.id,
         n1.id,
-        condition: const StateMatchCondition(PerformanceStateId('hot')),
+        condition: StateMatchCondition(EntityAddress.parse('state.hot')),
       );
       registry.createEntity(
         addr('clip.branchy'),
@@ -166,7 +165,9 @@ void main() {
       // The guarded branch survived: closed guard fires only n0 (+12), open
       // fires n0 → n1 (+24).
       const closed = GraphEvalContext.empty();
-      const open = GraphEvalContext(activeStateId: PerformanceStateId('hot'));
+      final open = GraphEvalContext(
+        activeState: EntityAddress.parse('state.hot'),
+      );
       final closedPitches = copiedGraph.evaluate(closed).map((n) => n.pitch);
       final openPitches = copiedGraph.evaluate(open).map((n) => n.pitch);
       expect(closedPitches, [72, 76, 79]);

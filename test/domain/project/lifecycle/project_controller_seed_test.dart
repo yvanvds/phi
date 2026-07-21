@@ -44,6 +44,15 @@ void main() {
         controller.registry.contains(EntityAddress.parse('domain.drum')),
         isTrue,
       );
+      // The default state graph rides the seed too (issue #240).
+      expect(
+        controller.registry.contains(EntityAddress.parse('state.intro')),
+        isTrue,
+      );
+      expect(
+        controller.registry.contains(EntityAddress.parse('state.verse')),
+        isTrue,
+      );
       // Seeding is initial state, not an edit — the project stays clean.
       expect(controller.isDirty.value, isFalse);
     });

@@ -130,7 +130,7 @@ class _TransformGraphCanvasState extends State<TransformGraphCanvas> {
     final (activeEdges, reachable) = _activeSubgraph(graph.edges, ctx);
     final version = Object.hash(
       graph.version,
-      ctx.activeStateId?.value,
+      ctx.activeState?.format(),
       _cursor,
     );
 
@@ -260,7 +260,7 @@ class _TransformGraphCanvasState extends State<TransformGraphCanvas> {
       items: [
         _item('unconditional', const AlwaysCondition()),
         for (final s in states)
-          _item('state · ${s.name}', StateMatchCondition(s.id)),
+          _item('state · ${s.name}', StateMatchCondition(s.address)),
         for (final v in variables)
           for (final value in v.values)
             _item(

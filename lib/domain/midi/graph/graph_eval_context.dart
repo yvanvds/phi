@@ -1,4 +1,4 @@
-import '../../state_machine/performance_state_id.dart';
+import '../../project/entity_address.dart';
 
 /// The runtime facts an [EdgeCondition] consults while a
 /// [MidiTransformGraph] is being evaluated.
@@ -12,15 +12,16 @@ import '../../state_machine/performance_state_id.dart';
 /// so only unconditional edges are taken — that is the "simple linear case"
 /// the graph must keep usable.
 class GraphEvalContext {
-  const GraphEvalContext({this.activeStateId, this.variables = const {}});
+  const GraphEvalContext({this.activeState, this.variables = const {}});
 
   /// No live state, no variables — only [AlwaysCondition] edges fire.
-  const GraphEvalContext.empty() : activeStateId = null, variables = const {};
+  const GraphEvalContext.empty() : activeState = null, variables = const {};
 
-  /// The state-machine state currently "live", mirrored from
-  /// [StateGraph.activeStateId]. `null` when the performance is between
-  /// states or the graph is evaluated in isolation (tests, preview).
-  final PerformanceStateId? activeStateId;
+  /// The `state.` entity address currently "live", mirrored from
+  /// [StateGraph.activeStateAddress] (issue #240). `null` when the
+  /// performance is between states or the graph is evaluated in isolation
+  /// (tests, preview).
+  final EntityAddress? activeState;
 
   /// Named runtime variables the performance exposes. Values are compared by
   /// `==`, so callers should use stable, hashable value types.
@@ -30,7 +31,7 @@ class GraphEvalContext {
   /// don't reach into [variables] directly.
   Object? variable(String name) => variables[name];
 
-  /// Value equality over [activeStateId] and [variables] (entries compared by
+  /// Value equality over [activeState] and [variables] (entries compared by
   /// `==`). Lets [MidiTransformGraph.evaluate] memoise on the live context —
   /// the player evaluates with a fresh context object each tick, so identity
   /// won't do; two contexts with the same live state must count as equal.
@@ -38,7 +39,7 @@ class GraphEvalContext {
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
     if (other is! GraphEvalContext) return false;
-    if (other.activeStateId != activeStateId) return false;
+    if (other.activeState != activeState) return false;
     final a = variables;
     final b = other.variables;
     if (a.length != b.length) return false;
@@ -58,6 +59,6 @@ class GraphEvalContext {
     for (final entry in variables.entries) {
       varsHash ^= Object.hash(entry.key, entry.value);
     }
-    return Object.hash(activeStateId, varsHash);
+    return Object.hash(activeState, varsHash);
   }
 }

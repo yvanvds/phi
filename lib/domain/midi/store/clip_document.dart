@@ -1,3 +1,4 @@
+import '../../project/entity_address.dart';
 import '../graph/midi_transform_graph.dart';
 import '../midi_clip.dart';
 import '../midi_clip_mode.dart';
@@ -81,6 +82,15 @@ class ClipDocument {
   /// Whether playback loops the clip's declared length. On by default; see the
   /// class doc (issue #184, design §7 decision 4).
   final bool loop;
+
+  /// The `state.` entity addresses this clip's graph guards on (issue #240) —
+  /// the clip's outgoing state references. Declared into the registry's
+  /// back-reference index (by [ClipRegistryPublisher]) so delete-impact on a
+  /// state lists the clips branching on it and a state rename can refactor
+  /// them. Empty for a guard-free clip; a dormant graph on a chain-mode clip
+  /// still counts (its guards would break too).
+  Set<EntityAddress> get guardStateReferences =>
+      graph?.guardStateAddresses ?? const {};
 
   /// Flattens the document to a JSON-compatible map. [transformCodec] encodes
   /// the chain / graph node transforms.

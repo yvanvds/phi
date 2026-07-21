@@ -8,7 +8,7 @@ import 'package:phi/domain/midi/midi_clip.dart';
 import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/midi_transform_chain.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
-import 'package:phi/domain/state_machine/performance_state_id.dart';
+import 'package:phi/domain/project/entity_address.dart';
 
 MidiClip _clip(List<int> pitches) => MidiClip(
   bars: 1,
@@ -89,8 +89,8 @@ void main() {
   });
 
   group('MidiTransformGraph — conditional edges', () {
-    const s1 = PerformanceStateId('s1');
-    const s2 = PerformanceStateId('s2');
+    final s1 = EntityAddress.parse('state.s1');
+    final s2 = EntityAddress.parse('state.s2');
 
     MidiTransformGraph buildStateBranch() {
       final graph = MidiTransformGraph(source: _clip([60]));
@@ -98,8 +98,8 @@ void main() {
       final b = graph.addNode(_t(10));
       final c = graph.addNode(_t(20));
       graph.connect(TransformNodeId.source, a.id);
-      graph.connect(a.id, b.id, condition: const StateMatchCondition(s1));
-      graph.connect(a.id, c.id, condition: const StateMatchCondition(s2));
+      graph.connect(a.id, b.id, condition: StateMatchCondition(s1));
+      graph.connect(a.id, c.id, condition: StateMatchCondition(s2));
       return graph;
     }
 
@@ -107,15 +107,11 @@ void main() {
       final graph = buildStateBranch();
 
       expect(
-        graph
-            .evaluate(const GraphEvalContext(activeStateId: s1))
-            .map((n) => n.pitch),
+        graph.evaluate(GraphEvalContext(activeState: s1)).map((n) => n.pitch),
         [71],
       );
       expect(
-        graph
-            .evaluate(const GraphEvalContext(activeStateId: s2))
-            .map((n) => n.pitch),
+        graph.evaluate(GraphEvalContext(activeState: s2)).map((n) => n.pitch),
         [81],
       );
     });
@@ -215,7 +211,7 @@ void main() {
         graph.connect(
           TransformNodeId.source,
           a.id,
-          condition: const StateMatchCondition(PerformanceStateId('x')),
+          condition: StateMatchCondition(EntityAddress.parse('state.x')),
         ),
         isFalse,
       );
@@ -326,7 +322,7 @@ void main() {
     });
 
     test('a changed context recomputes; re-using it re-hits the cache', () {
-      const s1 = PerformanceStateId('s1');
+      final s1 = EntityAddress.parse('state.s1');
       final graph = MidiTransformGraph(source: _clip([60]));
       final node = graph.addNode(_t(5));
       // The only edge is guarded by `s1`, so under the empty context the node
@@ -334,13 +330,13 @@ void main() {
       graph.connect(
         TransformNodeId.source,
         node.id,
-        condition: const StateMatchCondition(s1),
+        condition: StateMatchCondition(s1),
       );
 
       final dark = graph.evaluate(const GraphEvalContext.empty());
       expect(dark.single.pitch, 60);
 
-      const live = GraphEvalContext(activeStateId: s1);
+      final live = GraphEvalContext(activeState: s1);
       final lit = graph.evaluate(live);
       expect(identical(lit, dark), isFalse); // context differs → recompute
       expect(lit.single.pitch, 65); // edge open → +5 applied
@@ -388,13 +384,13 @@ void main() {
     });
 
     test('isLinear is false when any edge is guarded', () {
-      const s1 = PerformanceStateId('s1');
+      final s1 = EntityAddress.parse('state.s1');
       final graph = MidiTransformGraph(source: _clip([60]));
       final node = graph.addNode(_t(5));
       graph.connect(
         TransformNodeId.source,
         node.id,
-        condition: const StateMatchCondition(s1),
+        condition: StateMatchCondition(s1),
       );
       expect(graph.isLinear, isFalse);
     });
@@ -418,7 +414,7 @@ void main() {
     });
 
     test('linearTransforms follows the unconditional path past a branch', () {
-      const s1 = PerformanceStateId('s1');
+      final s1 = EntityAddress.parse('state.s1');
       final graph = MidiTransformGraph(source: _clip([60]));
       // Main spine: source → +5 (unconditional).
       final main = graph.addNode(_t(5));
@@ -428,7 +424,7 @@ void main() {
       graph.connect(
         TransformNodeId.source,
         branch.id,
-        condition: const StateMatchCondition(s1),
+        condition: StateMatchCondition(s1),
       );
 
       expect(graph.isLinear, isFalse);

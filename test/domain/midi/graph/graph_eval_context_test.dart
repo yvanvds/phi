@@ -1,22 +1,22 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/midi/graph/graph_eval_context.dart';
-import 'package:phi/domain/state_machine/performance_state_id.dart';
+import 'package:phi/domain/project/entity_address.dart';
 
 void main() {
   group('GraphEvalContext value equality', () {
-    const s1 = PerformanceStateId('s1');
-    const s2 = PerformanceStateId('s2');
+    final s1 = EntityAddress.parse('state.intro');
+    final s2 = EntityAddress.parse('state.verse');
 
     test('two contexts with the same live state and vars are equal', () {
-      const a = GraphEvalContext(activeStateId: s1, variables: {'x': 1});
-      const b = GraphEvalContext(activeStateId: s1, variables: {'x': 1});
+      final a = GraphEvalContext(activeState: s1, variables: const {'x': 1});
+      final b = GraphEvalContext(activeState: s1, variables: const {'x': 1});
       expect(a, b);
       expect(a.hashCode, b.hashCode);
     });
 
     test('a different live state is not equal', () {
-      const a = GraphEvalContext(activeStateId: s1);
-      const b = GraphEvalContext(activeStateId: s2);
+      final a = GraphEvalContext(activeState: s1);
+      final b = GraphEvalContext(activeState: s2);
       expect(a, isNot(b));
     });
 

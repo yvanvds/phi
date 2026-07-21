@@ -385,15 +385,13 @@ void main() {
     test('a state-guarded branch re-pushes as the state flips', () {
       fakeAsync((async) {
         const brk = PerformanceStateId('break');
-        final stateGraph = StateGraph()
-          ..addState(
-            PerformanceState(
-              id: brk,
-              name: 'break',
-              voice: 3,
-              position: Offset.zero,
-            ),
-          );
+        final breakState = PerformanceState(
+          id: brk,
+          name: 'break',
+          voice: 3,
+          position: Offset.zero,
+        );
+        final stateGraph = StateGraph()..addState(breakState);
         final gateway = FakeMidiGateway();
         final controller = EngineMidiController(
           chain: oneNoteChain(),
@@ -414,10 +412,12 @@ void main() {
           const TransposeTransform(semitones: 12, label: 'branch · +12'),
           const Offset(200, 360),
         );
+        // Guard on the state's entity address — what the canvas picker
+        // authors since issue #240.
         graph.connect(
           TransformNodeId.source,
           branch.id,
-          condition: const StateMatchCondition(brk),
+          condition: StateMatchCondition(breakState.address),
         );
         graph.mode = MidiClipMode.graph;
 

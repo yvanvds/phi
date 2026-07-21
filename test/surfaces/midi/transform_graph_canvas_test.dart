@@ -56,7 +56,7 @@ void main() {
             child: TransformGraphCanvas(
               controller: controller,
               evalContext: GraphEvalContext(
-                activeStateId: states.graph.activeStateId,
+                activeState: states.graph.activeStateAddress,
                 variables: variables.snapshot(),
               ),
               stateGraph: states.graph,
@@ -159,7 +159,11 @@ void main() {
     final edge = controller.graph.edges.firstWhere(
       (e) => e.fromId == TransformNodeId.source && e.toId == n0,
     );
-    expect(edge.condition, StateMatchCondition(states.graph.states.first.id));
+    // The picker authors the guard on the state's entity address (issue #240).
+    expect(
+      edge.condition,
+      StateMatchCondition(states.graph.states.first.address),
+    );
   });
 
   testWidgets('tapping a cable assigns a runtime-variable condition', (

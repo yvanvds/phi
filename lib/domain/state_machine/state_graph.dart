@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../project/entity_address.dart';
 import 'performance_state.dart';
 import 'performance_state_id.dart';
 import 'state_transition.dart';
@@ -38,6 +39,13 @@ class StateGraph extends ChangeNotifier {
   /// The state currently "live" — exactly one (or none) at a time. The
   /// node renders the fuchsia `● LIVE` capsule when its id matches.
   PerformanceStateId? get activeStateId => _activeStateId;
+
+  /// The live state's `state.` entity address ([PerformanceState.address]),
+  /// or `null` when no state is live — what the MIDI graph's
+  /// `GraphEvalContext.activeState` mirrors so address-based guards evaluate
+  /// against the live state (issue #240).
+  EntityAddress? get activeStateAddress =>
+      _activeStateId == null ? null : _states[_activeStateId]?.address;
 
   PerformanceState? stateById(PerformanceStateId id) => _states[id];
 

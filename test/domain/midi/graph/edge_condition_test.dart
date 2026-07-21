@@ -3,7 +3,7 @@ import 'package:phi/domain/midi/graph/always_condition.dart';
 import 'package:phi/domain/midi/graph/graph_eval_context.dart';
 import 'package:phi/domain/midi/graph/runtime_variable_condition.dart';
 import 'package:phi/domain/midi/graph/state_match_condition.dart';
-import 'package:phi/domain/state_machine/performance_state_id.dart';
+import 'package:phi/domain/project/entity_address.dart';
 
 void main() {
   group('AlwaysCondition', () {
@@ -12,7 +12,7 @@ void main() {
       expect(c.isSatisfiedBy(const GraphEvalContext.empty()), isTrue);
       expect(
         c.isSatisfiedBy(
-          const GraphEvalContext(activeStateId: PerformanceStateId('s')),
+          GraphEvalContext(activeState: EntityAddress.parse('state.intro')),
         ),
         isTrue,
       );
@@ -25,29 +25,20 @@ void main() {
   });
 
   group('StateMatchCondition', () {
-    const s1 = PerformanceStateId('s1');
-    const s2 = PerformanceStateId('s2');
+    final s1 = EntityAddress.parse('state.intro');
+    final s2 = EntityAddress.parse('state.break_down');
 
     test('is satisfied only when its state is live', () {
-      const c = StateMatchCondition(s1);
-      expect(
-        c.isSatisfiedBy(const GraphEvalContext(activeStateId: s1)),
-        isTrue,
-      );
-      expect(
-        c.isSatisfiedBy(const GraphEvalContext(activeStateId: s2)),
-        isFalse,
-      );
+      final c = StateMatchCondition(s1);
+      expect(c.isSatisfiedBy(GraphEvalContext(activeState: s1)), isTrue);
+      expect(c.isSatisfiedBy(GraphEvalContext(activeState: s2)), isFalse);
       expect(c.isSatisfiedBy(const GraphEvalContext.empty()), isFalse);
     });
 
-    test('labels with the state id and has value equality', () {
-      expect(const StateMatchCondition(s1).label, 'state · s1');
-      expect(const StateMatchCondition(s1), const StateMatchCondition(s1));
-      expect(
-        const StateMatchCondition(s1) == const StateMatchCondition(s2),
-        isFalse,
-      );
+    test('labels with the state leaf name and has value equality', () {
+      expect(StateMatchCondition(s1).label, 'state · intro');
+      expect(StateMatchCondition(s1), StateMatchCondition(s1));
+      expect(StateMatchCondition(s1) == StateMatchCondition(s2), isFalse);
     });
   });
 

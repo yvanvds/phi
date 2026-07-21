@@ -1,11 +1,13 @@
 import 'package:flutter/foundation.dart';
 
+import '../../project/entity_address.dart';
 import '../midi_clip.dart';
 import '../midi_note.dart';
 import '../midi_transform.dart';
 import 'always_condition.dart';
 import 'edge_condition.dart';
 import 'graph_eval_context.dart';
+import 'state_match_condition.dart';
 import 'transform_edge.dart';
 import 'transform_node.dart';
 import 'transform_node_id.dart';
@@ -157,6 +159,40 @@ class MidiTransformGraph extends ChangeNotifier {
   /// Signals that the source clip's contents changed underneath the graph
   /// (e.g. a file import mutated it in place). Bumps [version] and notifies.
   void notifySourceChanged() => _bump();
+
+  // ─── state guards (issue #240) ─────────────────────────────────────────────
+
+  /// Every `state.` entity address guarded on by a [StateMatchCondition] edge
+  /// — the clip's outgoing state references, feeding the registry's
+  /// back-reference index so delete-impact on a state lists the clips
+  /// branching on it.
+  Set<EntityAddress> get guardStateAddresses => {
+    for (final e in _edges)
+      if (e.condition case StateMatchCondition(:final state)) state,
+  };
+
+  /// Repoints every [StateMatchCondition] guard on [from] to [to] — the
+  /// rename-refactor step for `state.` entities: when a state renames, its
+  /// guards follow (design state-graph §3; the registry-backed wiring lands
+  /// with issue #241). Returns whether any edge changed; bumps [version] and
+  /// notifies once when so.
+  bool repointGuardState(EntityAddress from, EntityAddress to) {
+    var changed = false;
+    for (var i = 0; i < _edges.length; i++) {
+      final edge = _edges[i];
+      final condition = edge.condition;
+      if (condition is StateMatchCondition && condition.state == from) {
+        _edges[i] = TransformEdge(
+          fromId: edge.fromId,
+          toId: edge.toId,
+          condition: StateMatchCondition(to),
+        );
+        changed = true;
+      }
+    }
+    if (changed) _bump();
+    return changed;
+  }
 
   /// Drop every node and edge, leaving just the implicit source. Used before
   /// re-seeding the graph from a chain on a chain→graph conversion (issue #77).
