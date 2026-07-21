@@ -233,7 +233,22 @@ main + app          (orchestration)
   `CodeScriptCodec`), controller, and `CodeLibraryPanel` widget tests, plus an
   end-to-end `code_library` integration test (scratch shows → add a script →
   type → save → a second launch restores the source verbatim; selection swaps
-  the editor content).
+  the editor content). Issue #236 adds **registry-driven completion** (no LSP):
+  a pure-Dart `PhiCompletionResolver` (`lib/domain/code/completion/`) turns the
+  text left of the cursor into rows — a `phi` namespace + dot (`voice.`) lists
+  that kind's entities and groups from the live registry (Phi-flavoured: voice
+  colour tokens, clip bar-lengths, group markers), a group dot (`clip.drums.`)
+  narrows to its members, and an entity dot (`voice.bells.`) offers a **static
+  method table** (`phiMethodTable`, a checked-in artifact mirroring the `phi`
+  library's `_VERB_NAMES`, guarded by a drift test); a non-`phi` line resolves to
+  `null` so plain Python typing is untouched. It hosts in `re_editor`'s
+  autocomplete hook via a `PhiCompletionPromptsBuilder` + a `PhiCompletionListView`
+  overlay (`lib/surfaces/code/completion/`, keyboard nav + identifier-only
+  insertion), wired into `CodeEditorView` from the engine's live registry.
+  Covered by resolver unit tests, the drift guard, prompts-builder / list-view /
+  editor-wiring widget tests, and an end-to-end `code_completion` integration
+  test (real seeded project → each namespace resolves its real entities, a leaf
+  the method table, a plain line nothing).
 - MIDI surface — editable piano roll plus a 250px transformation-chain
   sidebar of eight chips. Domain in `lib/domain/midi/`: pure-Dart
   `MidiNote` / `MidiClip` (now **mutable**) / `MidiTransform` +

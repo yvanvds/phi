@@ -5,6 +5,7 @@ import 'package:re_editor/re_editor.dart';
 
 import '../../design/tokens/phi_colors.dart';
 import '../../domain/code/python_traceback.dart';
+import '../../domain/project/project_registry.dart';
 import '../../domain/session/session_state.dart';
 import '../../engine/bridge/code_evaluator.dart';
 import '../../engine/engine.dart';
@@ -40,6 +41,7 @@ class CodeSurface extends Surface {
     required this.session,
     required this.evaluator,
     this.libraryController,
+    this.registry,
     String? seedSource,
     super.key,
   }) : _seedSource = seedSource;
@@ -47,6 +49,11 @@ class CodeSurface extends Surface {
   final PhiEngine engine;
   final SessionState session;
   final CodeEvaluator evaluator;
+
+  /// The registry the completion popup reads (design §6). Defaults to the
+  /// engine's live registry (bound to the open project); an explicit registry is
+  /// mostly a test seam.
+  final ProjectRegistry? registry;
 
   /// Drives the script library panel + the open-script editor swap. `null` in
   /// the bare Phase-1 path (no project); then the editor is a single seeded
@@ -61,6 +68,7 @@ class CodeSurface extends Surface {
       session: session,
       evaluator: evaluator,
       libraryController: libraryController,
+      registry: registry ?? engine.mixRegistry,
       seedSource: _seedSource ?? codeSurfaceSeed,
     );
   }
@@ -71,12 +79,14 @@ class _CodeViewport extends StatefulWidget {
     required this.session,
     required this.evaluator,
     required this.libraryController,
+    required this.registry,
     required this.seedSource,
   });
 
   final SessionState session;
   final CodeEvaluator evaluator;
   final CodeLibraryController? libraryController;
+  final ProjectRegistry registry;
   final String seedSource;
 
   @override
@@ -236,6 +246,7 @@ class _CodeViewportState extends State<_CodeViewport> {
                 evaluator: widget.evaluator,
                 flash: _flash,
                 fresh: _fresh,
+                registry: widget.registry,
                 onEvaluated: _onBlockEvaluated,
               );
             },
