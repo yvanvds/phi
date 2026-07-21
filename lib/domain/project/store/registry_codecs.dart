@@ -1,3 +1,4 @@
+import '../../code/code_script_codec.dart';
 import '../../fx/fx_codec.dart';
 import '../../midi/midi_clip_codec.dart';
 import '../../mix/mix_strip_codec.dart';
@@ -23,6 +24,7 @@ Map<String, EntityPayloadCodec> defaultEntityCodecs() => const {
   RegistryKinds.synth: SynthCodec(),
   RegistryKinds.fx: FxCodec(),
   RegistryKinds.patch: PatchCodec(),
+  RegistryKinds.code: CodeScriptCodec(),
 };
 
 /// The kinds whose *groups* carry a persisted payload in `_group.json` (issue

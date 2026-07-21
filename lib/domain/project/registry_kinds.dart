@@ -29,4 +29,10 @@ abstract final class RegistryKinds {
   /// Node-and-cable patchers — `patch.` entities whose payload is the engine
   /// dump (patcher epic, `docs/design/patcher.md` §3).
   static const String patch = 'patch';
+
+  /// Live-coding scripts — `code.` entities whose payload is the source text
+  /// (live-coding epic, `docs/design/live-coding.md` §5). Scripts are authored,
+  /// not addressed from within a script, so the `phi` library models no `code`
+  /// namespace — the registry mirror silently ignores the kind.
+  static const String code = 'code';
 }

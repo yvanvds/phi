@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/domain/code/code_script.dart';
+import 'package:phi/domain/code/code_script_seed.dart';
 import 'package:phi/domain/midi/store/clip_document.dart';
 import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/project/project_registry.dart';
@@ -51,6 +53,20 @@ void main() {
       seedDefaultProject(registry);
 
       expect(registry.childrenOfKind('mix'), isEmpty);
+    });
+
+    test('seeds the scratch script under the code namespace (#235)', () {
+      final registry = ProjectRegistry();
+      addTearDown(registry.dispose);
+
+      seedDefaultProject(registry);
+
+      final scratch = registry.entityAt(EntityAddress.parse('code.scratch'));
+      expect(scratch, isNotNull);
+      final source = CodeScript.fromJson(
+        scratch!.payload! as Map<String, Object?>,
+      ).source;
+      expect(source, codeScratchSource);
     });
 
     test('seeds the default voice → synth.sine → master (#205)', () {

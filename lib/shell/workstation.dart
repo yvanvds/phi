@@ -20,6 +20,7 @@ import '../engine/bridge/dx7_fm_bank_reader.dart';
 import '../engine/bridge/no_op_code_evaluator.dart';
 import '../engine/engine.dart';
 import '../engine/state/clip_library_controller.dart';
+import '../engine/state/code_library_controller.dart';
 import '../engine/state/rack_definitions_controller.dart';
 import '../engine/state/voice_audition_controller.dart';
 import '../surfaces/code/code_surface.dart';
@@ -188,6 +189,12 @@ class _WorkstationState extends State<Workstation> {
   /// rebound alongside the engine whenever New / Open swaps the registry.
   ClipLibraryController? _libraryController;
 
+  /// Drives the Code surface's script library panel (issue #235) — the `code.`
+  /// tree, selection (open-script swap), context menu, drag, and journaled edits.
+  /// Built whenever a project controller supplies the registry (no engine
+  /// dependency); rebound whenever New / Open swaps the registry.
+  CodeLibraryController? _codeLibraryController;
+
   /// Drives the Racks surface's definitions panel (issue #209) — the `synth.` /
   /// `fx.` trees, selection routing to the editor pane, and the voices scaffold.
   /// Built only when a project controller supplies the registry (no engine
@@ -327,6 +334,12 @@ class _WorkstationState extends State<Workstation> {
         transformCodec: MidiTransformCodec(customRegistry: _customTransforms),
       );
     }
+    // The Code surface's script library reads the same registry — no engine
+    // dependency, so build it whenever a project supplies the registry (#235).
+    _codeLibraryController = CodeLibraryController(
+      registry: controller.registry,
+      recordCommand: controller.recordCommand,
+    );
     // The Racks definitions panel reads the same registry — no MIDI dependency,
     // so build it whenever a project supplies the registry (issue #209).
     _rackDefinitions = RackDefinitionsController(
@@ -378,6 +391,10 @@ class _WorkstationState extends State<Workstation> {
     // The library panel reads the same registry — rebind it too so a New / Open
     // that swaps the registry re-points the clip tree.
     _libraryController?.rebind(
+      registry: controller.registry,
+      recordCommand: controller.recordCommand,
+    );
+    _codeLibraryController?.rebind(
       registry: controller.registry,
       recordCommand: controller.recordCommand,
     );
@@ -452,6 +469,7 @@ class _WorkstationState extends State<Workstation> {
     widget.projectController?.removeListener(_bindEngineRegistry);
     widget.projectController?.layoutRestored.removeListener(_onLayoutRestored);
     _libraryController?.dispose();
+    _codeLibraryController?.dispose();
     _rackDefinitions?.dispose();
     _voiceAudition?.dispose();
     _exitListener?.dispose();
@@ -681,6 +699,7 @@ class _WorkstationState extends State<Workstation> {
           engine: widget.engine,
           session: widget.session,
           evaluator: _codeEvaluator,
+          libraryController: _codeLibraryController,
         );
       case SurfaceId.midi:
         return MidiSurface(
