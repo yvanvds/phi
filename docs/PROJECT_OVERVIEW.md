@@ -530,8 +530,26 @@ main + app          (orchestration)
   as a new note), drops orphan note-offs, and commits **each loop pass as one
   batch** through the ordinary clip-edit command layer (a bare `AddNoteCommand`,
   or a `CompositeClipCommand` for a multi-note pass) so Ctrl+Z removes a whole
-  pass. Pure-domain, unit-tested against a fake keyboard + fake clock; not yet
-  wired anywhere (record arm + transport-row flow is #261).
+  pass. Pure-domain, unit-tested against a fake keyboard + fake clock.
+  Issue #261 wires it into the editor as the **record arm + capture flow**: a
+  `RecordController` (`lib/engine/state/`, ChangeNotifier) holds the record-arm
+  flag (performance state, never persisted) and drives a `TakeRecorder` against
+  the edited session through a small `RecordTarget` seam (which `ClipSession`
+  implements — source clip · undo scope · `autoExtend` · address · play-relative
+  beat). It subscribes to the gateway's parsed MIDI-in, so **arm + play** starts
+  a take, **arming while playing** punches in, and **stop or disarm** ends it
+  (keeping the notes); each finished pass commits through the clip's `UndoScope`
+  so the ordinary revision bump refreshes the ghost / re-pushes playback live and
+  Ctrl+Z peels passes newest-first. The engine's frame ticker fires the pass
+  boundary: with **auto-extend off** the loop wraps and passes overdub; **on**,
+  the clip grows to contain the take (the length grow journaled *with* the notes,
+  one undo). Recorded notes carry the racks audition path's **armed voice**
+  (monitoring is that same path — no extra plumbing). A record button joins the
+  editor transport row (`ClipTransportRow`), lit while armed/recording. Covered
+  by `RecordController` unit tests (fake session/clock/input — arm+play, punch-in,
+  overdub + undo peeling, auto-extend grow/wrap, armed-voice tagging, live ghost),
+  a `MidiSurface` record widget test, and an end-to-end `midi_record_arm`
+  integration test (arm → play → a played note lands in the clip → undo).
 - State surface scaffold: pan/zoom canvas (reuses the patcher's 16px
   dot grid backdrop) of rounded-square `PerformanceState` nodes with
   four voice-coloured corner pins, plus directed `StateTransition`

@@ -25,6 +25,7 @@ import '../bridge/scene_agent_sink.dart';
 import 'clip_session.dart';
 import 'clip_session_host.dart';
 import 'midi_graph_controller.dart';
+import 'record_controller.dart';
 
 /// Engine-side **session manager** for the MIDI surface (issue #186).
 ///
@@ -94,9 +95,23 @@ class EngineMidiController implements ClipSessionHost {
     );
     _sessions[null] = session;
     _editedSession = session;
+    // Record arm + capture flow (issue #261): drives a TakeRecorder against the
+    // *edited* session off the gateway's parsed MIDI-in. The armed voice it tags
+    // notes with is the racks audition path's, wired in by the shell.
+    _record = RecordController(
+      input: _gateway.inputEvents,
+      target: () => _editedSession,
+    );
   }
 
   final MidiGateway _gateway;
+
+  late final RecordController _record;
+
+  /// The record arm + capture flow for the edited session (issue #261). The
+  /// transport row's record button drives its [RecordController.toggleArm]; the
+  /// shell wires its [RecordController.armedVoice] to the racks audition path.
+  RecordController get record => _record;
 
   /// Optional Scene sink. When wired and a playing session's chain carries an
   /// active spawn transform, each note-on spawns a live agent (issue #37). `null`
@@ -233,6 +248,7 @@ class EngineMidiController implements ClipSessionHost {
   /// ticker. No-op if already playing.
   void play() {
     _editedSession.play();
+    _record.onTransportPlay();
     _syncTicker();
   }
 
@@ -241,6 +257,9 @@ class EngineMidiController implements ClipSessionHost {
   /// continues mid-loop. Idles the ticker if nothing else needs it. No-op unless
   /// playing.
   void pause() {
+    // End any take before the clock freezes, so held notes close at the real
+    // beat (§3: pause ends the take, keeping its notes).
+    _record.onTransportStop();
     if (!_editedSession.pause()) return;
     _syncTicker();
   }
@@ -249,6 +268,7 @@ class EngineMidiController implements ClipSessionHost {
   /// unless paused.
   void resume() {
     if (!_editedSession.resume()) return;
+    _record.onTransportPlay();
     _syncTicker();
   }
 
@@ -257,6 +277,9 @@ class EngineMidiController implements ClipSessionHost {
   /// clips and the scene demo are untouched — stopping a clip clears only its
   /// own agents (design §4).
   void stop() {
+    // End any take first — the recorder must close held notes at the current
+    // beat before [ClipSession.stop] rewinds the transport to the top.
+    _record.onTransportStop();
     if (!_editedSession.stop()) return;
     _syncTicker();
   }
@@ -780,6 +803,9 @@ class EngineMidiController implements ClipSessionHost {
       session.applyTempo();
       session.advance(dtSeconds);
     }
+    // Fire a recording pass boundary when the edited transport crosses the loop
+    // end (issue #261) — after advancing, so it reads the latest beat.
+    _record.tick();
     // Advance the shared field once per frame — playing or not, so drift and grab
     // pulls integrate on the one ticker.
     _stepField(dtSeconds);
@@ -803,6 +829,7 @@ class EngineMidiController implements ClipSessionHost {
   void dispose() {
     _timer?.cancel();
     _timer = null;
+    _record.dispose();
     for (final timer in _previewTimers) {
       timer.cancel();
     }

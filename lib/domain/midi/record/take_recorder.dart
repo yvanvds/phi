@@ -86,6 +86,11 @@ class TakeRecorder {
   /// notes waiting on the next pass boundary.
   bool get hasPendingNotes => _pass.isNotEmpty || _held.isNotEmpty;
 
+  /// Whether any note is currently held (a note-on awaiting its note-off) — so
+  /// the recording flow (issue #261) can tell whether a [stop] will close a note
+  /// at the current beat, and grow an auto-extending clip to contain it.
+  bool get hasHeldNotes => _held.isNotEmpty;
+
   /// Begin a take. Clears any prior capture state. A no-op while already
   /// recording (arming again mid-take does not restart the pass).
   void start() {

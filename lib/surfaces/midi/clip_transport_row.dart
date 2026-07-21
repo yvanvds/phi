@@ -22,6 +22,9 @@ class ClipTransportControls {
     required this.onPause,
     required this.onStop,
     required this.onToggleLoop,
+    this.isArmed = false,
+    this.isRecording = false,
+    this.onToggleRecordArm,
   });
 
   final bool isPlaying;
@@ -31,6 +34,16 @@ class ClipTransportControls {
   final VoidCallback onPause;
   final VoidCallback onStop;
   final VoidCallback onToggleLoop;
+
+  /// Whether record is armed — the record button lights (issue #261).
+  final bool isArmed;
+
+  /// Whether a take is currently being captured — the record button also lights.
+  final bool isRecording;
+
+  /// Toggle the record arm, or `null` when no recording flow is wired (a bare
+  /// setup); the record button is then hidden.
+  final VoidCallback? onToggleRecordArm;
 }
 
 /// The editor header's **transport + length row** (issue #190, design §5): the
@@ -67,6 +80,7 @@ class ClipTransportRow extends StatelessWidget {
   static const Key barsFieldKey = Key('ClipTransportRow.bars');
   static const Key beatsPerBarFieldKey = Key('ClipTransportRow.beatsPerBar');
   static const Key autoExtendKey = Key('ClipTransportRow.autoExtend');
+  static const Key recordArmKey = Key('ClipTransportRow.record');
   static const Key playKey = Key('ClipTransportRow.play');
   static const Key pauseKey = Key('ClipTransportRow.pause');
   static const Key stopKey = Key('ClipTransportRow.stop');
@@ -105,6 +119,20 @@ class ClipTransportRow extends StatelessWidget {
         ),
         const Spacer(),
         if (controls != null) ...[
+          if (controls.onToggleRecordArm != null) ...[
+            TransportButton(
+              key: recordArmKey,
+              icon: Icons.fiber_manual_record,
+              tooltip: controls.isRecording
+                  ? 'recording — stop or disarm to end'
+                  : controls.isArmed
+                  ? 'armed — click to disarm'
+                  : 'arm record',
+              isActive: controls.isArmed || controls.isRecording,
+              onPressed: controls.onToggleRecordArm!,
+            ),
+            const SizedBox(width: 6),
+          ],
           TransportButton(
             key: playKey,
             icon: Icons.play_arrow,

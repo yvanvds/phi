@@ -96,6 +96,10 @@ class MidiSurface extends Surface {
   Widget build(BuildContext context) {
     final library = _libraryController;
     if (library == null) return _viewport();
+    // The record arm + capture flow for the edited session (issue #261); its arm
+    // / recording state lights the transport row's record button. `null` in
+    // setups without a MIDI subsystem — the record button is then hidden.
+    final record = _engine.midiOrNull?.record;
     // With a library controller the roll binds to the *edited* session, so a
     // clip selection swaps it. The panel persists across selections (it sits
     // outside the keyed viewport); the viewport is rebuilt on every controller
@@ -107,7 +111,9 @@ class MidiSurface extends Surface {
         LibraryPanel(controller: library),
         Expanded(
           child: ListenableBuilder(
-            listenable: library,
+            listenable: record == null
+                ? library
+                : Listenable.merge([library, record]),
             builder: (context, _) {
               final session = library.sessions.editedSession;
               final address = session.address;
@@ -137,6 +143,9 @@ class MidiSurface extends Surface {
                   onPause: library.pauseEdited,
                   onStop: library.stopEdited,
                   onToggleLoop: library.toggleEditedLoop,
+                  isArmed: record?.armed ?? false,
+                  isRecording: record?.isRecording ?? false,
+                  onToggleRecordArm: record?.toggleArm,
                 ),
               );
             },
