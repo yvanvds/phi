@@ -443,6 +443,38 @@ class EngineMidiController implements ClipSessionHost {
     if (acted) _syncTicker();
   }
 
+  /// Panic — the MIDI half of the shell-wide stop-everything (issue #264, design
+  /// `docs/design/midi-recording.md` §6). In order:
+  ///
+  /// 1. end any armed take **keeping its notes** (the held notes close at the
+  ///    current beat and commit as authored content, exactly as a stop does) —
+  ///    done *before* the transports rewind so the close reads the real beat;
+  /// 2. abort a running count-in (it started nothing yet);
+  /// 3. stop every clip session — playing or paused — each rewinding and clearing
+  ///    its own scene agents;
+  /// 4. all-notes-off the external MIDI-out port and every materialised voice
+  ///    synth — the belt-and-braces silence beyond the per-session stop, reaching
+  ///    a held audition note (arm-for-input / test strip) the transport never
+  ///    dispatched; and
+  /// 5. clear every remaining live scene agent — the whole field, not just the
+  ///    playing sessions' bands, so pending spawns despawn.
+  ///
+  /// Idempotent — every step no-ops when there is nothing to undo, so a
+  /// double-panic changes nothing. Effect volumes (placement, not notes) survive.
+  void panic() {
+    _record.onTransportStop();
+    _abortCountIn();
+    for (final session in _sessions.values) {
+      session.stop();
+    }
+    _gateway.allNotesOff();
+    for (final synth in _voiceSynths.values) {
+      synth.allNotesOff();
+    }
+    _clearAgents();
+    _syncTicker();
+  }
+
   /// Apply [action] to every open session whose address is [group] or nests
   /// beneath it, then re-sync the ticker once. A group holds only descendants;
   /// the boot session (`null` address) is never part of a group.

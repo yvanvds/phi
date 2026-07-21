@@ -105,6 +105,9 @@ class RealMaterialisedSynth implements MaterialisedSynth {
   void noteOff(int note) => _synth.noteOff(note, channel: channel);
 
   @override
+  void allNotesOff() => _synth.allNotesOff();
+
+  @override
   void dispose() {
     // Sound before synth: the audio thread renders the synth's voices *through*
     // the sound, so the sound must be gone first.

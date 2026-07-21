@@ -23,6 +23,7 @@ void main() {
     onCycleTabForward: () => fired.add('next'),
     onCycleTabBackward: () => fired.add('prev'),
     onOpenCommandPalette: () => fired.add('palette'),
+    onPanic: () => fired.add('panic'),
     onSaveProject: () => fired.add('save'),
   );
 
@@ -85,6 +86,19 @@ void main() {
     expect(byId(commands, 'project.save').shortcut!.label, 'Ctrl+S');
   });
 
+  test('panic is a permanent Transport command on F12', () {
+    final commands = build();
+    final panic = byId(commands, 'transport.panic');
+    expect(panic.category, 'Transport');
+    // Always enabled — panic is safe to run at any time (idempotent), unlike
+    // play/stop which gate on the transport state.
+    expect(panic.isEnabled, isTrue);
+    expect(panic.shortcut!.label, 'F12');
+    // Invoking it routes through the one `onPanic` callback the button shares.
+    panic.invoke();
+    expect(fired, ['panic']);
+  });
+
   test('the assembled default map is conflict-free', () {
     final registry = CommandRegistry()..registerAll(build());
     addTearDown(registry.dispose);
@@ -92,8 +106,9 @@ void main() {
     // claimed the same chord.
     final bindings = registry.shortcutBindings();
 
-    // 7 surfaces + undo + redo(+Y) + nextTab + prevTab + palette(+F1) + save.
-    expect(bindings, hasLength(7 + 1 + 2 + 1 + 1 + 2 + 1));
+    // 7 surfaces + undo + redo(+Y) + nextTab + prevTab + palette(+F1) + panic(F12)
+    // + save.
+    expect(bindings, hasLength(7 + 1 + 2 + 1 + 1 + 2 + 1 + 1));
   });
 
   test('a folded-in chord routes through the same callback as the palette', () {
