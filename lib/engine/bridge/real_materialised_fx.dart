@@ -3,6 +3,7 @@ import 'package:yse/yse.dart';
 import '../../domain/fx/fx_definition.dart';
 import '../../domain/fx/fx_kind.dart';
 import 'materialised_fx.dart';
+import 'patcher_insert_source.dart';
 
 /// Production [MaterialisedFx] backed by `package:yse` (design
 /// `docs/design/racks-and-voices.md` §5).
@@ -31,14 +32,31 @@ import 'materialised_fx.dart';
 ///   `grainTranspose` (ratio), `gain`;
 /// - `compressor`: `threshold` (dB), `ratio`, `attack` (ms), `release` (ms),
 ///   `makeup` (dB);
-/// - `patcherInsert`: reserved — builds **no** object ([isPlaceable] is
-///   `false`) until the patcher epic wires it (design §5).
+/// - `patcherInsert`: builds a `DspObject.patcherInsert` that **borrows** the
+///   live native [Patcher] for the definition's wrapped `patch.` entity —
+///   resolved through the [PatcherInsertSource] from the [patchInstanceId] the
+///   [PatchReconciler] handed the gateway (design `docs/design/patcher.md` §4
+///   role 2, issue #225). Placeable only when both are present *and* the patcher
+///   still exists; otherwise it builds no object ([isPlaceable] is `false`) and a
+///   chain skips it until a later re-sync resolves it. The inherited control
+///   surface (`impact` / `bypass`) still applies. Because the insert borrows the
+///   editor's *own* native patcher, edits to the patch are heard live through it.
 class RealMaterialisedFx implements MaterialisedFx {
-  /// Builds the engine effect for [definition] and applies its params.
-  RealMaterialisedFx(this._definition) {
+  /// Builds the engine effect for [definition] and applies its params. For a
+  /// [FxKind.patcherInsert] the patcher is resolved from [patchInstanceId]
+  /// through [patcherInsertSource] (both `null` for every other kind).
+  RealMaterialisedFx(
+    this._definition, {
+    PatcherInsertSource? patcherInsertSource,
+    int? patchInstanceId,
+  }) : _patcherInsertSource = patcherInsertSource,
+       _patchInstanceId = patchInstanceId {
     _dsp = _build(_definition);
     if (_dsp != null) _applyParams(_dsp!, _definition);
   }
+
+  final PatcherInsertSource? _patcherInsertSource;
+  final int? _patchInstanceId;
 
   FxDefinition _definition;
   DspObject? _dsp;
@@ -53,7 +71,8 @@ class RealMaterialisedFx implements MaterialisedFx {
   bool get isPlaceable => _dsp != null;
 
   /// The live engine effect, for the [RealFxChain] that links it. `null` for a
-  /// reserved `patcherInsert`. Not part of the yse-free surface.
+  /// `patcherInsert` whose patcher did not resolve (non-placeable). Not part of
+  /// the yse-free surface.
   DspObject? get dspObject => _dsp;
 
   @override
@@ -89,9 +108,19 @@ class RealMaterialisedFx implements MaterialisedFx {
     FxKind.difference => DspObject.difference(),
     FxKind.granulator => DspObject.granulator(),
     FxKind.compressor => Compressor(),
-    // Reserved until the patcher epic lands its entities (design §5).
-    FxKind.patcherInsert => null,
+    // Borrow the wrapped patch's live native patcher (issue #225). Non-placeable
+    // until the reconciler resolves an instance and it still exists.
+    FxKind.patcherInsert => _buildPatcherInsert(),
   };
+
+  DspObject? _buildPatcherInsert() {
+    final source = _patcherInsertSource;
+    final instanceId = _patchInstanceId;
+    if (source == null || instanceId == null) return null;
+    final patcher = source.patcherFor(instanceId);
+    if (patcher == null) return null;
+    return DspObject.patcherInsert(patcher);
+  }
 
   // ─── params ─────────────────────────────────────────────────────────────
 

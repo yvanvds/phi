@@ -42,6 +42,7 @@ import 'bridge/macbear_scene_renderer.dart';
 import 'bridge/midi_gateway.dart';
 import 'bridge/no_op_registry_mirror.dart';
 import 'bridge/patcher_gateway.dart';
+import 'bridge/patcher_insert_source.dart';
 import 'bridge/real_fx_gateway.dart';
 import 'bridge/real_midi_gateway.dart';
 import 'bridge/real_patcher_gateway.dart';
@@ -115,14 +116,27 @@ class PhiEngine {
     // `Channel` through the same gateway that minted it — the resolver stays in
     // the bridge so `package:yse` is never touched here (issue #208).
     final busResolver = yse.busResolver();
+    final PatcherGateway patcher =
+        patcherGateway ?? RealPatcherGateway(busResolver: busResolver);
+    // The fx gateway borrows a patch's live native patcher for a
+    // `patcherInsert` fx from the patcher gateway (issue #225) — the real one is
+    // a `PatcherInsertSource`; an injected fake that is not simply leaves patcher
+    // inserts non-placeable.
+    final PatcherInsertSource? insertSource = patcher is PatcherInsertSource
+        ? patcher as PatcherInsertSource
+        : null;
     return PhiEngine(
       yse,
       sceneRenderer: sceneRenderer ?? MacbearSceneRenderer(),
-      patcherGateway:
-          patcherGateway ?? RealPatcherGateway(busResolver: busResolver),
+      patcherGateway: patcher,
       midiGateway: midiGateway ?? RealMidiGateway(),
       synthGateway: synthGateway ?? RealSynthGateway(busResolver: busResolver),
-      fxGateway: fxGateway ?? RealFxGateway(busResolver: busResolver),
+      fxGateway:
+          fxGateway ??
+          RealFxGateway(
+            busResolver: busResolver,
+            patcherInsertSource: insertSource,
+          ),
     );
   }
 
@@ -660,6 +674,14 @@ class PhiEngine {
         fxGateway: fg,
         busChannelId: (bus) => _channelsByAddress[bus]?.channel.id,
         onVoicesChanged: midi.bindVoices,
+        // A `patcherInsert` fx borrows the live native patcher for its wrapped
+        // `patch.` entity (issue #225). Gate on the patch still existing so a
+        // wrapper whose patch was removed resolves to `null` (non-placeable, so
+        // the chain drops it) *before* the reconciler's teardown phase frees the
+        // native patcher — no chain ever links a freed one.
+        patchInstanceId: (patch) => _mixRegistry.entityAt(patch) == null
+            ? null
+            : _patchReconciler?.instanceIdOf(patch),
       );
     }
     // Reconcile per-entity patchers the same way (issue #220): one native patcher
@@ -874,15 +896,21 @@ class PhiEngine {
     _rebuildMixTree(desired);
     _recomputeEffectiveVolumes();
 
-    // Every bus channel now exists, so reconcile the racks against it: synths
-    // per internal voice (bound to their output bus) and insert chains per bus
-    // (issue #208). Runs last so a voice's bus and a chain's placement resolve
-    // to a live gateway channel id. A no-op without a rack materialiser.
+    // Every bus channel now exists, so reconcile the racks against it. The
+    // patcher subsystem is split into two phases around the rack sync (issue
+    // #225): a `patcherInsert` fx borrows a live native patcher, so
+    //  1. materialise new / surviving patchers first (so a chain can build a
+    //     `DspObject.patcherInsert` that borrows one), then
+    //  2. sync the racks — synths per internal voice + insert chains per bus
+    //     (issue #208); a wrapper whose patch just vanished resolves to no
+    //     instance and is dropped from the chain here, then
+    //  3. tear down the native patchers of removed patches — now unborrowed, so
+    //     none is freed while a chain still links it.
+    // Each runs only when its subsystem is wired; the patcher phases no-op
+    // without a reconciler.
+    _patchReconciler?.materialise(_mixRegistry);
     _racks?.sync(_mixRegistry);
-    // Then the per-entity patchers (issue #220): materialise / tear down native
-    // patchers per `patch.` entity and keep each running source mounted on its
-    // (now-materialised) placement bus. A no-op without a patcher gateway.
-    _patchReconciler?.sync(_mixRegistry);
+    _patchReconciler?.teardownRemoved(_mixRegistry);
   }
 
   /// Resolves a `patch.` source-placement bus [address] to the live gateway
@@ -1878,6 +1906,124 @@ class PhiEngine {
     _persistInserts(address, next);
   }
 
+  /// The `patch.` entities a **patcher insert** can be created from on [channel]
+  /// (design `docs/design/patcher.md` §4 role 2, issue #225) — every patch that
+  /// does **not** already have a wrapping `fx.` instance, in stable address order.
+  /// A patch that already has a wrapper is offered through [availableFxFor] like
+  /// any other fx instead (the wrapper is what moves / reorders), so the two
+  /// picker sources never double-list a patch. Empty when [channel] has no backing
+  /// strip or the project defines no patches.
+  List<EntityAddress> availablePatchesToInsert(MixerChannel channel) {
+    if (_addressOf(channel) == null) return const [];
+    return [
+      for (final patch in _allPatchAddresses())
+        if (_patchInsertWrapperFor(patch) == null) patch,
+    ];
+  }
+
+  /// Place [patch] as an insert effect on [channel] (design §4 role 2, issue
+  /// #225) — the mix-INSERTS-area counterpart of source placement. Finds the
+  /// patch's existing `patcherInsert` `fx.` wrapper or **creates** one (a journaled
+  /// `fx.` entity of kind `patcherInsert` referencing [patch], so delete-impact on
+  /// the patch lists it), then appends it to [channel]'s chain through
+  /// [addChannelInsert] — inheriting the one-bus move-with-impact and reorder
+  /// behaviour, so a patch behaves like any other insert. The engine materialises
+  /// it as a `DspObject.patcherInsert` borrowing the patch's live native graph on
+  /// the ensuing re-sync, so edits to the patch are heard live. A no-op before
+  /// [start], for a channel with no backing strip, or an unknown patch.
+  void addPatchInsert(MixerChannel channel, EntityAddress patch) {
+    if (!_started) return;
+    if (_addressOf(channel) == null) return;
+    if (_mixRegistry.entityAt(patch) == null) return;
+    final wrapper = _patchInsertWrapperFor(patch) ?? _createPatchInsert(patch);
+    addChannelInsert(channel, wrapper);
+  }
+
+  /// The address of the `fx.` `patcherInsert` instance wrapping [patch], or `null`
+  /// when no wrapper exists yet — a wrapper is canonical per patch, so a patch is
+  /// inserted through one `fx.` entity that then obeys the one-bus invariant.
+  EntityAddress? _patchInsertWrapperFor(EntityAddress patch) {
+    for (final address in _allFxAddresses()) {
+      final def = _fxDefinitionAt(address);
+      if (def != null &&
+          def.kind == FxKind.patcherInsert &&
+          def.patch == patch) {
+        return address;
+      }
+    }
+    return null;
+  }
+
+  /// Create the wrapping `fx.` entity of kind `patcherInsert` referencing [patch]
+  /// — a journaled create whose declared `fx → patch` reference feeds the
+  /// back-reference index (so the patch's delete-impact lists it, and a rename of
+  /// the patch refactors it). Named after the patch's leaf, uniquified in the fx
+  /// namespace. Returns the new wrapper's address.
+  EntityAddress _createPatchInsert(EntityAddress patch) {
+    final definition = FxDefinition(kind: FxKind.patcherInsert, patch: patch);
+    final address = _freshFxAddress(NameSlug.of(patch.name, fallback: 'patch'));
+    final command = CreateEntityCommand(
+      _mixRegistry,
+      address,
+      payload: definition.toJson(),
+      references: definition.references,
+    );
+    command.apply(); // notifies → _syncChannelsFromRegistry materialises it
+    _recordCommand?.call(command);
+    return address;
+  }
+
+  /// A free top-level `fx.` address for [leaf], suffixed until unused.
+  EntityAddress _freshFxAddress(String leaf) {
+    EntityAddress at(String name) =>
+        EntityAddress(kind: RegistryKinds.fx, segments: [name]);
+    var segment = leaf;
+    var n = 2;
+    while (_mixRegistry.contains(at(segment))) {
+      segment = '${leaf}_$n';
+      n++;
+    }
+    return at(segment);
+  }
+
+  /// The `fx.` instance at [address] decoded into its typed [FxDefinition], or
+  /// `null` when nothing fx-shaped sits there.
+  FxDefinition? _fxDefinitionAt(EntityAddress address) {
+    final payload = _mixRegistry.entityAt(address)?.payload;
+    if (payload is FxDefinition) return payload;
+    if (payload is Map) {
+      try {
+        return FxDefinition.fromJson(payload.cast<String, Object?>());
+      } on FormatException {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /// Every `patch.` entity address in the registry, walking groups so a grouped
+  /// patch is reached at its real address, in stable address order.
+  List<EntityAddress> _allPatchAddresses() {
+    final out = <EntityAddress>[];
+    void visit(RegistryNode node, EntityAddress address) {
+      if (node is RegistryEntity) out.add(address);
+      if (node is RegistryGroup) {
+        for (final child in node.children) {
+          visit(child, address.child(child.name));
+        }
+      }
+    }
+
+    for (final child in _mixRegistry.childrenOfKind(RegistryKinds.patch)) {
+      visit(
+        child,
+        EntityAddress(kind: RegistryKinds.patch, segments: [child.name]),
+      );
+    }
+    out.sort((a, b) => a.format().compareTo(b.format()));
+    return out;
+  }
+
   /// Every `fx.` instance address in the registry, walking groups so a grouped
   /// effect is reached at its real address, in stable address order. Only entities
   /// that decode to a valid [FxDefinition] are returned (a group node or a
@@ -1957,10 +2103,23 @@ class PhiEngine {
   /// Writes [inserts] into the `mix.` node at [address] as a journaled payload
   /// command (racks design §5) — the placement/reorder/remove path, de-duped by
   /// JSON; the ensuing sync re-materialises the bus's insert chain.
+  ///
+  /// The payload is a JSON map (the journal contract), not a `ReferenceSource`,
+  /// so the registry keeps the *old* references on the payload edit. Re-point the
+  /// back-reference index at the strip's new references (send targets + insert
+  /// effects, incl. a `patcherInsert` wrapper) so `mix.inserts → fx` delete-impact
+  /// and rename-refactor stay correct — the mirror of `updateVoice` (design §4,
+  /// racks §5; issue #225 relies on it so deleting an inserted patcher wrapper
+  /// lists the bus). Only the leaf-strip (entity) path is re-pointed here.
   void _persistInserts(EntityAddress address, List<EntityAddress> inserts) {
     final strip = _storedStrip(address);
     if (strip == null) return;
-    _persistStripPayload(address, strip.copyWith(inserts: inserts).toJson());
+    final next = strip.copyWith(inserts: inserts);
+    _persistStripPayload(address, next.toJson());
+    if (_mixRegistry.nodeAt(address) is! RegistryGroup &&
+        _mixRegistry.referencesOf(address) != next.references) {
+      _mixRegistry.setReferences(address, next.references);
+    }
   }
 
   /// Applies [payload] to the `mix.` entity **or group bus** at [address] as a

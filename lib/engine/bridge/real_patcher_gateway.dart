@@ -5,6 +5,7 @@ import 'package:yse/yse.dart';
 import '../../domain/patcher/patch_port_kind.dart';
 import 'patch_object_descriptor.dart';
 import 'patcher_gateway.dart';
+import 'patcher_insert_source.dart';
 import 'patcher_node_snapshot.dart';
 import 'real_materialised_synth.dart' show MixBusResolver;
 
@@ -18,8 +19,12 @@ import 'real_materialised_synth.dart' show MixBusResolver;
 /// bus — turns a mix-bus channel id into the live [Channel] a
 /// `Sound.fromPatcher` attaches to, exactly as [RealSynthGateway] does.
 ///
+/// Also a [PatcherInsertSource] (issue #225): the fx gateway borrows a patch's
+/// live native [Patcher] from it to build a `DspObject.patcherInsert`, keyed by
+/// the same instance id.
+///
 /// Requires `libyse.dll` discoverable at runtime — see README.md.
-class RealPatcherGateway implements PatcherGateway {
+class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
   RealPatcherGateway({MixBusResolver? busResolver})
     : _busResolver = busResolver ?? _masterBus;
 
@@ -189,6 +194,10 @@ class RealPatcherGateway implements PatcherGateway {
 
   @override
   void unmountSource(int instanceId) => _inst(instanceId).unmount();
+
+  @override
+  Patcher? patcherFor(int patchInstanceId) =>
+      _instances[patchInstanceId]?.patcher;
 
   @override
   String dumpJson(int instanceId) => _inst(instanceId).patcher.dumpJson();

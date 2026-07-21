@@ -1487,6 +1487,44 @@ main + app          (orchestration)
   needs a gateway object-enumeration call that does not exist yet (a `dart-yse`
   capability); the audio (reconciler-materialised graph) is unaffected. Filed as a
   follow-up.
+- **Patcher as an insert effect** (issue #225, patcher epic, design
+  `docs/design/patcher.md` §4 role 2, §11; the last slice of the epic) — the
+  reserved `fx.` kind `patcherInsert` (racks §5) becomes real, wiring a patcher
+  into a mix bus's insert chain through the existing racks seam. `FxDefinition`
+  (`lib/domain/fx/`) gains an optional `patch` reference and is now a
+  `ReferenceSource`: a `patcherInsert` fx wraps a `patch.` entity by address, so
+  `fx → patch` is a back-reference edge (delete-impact on the patch lists its
+  insert wrappers; a patch rename refactors the wrapper). The engine materialises
+  it as a `DspObject.patcherInsert` that **borrows** the patch's live native
+  patcher — so the same graph the editor edits is heard live through the insert. A
+  new bridge `PatcherInsertSource` seam (`lib/engine/bridge/`, implemented by
+  `RealPatcherGateway`) hands the fx gateway that native `Patcher` by instance id;
+  `FxGateway.materialiseFx` gained a `patchInstanceId`, and a patcher-insert handle
+  is placeable only while its patcher resolves (else the chain skips it, like the
+  old reserved stub). The `RackMaterialiser` resolves the wrapped patch's instance
+  through a seam and rebuilds the handle when it appears / vanishes. To keep the
+  live chain safe, `PhiEngine._syncChannelsFromRegistry` now runs the patcher
+  subsystem in **two phases** around the rack sync — `PatchReconciler.materialise`
+  (create patchers so a chain can borrow one), then `_racks.sync`, then
+  `PatchReconciler.teardownRemoved` (free a deleted patch's native patcher only
+  after the chains that borrowed it have been detached), so no wrapper ever links a
+  freed patcher. **Placement UI:** the mix INSERTS picker (#212) additionally
+  offers each patch with no wrapper yet as `patcher · {name}` — picking it creates
+  the wrapping `fx.` entity (`PhiEngine.addPatchInsert` / `availablePatchesToInsert`)
+  and places it, after which it obeys the same one-bus move-with-impact + reorder
+  as any other insert (a placed patch's wrapper then flows through `availableFxFor`,
+  not the patch list, so the two are never double-offered). `_persistInserts` now
+  re-points the leaf strip's back-reference index on every insert edit (the mirror
+  of `updateVoice`), closing the `mix.inserts → fx` edge for the live command path
+  so deleting an inserted wrapper lists the bus. Covered by unit tests
+  (`fx_definition_test` patch reference / references / refactor round-trips;
+  `engine_patcher_insert_test` — create + place, materialisation into the chain
+  borrowing the live instance, delete-impact both directions, removing the patch
+  drops the insert, reorder / move), a widget test (`mix_patcher_insert_test` — the
+  picker offers a patch, picking creates + places the wrapper, a wrapped patch drops
+  off the offer), and an end-to-end `mix_patcher_insert` integration test (pick a
+  patcher insert in the real app → both-direction delete-impact → save → reload
+  restores the insert and its `fx → patch` reference).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

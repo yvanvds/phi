@@ -85,14 +85,26 @@ class PatchReconciler {
   /// registry change: it materialises newly-added patches (parsing their dump),
   /// tears down removed ones, refreshes each survivor's placement, and keeps every
   /// running source mounted on its current bus (degrading a stale placement).
+  ///
+  /// The full pass, for standalone callers. The engine's channel sync instead
+  /// drives [materialise] and [teardownRemoved] as **two phases** around the
+  /// [RackMaterialiser]'s fx-chain sync (issue #225): new patchers must exist
+  /// *before* a chain builds a `DspObject.patcherInsert` borrowing one, and a
+  /// removed patch's native patcher must be freed *after* the chains that borrow
+  /// it have been detached — so a wrapper never links a freed patcher.
   void sync(ProjectRegistry registry) {
+    teardownRemoved(registry);
+    materialise(registry);
+  }
+
+  /// Materialise newly-added patches (open = parse the dump), refresh each
+  /// survivor's placement, and keep every running source mounted on its current
+  /// bus — **without** tearing down removed patches (that is [teardownRemoved]).
+  /// A removed patch's `_open` entry therefore survives until [teardownRemoved],
+  /// so a chain still borrowing its patcher stays valid until it is detached.
+  void materialise(ProjectRegistry registry) {
     final desired = <EntityAddress, PatchPayload>{};
     _walkPatches(registry, (address, payload) => desired[address] = payload);
-
-    // Tear down patches whose entity is gone (delete / close).
-    for (final address in _open.keys.toList()) {
-      if (!desired.containsKey(address)) _teardownOne(address);
-    }
 
     // Materialise new patches (open = parse the dump); refresh placement on the
     // survivors **without** re-parsing — the live native graph is the source of
@@ -111,6 +123,17 @@ class PatchReconciler {
     // Keep every running source mounted on its current placement bus.
     for (final entry in _open.entries) {
       if (entry.value.running) _remountRunning(entry.key, entry.value);
+    }
+  }
+
+  /// Tear down the native patchers of patches whose entity is gone (delete /
+  /// close) — unmounting any running source first. Run *after* the fx-chain sync
+  /// so no insert still borrows the patcher being freed (issue #225).
+  void teardownRemoved(ProjectRegistry registry) {
+    final desired = <EntityAddress>{};
+    _walkPatches(registry, (address, _) => desired.add(address));
+    for (final address in _open.keys.toList()) {
+      if (!desired.contains(address)) _teardownOne(address);
     }
   }
 
