@@ -37,9 +37,11 @@ import 'bridge/audio_device_coordinator.dart';
 import 'bridge/audio_device_descriptor.dart';
 import 'bridge/audio_device_notice.dart';
 import 'bridge/audio_device_state.dart';
+import 'bridge/bus_tap.dart';
 import 'bridge/fx_gateway.dart';
 import 'bridge/macbear_scene_renderer.dart';
 import 'bridge/midi_gateway.dart';
+import 'bridge/no_op_bus_tap.dart';
 import 'bridge/no_op_registry_mirror.dart';
 import 'bridge/patcher_gateway.dart';
 import 'bridge/patcher_insert_source.dart';
@@ -80,6 +82,7 @@ class PhiEngine {
     SynthGateway? synthGateway,
     FxGateway? fxGateway,
     RegistryMirror registryMirror = const NoOpRegistryMirror(),
+    BusTap busTap = const NoOpBusTap(),
     Duration telemetryInterval = const Duration(milliseconds: 50),
   }) : _sceneRenderer = sceneRenderer,
        _patcherGateway = patcherGateway,
@@ -87,6 +90,7 @@ class PhiEngine {
        _synthGateway = synthGateway,
        _fxGateway = fxGateway,
        _mirrorBinder = RegistryMirrorBinder(registryMirror),
+       _busTap = busTap,
        _telemetryInterval = telemetryInterval {
     // The registry is the source of truth for the channel set (design §8): the
     // engine materialises its `MixerChannel`s from `mix.` entities and re-syncs
@@ -146,7 +150,20 @@ class PhiEngine {
   final MidiGateway? _midiGateway;
   final SynthGateway? _synthGateway;
   final FxGateway? _fxGateway;
+  final BusTap _busTap;
   final Duration _telemetryInterval;
+
+  /// Subscribe to the engine's **host bus tap** for every publish whose address
+  /// falls under [prefix] (design `docs/design/live-coding.md` §4). The
+  /// live-coding control plane taps `phi.ctl` here and routes each frame to the
+  /// owning controller.
+  ///
+  /// The seam is present now but silent in production — the tap C API is an
+  /// engine dependency not yet landed (`yvanvds/yse-soundengine#389`,
+  /// `yvanvds/dart-yse#43`), so the default [NoOpBusTap] yields an empty stream.
+  /// Tests inject a `FakeBusTap` and drive publishes through to prove the
+  /// downstream routing before the engine work arrives (design §9 step 1).
+  Stream<BusTapFrame> tapBus(String prefix) => _busTap.subscribe(prefix);
 
   /// Coordinates the boot-from-settings and live-switch device rules (design §5,
   /// §9.3) over the gateway. Lazily built so [start] can boot from stored
