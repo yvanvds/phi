@@ -1,30 +1,35 @@
-import '../../state_machine/performance_state_id.dart';
+import '../../project/entity_address.dart';
 import 'edge_condition.dart';
 import 'graph_eval_context.dart';
 
-/// Opens the edge only while a specific state-machine state is live.
+/// Opens the edge only while a specific `state.` entity is live.
 ///
 /// This is what makes the mockup's `branch · state.break` real: an edge
-/// carrying `StateMatchCondition(breakStateId)` routes notes down the break
-/// branch exactly when the [StateGraph]'s `activeStateId` is that state, and
-/// is closed otherwise.
+/// carrying `StateMatchCondition(state.break's address)` routes notes down the
+/// break branch exactly when the live state is that entity, and is closed
+/// otherwise.
+///
+/// Since issue #240 the guard names the state by **entity address** rather
+/// than by the canvas-local `PerformanceStateId` — the uniform `state.` name
+/// used in live code and completion — so a persisted guard re-binds by name
+/// across sessions and rides the ordinary rename-refactor (the registry-backed
+/// wiring lands with issue #241).
 class StateMatchCondition extends EdgeCondition {
-  const StateMatchCondition(this.stateId);
+  const StateMatchCondition(this.state);
 
-  /// The state that must be live for this edge to open.
-  final PerformanceStateId stateId;
-
-  @override
-  bool isSatisfiedBy(GraphEvalContext context) =>
-      context.activeStateId == stateId;
+  /// The `state.` entity that must be live for this edge to open.
+  final EntityAddress state;
 
   @override
-  String get label => 'state · ${stateId.value}';
+  bool isSatisfiedBy(GraphEvalContext context) => context.activeState == state;
+
+  @override
+  String get label => 'state · ${state.name}';
 
   @override
   bool operator ==(Object other) =>
-      other is StateMatchCondition && other.stateId == stateId;
+      other is StateMatchCondition && other.state == state;
 
   @override
-  int get hashCode => stateId.hashCode;
+  int get hashCode => state.hashCode;
 }

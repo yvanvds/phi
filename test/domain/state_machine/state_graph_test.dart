@@ -173,6 +173,40 @@ void main() {
 
         expect(g.activeStateId, isNull);
       });
+
+      test('activeStateAddress derives the live state.<slug> address '
+          '(issue #240)', () {
+        final g = StateGraph();
+        g.addState(
+          PerformanceState(
+            id: const PerformanceStateId('a'),
+            name: 'Break Down',
+            voice: 1,
+            position: Offset.zero,
+          ),
+        );
+        expect(g.activeStateAddress, isNull);
+
+        g.setActive(const PerformanceStateId('a'));
+        // Display names slug into valid registry segments.
+        expect(g.activeStateAddress?.format(), 'state.break_down');
+
+        g.setActive(null);
+        expect(g.activeStateAddress, isNull);
+      });
+
+      test('a rename moves the derived address with the display name', () {
+        final state = PerformanceState(
+          id: const PerformanceStateId('a'),
+          name: 'intro',
+          voice: 1,
+          position: Offset.zero,
+        );
+        expect(state.address.format(), 'state.intro');
+
+        state.rename('verse');
+        expect(state.address.format(), 'state.verse');
+      });
     });
 
     group('arming + firing', () {

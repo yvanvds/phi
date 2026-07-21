@@ -2,6 +2,9 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 
+import '../project/entity_address.dart';
+import '../project/name_slug.dart';
+import '../project/registry_kinds.dart';
 import 'performance_state_id.dart';
 import 'state_snapshot.dart';
 
@@ -31,6 +34,15 @@ class PerformanceState extends ChangeNotifier {
 
   /// Display name shown in the node header.
   String get name => _name;
+
+  /// The `state.` entity address this node answers to, derived from the slug
+  /// of its display [name] — matching how the registry seeds `state.intro` /
+  /// `state.verse` (issue #240). The bridge until issue #241 keys the canvas
+  /// by real registry addresses; guards authored against it re-bind by name.
+  EntityAddress get address => EntityAddress(
+    kind: RegistryKinds.state,
+    segments: [NameSlug.of(_name, fallback: 'state')],
+  );
 
   /// Top-left position in canvas-local coordinates.
   Offset get position => _position;

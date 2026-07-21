@@ -7,7 +7,7 @@ import 'package:phi/domain/midi/midi_clip.dart';
 import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/store/midi_transform_graph_codec.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
-import 'package:phi/domain/state_machine/performance_state_id.dart';
+import 'package:phi/domain/project/entity_address.dart';
 
 void main() {
   const codec = MidiTransformGraphCodec();
@@ -52,7 +52,7 @@ void main() {
     graph.connect(
       n0.id,
       n1.id,
-      condition: const StateMatchCondition(PerformanceStateId('hot')),
+      condition: StateMatchCondition(EntityAddress.parse('state.hot')),
     );
 
     final decoded = codec.decode(codec.encode(graph), clip);
@@ -62,7 +62,9 @@ void main() {
     expect(decoded.edges, hasLength(2));
 
     const closed = GraphEvalContext.empty();
-    const open = GraphEvalContext(activeStateId: PerformanceStateId('hot'));
+    final open = GraphEvalContext(
+      activeState: EntityAddress.parse('state.hot'),
+    );
     // Guard closed: only n0 fires (+12). Guard open: n0 → n1 (+24).
     expect(pitches(decoded.evaluate(closed)), pitches(graph.evaluate(closed)));
     expect(pitches(decoded.evaluate(open)), pitches(graph.evaluate(open)));

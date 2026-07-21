@@ -640,6 +640,39 @@ main + app          (orchestration)
   name plus a read-only three-section snapshot view (DOMAINS · CODE
   BLOCKS · SCENE REF — all empty until the time-domain / scripting /
   scene-pose layers ship).
+  The state-graph epic (design `docs/design/state-graph.md`, epic #239) begins
+  with the **`state.` entity domain** (issue #240): a new registry kind whose
+  payload is a `StateDocument` (`lib/domain/state_machine/store/`) — canvas
+  position, the **ordered outbound transitions** (`StateTransitionSpec`:
+  target address · `StateTrigger` data (sealed manual / code / timed-on-domain
+  / variable — behaviour lands with #244) · optional label), the explicitly
+  captured per-category `StateSlices` (`lib/domain/state_machine/slices/` —
+  clips + loop flags, mix volume/mute per bus, string variable values,
+  per-domain tempos; `null` = uncaptured ≠ captured-empty; capture-from-live
+  is #242), and an optional on-enter `code.` ref. `StateDocument` is a
+  `ReferenceSource` (targets, trigger/tempo domains, slice clips/buses,
+  on-enter script), stored map-native (`StateDocumentCodec`, schema v1, in
+  `defaultEntityCodecs`) with references declared — so delete-impact on a
+  state lists its inbound transitions and rename-refactor remaps them.
+  Which state is *live* never persists (§8 decision 2 — firing is
+  performance, not authorship). A fresh project seeds `state.intro` (one
+  manual transition) → `state.verse` at the canvas positions the surface has
+  always used; the registry-backed controller/canvas is #241.
+  `StateMatchCondition` **migrated** from `PerformanceStateId` to the entity
+  address (no compat shim): `GraphEvalContext.activeState` is now an
+  `EntityAddress` mirrored from `StateGraph.activeStateAddress` (derived from
+  the live node's name slug until #241 keys the canvas by real registry
+  addresses), the guard picker authors addresses, `EdgeConditionCodec`
+  persists the dotted address, and the graph exposes `guardStateAddresses` +
+  `repointGuardState` — the guard-rename machinery #241 drives. The
+  `ClipRegistryPublisher` also listens to the domain graph and re-declares
+  `ClipDocument.guardStateReferences` on every publish, so delete-impact on a
+  state lists the clips whose MIDI-graph guards branch on it. Covered by
+  domain unit tests (trigger/spec/slices/document round-trip identity, codec,
+  registry seed + delete-impact + rename-refactor, guard repoint), publisher
+  reference-sync tests, and an end-to-end `state_entities` integration test
+  (seed → delete-impact → save → second launch restores the payloads
+  identically).
 - Time-domains layer seed (issue #60): pure-Dart `TimeDomain` (a named
   BPM tempo reference) and an immutable, copy-on-write `TimeDomainRegistry`
   (name→domain lookup) in `lib/domain/time_domains/`. The minimal object a

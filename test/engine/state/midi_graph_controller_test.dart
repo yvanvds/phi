@@ -7,7 +7,7 @@ import 'package:phi/domain/midi/midi_clip_mode.dart';
 import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/midi_transform_chain.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
-import 'package:phi/domain/state_machine/performance_state_id.dart';
+import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/engine/state/midi_graph_controller.dart';
 
 void main() {
@@ -104,17 +104,17 @@ void main() {
     final chain = chainWith([3]);
     final controller = MidiGraphController.seededFrom(chain);
     final node = controller.graph.nodes.single;
-    const stateId = PerformanceStateId('s1');
+    final state = EntityAddress.parse('state.s1');
 
     final ok = controller.setEdgeCondition(
       TransformNodeId.source,
       node.id,
-      const StateMatchCondition(stateId),
+      StateMatchCondition(state),
     );
 
     expect(ok, isTrue);
     final edge = controller.graph.edges.single;
-    expect(edge.condition, const StateMatchCondition(stateId));
+    expect(edge.condition, StateMatchCondition(state));
     // With no state live the guard is closed, so the node passes through and
     // the source notes reach the (now unreachable) output unchanged.
     expect(controller.graph.evaluate().single.pitch, 60);
@@ -208,7 +208,7 @@ void main() {
     source.connect(
       TransformNodeId.source,
       b.id,
-      condition: const StateMatchCondition(PerformanceStateId('x')),
+      condition: StateMatchCondition(EntityAddress.parse('state.x')),
     );
 
     var notified = 0;

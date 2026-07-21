@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import '../../domain/midi/clip_editor.dart';
 import '../../domain/midi/midi_clip_mode.dart';
 import '../../domain/midi/midi_transform_chain.dart';
@@ -45,7 +47,9 @@ class ClipRegistryPublisher {
   ///   add/remove/toggle/edit and length changes;
   /// - the piano-roll authoring controller ([_editor]) notifies on every note edit;
   /// - the branching-graph editor ([_graphController]), or `null` when none is
-  ///   wired, notifies on graph edits.
+  ///   wired, notifies on mode + layout changes, and its **domain graph** on
+  ///   structural edits (nodes, edges, guards — issue #240: a guard change must
+  ///   publish immediately so the clip's state references stay declared).
   MidiTransformChain? _chain;
   ClipEditor? _editor;
   MidiGraphController? _graphController;
@@ -93,6 +97,7 @@ class ClipRegistryPublisher {
     chain.addListener(_onChanged);
     editor.addListener(_onChanged);
     graphController?.addListener(_onChanged);
+    graphController?.graph.addListener(_onChanged);
     _listening = true;
   }
 
@@ -108,6 +113,7 @@ class ClipRegistryPublisher {
       _chain?.removeListener(_onChanged);
       _editor?.removeListener(_onChanged);
       _graphController?.removeListener(_onChanged);
+      _graphController?.graph.removeListener(_onChanged);
       _listening = false;
     }
     _registry = null;
@@ -130,16 +136,28 @@ class ClipRegistryPublisher {
     final address = _address;
     if (registry == null || address == null || _chain == null) return;
     if (!registry.contains(address)) return;
-    final snapshot = _snapshot();
+    final document = _document();
+    final snapshot = document.toJson();
     final encoded = jsonEncode(snapshot);
     if (encoded == _lastPushedJson) return; // selection / layout only — skip.
     _lastPushedJson = encoded;
     final command = UpdateEntityPayloadCommand(registry, address, snapshot);
     command.apply();
     _recordCommand?.call(command);
+    // The payload is a JSON map (the journal contract), not a `ReferenceSource`,
+    // so the registry keeps the *old* references on a payload edit. Re-point the
+    // back-reference index at the clip's guarded `state.` addresses so
+    // delete-impact on a state lists the clips branching on it and a rename can
+    // refactor them (issue #240) — the mirror of `updateVoice` (design §4).
+    final references = document.guardStateReferences;
+    if (!setEquals(registry.referencesOf(address), references)) {
+      registry.setReferences(address, references);
+    }
   }
 
-  Map<String, Object?> _snapshot() {
+  Map<String, Object?> _snapshot() => _document().toJson();
+
+  ClipDocument _document() {
     final chain = _chain!;
     final gc = _graphController;
     return ClipDocument(
@@ -148,6 +166,6 @@ class ClipRegistryPublisher {
       chain: chain.transforms,
       graph: gc?.graph,
       loop: _loop?.call() ?? true,
-    ).toJson();
+    );
   }
 }

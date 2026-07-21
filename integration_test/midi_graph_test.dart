@@ -89,10 +89,12 @@ void main() {
       const TransposeTransform(semitones: 12, label: 'branch · +12'),
       const Offset(200, 360),
     );
+    // Guard on the state's entity address — the uniform `state.` name guards
+    // carry since issue #240.
     graph.connect(
       TransformNodeId.source,
       branch.id,
-      condition: StateMatchCondition(brk.id),
+      condition: StateMatchCondition(brk.address),
     );
     await tester.pumpAndSettle();
 

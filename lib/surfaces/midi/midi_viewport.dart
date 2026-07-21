@@ -190,7 +190,7 @@ class _MidiViewportState extends State<MidiViewport> {
   }
 
   GraphEvalContext get _evalContext => GraphEvalContext(
-    activeStateId: widget.stateGraph?.activeStateId,
+    activeState: widget.stateGraph?.activeStateAddress,
     variables: widget.runtimeVariables?.snapshot() ?? const {},
   );
 
