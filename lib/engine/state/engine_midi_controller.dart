@@ -21,9 +21,11 @@ import '../../domain/voice/voice_channel_resolver.dart';
 import '../bridge/materialised_synth.dart';
 import '../bridge/midi_gateway.dart';
 import '../bridge/midi_input_event.dart';
+import '../bridge/midi_transport.dart';
 import '../bridge/scene_agent_sink.dart';
 import 'clip_session.dart';
 import 'clip_session_host.dart';
+import 'count_in_controller.dart';
 import 'midi_graph_controller.dart';
 import 'record_controller.dart';
 
@@ -112,6 +114,24 @@ class EngineMidiController implements ClipSessionHost {
   /// transport row's record button drives its [RecordController.toggleArm]; the
   /// shell wires its [RecordController.armedVoice] to the racks audition path.
   RecordController get record => _record;
+
+  final CountInController _countIn = CountInController();
+
+  /// The count-in setting + scheduler (issue #263). The toolbar count-in picker
+  /// binds to its [CountInController.bars]; [play] gates a fresh start on it,
+  /// counting on a reserved clock at the edited session's tempo before playback
+  /// (and any armed take) begins on the downbeat.
+  CountInController get countIn => _countIn;
+
+  /// The reserved clock the count-in measures against — minted lazily on the
+  /// first counted play, paced to the edited session's tempo each time so the
+  /// count counts on the session's own domain tempo (design §5). `null` until a
+  /// count-in first runs; kept (stopped) between counts and disposed on [dispose].
+  MidiTransport? _countClock;
+
+  /// The reserved clock name the count-in transport binds to — distinct from any
+  /// clip session's clock so counting never disturbs a running session.
+  static const String countInClockName = 'phi.midi.countin';
 
   /// Optional Scene sink. When wired and a playing session's chain carries an
   /// active spawn transform, each note-on spawns a live agent (issue #37). `null`
@@ -246,17 +266,77 @@ class EngineMidiController implements ClipSessionHost {
 
   /// Start (or restart) playback of the edited session, then spin the frame
   /// ticker. No-op if already playing.
+  ///
+  /// A **fresh** start from stopped honours the count-in setting (issue #263):
+  /// with `countIn.bars > 0` the click counts that many bars on a reserved clock
+  /// at the session's tempo, and playback (with any armed take) begins on the
+  /// downbeat — scheduled against the engine clock, not a Dart timer. A repeated
+  /// press while a count runs is ignored; a session already playing or paused
+  /// starts at once (a punch-in never waits — design §5).
   void play() {
+    if (_countIn.isCounting) return;
+    if (_editedSession.isPlaying ||
+        _editedSession.isPaused ||
+        !_beginCountIn()) {
+      _startEditedPlayback();
+      return;
+    }
+    // A count started: the frame ticker drives it to the downbeat.
+    _syncTicker();
+  }
+
+  /// Start the edited session and any armed take at once — the body [play] runs
+  /// on the downbeat (or immediately when no count-in is set).
+  void _startEditedPlayback() {
     _editedSession.play();
     _record.onTransportPlay();
     _syncTicker();
   }
 
+  /// Begin a count-in for a fresh play when `countIn.bars > 0`: mint/pace the
+  /// reserved count clock, and schedule the downbeat against it at the edited
+  /// clip's meter. Returns whether a count actually started (`false` when the
+  /// setting is `0` — the caller then starts at once).
+  bool _beginCountIn() {
+    if (_countIn.bars <= 0) return false;
+    final clock = _startCountClock();
+    final began = _countIn.begin(
+      beatsPerBar: _editedSession.clip.beatsPerBar,
+      beatPosition: () => clock.beatPosition,
+      onComplete: _completeCountIn,
+    );
+    if (!began) _stopCountClock();
+    return began;
+  }
+
+  /// Mint (once) and start the reserved count clock, paced to the edited
+  /// session's tempo so a count counts on the session's own domain tempo.
+  MidiTransport _startCountClock() {
+    final tempo = _editedSession.effectiveTempo;
+    final clock = _countClock ??= _gateway.createTransport(
+      clockName: countInClockName,
+      tempo: tempo,
+    );
+    clock.setTempo(tempo);
+    clock.play();
+    return clock;
+  }
+
+  /// The count reached the downbeat — stop the count clock and start playback.
+  void _completeCountIn() {
+    _stopCountClock();
+    _startEditedPlayback();
+  }
+
+  /// Halt the reserved count clock, keeping it for the next count.
+  void _stopCountClock() => _countClock?.stop();
+
   /// Pause the edited session — halt its dispatch (`allNotesOff` so no voice
   /// hangs) and freeze its clock, keeping the beat position so [resume]
   /// continues mid-loop. Idles the ticker if nothing else needs it. No-op unless
-  /// playing.
+  /// playing. Aborts a running count-in (there is nothing to pause yet).
   void pause() {
+    if (_abortCountIn()) return;
     // End any take before the clock freezes, so held notes close at the real
     // beat (§3: pause ends the take, keeping its notes).
     _record.onTransportStop();
@@ -277,11 +357,25 @@ class EngineMidiController implements ClipSessionHost {
   /// clips and the scene demo are untouched — stopping a clip clears only its
   /// own agents (design §4).
   void stop() {
+    // A stop during the count aborts it cleanly — nothing was playing yet, so
+    // there is no take to close and no transport to rewind (design §5).
+    if (_abortCountIn()) return;
     // End any take first — the recorder must close held notes at the current
     // beat before [ClipSession.stop] rewinds the transport to the top.
     _record.onTransportStop();
     if (!_editedSession.stop()) return;
     _syncTicker();
+  }
+
+  /// Cancel a running count-in and idle its clock, returning whether one was
+  /// aborted — a stop or pause during the count. A no-op (returns `false`) when
+  /// no count is running.
+  bool _abortCountIn() {
+    if (!_countIn.isCounting) return false;
+    _countIn.cancel();
+    _stopCountClock();
+    _syncTicker();
+    return true;
   }
 
   // ─── concurrent playback: per-session, group, and all (issue #187) ────────
@@ -780,11 +874,11 @@ class EngineMidiController implements ClipSessionHost {
   bool get _anyPlaying => _sessions.values.any((s) => s.isPlaying);
 
   /// Run the frame ticker exactly while there is per-frame work — a session is
-  /// playing, or a grab needs realizing on a stopped Scene — and idle it
-  /// otherwise. The single frame driver for the shared scene field in all cases
-  /// (issue #103).
+  /// playing, a count-in is running, or a grab needs realizing on a stopped
+  /// Scene — and idle it otherwise. The single frame driver for the shared scene
+  /// field in all cases (issue #103).
   void _syncTicker() {
-    final needed = _anyPlaying || _field.isGrabbing;
+    final needed = _anyPlaying || _field.isGrabbing || _countIn.isCounting;
     if (needed && _timer == null) {
       _timer = Timer.periodic(_tickInterval, _onTick);
     } else if (!needed && _timer != null) {
@@ -794,6 +888,10 @@ class EngineMidiController implements ClipSessionHost {
   }
 
   void _onTick(Timer _) {
+    // Drive a running count-in first: when the clock reaches the downbeat it
+    // starts the edited session (and any armed take) this same frame (issue
+    // #263), which the session advance below then carries forward.
+    _countIn.tick();
     final dtSeconds = _tickInterval.inMicroseconds * 1e-6;
     // Advance every playing session: re-bind its clock (a live domain-chip toggle
     // takes hold here), re-push on change, cross its Scene window, move its
@@ -830,6 +928,9 @@ class EngineMidiController implements ClipSessionHost {
     _timer?.cancel();
     _timer = null;
     _record.dispose();
+    _countIn.dispose();
+    _countClock?.dispose();
+    _countClock = null;
     for (final timer in _previewTimers) {
       timer.cancel();
     }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/time_domains/time_domain.dart';
 import 'package:phi/domain/time_domains/time_domain_registry.dart';
+import 'package:phi/engine/state/count_in_controller.dart';
 import 'package:phi/engine/state/metronome_controller.dart';
 import 'package:phi/shell/top_toolbar/metronome_control.dart';
 import 'package:phi/shell/top_toolbar/metronome_popover.dart';
@@ -126,5 +127,39 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.volume, lessThan(before));
+  });
+
+  testWidgets('the count-in picker sets the count length (#263)', (
+    tester,
+  ) async {
+    final countIn = CountInController();
+    addTearDown(countIn.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: MetronomeControl(controller: controller, countIn: countIn),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openPopover(tester);
+    expect(countIn.bars, 0);
+
+    // Open the count-in PhiSelect and pick a one-bar count.
+    await tester.tap(find.byKey(MetronomePopover.countInKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('1 bar'));
+    await tester.pumpAndSettle();
+
+    expect(countIn.bars, 1);
+  });
+
+  testWidgets('no count-in field without a CountInController', (tester) async {
+    await pump(tester); // built without a countIn
+    await openPopover(tester);
+    expect(find.byKey(MetronomePopover.countInKey), findsNothing);
   });
 }

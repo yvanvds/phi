@@ -7,16 +7,22 @@ import '../../design/tokens/phi_type.dart';
 import '../../design/widgets/select/phi_select.dart';
 import '../../design/widgets/select/phi_select_option.dart';
 import '../../design/widgets/toggle/phi_toggle.dart';
+import '../../engine/state/count_in_controller.dart';
 import '../../engine/state/metronome_controller.dart';
 
 /// The metronome settings panel (issue #262, design §4): the domain picker
 /// (a [PhiSelect] over the project's `domain.` entities), beats-per-bar, the
-/// downbeat accent, and the click volume. Rendered inside [MetronomeControl]'s
-/// popover; it reads and writes the live [MetronomeController].
+/// downbeat accent, and the click volume, plus the **count-in** length when a
+/// [CountInController] is wired (issue #263, design §5). Rendered inside
+/// [MetronomeControl]'s popover; it reads and writes the live controllers.
 class MetronomePopover extends StatelessWidget {
-  const MetronomePopover({required this.controller, super.key});
+  const MetronomePopover({required this.controller, this.countIn, super.key});
 
   final MetronomeController controller;
+
+  /// The count-in setting, or `null` when no recording flow is wired (a bare
+  /// setup); the count-in field is then hidden.
+  final CountInController? countIn;
 
   /// The beats-per-bar options the meter picker offers.
   static const List<int> beatsPerBarOptions = [2, 3, 4, 5, 6, 7];
@@ -25,6 +31,7 @@ class MetronomePopover extends StatelessWidget {
   static const Key beatsPickerKey = Key('MetronomePopover.beats');
   static const Key accentToggleKey = Key('MetronomePopover.accent');
   static const Key volumeSliderKey = Key('MetronomePopover.volume');
+  static const Key countInKey = Key('MetronomePopover.countIn');
 
   @override
   Widget build(BuildContext context) {
@@ -66,10 +73,32 @@ class MetronomePopover extends StatelessWidget {
           ),
           const SizedBox(height: PhiSpacing.s2),
           _Field(label: 'volume', child: _volumeSlider()),
+          if (countIn != null) ...[
+            const SizedBox(height: PhiSpacing.s2),
+            _Field(label: 'count-in', child: _countInPicker(countIn!)),
+          ],
         ],
       ),
     );
   }
+
+  Widget _countInPicker(CountInController countIn) {
+    return PhiSelect<int>.flat(
+      key: countInKey,
+      value: countIn.bars,
+      options: [
+        for (var bars = 0; bars <= CountInController.maxBars; bars++)
+          PhiSelectOption<int>(value: bars, label: _countInLabel(bars)),
+      ],
+      onChanged: (v) => countIn.bars = v,
+    );
+  }
+
+  static String _countInLabel(int bars) => switch (bars) {
+    0 => 'off',
+    1 => '1 bar',
+    _ => '$bars bars',
+  };
 
   Widget _domainPicker() {
     return PhiSelect<String?>.flat(

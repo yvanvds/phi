@@ -576,6 +576,26 @@ main + app          (orchestration)
   `MetronomeControl` widget test (toggle + popover controls), and an end-to-end
   `metronome_click` integration test (toolbar enable → bind `drum @ 124` →
   re-pace → change meter → stop).
+  Issue #263 adds the **count-in** (design §5) — an N-bar delay before a fresh
+  play/record. A `CountInController` (`lib/engine/state/`, ChangeNotifier) holds
+  the count length in bars (`0 / 1 / 2`, performance state, never persisted) and
+  schedules the wait as a **query of the engine clock** each frame — no Dart
+  timer in the timing path: [begin] captures the clock's beat as the origin and
+  the count completes once it advances `bars × beatsPerBar` beats, firing a
+  downbeat callback (audio-agnostic — the click counts when enabled, a silent
+  wait when not; the schedule is identical). `EngineMidiController.play` gates a
+  **fresh** start on it: with `bars > 0` it mints/paces a reserved count clock
+  (`phi.midi.countin`) at the edited session's tempo and, at the clip's meter,
+  waits before starting the session and any armed take on the downbeat; a stop or
+  pause aborts the count cleanly, and a punch-in into an already-running session
+  never waits (only a fresh play is scheduled). The toolbar `MetronomePopover`
+  gains a count-in `PhiSelect` (off / 1 bar / 2 bars) bound to the controller.
+  Covered by `CountInController` unit tests (scheduling at several meters, origin
+  capture, abort, no-op guards), `EngineMidiController` fake-clock tests (the
+  waited start, capture beginning on the downbeat, stop-abort, punch-in bypass,
+  0-bar immediate, meter-driven length), a `MetronomeControl` widget test (the
+  picker), and an end-to-end `count_in` integration test (set count-in → play
+  waits → stop aborts).
 - State surface scaffold: pan/zoom canvas (reuses the patcher's 16px
   dot grid backdrop) of rounded-square `PerformanceState` nodes with
   four voice-coloured corner pins, plus directed `StateTransition`
