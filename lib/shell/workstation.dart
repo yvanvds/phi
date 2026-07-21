@@ -598,6 +598,7 @@ class _WorkstationState extends State<Workstation> {
               onOpenSettings: widget.projectController != null
                   ? _openSettings
                   : null,
+              metronome: widget.engine.metronomeOrNull,
             ),
             Expanded(
               child: Row(

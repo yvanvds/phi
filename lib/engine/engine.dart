@@ -31,6 +31,7 @@ import '../domain/project/registry_group.dart';
 import '../domain/project/registry_kinds.dart';
 import '../domain/project/registry_node.dart';
 import '../domain/runtime/runtime_variable_registry.dart';
+import '../domain/synth/sine_synth.dart';
 import '../domain/time_domains/time_domain.dart';
 import '../domain/time_domains/time_domain_registry.dart';
 import 'bridge/audio_device_coordinator.dart';
@@ -40,6 +41,7 @@ import 'bridge/audio_device_state.dart';
 import 'bridge/bus_tap.dart';
 import 'bridge/fx_gateway.dart';
 import 'bridge/macbear_scene_renderer.dart';
+import 'bridge/materialised_synth.dart';
 import 'bridge/midi_gateway.dart';
 import 'bridge/no_op_bus_tap.dart';
 import 'bridge/no_op_registry_mirror.dart';
@@ -58,6 +60,7 @@ import 'bridge/yse_gateway.dart';
 import 'state/clip_registry_publisher.dart';
 import 'state/engine_midi_controller.dart';
 import 'state/engine_telemetry.dart';
+import 'state/metronome_controller.dart';
 import 'state/mix_tree_node.dart';
 import 'state/mixer_channel.dart';
 import 'state/patch_bus_option.dart';
@@ -331,6 +334,47 @@ class PhiEngine {
   /// [MidiGateway] was injected.
   EngineMidiController? get midiOrNull => _midi;
 
+  MetronomeController? _metronome;
+
+  /// The reserved click voice — a sine synth routed to master (design §4, §8).
+  /// Materialised on [start] when a synth gateway is wired; `null` otherwise, so
+  /// the click transport runs silently in setups without one (Phase-1 tests).
+  MaterialisedSynth? _clickSynth;
+
+  /// The metronome — the click session on a chosen time domain (issue #262).
+  /// Created on [start] alongside the MIDI subsystem; throws before [start] or
+  /// when no [MidiGateway] was wired. Use [metronomeOrNull] for the nullable
+  /// variant.
+  MetronomeController get metronome {
+    final m = _metronome;
+    if (m == null) {
+      throw StateError(
+        'PhiEngine.metronome used before start() or without a MIDI gateway',
+      );
+    }
+    return m;
+  }
+
+  /// Nullable variant of [metronome] — `null` before [start] *or* when no
+  /// [MidiGateway] was injected.
+  MetronomeController? get metronomeOrNull => _metronome;
+
+  /// Lazily materialise the reserved click voice (design §4, §8) the first time
+  /// the metronome is enabled — a sine synth on the reserved click channel,
+  /// routed to master like any voice. Materialised on demand (not at [start]) so
+  /// a project that never clicks pays nothing and the racks stay untouched.
+  /// Returns `null` (the click then runs silently) before [start], without a
+  /// synth gateway, or without the MIDI subsystem. Disposed on [stop].
+  MaterialisedSynth? _ensureClickSynth() {
+    if (_clickSynth != null) return _clickSynth;
+    final sg = _synthGateway;
+    if (!_started || sg == null || _midi == null) return null;
+    return _clickSynth = sg.materialiseSynth(
+      const SineSynth(voiceCount: 2),
+      channel: MetronomeController.clickSynthChannel,
+    )..bindToBus(null); // master
+  }
+
   Timer? _telemetryTimer;
   final StreamController<EngineTelemetry> _telemetry =
       StreamController<EngineTelemetry>.broadcast();
@@ -532,6 +576,9 @@ class PhiEngine {
     // seeding a default patch when it carries none, and open the first (issue
     // #224). No-op before [start] (no reconciler yet — start runs it once).
     _setupPatchLibrary();
+    // The new project brings its own `domain.` entities — refresh the metronome's
+    // picker and re-pace a running click against them (issue #262).
+    _metronome?.refreshDomains();
   }
 
   /// Adopt the bound registry's `clip.` document into the live MIDI objects, then
@@ -680,6 +727,17 @@ class PhiEngine {
         // Scene. `null` when no renderer is wired — spawning just no-ops.
         agentSink: _sceneRenderer,
       );
+      // The metronome (issue #262): a click session on a chosen `domain.` entity,
+      // paced from its tempo (the session tempo when none is bound). Built on the
+      // same transport machinery as clips, on its own reserved clock. The
+      // reserved click voice ([_clickSynth]) is materialised below once the synth
+      // gateway is known; the controller reads it lazily when the click runs.
+      _metronome = MetronomeController(
+        gateway: mg,
+        domains: _sessionTimeDomains,
+        sessionTempo: () => _midi?.sessionBpm ?? 120,
+        clickSynth: _ensureClickSynth,
+      );
     }
     // The rack materialiser (issue #208) reconciles synths per internal voice
     // and insert chains per bus, then hands the live voice table + synth map to
@@ -738,6 +796,9 @@ class PhiEngine {
     // project carries none, build the library controller, and open the first
     // patch so the surface has an editor. No-op without a patcher gateway.
     _setupPatchLibrary();
+    // Refresh the metronome picker against whatever `domain.` entities the bound
+    // registry carries (bindProject may have run before start, issue #262).
+    _metronome?.refreshDomains();
     // Boot / re-init full sync (design §3, issue #231): the embedded interpreter
     // is (re)ready here — on the first start, and again after a stop → start
     // re-inits the `System` and blanks its Python — so push the whole tree at the
@@ -807,6 +868,13 @@ class PhiEngine {
       _runtimeVariables = null;
       _clipPublisher?.unbind();
       _clipPublisher = null;
+      // The metronome first (it may hold a live connection to the click synth),
+      // then the reserved click voice — Sound before Synth, before the device
+      // closes below (issue #262).
+      _metronome?.dispose();
+      _metronome = null;
+      _clickSynth?.dispose();
+      _clickSynth = null;
       _midi?.dispose();
       _midi = null;
       _teardownChannels();
