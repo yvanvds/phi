@@ -184,8 +184,13 @@ void main() {
     // …the stopped clip plays again…
     expect(engine.midi.isPlaying, isTrue);
 
-    // …and the on-enter script ran through the shared evaluator.
-    expect(evaluator.calls, [codeScratchSource]);
+    // …and the on-enter script ran through the shared evaluator. The same
+    // evaluator also carries the `state.current` mirror pushes (issue #246),
+    // so the script runs are the calls that aren't sync pushes.
+    List<String> scriptRuns() => evaluator.calls
+        .where((c) => !c.startsWith('phi._sync_state_current('))
+        .toList();
+    expect(scriptRuns(), [codeScratchSource]);
 
     // Journal-free (§8 decision 2): the application authored nothing — the
     // project is still saved and the authored payloads keep their values.
@@ -210,7 +215,7 @@ void main() {
 
     // The rest of the state still applied…
     expect(engine.midi.isPlaying, isTrue);
-    expect(evaluator.calls, hasLength(2));
+    expect(scriptRuns(), hasLength(2));
     // …and the dropped bus was surfaced as a notice on the entered state.
     final notice = engine.lastStateNotice.value;
     expect(notice, isNotNull);
