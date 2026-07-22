@@ -83,6 +83,36 @@ class RenameFollowingTest(PhiTestCase):
         self.assertIn('real', phi.clip)
 
 
+class StateCurrentTest(PhiTestCase):
+    """``state.current`` — the host-pushed live-state readable (issue #246)."""
+
+    def test_current_defaults_to_none(self):
+        self.assertIsNone(phi.state.current)
+
+    def test_host_push_makes_current_readable(self):
+        phi._sync_state_current('verse')
+        self.assertEqual(phi.state.current, 'verse')
+
+    def test_push_of_none_clears(self):
+        phi._sync_state_current('verse')
+        phi._sync_state_current(None)
+        self.assertIsNone(phi.state.current)
+
+    def test_reset_clears_current(self):
+        phi._sync_state_current('verse')
+        phi._reset()
+        self.assertIsNone(phi.state.current)
+
+    def test_current_appears_in_dir_of_the_state_root(self):
+        self.assertIn('current', dir(phi.state))
+
+    def test_current_feeds_fire(self):
+        # ``state.fire(state.current)`` round-trips the pushed name.
+        phi._sync_state_current('verse')
+        phi.state.fire(phi.state.current)
+        self.assertEqual(self.sent[-1], ('phi.ctl.state.fire', 'verse'))
+
+
 class ReplaceTest(PhiTestCase):
     def test_replace_rebuilds_the_table(self):
         phi._sync_create('clip.old')
