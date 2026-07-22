@@ -7,13 +7,10 @@ import '../../design/widgets/patcher/patch_grid_painter.dart';
 import '../../design/widgets/state_machine/state_canvas_constants.dart';
 import '../../design/widgets/state_machine/state_transition_geometry.dart';
 import '../../domain/project/entity_address.dart';
-import '../../domain/project/registry_entity.dart';
-import '../../domain/project/registry_kinds.dart';
 import '../../domain/runtime/runtime_variable_registry.dart';
 import '../../domain/session/session_state.dart';
 import '../../domain/state_machine/state_transition.dart';
 import '../../domain/state_machine/store/state_trigger.dart';
-import '../../domain/time_domains/time_domain.dart';
 import '../../engine/state/state_entity_selection.dart';
 import '../../engine/state/state_machine_controller.dart';
 import 'state_ghost_transition.dart';
@@ -179,7 +176,11 @@ class _StateCanvasState extends State<StateCanvas> {
 
   void _select(EntityAddress address) {
     widget.session.select(
-      StateEntitySelection(controller: _controller, address: address),
+      StateEntitySelection(
+        controller: _controller,
+        address: address,
+        variables: widget.variables,
+      ),
     );
   }
 
@@ -265,33 +266,11 @@ class _StateCanvasState extends State<StateCanvas> {
     final edited = await StateTriggerEditor.show(
       context,
       initial: trigger,
-      domains: _domainOptions(),
+      domains: StateTriggerEditor.domainOptionsOf(_controller.registry),
       variables: widget.variables?.variables.toList() ?? const [],
     );
     if (edited == null || edited == trigger || !mounted) return;
     _controller.setTrigger(transition.source, transition.target, edited);
-  }
-
-  /// The project's `domain.` clocks a timed trigger can count on — top-level
-  /// entities with a decoded [TimeDomain] payload, in registry order (the
-  /// capture seam's shape).
-  List<TriggerDomainOption> _domainOptions() {
-    final result = <TriggerDomainOption>[];
-    for (final node in _controller.registry.childrenOfKind(
-      RegistryKinds.domain,
-    )) {
-      if (node is! RegistryEntity) continue;
-      final payload = node.payload;
-      if (payload is! TimeDomain) continue;
-      result.add((
-        address: EntityAddress(
-          kind: RegistryKinds.domain,
-          segments: [node.name],
-        ),
-        tempo: payload.tempo,
-      ));
-    }
-    return result;
   }
 
   // ─── context menus (standard affordances, issue #241) ───────────────────

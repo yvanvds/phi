@@ -5,9 +5,10 @@ import '../../design/tokens/phi_motion.dart';
 import '../../design/tokens/phi_spacing.dart';
 import '../../design/tokens/phi_type.dart';
 import '../../design/widgets/fader/phi_fader.dart';
-import '../../design/widgets/inline_editable_text/inline_editable_text.dart';
 import '../../domain/session/session_state.dart';
 import '../../engine/state/state_entity_selection.dart';
+import 'no_selection_panel.dart';
+import 'state_inspector_panel.dart';
 
 /// Right inspector — collapsed by default to a 28px strip with a rotated
 /// label. Tap to expand to 320px and reveal property editors for the active
@@ -105,12 +106,12 @@ class _ExpandedBody extends StatelessWidget {
                   valueListenable: session.selection,
                   builder: (context, value, _) {
                     if (value is StateEntitySelection) {
-                      return _StateEntitySection(
+                      return StateInspectorPanel(
                         selection: value,
                         session: session,
                       );
                     }
-                    return const _NoSelection();
+                    return const NoSelectionPanel();
                   },
                 ),
               ],
@@ -118,89 +119,6 @@ class _ExpandedBody extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _NoSelection extends StatelessWidget {
-  const _NoSelection();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('NO SELECTION', style: PhiType.caption()),
-        const SizedBox(height: PhiSpacing.s2),
-        Text(
-          'Select an object on a surface to edit its properties here.',
-          style: PhiType.small(),
-        ),
-      ],
-    );
-  }
-}
-
-/// Inspector panel for a selected `state.` entity (issue #241). Inline-
-/// editable name — an edit renames the entity through the controller's
-/// journaled rename-refactor and re-publishes the selection at its new
-/// address — plus the entity address and a read-only outbound-transitions
-/// list. The full SLICES / ON ENTER / TRANSITIONS editors arrive with the
-/// state-graph epic's inspector issue (design state-graph §6).
-class _StateEntitySection extends StatelessWidget {
-  const _StateEntitySection({required this.selection, required this.session});
-
-  final StateEntitySelection selection;
-  final SessionState session;
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = selection.controller;
-    return ListenableBuilder(
-      listenable: controller,
-      builder: (context, _) {
-        final node = controller.nodeAt(selection.address);
-        final document = controller.documentOf(selection.address);
-        // The selected entity is gone (deleted, or renamed from elsewhere) —
-        // the selection is stale, so fall back to the empty panel.
-        if (node == null || document == null) return const _NoSelection();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('STATE', style: PhiType.caption()),
-            const SizedBox(height: PhiSpacing.s2),
-            InlineEditableText(
-              value: node.name,
-              onChanged: (name) {
-                final to = controller.rename(selection.address, name);
-                if (to != null && to != selection.address) {
-                  session.select(selection.withAddress(to));
-                }
-              },
-              style: PhiType.monoL(),
-            ),
-            const SizedBox(height: PhiSpacing.s1),
-            Text(
-              node.address.format(),
-              style: PhiType.small().copyWith(color: PhiColors.fg3),
-            ),
-            const SizedBox(height: PhiSpacing.s5),
-            Text('TRANSITIONS', style: PhiType.caption()),
-            const SizedBox(height: PhiSpacing.s1),
-            if (document.transitions.isEmpty)
-              Text('—', style: PhiType.mono().copyWith(color: PhiColors.fg3))
-            else
-              for (final spec in document.transitions)
-                Padding(
-                  padding: const EdgeInsets.only(top: PhiSpacing.s0),
-                  child: Text(
-                    '→ ${spec.to.name} · ${spec.label ?? spec.trigger.kind}',
-                    style: PhiType.mono(),
-                  ),
-                ),
-          ],
-        );
-      },
     );
   }
 }

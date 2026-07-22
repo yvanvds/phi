@@ -652,11 +652,12 @@ main + app          (orchestration)
   content (`state_seed.dart` seeds fresh projects), and `bindRegistry`
   rebinds the controller so New/Open re-render the canvas and re-seed the
   live capsule. Tapping a node publishes a `StateEntitySelection`
-  (controller + address) into `SessionState.selection`; the right inspector
+  (controller + address + the runtime-variable registry) into
+  `SessionState.selection`; the right inspector
   renders the entity — inline rename through the journaled refactor
   (re-publishing the selection at the new address), the dotted address, and
-  the outbound-transitions list (the full SLICES / ON ENTER / TRANSITIONS
-  editors arrive with the epic's inspector issue). Covered by the controller
+  the full SLICES / ON ENTER / TRANSITIONS panels (issue #245, below).
+  Covered by the controller
   suite (journaled edits, arm/fire, rename-refactor + undo, delete impact,
   rebind), canvas + inspector widget tests (context menus, impact dialog,
   selection, rename re-publish, stale-selection fallback), and the
@@ -801,6 +802,33 @@ main + app          (orchestration)
   end-to-end `state_triggers` integration test (badge → arm on the badge →
   editor authors timed (clock armed on the entered live state) → variable
   (schedule cancels; the variable change fires the transition) → fireTo).
+  Issue #245 replaces the inspector placeholders with the **real SLICES /
+  ON ENTER / TRANSITIONS panels** (design §6): `StateInspectorPanel`
+  (`lib/shell/right_inspector/state_inspector_panel.dart`, rendered by
+  `RightInspector` for a `StateEntitySelection`; the shared empty panel is
+  `NoSelectionPanel`). **SLICES** shows the four categories with per-category
+  capture / clear and the captured entries listed with per-entry `×` remove
+  — an uncaptured category reads *not captured*, meaningfully distinct from
+  *captured · empty*; capture is disabled without a wired `StateSliceSource`.
+  **ON ENTER** is a `PhiSelect` over the project's `code.` tree (or none; a
+  stored script no longer in the project stays offered as `… · missing`)
+  driving the controller's journaled `setOnEnter`. **TRANSITIONS** lists the
+  outbound specs — target, a tappable trigger summary (kind + params) that
+  opens the shared `StateTriggerEditor` (its domain options now come from
+  the static `StateTriggerEditor.domainOptionsOf`; the variable picker reads
+  the selection's registry), and an inline-editable label through the
+  journaled `setTransitionLabel` — with per-row remove (`disconnect`) and an
+  add picker offering only unconnected non-self targets (`connect`), so
+  transitions are authored here as well as on the canvas and both sides stay
+  consistent (same controller, same journaled commands). Covered by
+  controller tests (`setOnEnter` / `setTransitionLabel` journal one command,
+  no-op on stored values, declare the on-enter reference), panel widget
+  tests (every panel interaction mutating the payload through commands,
+  not-captured vs captured-empty, canvas ↔ inspector consistency), and an
+  end-to-end `state_inspector` integration test (capture / trim / clear on
+  the live engine, on-enter to the seeded `code.scratch`, trigger + label
+  edits re-badging the canvas, canvas-authored state offered by the add
+  picker, inspector-side remove dropping the canvas badge).
 - Time-domains layer seed (issue #60): pure-Dart `TimeDomain` (a named
   BPM tempo reference) and an immutable, copy-on-write `TimeDomainRegistry`
   (name→domain lookup) in `lib/domain/time_domains/`. The minimal object a

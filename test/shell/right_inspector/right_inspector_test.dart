@@ -123,12 +123,16 @@ void main() {
         await tester.pump();
 
         expect(find.text('NO SELECTION'), findsNothing);
-        // STATE caption + inline name + entity address + outbound list.
+        // STATE caption + inline name + entity address + the real panels
+        // (issue #245): SLICES / ON ENTER / TRANSITIONS.
         expect(find.text('STATE'), findsOneWidget);
         expect(find.text('intro'), findsOneWidget);
         expect(find.text('state.intro'), findsOneWidget);
+        expect(find.text('SLICES'), findsOneWidget);
+        expect(find.text('ON ENTER'), findsOneWidget);
         expect(find.text('TRANSITIONS'), findsOneWidget);
-        expect(find.text('→ verse · manual'), findsOneWidget);
+        expect(find.text('→ verse'), findsOneWidget);
+        expect(find.text('manual'), findsOneWidget);
 
         session.clearSelection();
         await tester.pump();

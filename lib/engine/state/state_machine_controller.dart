@@ -409,6 +409,48 @@ class StateMachineController extends ChangeNotifier {
     );
   }
 
+  /// Replace the label of the [source] → [target] transition with [label] —
+  /// trimmed, with blank clearing it back to unset — as one journaled payload
+  /// update, so a label edit dirties, saves and undoes like any other
+  /// authored change (issue #245). Returns whether the transition exists
+  /// (`true` with no journal write when the label is already [label]).
+  bool setTransitionLabel(
+    EntityAddress source,
+    EntityAddress target,
+    String? label,
+  ) {
+    final document = _docs[source];
+    if (document == null) return false;
+    if (!document.transitions.any((s) => s.to == target)) return false;
+    final trimmed = label?.trim();
+    final normalised = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    if (document.transitions.every(
+      (s) => s.to != target || s.label == normalised,
+    )) {
+      return true;
+    }
+    _apply(
+      UpdateEntityPayloadCommand(
+        _registry,
+        source,
+        document.copyWith(
+          transitions: [
+            for (final spec in document.transitions)
+              if (spec.to == target)
+                StateTransitionSpec(
+                  to: spec.to,
+                  trigger: spec.trigger,
+                  label: normalised,
+                )
+              else
+                spec,
+          ],
+        ),
+      ),
+    );
+    return true;
+  }
+
   /// The persisted trigger of the first [source] → [target] transition, or
   /// `null` when no such transition exists — what the canvas badge and the
   /// trigger editor read (issue #244).
@@ -577,6 +619,29 @@ class StateMachineController extends ChangeNotifier {
       document.copyWith(slices: slices),
     ),
   );
+
+  // ─── on-enter script (issue #245; applied on entry by #243) ─────────────
+
+  /// Set — or clear, with `null` — the on-enter `code.` script of the state
+  /// at [address]: one journaled payload update, so the edit dirties, saves
+  /// and undoes like any other authored change (issue #245). The typed
+  /// document declares the reference, so a rename of the script follows it
+  /// and delete-impact on the script lists the state. Returns whether the
+  /// state exists (`true` with no journal write when [code] is already
+  /// stored).
+  bool setOnEnter(EntityAddress address, EntityAddress? code) {
+    final document = _docs[address];
+    if (document == null) return false;
+    if (document.onEnter == code) return true;
+    _apply(
+      UpdateEntityPayloadCommand(
+        _registry,
+        address,
+        document.copyWith(onEnter: code, clearOnEnter: code == null),
+      ),
+    );
+    return true;
+  }
 
   // ─── arming + firing ────────────────────────────────────────────────────
 

@@ -7,8 +7,12 @@ import '../../design/tokens/phi_type.dart';
 import '../../design/widgets/select/phi_select.dart';
 import '../../design/widgets/select/phi_select_option.dart';
 import '../../domain/project/entity_address.dart';
+import '../../domain/project/project_registry.dart';
+import '../../domain/project/registry_entity.dart';
+import '../../domain/project/registry_kinds.dart';
 import '../../domain/runtime/runtime_variable.dart';
 import '../../domain/state_machine/store/state_trigger.dart';
+import '../../domain/time_domains/time_domain.dart';
 
 /// A pickable `domain.` clock for a timed trigger — its address plus the
 /// authored tempo the picker labels it with.
@@ -53,6 +57,27 @@ class StateTriggerEditor extends StatefulWidget {
   static const Key valueKey = Key('StateTriggerEditor.value');
   static const Key saveKey = Key('StateTriggerEditor.save');
   static const Key cancelKey = Key('StateTriggerEditor.cancel');
+
+  /// The `domain.` clocks a timed trigger can count on — [registry]'s
+  /// top-level entities with a decoded [TimeDomain] payload, in registry
+  /// order. The canvas and the inspector both feed [show] from this (issues
+  /// #244 / #245).
+  static List<TriggerDomainOption> domainOptionsOf(ProjectRegistry registry) {
+    final result = <TriggerDomainOption>[];
+    for (final node in registry.childrenOfKind(RegistryKinds.domain)) {
+      if (node is! RegistryEntity) continue;
+      final payload = node.payload;
+      if (payload is! TimeDomain) continue;
+      result.add((
+        address: EntityAddress(
+          kind: RegistryKinds.domain,
+          segments: [node.name],
+        ),
+        tempo: payload.tempo,
+      ));
+    }
+    return result;
+  }
 
   /// Show the editor over [context]; resolves to the edited trigger, or
   /// `null` when cancelled (or barrier-dismissed).
