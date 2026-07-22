@@ -49,8 +49,11 @@ import 'patcher_commands/set_patch_params_command.dart';
 /// owning it, so [dispose] leaves the native patcher to the reconciler that
 /// created it.
 class PatcherController {
-  PatcherController(this._gateway, {int mainOutputs = 2})
-    : instanceId = _gateway.createInstance(mainOutputs: mainOutputs),
+  PatcherController(this._gateway, {int mainOutputs = 2, String name = ''})
+    : instanceId = _gateway.createInstance(
+        mainOutputs: mainOutputs,
+        name: name,
+      ),
       _ownsInstance = true;
 
   /// Bind an editor to an already-created gateway [instanceId] (the reconciler's

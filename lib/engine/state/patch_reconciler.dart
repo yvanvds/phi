@@ -112,7 +112,15 @@ class PatchReconciler {
     desired.forEach((address, payload) {
       final open = _open[address];
       if (open == null) {
-        final instanceId = _gateway.createInstance(mainOutputs: _mainOutputs);
+        // Name the native instance by its kind-stripped address (`patch.fx.swirl`
+        // → `fx.swirl`) so it registers on the engine-direct bus at
+        // `patcher.<address>.<slot>` and the `patch.<name>.send` verb reaches it
+        // (issue #318). A rename lands here as a fresh address, so the new
+        // instance re-registers under the new name.
+        final instanceId = _gateway.createInstance(
+          mainOutputs: _mainOutputs,
+          name: address.segments.join('.'),
+        );
         _gateway.parseJson(instanceId, jsonEncode(payload.dump));
         _open[address] = _OpenPatch(instanceId, payload.placement);
       } else {

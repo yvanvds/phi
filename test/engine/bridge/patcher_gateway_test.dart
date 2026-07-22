@@ -303,4 +303,57 @@ void main() {
       expect(gateway.enumerate(a).objects, hasLength(1));
     });
   });
+
+  group('engine-direct bus addressing (issue #318)', () {
+    test('a named instance registers under its bus name and receives a '
+        'publish to patcher.<name>.<slot>', () {
+      final a = gateway.createInstance(name: 'fx.swirl');
+
+      expect(gateway.instances[a]!.busName, 'fx.swirl');
+      // A publish to the instance's bus address lands on it at the given slot.
+      final delivered = gateway.deliverToPatcherBus('patcher.fx.swirl.3', 0.5);
+      expect(delivered, isTrue);
+      expect(gateway.instances[a]!.busSlots[3], 0.5);
+    });
+
+    test('an anonymous instance is not bus-addressable', () {
+      final a = gateway.createInstance(); // no name → anonymous
+
+      expect(gateway.instances[a]!.busName, '');
+      // No registration, so a publish to any patcher address resolves to nothing.
+      expect(gateway.deliverToPatcherBus('patcher.anything.0', 1), isFalse);
+      expect(gateway.instances[a]!.busSlots, isEmpty);
+    });
+
+    test('publishes route to the instance registered under that name', () {
+      final a = gateway.createInstance(name: 'a');
+      final b = gateway.createInstance(name: 'b');
+
+      gateway.deliverToPatcherBus('patcher.a.0', 1);
+      gateway.deliverToPatcherBus('patcher.b.1', 2);
+
+      // Each publish lands only on its own instance — names never cross-talk.
+      expect(gateway.instances[a]!.busSlots, {0: 1.0});
+      expect(gateway.instances[b]!.busSlots, {1: 2.0});
+    });
+
+    test('disposing a named instance unregisters it from the bus', () {
+      final a = gateway.createInstance(name: 'gone');
+      expect(gateway.deliverToPatcherBus('patcher.gone.0', 1), isTrue);
+
+      gateway.disposeInstance(a);
+
+      // The bus name is freed, so a later publish no longer resolves.
+      expect(gateway.deliverToPatcherBus('patcher.gone.0', 2), isFalse);
+    });
+
+    test('a malformed patcher address never resolves', () {
+      gateway.createInstance(name: 'fx.swirl');
+
+      // Missing slot, non-numeric slot, and wrong prefix all degrade to false.
+      expect(gateway.deliverToPatcherBus('patcher.fx.swirl', 1), isFalse);
+      expect(gateway.deliverToPatcherBus('patcher.fx.swirl.x', 1), isFalse);
+      expect(gateway.deliverToPatcherBus('synth.fx.swirl.0', 1), isFalse);
+    });
+  });
 }
