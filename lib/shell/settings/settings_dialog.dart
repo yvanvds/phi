@@ -25,6 +25,7 @@ class SettingsDialog extends StatefulWidget {
     required this.engine,
     required this.settings,
     this.initialSection = SettingsSection.audio,
+    this.diagnosticsReport,
     super.key,
   });
 
@@ -39,6 +40,11 @@ class SettingsDialog extends StatefulWidget {
   /// click-through lands straight on the device pickers (issue #271).
   final SettingsSection initialSection;
 
+  /// Builds the full paste-ready diagnostics bundle for the DIAGNOSTICS section's
+  /// copy button (issue #272). `null` in a bare dialog, which then copies only
+  /// the read-only rows.
+  final String Function()? diagnosticsReport;
+
   /// Opens the dialog as a modal overlay over [context], starting on
   /// [initialSection] (AUDIO by default). Resolves when it is dismissed (there is
   /// nothing to return — every edit already applied).
@@ -47,6 +53,7 @@ class SettingsDialog extends StatefulWidget {
     required PhiEngine engine,
     required AppSettingsController settings,
     SettingsSection initialSection = SettingsSection.audio,
+    String Function()? diagnosticsReport,
   }) {
     return showDialog<void>(
       context: context,
@@ -55,6 +62,7 @@ class SettingsDialog extends StatefulWidget {
         engine: engine,
         settings: settings,
         initialSection: initialSection,
+        diagnosticsReport: diagnosticsReport,
       ),
     );
   }
@@ -162,7 +170,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
       case SettingsSection.projects:
         return ProjectsSettingsSection(settings: widget.settings);
       case SettingsSection.diagnostics:
-        return DiagnosticsSettingsSection(engine: widget.engine);
+        return DiagnosticsSettingsSection(
+          engine: widget.engine,
+          report: widget.diagnosticsReport,
+        );
     }
   }
 }

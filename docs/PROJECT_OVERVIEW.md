@@ -2079,6 +2079,32 @@ main + app          (orchestration)
   `AudioDeviceChip` widget test (per-state look + click-through), and an end-to-end
   `audio_device_chip` integration test (the real app walks the four states via the
   fake gateway, each transition logs, and the chip clicks through to settings AUDIO).
+- **The report bundle + crash surfacing** (issue #272, epic #267, design
+  `docs/design/diagnostics.md` §6) — closes the diagnostics epic. A pure-Dart
+  `DiagnosticsBundle` (`lib/domain/log/`) renders one paste-ready, **stable-ordered**
+  block from already-resolved primitives — app + libYSE versions, the resolved
+  `YSE_DLL_PATH`, the active device + live audio state (rate/buffer/latency/layout),
+  the dropped-callback count, the open project path, and the last 200 log lines
+  (reusing `LogTranscript`) — so two reports taken days apart diff cleanly; nothing
+  is redacted (single-user, local machine). A shell `DiagnosticsReport`
+  (`lib/shell/diagnostics/`) is the single seam that gathers those facts off the
+  engine façade, the shared `LogStore`, and the open project location, and it backs
+  **both** the new `Copy Diagnostics` palette command (`app.copyDiagnostics`, no
+  chord) and the settings DIAGNOSTICS copy button (the section gained an optional
+  `report` builder; without it, the bare read-only block is still copied). The app
+  version is a plain `phiAppVersion` constant (`lib/core/app_version.dart`), kept in
+  step with `pubspec.yaml` — no `package_info_plus` plugin for a local instrument.
+  Crash surfacing rides on the #268 marker/`CrashReport`: `SessionLog.boot`'s verdict
+  (a missing clean-shutdown marker ⇒ the previous session crashed) is now captured in
+  `PhiApp` and handed to the `Workstation` as a `Future<CrashReport?>`; on first frame
+  a non-null report raises a warning notice (toast + log) naming the previous session's
+  log file — **alongside**, not replacing, the journal's recovery dialog. Covered by
+  `DiagnosticsBundle` unit tests (complete + stable order + log tail + empty/no-device/
+  no-project fallbacks), a `DiagnosticsReport` test over the real engine + log, a
+  `DiagnosticsSettingsSection` widget test (the supplied bundle wins over the read-only
+  rows), and an end-to-end `diagnostics_bundle` integration test (the `Copy Diagnostics`
+  command writes the bundle to the clipboard; an injected crash report surfaces the
+  linking notice + log entry).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

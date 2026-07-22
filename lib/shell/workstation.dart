@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../design/tokens/phi_colors.dart';
+import '../domain/log/crash_report.dart';
 import '../domain/log/log_level.dart';
 import '../domain/log/session_log.dart';
 import '../domain/midi/clip_editor.dart';
@@ -40,6 +42,7 @@ import 'commands/command_palette.dart';
 import 'commands/command_registry.dart';
 import 'commands/shell_commands.dart';
 import 'diagnostics/audio_health_monitor.dart';
+import 'diagnostics/diagnostics_report.dart';
 import 'diagnostics/log_coordinator.dart';
 import 'diagnostics/log_panel.dart';
 import 'diagnostics/log_panel_controller.dart';
@@ -77,6 +80,7 @@ class Workstation extends StatefulWidget {
     this.commandRegistry,
     this.noticeCenter,
     this.sessionLog,
+    this.crashReport,
     super.key,
   });
 
@@ -93,6 +97,13 @@ class Workstation extends StatefulWidget {
   /// the log then lives in memory only. Ignored when [noticeCenter] is injected
   /// (that center already owns its recorder).
   final SessionLog? sessionLog;
+
+  /// The result of booting the session log (issue #272, design §6): a non-null
+  /// [CrashReport] means the previous session left no clean-shutdown marker — it
+  /// crashed — so the shell surfaces a notice linking that session's log file,
+  /// alongside (not replacing) the journal's recovery dialog. `null` (and a
+  /// resolved-`null` future) means a clean previous exit or a first-ever boot.
+  final Future<CrashReport?>? crashReport;
 
   /// The command registry backing the command palette (design
   /// `docs/design/shell-layout.md` §4). `null` lets the shell build and own one,
@@ -188,6 +199,11 @@ class _WorkstationState extends State<Workstation> {
   /// Feeds the two log-only sources — the engine stream and Python tracebacks —
   /// into the notice center's recorder (design §2). Disposed with the shell.
   late final LogCoordinator _logCoordinator;
+
+  /// Assembles the paste-ready diagnostics bundle (design §6, issue #272) from
+  /// the engine, the shared log, and the open project path. The single source
+  /// behind both the "Copy Diagnostics" command and the settings copy button.
+  late final DiagnosticsReport _diagnostics;
 
   /// Drives the bottom-drawer log panel + the status-bar error badge (design §4,
   /// §5, issue #270) over the notice center's shared [LogStore]. Owned here.
@@ -301,6 +317,14 @@ class _WorkstationState extends State<Workstation> {
     // design §4). Owned here; disposed before the notice center so it detaches
     // its store listener before the store goes away.
     _logPanel = LogPanelController(store: _noticeCenter.log);
+    // The report bundle (issue #272, design §6): reads the engine, the shared
+    // log, and the open project path at compose time. Backs both the "Copy
+    // Diagnostics" command and the settings DIAGNOSTICS copy button.
+    _diagnostics = DiagnosticsReport(
+      engine: widget.engine,
+      log: _noticeCenter.log,
+      projectPath: () => widget.projectController?.location.value,
+    );
     // The status-bar audio-device chip (issue #271, design §5): derive its health
     // from `activeAudioState()` polled on the engine's telemetry tick plus the
     // device notices, logging each transition through the same channel. Disposed
@@ -358,6 +382,34 @@ class _WorkstationState extends State<Workstation> {
     _ownsCommands = widget.commandRegistry == null;
     _commands = widget.commandRegistry ?? CommandRegistry();
     _registerShellCommands();
+
+    // Crash surfacing (issue #272, design §6): once the boot completes, a
+    // non-null report means the previous session crashed — offer its log through
+    // the notice channel (toast + log entry), alongside the journal's recovery
+    // dialog. Scheduled off the first frame so the toast overlay is mounted.
+    _surfaceCrashReport();
+  }
+
+  /// Raises the crashed-last-session notice when the session-log boot reports a
+  /// crash (issue #272, design §6). Awaits [Workstation.crashReport]; a non-null
+  /// [CrashReport] surfaces a warning naming the previous session's log file so
+  /// the performer knows where "what happened" is written. No-op on a clean or
+  /// first-ever boot, or when no boot future was handed in (tests, bare shell).
+  void _surfaceCrashReport() {
+    final pending = widget.crashReport;
+    if (pending == null) return;
+    unawaited(
+      pending
+          .then((report) {
+            if (!mounted || report == null) return;
+            _noticeCenter.notice(
+              'Previous session ended unexpectedly — its log is '
+              'logs/${report.previousLogName}',
+              level: LogLevel.warning,
+            );
+          })
+          .catchError((Object _) {}),
+    );
   }
 
   /// Registers the shell's seed commands (design §4) — surface summon, transport,
@@ -382,6 +434,9 @@ class _WorkstationState extends State<Workstation> {
         // The log drawer's plain open/close — shared by the status-bar toggle,
         // this command, and Ctrl+J (issue #270, design §4).
         onToggleLogPanel: _logPanel.toggle,
+        // Copy the diagnostics bundle to the clipboard (issue #272, design §6) —
+        // the same block the settings copy button yields.
+        onCopyDiagnostics: () => unawaited(_copyDiagnostics()),
         onNewProject: actions == null
             ? null
             : () => unawaited(actions.newProject(context)),
@@ -405,6 +460,14 @@ class _WorkstationState extends State<Workstation> {
   /// Opens the command palette overlay (design §4) on Ctrl+Shift+P / F1.
   void _openCommandPalette() =>
       unawaited(CommandPalette.show(context, registry: _commands));
+
+  /// Copies the diagnostics bundle to the clipboard (issue #272, design §6) and
+  /// confirms through the notice channel (toast + log). The palette command
+  /// routes here; the settings copy button composes the same bundle in place.
+  Future<void> _copyDiagnostics() async {
+    await Clipboard.setData(ClipboardData(text: _diagnostics.compose()));
+    _noticeCenter.notice('Diagnostics copied to clipboard');
+  }
 
   /// Runs the shell-wide **panic** (issue #264, design
   /// `docs/design/midi-recording.md` §6): the engine's one stop-everything —
@@ -593,6 +656,7 @@ class _WorkstationState extends State<Workstation> {
         context,
         engine: widget.engine,
         settings: controller.settingsController,
+        diagnosticsReport: _diagnostics.compose,
       ),
     );
   }

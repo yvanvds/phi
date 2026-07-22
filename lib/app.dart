@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'design/theme.dart';
+import 'domain/log/crash_report.dart';
 import 'domain/log/real_log_file_store.dart';
 import 'domain/log/session_log.dart';
 import 'domain/midi/custom_transform_registry.dart';
@@ -40,6 +41,7 @@ class PhiApp extends StatefulWidget {
     this.layoutController,
     this.commandRegistry,
     this.noticeCenter,
+    this.crashReport,
   });
 
   /// Optional engine override — tests inject a fake-backed engine here so
@@ -94,6 +96,11 @@ class PhiApp extends StatefulWidget {
   /// fallback raised and the entries the sources logged.
   final NoticeCenter? noticeCenter;
 
+  /// Optional crashed-last-session report (design §6, issue #272). `null` on the
+  /// production path lets the app boot the session log and derive it; tests
+  /// inject a resolved future to drive the crash notice without touching disk.
+  final Future<CrashReport?>? crashReport;
+
   @override
   State<PhiApp> createState() => _PhiAppState();
 }
@@ -112,9 +119,14 @@ class _PhiAppState extends State<PhiApp> {
   /// §2): booted on the production path so engine / Python / app log entries
   /// land under `%APPDATA%/phi/logs/`, closed with a clean-shutdown marker on
   /// orderly exit. `null` when a test injected an engine (no disk in tests) or a
-  /// notice center (it owns its own recorder). Crash surfacing of that file is
-  /// #272.
+  /// notice center (it owns its own recorder).
   SessionLog? _sessionLog;
+
+  /// The session-log boot's crash verdict (design §6, issue #272), set on the
+  /// production path and handed to the workstation to surface. `null` when a test
+  /// injected a notice center (no disk boot ran); a test can still inject its own
+  /// via [PhiApp.crashReport].
+  Future<CrashReport?>? _crashReport;
 
   late final SessionState _session;
   late final bool _ownsSession;
@@ -150,7 +162,10 @@ class _PhiAppState extends State<PhiApp> {
       if (widget.noticeCenter == null) {
         final sessionLog = SessionLog(files: RealLogFileStore());
         _sessionLog = sessionLog;
-        unawaited(sessionLog.boot());
+        // Capture the boot's crash verdict (design §6, issue #272): a non-null
+        // report means the previous session left no clean-shutdown marker. The
+        // workstation awaits it to surface the crashed-last-session notice.
+        _crashReport = sessionLog.boot();
       }
     }
     _engine.start();
@@ -231,6 +246,7 @@ class _PhiAppState extends State<PhiApp> {
         commandRegistry: widget.commandRegistry,
         noticeCenter: widget.noticeCenter,
         sessionLog: _sessionLog,
+        crashReport: widget.crashReport ?? _crashReport,
       ),
     );
   }
