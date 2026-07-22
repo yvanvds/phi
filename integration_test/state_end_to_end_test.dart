@@ -14,14 +14,7 @@ import 'package:phi/domain/state_machine/slices/state_slice_category.dart';
 import 'package:phi/domain/state_machine/store/state_seed.dart';
 import 'package:phi/domain/state_machine/store/state_trigger.dart';
 import 'package:phi/engine/bridge/bus_tap.dart';
-import 'package:phi/engine/bridge/clip_control_port.dart';
-import 'package:phi/engine/bridge/control_plane_dispatcher.dart';
-import 'package:phi/engine/bridge/fx_control_port.dart';
-import 'package:phi/engine/bridge/tempo_control_port.dart';
-import 'package:phi/engine/bridge/variable_control_port.dart';
-import 'package:phi/engine/bridge/voice_control_port.dart';
 import 'package:phi/engine/engine.dart';
-import 'package:phi/engine/state/state_machine_control_port.dart';
 import 'package:phi/engine/state/state_trigger_scheduler.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
@@ -101,22 +94,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // The control plane over the engine's tap: the *real* dispatcher and the
-    // *real* state port; the other owning controllers stay faked — the
-    // cross-epic seams (#233's fakes) this walk is explicitly allowed to keep.
-    final notices = <String>[];
-    final inert = _InertPorts();
-    final dispatcher = ControlPlaneDispatcher(
-      busTap: busTap,
-      clips: inert,
-      voices: inert,
-      variables: inert,
-      states: StateMachineControlPort(engine.stateTriggers),
-      tempo: inert,
-      fx: inert,
-      onNotice: notices.add,
-    );
-    addTearDown(dispatcher.dispose);
+    // The control plane is now activated **in production** (issue #334): the
+    // dispatcher `PhiEngine.start` constructs over the engine's own bus tap —
+    // no scaffold dispatcher here — routes `phi.ctl.state.fire` to the real
+    // `StateMachineControlPort` over `engine.stateTriggers`. This walk drives
+    // frames straight onto that production seam through the same `busTap`.
 
     // ── Shape the intro performance and capture it onto `verse` ──────────────
     final pads = engine.addChannel(name: 'pads');
@@ -196,7 +178,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(sm.activeStateAddress, verseStateAddress);
-    expect(notices, isEmpty);
+    expect(engine.lastStateNotice.value, isNull);
 
     // The captured slices applied: mix level and variable snapped back…
     final livePads = engine.channels.value.singleWhere((c) => c.name == 'pads');
@@ -274,7 +256,6 @@ void main() {
 
     // Nothing degraded anywhere along the walk.
     expect(engine.lastStateNotice.value, isNull);
-    expect(notices, isEmpty);
 
     await engine.dispose();
     await midiGateway.dispose();
@@ -283,46 +264,4 @@ void main() {
     appSettings.dispose();
     session.dispose();
   });
-}
-
-/// The control plane's other owning controllers, faked (cross-epic seams —
-/// design `docs/design/live-coding.md` §4): this walk routes only state fires,
-/// so every other port is inert and any call onto one would surface through
-/// the dispatcher's notice log instead.
-class _InertPorts
-    implements
-        ClipControlPort,
-        VoiceControlPort,
-        VariableControlPort,
-        TempoControlPort,
-        FxControlPort {
-  @override
-  void play(EntityAddress target) {}
-
-  @override
-  void stop(EntityAddress target) {}
-
-  @override
-  void pause(EntityAddress target) {}
-
-  @override
-  void loop(EntityAddress target, {required bool on}) {}
-
-  @override
-  void stopAll() {}
-
-  @override
-  void note(EntityAddress voice, {required int pitch, int velocity = 100}) {}
-
-  @override
-  void off(EntityAddress voice, {int? pitch}) {}
-
-  @override
-  void set(String name, Object? value) {}
-
-  @override
-  void setTempo(EntityAddress domain, double bpm) {}
-
-  @override
-  void setParam(EntityAddress fx, String param, double value) {}
 }
