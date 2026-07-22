@@ -39,6 +39,7 @@ import 'bottom_status/bottom_status.dart';
 import 'commands/command_palette.dart';
 import 'commands/command_registry.dart';
 import 'commands/shell_commands.dart';
+import 'diagnostics/audio_health_monitor.dart';
 import 'diagnostics/log_coordinator.dart';
 import 'diagnostics/log_panel.dart';
 import 'diagnostics/log_panel_controller.dart';
@@ -56,6 +57,7 @@ import 'project/close_guard.dart';
 import 'project/project_actions.dart';
 import 'right_inspector/right_inspector.dart';
 import 'settings/settings_dialog.dart';
+import 'settings/settings_section.dart';
 import 'top_toolbar/top_toolbar.dart';
 
 /// Phi workstation chrome — composes the four fixed regions (top toolbar,
@@ -191,6 +193,11 @@ class _WorkstationState extends State<Workstation> {
   /// §5, issue #270) over the notice center's shared [LogStore]. Owned here.
   late final LogPanelController _logPanel;
 
+  /// Derives the status-bar audio-device health chip (design §5, issue #271) from
+  /// the engine's telemetry tick + `activeAudioState()` and device notices, and
+  /// logs each health transition through the notice channel. Owned here.
+  late final AudioHealthMonitor _audioHealth;
+
   late final CodeEvaluator _codeEvaluator;
   late final bool _ownsCodeEvaluator;
   late final CustomTransformRegistry _customTransforms;
@@ -294,6 +301,16 @@ class _WorkstationState extends State<Workstation> {
     // design §4). Owned here; disposed before the notice center so it detaches
     // its store listener before the store goes away.
     _logPanel = LogPanelController(store: _noticeCenter.log);
+    // The status-bar audio-device chip (issue #271, design §5): derive its health
+    // from `activeAudioState()` polled on the engine's telemetry tick plus the
+    // device notices, logging each transition through the same channel. Disposed
+    // before the notice center so it stops surfacing before the channel goes away.
+    _audioHealth = AudioHealthMonitor(
+      tick: widget.engine.telemetry,
+      readState: widget.engine.activeAudioState,
+      lastNotice: widget.engine.lastAudioNotice,
+      notices: _noticeCenter,
+    );
     // Retrofit sweep (design §3, §8 decision 3): the shipped ad-hoc notice
     // sites — the audio device fallback and the state / patch degradation paths
     // — surface through the one channel instead of vanishing on an unread
@@ -580,6 +597,22 @@ class _WorkstationState extends State<Workstation> {
     );
   }
 
+  /// Opens the settings dialog straight to its AUDIO section — the status-bar
+  /// audio-device chip's click-through (design §5, issue #271). Wired only when a
+  /// project controller is present (the settings owner lives on it).
+  void _openAudioSettings() {
+    final controller = widget.projectController;
+    if (controller == null) return;
+    unawaited(
+      SettingsDialog.show(
+        context,
+        engine: widget.engine,
+        settings: controller.settingsController,
+        initialSection: SettingsSection.audio,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _layout.removeListener(_onLayoutChanged);
@@ -590,6 +623,9 @@ class _WorkstationState extends State<Workstation> {
     widget.engine.lastAudioNotice.removeListener(_onAudioNotice);
     widget.engine.lastStateNotice.removeListener(_onStateNotice);
     widget.engine.lastPatchNotice.removeListener(_onPatchNotice);
+    // Stop the audio-health monitor (detaching its tick + notice listeners)
+    // before the notice center it surfaces through goes away.
+    _audioHealth.dispose();
     // Detach the panel's store listener before the notice center (maybe) drops
     // the store it listens to.
     _logPanel.dispose();
@@ -757,6 +793,10 @@ class _WorkstationState extends State<Workstation> {
                     engine: widget.engine,
                     session: widget.session,
                     logPanel: _logPanel,
+                    audioHealth: _audioHealth.health,
+                    onAudioSettings: widget.projectController == null
+                        ? null
+                        : _openAudioSettings,
                     onPanic: _onPanic,
                   ),
                 ],

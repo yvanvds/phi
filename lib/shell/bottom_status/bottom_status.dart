@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../design/tokens/phi_colors.dart';
@@ -6,16 +7,19 @@ import '../../design/tokens/phi_type.dart';
 import '../../domain/session/session_state.dart';
 import '../../engine/engine.dart';
 import '../../engine/state/engine_telemetry.dart';
+import '../diagnostics/audio_device_health.dart';
 import '../diagnostics/log_panel_controller.dart';
 import '../diagnostics/log_panel_toggle.dart';
+import 'audio_device_chip.dart';
 import 'midi_activity_dot.dart';
 import 'panic_button.dart';
 import 'status_chip.dart';
 
 /// Bottom status strip — 24px. Shows live engine telemetry (CPU, buffer,
 /// latency, drops), a `LIVE` dot that lights up when projection mode is on, the
-/// **panic** button right of the dot (issue #264), and a MIDI activity indicator
-/// that flashes on incoming MIDI.
+/// **panic** button right of the dot (issue #264), an **audio-device health
+/// chip** (issue #271), and a MIDI activity indicator that flashes on incoming
+/// MIDI.
 class BottomStatus extends StatelessWidget {
   /// Production constructor — binds to a live [PhiEngine]. [onPanic] routes the
   /// status-bar panic button (issue #264); the shell passes a handler that also
@@ -25,6 +29,8 @@ class BottomStatus extends StatelessWidget {
     required PhiEngine engine,
     required this.session,
     this.logPanel,
+    this.audioHealth,
+    this.onAudioSettings,
     VoidCallback? onPanic,
     super.key,
   }) : telemetry = engine.telemetry,
@@ -40,6 +46,8 @@ class BottomStatus extends StatelessWidget {
     required this.midiActivity,
     required this.session,
     this.logPanel,
+    this.audioHealth,
+    this.onAudioSettings,
     this.onPanic = _noPanic,
     super.key,
   });
@@ -52,6 +60,15 @@ class BottomStatus extends StatelessWidget {
   /// (design `docs/design/diagnostics.md` §4, §5). `null` in the bare widget
   /// tests that don't exercise the log; the toggle is then omitted.
   final LogPanelController? logPanel;
+
+  /// The live audio-device health the status-bar chip shows (design
+  /// `docs/design/diagnostics.md` §5, issue #271). `null` in the bare widget
+  /// tests that don't exercise it; the chip is then omitted.
+  final ValueListenable<AudioDeviceHealth>? audioHealth;
+
+  /// Opens the settings dialog's AUDIO section — the audio chip's click-through
+  /// (design §5). `null` leaves the chip inert (no settings owner wired).
+  final VoidCallback? onAudioSettings;
 
   /// The panic action the status-bar button runs (issue #264) — the shell wires
   /// this to `PhiEngine.panic`.
@@ -86,6 +103,11 @@ class BottomStatus extends StatelessWidget {
               ),
               StatusChip(label: 'LAT', value: formatLatency(t.latencyMs)),
               StatusChip(label: 'DROPS', value: '${t.missedCallbacks}'),
+              if (audioHealth != null) ...[
+                const SizedBox(width: PhiSpacing.s2),
+                AudioDeviceChip(health: audioHealth!, onTap: onAudioSettings),
+                const SizedBox(width: PhiSpacing.s2),
+              ],
               MidiActivityDot(activity: midiActivity),
               if (logPanel != null) ...[
                 const SizedBox(width: PhiSpacing.s3),

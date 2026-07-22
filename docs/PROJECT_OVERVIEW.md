@@ -2056,6 +2056,29 @@ main + app          (orchestration)
   an end-to-end `log_panel` integration test (toggle + Ctrl+J open, filter/search
   narrow, copy writes the visible set, the error badge opens filtered to errors and
   clears).
+- **The status-bar audio-device chip** (issue #271, epic #267, design
+  `docs/design/diagnostics.md` §5) — a glanceable health chip in the `BottomStatus`
+  showing ok · reconnecting · lost. An `AudioDeviceHealth` enum
+  (`lib/shell/diagnostics/`) plus an `AudioHealthMonitor` (same folder) derive the
+  state on the engine's existing telemetry tick: a live device (`activeAudioState()`
+  reads `sampleRate > 0`) is ok, a drop with a standing `noAudioDevice` notice is
+  lost, and a drop otherwise (the 1 s auto-reconnect window) is reconnecting —
+  reaching ok clears the tracked cause so a later drop reads as a fresh reconnect,
+  not a stale loss. The monitor is built from existing engine API only
+  (`telemetry` + `activeAudioState()` + `lastAudioNotice`, no engine change) and
+  logs every *transition* through the notice channel (design §5): dropping to
+  reconnecting/lost raises a notice (toast + log at warning/error), recovery to ok
+  logs at info without a toast. `AudioDeviceChip` (`lib/shell/bottom_status/`)
+  watches the monitor's `ValueListenable<AudioDeviceHealth>` — calm/muted while ok,
+  amber reconnecting, red lost — and clicks through to the settings dialog's AUDIO
+  section (a new `initialSection` on `SettingsDialog.show`). The `Workstation` owns
+  the monitor and wires the chip + click-through; `BottomStatus` gains optional
+  `audioHealth` + `onAudioSettings` params (omitted in the bare widget tests, so the
+  chip is only shown when wired). Covered by `AudioHealthMonitor` unit tests
+  (ok→reconnecting→lost→ok derivation + paired log entries + toast/no-toast), an
+  `AudioDeviceChip` widget test (per-state look + click-through), and an end-to-end
+  `audio_device_chip` integration test (the real app walks the four states via the
+  fake gateway, each transition logs, and the chip clicks through to settings AUDIO).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
