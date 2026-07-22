@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../../design/widgets/state_machine/state_canvas_constants.dart';
 import '../../design/widgets/state_machine/state_transition_geometry.dart';
 import '../../design/widgets/state_machine/state_transition_painter.dart';
-import '../../domain/state_machine/performance_state_id.dart';
+import '../../domain/project/entity_address.dart';
 import '../../domain/state_machine/state_transition.dart';
 
 /// Wraps the [StateTransitionPainter] in a `GestureDetector` that maps a
@@ -24,12 +24,11 @@ class StateTransitionLayer extends StatelessWidget {
   });
 
   final List<StateTransition> transitions;
-  final Map<PerformanceStateId, Rect> nodeRects;
+  final Map<EntityAddress, Rect> nodeRects;
   final int version;
 
-  /// Called with the in-graph transition whose arrow was tapped. `null`
-  /// to make the layer non-interactive — useful in tests / future
-  /// read-only renders.
+  /// Called with the transition whose arrow was tapped. `null` to make the
+  /// layer non-interactive — useful in tests / future read-only renders.
   final void Function(StateTransition transition)? onTransitionTap;
 
   @override
@@ -62,8 +61,8 @@ class StateTransitionLayer extends StatelessWidget {
     StateTransition? best;
     var bestDistance = StateCanvasConstants.transitionHitThreshold;
     for (final t in transitions) {
-      final src = nodeRects[t.sourceId];
-      final dst = nodeRects[t.targetId];
+      final src = nodeRects[t.source];
+      final dst = nodeRects[t.target];
       if (src == null || dst == null) continue;
       final curve = StateTransitionGeometry.curveBetween(src, dst);
       final d = StateTransitionGeometry.distanceTo(curve, local);

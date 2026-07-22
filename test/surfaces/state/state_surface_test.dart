@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/widgets/state_machine/state_node_frame.dart';
 import 'package:phi/domain/session/session_state.dart';
-import 'package:phi/domain/state_machine/performance_state.dart';
 import 'package:phi/engine/engine.dart';
+import 'package:phi/engine/state/state_entity_selection.dart';
 import 'package:phi/surfaces/state/state_surface.dart';
 
 import '../../engine/test_doubles/fake_yse_gateway.dart';
@@ -68,9 +68,8 @@ void main() {
       await gateway.dispose();
     });
 
-    testWidgets('seeds two states and one transition on first build', (
-      tester,
-    ) async {
+    testWidgets('renders the engine-seeded intro → verse pair from the '
+        'registry', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -78,16 +77,16 @@ void main() {
           ),
         ),
       );
-      // First frame triggers the seed in initState; pump again so the
-      // ListenableBuilder picks up the graph changes.
       await tester.pump();
 
+      // `PhiEngine.start` seeded the default pair into its scratch registry
+      // (issue #241) — the canvas renders straight from it.
       expect(find.byType(StateNodeFrame), findsNWidgets(2));
-      expect(engine.stateMachine.graph.states, hasLength(2));
-      expect(engine.stateMachine.graph.transitions, hasLength(1));
+      expect(engine.stateMachine.states, hasLength(2));
+      expect(engine.stateMachine.transitions, hasLength(1));
     });
 
-    testWidgets('seed marks the first state as the live one', (tester) async {
+    testWidgets('the first seeded state is the live one', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -97,15 +96,14 @@ void main() {
       );
       await tester.pump();
 
-      final activeId = engine.stateMachine.graph.activeStateId;
-      expect(activeId, isNotNull);
-      expect(engine.stateMachine.graph.stateById(activeId!)?.name, 'intro');
+      final active = engine.stateMachine.activeStateAddress;
+      expect(active, isNotNull);
+      expect(active!.name, 'intro');
       expect(find.text('● LIVE'), findsOneWidget);
     });
 
-    testWidgets('tapping a node publishes it as the cross-surface selection', (
-      tester,
-    ) async {
+    testWidgets('tapping a node publishes its entity as the cross-surface '
+        'selection', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -122,8 +120,10 @@ void main() {
       await tester.pump();
 
       final selected = session.selection.value;
-      expect(selected, isA<PerformanceState>());
-      expect((selected as PerformanceState).name, 'verse');
+      expect(selected, isA<StateEntitySelection>());
+      selected as StateEntitySelection;
+      expect(selected.address.name, 'verse');
+      expect(identical(selected.controller, engine.stateMachine), isTrue);
     });
   });
 }

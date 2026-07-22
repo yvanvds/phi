@@ -7,8 +7,8 @@ import 'state_canvas_constants.dart';
 
 /// Visual chrome for one state node: a rounded square with a status
 /// caption, the state name beneath, and four voice-coloured corner
-/// pins. Visual-only and unaware of [PerformanceState] /
-/// [StateMachineController]; callers wrap it in a `GestureDetector`/
+/// pins. Visual-only and unaware of `StateNodeData` /
+/// `StateMachineController`; callers wrap it in a `GestureDetector`/
 /// `Listener` for drag, tap, and transition authoring.
 ///
 /// Three [display] modes — `idle`, `live`, `armed` — drive border /

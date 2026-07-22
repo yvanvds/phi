@@ -31,6 +31,7 @@ import '../domain/project/registry_group.dart';
 import '../domain/project/registry_kinds.dart';
 import '../domain/project/registry_node.dart';
 import '../domain/runtime/runtime_variable_registry.dart';
+import '../domain/state_machine/store/state_seed.dart';
 import '../domain/synth/sine_synth.dart';
 import '../domain/time_domains/time_domain.dart';
 import '../domain/time_domains/time_domain_registry.dart';
@@ -101,6 +102,15 @@ class PhiEngine {
     // registry it owns a private empty one, so a bare engine (Phase-1 tests)
     // still adds channels — they just live in a registry nobody persists.
     _mixRegistry.addListener(_syncChannelsFromRegistry);
+    // Seed the default `intro → verse` state pair into the scratch registry
+    // (design state-graph §3, issue #241): a bare engine — tests, or a run
+    // before any project is bound — still shows the graph the State surface
+    // has always seeded. Done *before* the mirror binds so the boot resync is
+    // the one push that carries the seeded states. A *project* registry is
+    // never touched: its states are authored content (seeded by
+    // `seedDefaultProject` for a fresh project; an intentionally emptied one
+    // stays empty).
+    _seedDefaultStatesIfUnbound();
     // The RegistryMirror seam (design §8) follows the same registry, mirroring
     // create / rename / delete / regroup into the engine's Python namespace —
     // a no-op until the live-coding epic swaps in a live mirror.
@@ -578,6 +588,7 @@ class PhiEngine {
       _recordCommand = recordCommand;
       _clipCustomTransforms = customTransforms;
       _clipPublisher?.updateRecordCommand(recordCommand);
+      _stateMachine?.rebind(registry: registry, recordCommand: recordCommand);
       return;
     }
     _mixRegistry.removeListener(_syncChannelsFromRegistry);
@@ -593,6 +604,10 @@ class PhiEngine {
     // names (design §3, issue #231). The incremental event stream keeps it in
     // step from here.
     _mirrorBinder.resync();
+    // Re-point the state machine at the project's `state.` namespace (issue
+    // #241): the canvas re-renders from the new registry and the live state
+    // re-seeds from its first state.
+    _stateMachine?.rebind(registry: registry, recordCommand: recordCommand);
     _teardownChannels();
     _syncChannelsFromRegistry();
     _adoptClipAndRebindPublisher();
@@ -642,6 +657,28 @@ class PhiEngine {
     // and the publisher — which follows the edited session's address — has an
     // entity to publish into.
     midi.adoptDocumentAsEdited(address, document);
+  }
+
+  /// Seed the default `intro → verse` state pair (design state-graph §3)
+  /// into the engine's own scratch registry when it carries no states yet.
+  /// Payloads are map-native, exactly like `seedDefaultProject`'s — the
+  /// state machine normalises them to typed documents on bind. A bound
+  /// project registry is never seeded here.
+  void _seedDefaultStatesIfUnbound() {
+    if (!_ownsMixRegistry) return;
+    if (_mixRegistry.childrenOfKind(RegistryKinds.state).isNotEmpty) return;
+    final intro = introStateDocument();
+    _mixRegistry.createEntity(
+      introStateAddress,
+      payload: intro.toJson(),
+      references: intro.references,
+    );
+    final verse = verseStateDocument();
+    _mixRegistry.createEntity(
+      verseStateAddress,
+      payload: verse.toJson(),
+      references: verse.references,
+    );
   }
 
   /// The session time-domain registry, materialised from the bound registry's
@@ -725,8 +762,19 @@ class PhiEngine {
     // [PatchReconciler] (below) as it syncs, and the editor binds to the open
     // entity's instance through the [PatchLibraryController] (issue #224).
     final pg = _patcherGateway;
-    final sm = StateMachineController();
+    // The default `intro → verse` state pair was seeded into the scratch
+    // registry at construction (never into a bound project registry); the
+    // controller fronts whichever registry is bound now.
+    final sm = StateMachineController(
+      registry: _mixRegistry,
+      recordCommand: _recordCommand,
+    );
     _stateMachine = sm;
+    // Rename = refactor reaches the live MIDI graphs too (issue #241): when a
+    // `state.` entity moves, repoint every open session's guard edges so a
+    // state-guarded branch keeps routing — the stored clip follows through
+    // the edited session's registry publisher.
+    sm.onStateMoved = (from, to) => _midi?.repointStateGuards(from, to);
     final rv = RuntimeVariableRegistry();
     _runtimeVariables = rv;
     // MIDI subsystem is optional — tests that don't inject a MidiGateway get
@@ -741,7 +789,7 @@ class PhiEngine {
         // The state machine drives the graph's live evaluation context, so a
         // graph clip's state-guarded branch re-routes the sounding notes as the
         // live state flips (issue #77).
-        stateGraph: sm.graph,
+        stateMachine: sm,
         // The runtime-variable registry drives the graph's other context
         // source, so a `var · mode = lead` branch re-routes as the performance
         // moves the variable (issue #78).

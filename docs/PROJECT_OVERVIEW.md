@@ -617,30 +617,53 @@ main + app          (orchestration)
   `BottomStatus` widget test (the button runs `onPanic`), a `shell_commands` test
   (the permanent F12 Transport command), and an end-to-end `panic` integration
   test (F12 and the button each stop the click, the session, and the transport).
-- State surface scaffold: pan/zoom canvas (reuses the patcher's 16px
-  dot grid backdrop) of rounded-square `PerformanceState` nodes with
-  four voice-coloured corner pins, plus directed `StateTransition`
-  arrows drawn as cubic Béziers between the closest source/target
-  edges with arrowheads. Domain in `lib/domain/state_machine/`:
-  pure-Dart `PerformanceState` / `StateTransition` / `StateGraph` /
-  `StateSnapshot` (ChangeNotifier where mutable, immutable value
-  type for `StateSnapshot`). `StateMachineController` (pure Dart,
-  no gateway) in `lib/engine/state/` snaps every node move to 16px
-  and rejects self-loops + duplicate transitions. Drag any corner
-  pin onto another node to author a transition; click a transition
-  arrow to arm it (the target node renders the amber
-  `▲ ARMED · {fireOn}` capsule and the arrow turns fuchsia); tap
-  the armed capsule to fire — active flips to the target and every
-  arm clears. Exactly one state at a time is "live" (fuchsia
-  `● LIVE` capsule). Seeds `intro` (live) → `verse` on first open.
-  Tapping any node also publishes it as the cross-surface selection
-  (`SessionState.selection`, a `ValueNotifier<Object?>` any surface
-  can write into); the selected node renders an outer fuchsia ring,
-  and the right inspector swaps its placeholder for an inline-editable
-  name plus a read-only three-section snapshot view (DOMAINS · CODE
-  BLOCKS · SCENE REF — all empty until the time-domain / scripting /
-  scene-pose layers ship).
-  The state-graph epic (design `docs/design/state-graph.md`, epic #239) begins
+- State surface: pan/zoom canvas (reuses the patcher's 16px dot grid
+  backdrop) of rounded-square state nodes with four voice-coloured corner
+  pins, plus directed transition arrows drawn as cubic Béziers between the
+  closest source/target edges with arrowheads. Since issue #241 the canvas is
+  **registry-backed**: nodes are `state.` entities, and the
+  `StateMachineController` (`lib/engine/state/`) fronts the registry — the
+  view rows (`StateNodeData`) and edges (`StateTransition`, both
+  `lib/domain/state_machine/`) derive from the entity payloads on every
+  change, and every structural edit (add / duplicate / rename / delete /
+  connect / disconnect / node move) is a journaled command through the
+  ordinary create/move/remove/update-payload command layer, so it dirties,
+  saves, and undoes like any other project change. Node drags stay transient
+  while the pointer is down (16px snap as always) and commit **one** position
+  command on release. Which state is **live** and which transitions are
+  **armed** are performance state keyed by entity address — never persisted;
+  a loaded or reloaded project re-seeds live on its first `state.` entity.
+  **Rename = refactor**: a rename is a registry move, sibling transition
+  targets rewrite in the same command, live/armed/drag references remap in
+  place (rename mid-arm keeps the arm), and the controller's `onStateMoved`
+  hook has the engine repoint every open MIDI session's `state.` guards
+  (`EngineMidiController.repointStateGuards`) so guard evaluation re-routes
+  live. Standard affordances ride context menus: right-click empty canvas →
+  *new state* at that spot; right-click a node → *duplicate* / *delete* (the
+  latter behind the delete-impact dialog when other entities still point at
+  the state; deleting also clears inbound transitions as journaled payload
+  updates). Drag any corner pin onto another node to author a transition;
+  click a transition arrow to arm it (the target renders the amber
+  `▲ ARMED · {fireOn}` capsule); tap the armed capsule to fire — live flips
+  to the target and every arm clears, journal-free. Exactly one state is live
+  whenever any exists (fuchsia `● LIVE` capsule). `PhiEngine.start` seeds the
+  default `intro → verse` pair into its own scratch registry when no project
+  is bound (bare engine, tests); a bound project's states are authored
+  content (`state_seed.dart` seeds fresh projects), and `bindRegistry`
+  rebinds the controller so New/Open re-render the canvas and re-seed the
+  live capsule. Tapping a node publishes a `StateEntitySelection`
+  (controller + address) into `SessionState.selection`; the right inspector
+  renders the entity — inline rename through the journaled refactor
+  (re-publishing the selection at the new address), the dotted address, and
+  the outbound-transitions list (the full SLICES / ON ENTER / TRANSITIONS
+  editors arrive with the epic's inspector issue). Covered by the controller
+  suite (journaled edits, arm/fire, rename-refactor + undo, delete impact,
+  rebind), canvas + inspector widget tests (context menus, impact dialog,
+  selection, rename re-publish, stale-selection fallback), and the
+  `state_graph_canvas` integration test (drag journals the position, rename
+  mid-arm keeps the arm on-screen, context-menu new state, save + second
+  launch restores the graph, the positions, and the live-state seed).
+  The state-graph epic (design `docs/design/state-graph.md`, epic #239) began
   with the **`state.` entity domain** (issue #240): a new registry kind whose
   payload is a `StateDocument` (`lib/domain/state_machine/store/`) — canvas
   position, the **ordered outbound transitions** (`StateTransitionSpec`:
@@ -657,14 +680,15 @@ main + app          (orchestration)
   Which state is *live* never persists (§8 decision 2 — firing is
   performance, not authorship). A fresh project seeds `state.intro` (one
   manual transition) → `state.verse` at the canvas positions the surface has
-  always used; the registry-backed controller/canvas is #241.
-  `StateMatchCondition` **migrated** from `PerformanceStateId` to the entity
-  address (no compat shim): `GraphEvalContext.activeState` is now an
-  `EntityAddress` mirrored from `StateGraph.activeStateAddress` (derived from
-  the live node's name slug until #241 keys the canvas by real registry
-  addresses), the guard picker authors addresses, `EdgeConditionCodec`
+  always used; the registry-backed controller/canvas landed with #241.
+  `StateMatchCondition` **migrated** from the old canvas-local id to the
+  entity address (no compat shim): `GraphEvalContext.activeState` is an
+  `EntityAddress` mirrored from the state machine's `activeStateAddress`
+  (real registry addresses since #241), the guard picker authors addresses,
+  `EdgeConditionCodec`
   persists the dotted address, and the graph exposes `guardStateAddresses` +
-  `repointGuardState` — the guard-rename machinery #241 drives. The
+  `repointGuardState` — the guard-rename machinery #241 drives on every
+  state rename. The
   `ClipRegistryPublisher` also listens to the domain graph and re-declares
   `ClipDocument.guardStateReferences` on every publish, so delete-impact on a
   state lists the clips whose MIDI-graph guards branch on it. Covered by

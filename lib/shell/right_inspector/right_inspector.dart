@@ -7,8 +7,7 @@ import '../../design/tokens/phi_type.dart';
 import '../../design/widgets/fader/phi_fader.dart';
 import '../../design/widgets/inline_editable_text/inline_editable_text.dart';
 import '../../domain/session/session_state.dart';
-import '../../domain/state_machine/performance_state.dart';
-import '../../domain/state_machine/state_snapshot.dart';
+import '../../engine/state/state_entity_selection.dart';
 
 /// Right inspector — collapsed by default to a 28px strip with a rotated
 /// label. Tap to expand to 320px and reveal property editors for the active
@@ -105,8 +104,11 @@ class _ExpandedBody extends StatelessWidget {
                 ValueListenableBuilder<Object?>(
                   valueListenable: session.selection,
                   builder: (context, value, _) {
-                    if (value is PerformanceState) {
-                      return _PerformanceStateSection(state: value);
+                    if (value is StateEntitySelection) {
+                      return _StateEntitySection(
+                        selection: value,
+                        session: session,
+                      );
                     }
                     return const _NoSelection();
                   },
@@ -139,90 +141,66 @@ class _NoSelection extends StatelessWidget {
   }
 }
 
-/// Inspector panel for a selected [PerformanceState]. Inline-editable
-/// name + read-only [StateSnapshot] view (three labelled lists). The
-/// snapshot stays read-only until the time-domain / scripting /
-/// scene-pose layers ship — see [StateSnapshot] for the contract.
-class _PerformanceStateSection extends StatelessWidget {
-  const _PerformanceStateSection({required this.state});
+/// Inspector panel for a selected `state.` entity (issue #241). Inline-
+/// editable name — an edit renames the entity through the controller's
+/// journaled rename-refactor and re-publishes the selection at its new
+/// address — plus the entity address and a read-only outbound-transitions
+/// list. The full SLICES / ON ENTER / TRANSITIONS editors arrive with the
+/// state-graph epic's inspector issue (design state-graph §6).
+class _StateEntitySection extends StatelessWidget {
+  const _StateEntitySection({required this.selection, required this.session});
 
-  final PerformanceState state;
+  final StateEntitySelection selection;
+  final SessionState session;
 
   @override
   Widget build(BuildContext context) {
+    final controller = selection.controller;
     return ListenableBuilder(
-      listenable: state,
+      listenable: controller,
       builder: (context, _) {
-        final snapshot = state.snapshot;
+        final node = controller.nodeAt(selection.address);
+        final document = controller.documentOf(selection.address);
+        // The selected entity is gone (deleted, or renamed from elsewhere) —
+        // the selection is stale, so fall back to the empty panel.
+        if (node == null || document == null) return const _NoSelection();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('STATE', style: PhiType.caption()),
             const SizedBox(height: PhiSpacing.s2),
             InlineEditableText(
-              value: state.name,
-              onChanged: state.rename,
+              value: node.name,
+              onChanged: (name) {
+                final to = controller.rename(selection.address, name);
+                if (to != null && to != selection.address) {
+                  session.select(selection.withAddress(to));
+                }
+              },
               style: PhiType.monoL(),
             ),
+            const SizedBox(height: PhiSpacing.s1),
+            Text(
+              node.address.format(),
+              style: PhiType.small().copyWith(color: PhiColors.fg3),
+            ),
             const SizedBox(height: PhiSpacing.s5),
-            _SnapshotList(label: 'DOMAINS', values: snapshot.domainIds),
-            const SizedBox(height: PhiSpacing.s4),
-            _SnapshotList(label: 'CODE BLOCKS', values: snapshot.codeBlockIds),
-            const SizedBox(height: PhiSpacing.s4),
-            _SnapshotScalar(label: 'SCENE REF', value: snapshot.sceneRef),
+            Text('TRANSITIONS', style: PhiType.caption()),
+            const SizedBox(height: PhiSpacing.s1),
+            if (document.transitions.isEmpty)
+              Text('—', style: PhiType.mono().copyWith(color: PhiColors.fg3))
+            else
+              for (final spec in document.transitions)
+                Padding(
+                  padding: const EdgeInsets.only(top: PhiSpacing.s0),
+                  child: Text(
+                    '→ ${spec.to.name} · ${spec.label ?? spec.trigger.kind}',
+                    style: PhiType.mono(),
+                  ),
+                ),
           ],
         );
       },
-    );
-  }
-}
-
-class _SnapshotList extends StatelessWidget {
-  const _SnapshotList({required this.label, required this.values});
-
-  final String label;
-  final List<String> values;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: PhiType.caption()),
-        const SizedBox(height: PhiSpacing.s1),
-        if (values.isEmpty)
-          Text('—', style: PhiType.mono().copyWith(color: PhiColors.fg3))
-        else
-          for (final v in values)
-            Padding(
-              padding: const EdgeInsets.only(top: PhiSpacing.s0),
-              child: Text(v, style: PhiType.mono()),
-            ),
-      ],
-    );
-  }
-}
-
-class _SnapshotScalar extends StatelessWidget {
-  const _SnapshotScalar({required this.label, required this.value});
-
-  final String label;
-  final String? value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: PhiType.caption()),
-        const SizedBox(height: PhiSpacing.s1),
-        Text(
-          value ?? '—',
-          style: PhiType.mono().copyWith(
-            color: value == null ? PhiColors.fg3 : PhiColors.fg1,
-          ),
-        ),
-      ],
     );
   }
 }

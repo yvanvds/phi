@@ -1,42 +1,45 @@
-import 'performance_state_id.dart';
+import '../project/entity_address.dart';
 
-/// A directed edge between two [PerformanceState]s.
+/// A directed edge between two `state.` entities, as the canvas renders and
+/// interacts with it (issue #241).
 ///
-/// Immutable value object. To "move" a transition, remove and add; to
-/// change [armed] or [fireOn], replace the instance via [copyWith] —
-/// [StateGraph] does this in place when its `toggleArmed` / `fire` /
-/// `setArmed` methods are called.
+/// Immutable value object the registry-backed `StateMachineController`
+/// derives from the source state's persisted `StateTransitionSpec` list: the
+/// [source] / [target] addresses come from the payload, [fireOn] from the
+/// spec's label or trigger kind, and [armed] from the controller's transient
+/// arm set — arming is performance state and never persists.
 ///
-/// Equality is on `(sourceId, targetId)` only — two transitions with the
-/// same endpoints but different `armed` / `fireOn` are still "the same
-/// edge". That keeps duplicate-detection in [StateGraph] a cheap
-/// `contains` call and lets the graph look up the current state of an
-/// edge by its endpoints alone.
+/// Equality is on `(source, target)` only — two transitions with the same
+/// endpoints but different `armed` / `fireOn` are still "the same edge". That
+/// keeps duplicate-detection a cheap `contains` call and lets the controller
+/// key its arm set by endpoints alone, which is what lets a rename remap an
+/// arm in place (rename mid-arm keeps the arm).
 class StateTransition {
   const StateTransition({
-    required this.sourceId,
-    required this.targetId,
+    required this.source,
+    required this.target,
     this.armed = false,
     this.fireOn = 'manual',
   });
 
-  final PerformanceStateId sourceId;
-  final PerformanceStateId targetId;
+  /// The `state.` entity whose payload carries this transition.
+  final EntityAddress source;
+
+  /// The `state.` entity this transition fires toward.
+  final EntityAddress target;
 
   /// Whether this transition is staged to fire on the next trigger.
-  /// Multiple transitions may be armed simultaneously; [StateGraph.fire]
-  /// clears every arm in one go.
+  /// Multiple transitions may be armed simultaneously; a fire clears every
+  /// arm in one go.
   final bool armed;
 
-  /// Free-form label rendered in the target node's "armed" capsule
-  /// ("manual", "4 bars", "audio > −18", …). The trigger semantics
-  /// behind the label arrive with the time-domain / sensor layers; for
-  /// now the label is purely cosmetic.
+  /// Label rendered in the target node's "armed" capsule — the spec's label
+  /// when set, its trigger kind otherwise ("manual", "timed", …).
   final String fireOn;
 
   StateTransition copyWith({bool? armed, String? fireOn}) => StateTransition(
-    sourceId: sourceId,
-    targetId: targetId,
+    source: source,
+    target: target,
     armed: armed ?? this.armed,
     fireOn: fireOn ?? this.fireOn,
   );
@@ -45,9 +48,14 @@ class StateTransition {
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is StateTransition &&
-          other.sourceId == sourceId &&
-          other.targetId == targetId);
+          other.source == source &&
+          other.target == target);
 
   @override
-  int get hashCode => Object.hash(sourceId, targetId);
+  int get hashCode => Object.hash(source, target);
+
+  @override
+  String toString() =>
+      'StateTransition($source → $target'
+      '${armed ? ', armed' : ''})';
 }

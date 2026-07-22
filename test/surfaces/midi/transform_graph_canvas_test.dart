@@ -33,8 +33,10 @@ void main() {
       ],
     );
     controller = MidiGraphController.seededFrom(chain);
+    // Not `break`: the slugger bumps Python keywords to `break_`, and the
+    // menu label mirrors the entity name.
     states = StateMachineController()
-      ..addState(name: 'break', position: Offset.zero, voice: 1);
+      ..addState(name: 'bridge', position: Offset.zero);
     variables = RuntimeVariableRegistry()
       ..define(name: 'mode', values: ['lead', 'pad']);
   });
@@ -56,10 +58,10 @@ void main() {
             child: TransformGraphCanvas(
               controller: controller,
               evalContext: GraphEvalContext(
-                activeState: states.graph.activeStateAddress,
+                activeState: states.activeStateAddress,
                 variables: variables.snapshot(),
               ),
-              stateGraph: states.graph,
+              stateMachine: states,
               runtimeVariables: variables,
             ),
           ),
@@ -153,17 +155,14 @@ void main() {
     await tester.tapAt(tl + mid);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('state · break'));
+    await tester.tap(find.text('state · bridge'));
     await tester.pumpAndSettle();
 
     final edge = controller.graph.edges.firstWhere(
       (e) => e.fromId == TransformNodeId.source && e.toId == n0,
     );
     // The picker authors the guard on the state's entity address (issue #240).
-    expect(
-      edge.condition,
-      StateMatchCondition(states.graph.states.first.address),
-    );
+    expect(edge.condition, StateMatchCondition(states.states.first.address));
   });
 
   testWidgets('tapping a cable assigns a runtime-variable condition', (

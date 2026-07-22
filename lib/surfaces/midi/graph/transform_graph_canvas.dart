@@ -15,8 +15,8 @@ import '../../../domain/midi/graph/state_match_condition.dart';
 import '../../../domain/midi/graph/transform_edge.dart';
 import '../../../domain/midi/graph/transform_node_id.dart';
 import '../../../domain/runtime/runtime_variable_registry.dart';
-import '../../../domain/state_machine/state_graph.dart';
 import '../../../engine/state/midi_graph_controller.dart';
+import '../../../engine/state/state_machine_controller.dart';
 import 'transform_edge_layer.dart';
 import 'transform_ghost_cable.dart';
 import 'transform_graph_node_view.dart';
@@ -36,20 +36,21 @@ class TransformGraphCanvas extends StatefulWidget {
   const TransformGraphCanvas({
     required this.controller,
     required this.evalContext,
-    this.stateGraph,
+    this.stateMachine,
     this.runtimeVariables,
     super.key,
   });
 
   final MidiGraphController controller;
 
-  /// The live evaluation context (mirroring `StateGraph.activeStateId` and the
-  /// runtime registry's values), used to light the active subgraph.
+  /// The live evaluation context (mirroring the state machine's live entity
+  /// address and the runtime registry's values), used to light the active
+  /// subgraph.
   final GraphEvalContext evalContext;
 
   /// The state machine, for the condition menu's state list. `null` when no
   /// state machine is wired — the menu then offers only `always` + variables.
-  final StateGraph? stateGraph;
+  final StateMachineController? stateMachine;
 
   /// The runtime-variable registry, for the condition menu's `var · name =
   /// value` entries (issue #78). `null` when none is wired — the menu then
@@ -86,7 +87,7 @@ class _TransformGraphCanvasState extends State<TransformGraphCanvas> {
               listenable: Listenable.merge([
                 _controller,
                 _controller.graph,
-                widget.stateGraph,
+                widget.stateMachine,
                 widget.runtimeVariables,
               ]),
               builder: (context, _) {
@@ -248,7 +249,7 @@ class _TransformGraphCanvasState extends State<TransformGraphCanvas> {
       Rect.fromPoints(global, global),
       Offset.zero & overlay.size,
     );
-    final states = widget.stateGraph?.states.toList() ?? const [];
+    final states = widget.stateMachine?.states ?? const [];
     // Every (variable, candidate value) pair is a concrete guard — no free
     // text (issue #78): the registry enumerates exactly what a variable can
     // hold, so the picker can only author a guard the variable can satisfy.

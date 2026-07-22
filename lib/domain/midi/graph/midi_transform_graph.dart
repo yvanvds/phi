@@ -35,7 +35,7 @@ import 'transform_node_id.dart';
 ///
 /// Mutates in place via [addNode] / [removeNode] / [connect] / [disconnect] /
 /// [setNodeTransform]; each mutation bumps [version] and notifies, matching
-/// [MidiTransformChain] and [StateGraph].
+/// [MidiTransformChain].
 class MidiTransformGraph extends ChangeNotifier {
   MidiTransformGraph({required MidiClip source}) : _source = source;
 

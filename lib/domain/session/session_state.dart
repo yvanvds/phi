@@ -36,7 +36,7 @@ class SessionState {
 
   /// Cross-surface selection. Whichever surface publishes here, every
   /// other chrome region (notably the right inspector) can watch and
-  /// react. Holds anything — a [PerformanceState], a `PatchNode`, a
+  /// react. Holds anything — a `StateEntitySelection`, a `PatchNode`, a
   /// `MidiClip`, etc. — keyed by reference.
   final ValueNotifier<Object?> selection = ValueNotifier<Object?>(null);
 
