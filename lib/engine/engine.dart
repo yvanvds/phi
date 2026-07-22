@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../domain/code/code_script.dart';
 import '../domain/fx/fx_definition.dart';
 import '../domain/fx/fx_kind.dart';
 import '../domain/midi/custom_transform_registry.dart';
@@ -31,6 +32,7 @@ import '../domain/project/registry_group.dart';
 import '../domain/project/registry_kinds.dart';
 import '../domain/project/registry_node.dart';
 import '../domain/runtime/runtime_variable_registry.dart';
+import '../domain/state_machine/slices/clip_slice_entry.dart';
 import '../domain/state_machine/store/state_seed.dart';
 import '../domain/synth/sine_synth.dart';
 import '../domain/time_domains/time_domain.dart';
@@ -40,6 +42,7 @@ import 'bridge/audio_device_descriptor.dart';
 import 'bridge/audio_device_notice.dart';
 import 'bridge/audio_device_state.dart';
 import 'bridge/bus_tap.dart';
+import 'bridge/code_evaluator.dart';
 import 'bridge/fx_gateway.dart';
 import 'bridge/macbear_scene_renderer.dart';
 import 'bridge/materialised_synth.dart';
@@ -60,6 +63,7 @@ import 'bridge/synth_gateway.dart';
 import 'bridge/yse_gateway.dart';
 import 'state/clip_registry_publisher.dart';
 import 'state/engine_midi_controller.dart';
+import 'state/engine_state_slice_applier.dart';
 import 'state/engine_state_slice_source.dart';
 import 'state/engine_telemetry.dart';
 import 'state/metronome_controller.dart';
@@ -71,6 +75,8 @@ import 'state/patch_placement_notice.dart';
 import 'state/patch_reconciler.dart';
 import 'state/patcher_controller.dart';
 import 'state/rack_materialiser.dart';
+import 'state/state_application_engine.dart';
+import 'state/state_application_notice.dart';
 import 'state/state_machine_controller.dart';
 
 /// High-level façade over the YSE audio engine.
@@ -306,6 +312,27 @@ class PhiEngine {
 
   /// Nullable variant of [stateMachine] — `null` before [start].
   StateMachineController? get stateMachineOrNull => _stateMachine;
+
+  /// The journal-free state application engine (design state-graph §4, issue
+  /// #243) — applies an entered state's captured slices through the owning
+  /// controllers (variables → tempos → mix → clips → on-enter script). Created
+  /// on [start], torn down on [stop]; `null` outside that window.
+  StateApplicationEngine? _stateApplication;
+
+  /// The evaluator on-enter state scripts run through (issue #243) — owned by
+  /// the shell (the Code surface's evaluator) and handed in here so a state's
+  /// script and the editor share one interpreter and one `phi` library. While
+  /// `null` (the bare default) on-enter scripts skip with a [lastStateNotice].
+  CodeEvaluator? stateScriptEvaluator;
+
+  /// The most recent state-application degradation — a deleted slice referent,
+  /// a skipped variable or clip, a missing or failed on-enter script — or
+  /// `null`. Surfaced the same way [lastPatchNotice] is (design state-graph
+  /// §4, issue #243).
+  ValueListenable<StateApplicationNotice?> get lastStateNotice =>
+      _lastStateNotice;
+  final ValueNotifier<StateApplicationNotice?> _lastStateNotice =
+      ValueNotifier<StateApplicationNotice?>(null);
 
   RuntimeVariableRegistry? _runtimeVariables;
 
@@ -614,6 +641,10 @@ class PhiEngine {
     // notification must land on an already-reconciled channel/rack state (a
     // premature pass here used to materialise the voice synths twice).
     _stateMachine?.rebind(registry: registry, recordCommand: recordCommand);
+    // The previous performance's live tempo overrides (a fired state's tempos
+    // slice, issue #243) die with it — the new project runs on its authored
+    // domain tempos until one of *its* states applies.
+    _midi?.clearDomainTempoOverrides();
     _adoptClipAndRebindPublisher();
     // Rebind the patcher entity strip to the new project's `patch.` namespace,
     // seeding a default patch when it carries none, and open the first (issue
@@ -642,25 +673,81 @@ class PhiEngine {
   /// adopt it into [midi]'s live clip objects (issue #139). Re-resolves domain
   /// subscriptions against the project's `domain.` entities and re-links custom
   /// transforms against [_clipCustomTransforms], both through the decoding codec.
-  /// No-op when the registry carries no clip (or a non-map payload).
+  /// No-op when the registry carries no clip (or an undecodable payload).
   void _adoptClipDocument(EngineMidiController midi) {
     final address = _clipAddressIn(_mixRegistry);
     if (address == null) return;
-    final payload = _mixRegistry.entityAt(address)?.payload;
-    if (payload is! Map) return;
-    final document = ClipDocument.fromJson(
-      payload.cast<String, Object?>(),
-      transformCodec: MidiTransformCodec(
-        customRegistry: _clipCustomTransforms,
-        timeDomains: _sessionTimeDomains(),
-      ),
-    );
+    final document = _clipDocumentAt(address);
+    if (document == null) return;
     // Adopt into the edited session in place *and* reconcile that session to the
     // clip's address (issue #197): the boot session (keyed `null`) is promoted to
     // this first clip, so a later panel selection of it reuses the same session,
     // and the publisher — which follows the edited session's address — has an
     // entity to publish into.
     midi.adoptDocumentAsEdited(address, document);
+  }
+
+  /// Decode the [ClipDocument] stored at [address], re-resolving domain
+  /// subscriptions and custom transforms through the decoding codec — or
+  /// `null` when no clip entity with a decodable document sits there.
+  ClipDocument? _clipDocumentAt(EntityAddress address) {
+    final payload = _mixRegistry.entityAt(address)?.payload;
+    if (payload is ClipDocument) return payload;
+    if (payload is! Map) return null;
+    return ClipDocument.fromJson(
+      payload.cast<String, Object?>(),
+      transformCodec: MidiTransformCodec(
+        customRegistry: _clipCustomTransforms,
+        timeDomains: _sessionTimeDomains(),
+      ),
+    );
+  }
+
+  /// Run the entered [state] through the application engine (issue #243): its
+  /// slices resolved against the current registry (dangling referents dropped
+  /// and surfaced) and its on-enter script reference, applied journal-free.
+  /// Fire-and-forget — the script evaluation is async, but the performance
+  /// never waits on it.
+  void _applyEnteredState(EntityAddress state) {
+    final sm = _stateMachine;
+    final application = _stateApplication;
+    if (sm == null || application == null) return;
+    unawaited(
+      application.enterState(
+        state: state,
+        resolution: sm.resolveSlicesOf(state),
+        onEnter: sm.documentOf(state)?.onEnter,
+      ),
+    );
+  }
+
+  /// Bring the captured clip [entry] to play (issue #243): reuse its open
+  /// session or open one from its stored document, refresh the captured loop
+  /// flag, and start it (a no-op when already playing — it keeps sounding).
+  /// Returns `false` when the clip could not be started — no MIDI subsystem,
+  /// or no decodable document to open a session from.
+  bool _playSliceClip(ClipSliceEntry entry) {
+    final midi = _midi;
+    if (midi == null) return false;
+    if (midi.sessionFor(entry.clip) == null) {
+      final document = _clipDocumentAt(entry.clip);
+      if (document == null) return false;
+      midi.ensureSession(entry.clip, document);
+    }
+    midi.setSessionLoop(entry.clip, entry.loop);
+    midi.playSession(entry.clip);
+    return true;
+  }
+
+  /// The stored source of the `code.` entity at [address], or `null` when no
+  /// script sits there — the on-enter missing-reference seam (issue #243).
+  String? _codeSourceAt(EntityAddress address) {
+    final payload = _mixRegistry.entityAt(address)?.payload;
+    if (payload is CodeScript) return payload.source;
+    if (payload is Map) {
+      return CodeScript.fromJson(payload.cast<String, Object?>()).source;
+    }
+    return null;
   }
 
   /// Seed the default `intro → verse` state pair (design state-graph §3)
@@ -827,6 +914,27 @@ class PhiEngine {
       variables: () => rv,
       registry: () => _mixRegistry,
     );
+    // The application engine (design state-graph §4, issue #243): entering a
+    // state applies its captured slices through the owning controllers in
+    // fixed order — variables → tempos → mix → clips → on-enter script.
+    // Application is performance, not authorship: mix levels apply live
+    // (never persisted), tempos as clock-binding overrides, clips through the
+    // sessions — nothing journals, so recovery replays land on the authored
+    // state (§8 decision 2). Degradations surface on [lastStateNotice].
+    _stateApplication = StateApplicationEngine(
+      applier: EngineStateSliceApplier(
+        variables: () => rv,
+        domainTempo: (domain, bpm) => _midi?.applyDomainTempo(domain, bpm),
+        mixLevel: applyLiveBusLevel,
+        playingClips: () => _midi?.playingClipEntries ?? const [],
+        playClip: _playSliceClip,
+        stopClip: (clip) => _midi?.stopSession(clip),
+      ),
+      evaluator: () => stateScriptEvaluator,
+      scriptSourceOf: _codeSourceAt,
+      onNotice: (notice) => _lastStateNotice.value = notice,
+    );
+    sm.onStateEntered = _applyEnteredState;
     // The rack materialiser (issue #208) reconciles synths per internal voice
     // and insert chains per bus, then hands the live voice table + synth map to
     // the MIDI controller so sessions flatten + connect by routed voice. It runs
@@ -952,6 +1060,7 @@ class PhiEngine {
       _patcherGateway?.disposeAll();
       _stateMachine?.dispose();
       _stateMachine = null;
+      _stateApplication = null;
       _runtimeVariables?.dispose();
       _runtimeVariables = null;
       _clipPublisher?.unbind();
@@ -1691,6 +1800,27 @@ class PhiEngine {
     _persistChannelState(channel);
   }
 
+  /// Set the **live** level of the materialised bus at [bus] — volume and mute
+  /// together — without persisting either (issue #243). The state application
+  /// engine's mix slice applies through here: the fader and mute follow (the
+  /// live [MixerChannel] notifies), the gateway ramps the effective volumes,
+  /// and the authored `mix.` payload is untouched — so a crash-recovery
+  /// replay lands on the authored levels, and the next save persists what was
+  /// *authored*, not what a fired state dialled in. A no-op for an address
+  /// with no materialised channel (master is implicit and never captured).
+  void applyLiveBusLevel(
+    EntityAddress bus, {
+    required double volume,
+    required bool muted,
+  }) {
+    if (!_started) return;
+    final materialised = _channelsByAddress[bus];
+    if (materialised == null) return;
+    materialised.channel.applyVolume(volume.clamp(0.0, 1.0));
+    materialised.channel.applyMuted(muted);
+    _recomputeEffectiveVolumes();
+  }
+
   /// Mute or unmute a channel (strip or group bus). Master mute is set through
   /// [setMasterMuted]; muting a group silences its whole subtree (design §5).
   /// Triggers a tree-wide solo/mute re-evaluation. Discrete, so it persists
@@ -2411,6 +2541,7 @@ class PhiEngine {
     _returns.dispose();
     _lastAudioNotice.dispose();
     _lastPatchNotice.dispose();
+    _lastStateNotice.dispose();
     await _telemetry.close();
   }
 }

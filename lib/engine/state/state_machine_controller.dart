@@ -78,6 +78,14 @@ class StateMachineController extends ChangeNotifier {
   /// called more than once per move; repointing is idempotent.
   void Function(EntityAddress from, EntityAddress to)? onStateMoved;
 
+  /// Called after a state is *entered* — an explicit [fire] or [setLive] made
+  /// it live. The seam the engine wires to the application engine (issue
+  /// #243), so entering a state applies its captured slices and on-enter
+  /// script. Passive re-seeding (a project load, a deleted live state falling
+  /// back to the first survivor) is **not** an entry: recovery lands on the
+  /// authored state without replaying performance (§8 decision 2).
+  void Function(EntityAddress state)? onStateEntered;
+
   /// Pan/zoom state for the `InteractiveViewer` in the canvas.
   final TransformationController transform = TransformationController();
 
@@ -526,9 +534,10 @@ class StateMachineController extends ChangeNotifier {
     _bumpAndNotify();
   }
 
-  /// Fire [transition]: the target goes live and every arm clears. Firing is
-  /// performance, not authorship — nothing journals (§8 decision 2). No-op
-  /// if [transition] is unknown.
+  /// Fire [transition]: the target goes live, every arm clears, and the entry
+  /// is published through [onStateEntered] so the application engine applies
+  /// the target's slices (issue #243). Firing is performance, not authorship
+  /// — nothing journals (§8 decision 2). No-op if [transition] is unknown.
   void fire(StateTransition transition) {
     final reference = StateTransition(
       source: transition.source,
@@ -538,15 +547,18 @@ class StateMachineController extends ChangeNotifier {
     _armed.clear();
     _liveState = transition.target;
     _bumpAndNotify();
+    onStateEntered?.call(transition.target);
   }
 
-  /// Mark the state at [address] live. No-op if [address] is unknown. The
-  /// live state is performance state — exactly one state is live whenever
-  /// any exists, so there is no way to clear it, only to move it.
+  /// Mark the state at [address] live — an explicit entry, published through
+  /// [onStateEntered] like a [fire]. No-op if [address] is unknown or already
+  /// live. The live state is performance state — exactly one state is live
+  /// whenever any exists, so there is no way to clear it, only to move it.
   void setLive(EntityAddress address) {
     if (_liveState == address || !_docs.containsKey(address)) return;
     _liveState = address;
     _bumpAndNotify();
+    onStateEntered?.call(address);
   }
 
   @override

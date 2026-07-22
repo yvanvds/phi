@@ -234,6 +234,10 @@ class _WorkstationState extends State<Workstation> {
 
     _ownsCodeEvaluator = widget.codeEvaluator == null;
     _codeEvaluator = widget.codeEvaluator ?? NoOpCodeEvaluator();
+    // The engine runs on-enter state scripts (issue #243) through the same
+    // evaluator the Code surface evaluates blocks with — one interpreter, one
+    // `phi` library, so a state's script can do anything live code can.
+    widget.engine.stateScriptEvaluator = _codeEvaluator;
     _ownsCustomTransforms = widget.customTransformRegistry == null;
     _customTransforms =
         widget.customTransformRegistry ?? CustomTransformRegistry();
@@ -500,6 +504,9 @@ class _WorkstationState extends State<Workstation> {
     // won't touch the MIDI editor's scope (disposed with the editor below).
     _undoScopes.dispose();
     // Only dispose what the shell owns; injected doubles are the test's to own.
+    // Detach the engine's on-enter script seam first so a state fired after
+    // this shell is gone never reaches a disposed evaluator.
+    widget.engine.stateScriptEvaluator = null;
     if (_ownsCodeEvaluator) _codeEvaluator.dispose();
     if (_ownsCustomTransforms) _customTransforms.dispose();
     // Only dispose the MIDI state the shell owns; the engine disposes its own.

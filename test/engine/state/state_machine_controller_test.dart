@@ -269,6 +269,54 @@ void main() {
     });
   });
 
+  group('onStateEntered (issue #243)', () {
+    late List<EntityAddress> entered;
+
+    setUp(() {
+      entered = [];
+      controller.onStateEntered = entered.add;
+    });
+
+    test('fire publishes the entered target', () {
+      controller.fire(ref(introStateAddress, verseStateAddress));
+      expect(entered, [verseStateAddress]);
+    });
+
+    test('fire of an unknown transition publishes nothing', () {
+      controller.fire(ref(verseStateAddress, introStateAddress));
+      expect(entered, isEmpty);
+    });
+
+    test('setLive publishes the entry; a same-address set does not', () {
+      controller.setLive(verseStateAddress);
+      expect(entered, [verseStateAddress]);
+
+      controller.setLive(verseStateAddress);
+      expect(entered, hasLength(1));
+    });
+
+    test('passive re-seeding is not an entry — deleting the live state '
+        'falls back silently', () {
+      controller.removeState(introStateAddress);
+      // The live capsule re-seeded onto the survivor…
+      expect(controller.activeStateAddress, verseStateAddress);
+      // …but nothing was *entered*: recovery lands on the authored state
+      // without replaying performance (§8 decision 2).
+      expect(entered, isEmpty);
+    });
+
+    test('a rebind live re-seed is not an entry either', () {
+      final scratch = ProjectRegistry();
+      addTearDown(scratch.dispose);
+      seedStates(scratch);
+      controller.rebind(registry: scratch);
+
+      // The new registry's first state went live by *seeding*, not entry.
+      expect(controller.activeStateAddress, introStateAddress);
+      expect(entered, isEmpty);
+    });
+  });
+
   group('rename = refactor', () {
     test('rewrites sibling transition targets in the same move command', () {
       final to = controller.rename(verseStateAddress, 'chorus');

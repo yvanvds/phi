@@ -508,10 +508,14 @@ class ClipSession implements RecordTarget {
   /// The clip's **base** tempo before any played steering: the tempo of the
   /// first **active** [DomainSubscriptionTransform] that resolves a domain (a
   /// subscription binds the clock — issue #102), or the host session tempo when
-  /// no clip is subscribed.
+  /// no clip is subscribed. A live per-domain override — a state's tempos
+  /// slice applied through the clock binding (issue #243) — wins over the
+  /// subscribed domain's authored tempo.
   double get _baseTempo {
     for (final t in _chain.transforms) {
       if (t is DomainSubscriptionTransform && t.active) {
+        final override = host.domainTempoOverride(t.domainName);
+        if (override != null) return override;
         final bound = t.boundTempo;
         if (bound != null) return bound;
       }
