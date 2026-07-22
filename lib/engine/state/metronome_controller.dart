@@ -26,6 +26,15 @@ import '../bridge/transport_note.dart';
 /// bound domain's tempo ([refreshDomains]), re-paces the running click without
 /// ever re-pushing the note list: tempo lives in the clock, not the data.
 ///
+/// A **state application** can lay a live per-domain tempo override over the
+/// authored `domain.` tempo (issue #331, following #243): the click follows it
+/// exactly as a subscribed clip does. The override is read through the
+/// [domainTempoOverride] seam (the engine's live overrides) and wins over the
+/// authored tempo, so firing a state that re-tempos the bound domain re-paces
+/// the click, and the click falls back to the authored tempo when the overrides
+/// clear (a project swap). The engine re-paces the running click ([applyTempo])
+/// whenever it lays or clears an override.
+///
 /// The click plays a reserved, seeded **click voice** synthesized from the sine
 /// kind (zero assets, §8), routed to master like any voice — supplied by the
 /// engine through [clickSynth] and connected to the click transport while the
@@ -37,6 +46,7 @@ class MetronomeController extends ChangeNotifier {
     required TimeDomainRegistry Function() domains,
     required double Function() sessionTempo,
     MaterialisedSynth? Function()? clickSynth,
+    double? Function(String domainName)? domainTempoOverride,
     String clockName = defaultClockName,
     int beatsPerBar = 4,
     bool accentDownbeat = true,
@@ -46,6 +56,7 @@ class MetronomeController extends ChangeNotifier {
        _domains = domains,
        _sessionTempo = sessionTempo,
        _clickSynth = clickSynth,
+       _domainTempoOverride = domainTempoOverride,
        _clockName = clockName,
        _beatsPerBar = beatsPerBar < 1 ? 1 : beatsPerBar,
        _accentDownbeat = accentDownbeat,
@@ -56,6 +67,15 @@ class MetronomeController extends ChangeNotifier {
   final TimeDomainRegistry Function() _domains;
   final double Function() _sessionTempo;
   final MaterialisedSynth? Function()? _clickSynth;
+
+  /// Reads the engine's live per-domain tempo override for a domain name, or
+  /// `null` when it runs at its authored tempo (issue #331). A state
+  /// application lays these overrides through the clock binding (issue #243);
+  /// the click consults it so it tracks an applied tempo exactly as a
+  /// subscribed clip does. `null` in setups without live overrides (bare /
+  /// Phase-1 tests) — the click then always paces from the authored tempo.
+  final double? Function(String domainName)? _domainTempoOverride;
+
   final String _clockName;
 
   /// The reserved clock name the click transport binds to — distinct from any
@@ -144,9 +164,20 @@ class MetronomeController extends ChangeNotifier {
   TimeDomain? get boundDomain =>
       _domainName == null ? null : _domains().resolve(_domainName!);
 
-  /// The click's base tempo: the bound domain's tempo, or the session tempo when
-  /// no domain is bound (or the bound name has vanished from the registry).
-  double get _baseTempo => boundDomain?.tempo ?? _sessionTempo();
+  /// The click's base tempo. A live per-domain tempo override — a state's
+  /// tempos slice applied through the clock binding (issue #331/#243) — wins
+  /// over everything, so the click tracks a state-applied tempo just as a
+  /// subscribed clip does. Otherwise: the bound domain's authored tempo, or the
+  /// session tempo when no domain is bound (or the bound name has vanished from
+  /// the registry).
+  double get _baseTempo {
+    final name = _domainName;
+    if (name != null) {
+      final override = _domainTempoOverride?.call(name);
+      if (override != null) return override;
+    }
+    return boundDomain?.tempo ?? _sessionTempo();
+  }
 
   // ── control ────────────────────────────────────────────────────────────────
 
