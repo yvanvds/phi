@@ -14,7 +14,6 @@ import '../../domain/scene/pick_ray.dart';
 import '../../domain/scene/scatter.dart';
 import '../../domain/scene/scene_demo.dart';
 import '../../domain/scene/scene_field.dart';
-import '../../domain/state_machine/state_graph.dart';
 import '../../domain/time_domains/fader_tempo_source.dart';
 import '../../domain/time_domains/tempo_source_stack.dart';
 import '../../domain/voice/voice_channel_resolver.dart';
@@ -28,6 +27,7 @@ import 'clip_session_host.dart';
 import 'count_in_controller.dart';
 import 'midi_graph_controller.dart';
 import 'record_controller.dart';
+import 'state_machine_controller.dart';
 
 /// Engine-side **session manager** for the MIDI surface (issue #186).
 ///
@@ -60,7 +60,7 @@ class EngineMidiController implements ClipSessionHost {
     required MidiGateway gateway,
     ClipEditor? editor,
     SceneAgentSink? agentSink,
-    StateGraph? stateGraph,
+    StateMachineController? stateMachine,
     RuntimeVariableRegistry? runtimeVariables,
     VoiceChannelResolver? voiceResolver,
     double bpm = 120,
@@ -69,7 +69,7 @@ class EngineMidiController implements ClipSessionHost {
     Duration tickInterval = const Duration(milliseconds: 16),
   }) : _gateway = gateway,
        _agentSink = agentSink,
-       _stateGraph = stateGraph,
+       _stateMachine = stateMachine,
        _runtimeVariables = runtimeVariables,
        _voiceResolver = voiceResolver ?? VoiceChannelResolver.seededDefault(),
        _microtonal = microtonal,
@@ -141,7 +141,7 @@ class EngineMidiController implements ClipSessionHost {
   /// The live state machine, mirrored into the graph's [GraphEvalContext] so a
   /// `state · break` edge opens exactly while that state is live. `null` in setups
   /// without a state machine — the graph then evaluates against the empty context.
-  final StateGraph? _stateGraph;
+  final StateMachineController? _stateMachine;
 
   /// The live runtime-variable registry, mirrored into the graph's
   /// [GraphEvalContext] (issue #78). `null` in setups without a registry.
@@ -664,9 +664,22 @@ class EngineMidiController implements ClipSessionHost {
 
   @override
   GraphEvalContext liveContext() => GraphEvalContext(
-    activeState: _stateGraph?.activeStateAddress,
+    activeState: _stateMachine?.activeStateAddress,
     variables: _runtimeVariables?.snapshot() ?? const {},
   );
+
+  /// Repoint every open session's live MIDI-graph `state.` guards from
+  /// [from] to [to] — the rename-refactor hook the registry-backed state
+  /// machine drives (issue #241), so a state rename re-routes guard
+  /// evaluation without touching authored notes. The edited session's
+  /// registry publisher observes its graph, so the repoint also republishes
+  /// the stored clip payload with the rewritten guard. Idempotent — a graph
+  /// with no guard on [from] is left untouched.
+  void repointStateGuards(EntityAddress from, EntityAddress to) {
+    for (final session in _sessions.values) {
+      session.graphController.graph.repointGuardState(from, to);
+    }
+  }
 
   // ─── voice → channel resolution (design §6) ──────────────────────────────
 

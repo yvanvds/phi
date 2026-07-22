@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
-import '../../../domain/state_machine/performance_state_id.dart';
+import '../../../domain/project/entity_address.dart';
 import '../../../domain/state_machine/state_transition.dart';
 import '../../tokens/phi_colors.dart';
 import 'state_canvas_constants.dart';
@@ -27,9 +27,10 @@ class StateTransitionPainter extends CustomPainter {
   /// Transitions to draw, in order.
   final List<StateTransition> transitions;
 
-  /// Canvas-local rectangle of every state node currently rendered. The
-  /// painter silently skips any transition referencing a missing endpoint.
-  final Map<PerformanceStateId, Rect> nodeRects;
+  /// Canvas-local rectangle of every state node currently rendered, keyed by
+  /// its `state.` entity address. The painter silently skips any transition
+  /// referencing a missing endpoint.
+  final Map<EntityAddress, Rect> nodeRects;
 
   /// Bumped whenever the graph changes — used by [shouldRepaint] as a
   /// cheap int comparison instead of deep-equals.
@@ -53,8 +54,8 @@ class StateTransitionPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     for (final t in transitions) {
-      final src = nodeRects[t.sourceId];
-      final dst = nodeRects[t.targetId];
+      final src = nodeRects[t.source];
+      final dst = nodeRects[t.target];
       if (src == null || dst == null) continue;
       final stroke = t.armed ? hotStroke : mutedStroke;
       final fill = t.armed ? hotFill : mutedFill;

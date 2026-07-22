@@ -46,15 +46,13 @@ void main() {
     // Two performance states; `main` live, `break` dormant.
     final main = engine.stateMachine.addState(
       name: 'main',
-      position: const Offset(160, 160),
-      voice: 1,
+      position: const Offset(160, 320),
     );
     final brk = engine.stateMachine.addState(
       name: 'break',
-      position: const Offset(360, 160),
-      voice: 3,
+      position: const Offset(360, 320),
     );
-    engine.stateMachine.setActive(main.id);
+    engine.stateMachine.setLive(main);
 
     // Open the MIDI surface — a chain clip by default: piano roll + chip
     // sidebar, no NOTES/GRAPH tabs.
@@ -94,7 +92,7 @@ void main() {
     graph.connect(
       TransformNodeId.source,
       branch.id,
-      condition: StateMatchCondition(brk.address),
+      condition: StateMatchCondition(brk),
     );
     await tester.pumpAndSettle();
 
@@ -103,12 +101,12 @@ void main() {
 
     // Go live on `break` → the branch opens and its terminal's ten notes join
     // the output. The preview reflects the active subgraph, live.
-    engine.stateMachine.setActive(brk.id);
+    engine.stateMachine.setLive(brk);
     await tester.pumpAndSettle();
     expect(find.textContaining('PREVIEW · 20 NOTES'), findsOneWidget);
 
     // Back to `break` off → main → preview returns to ten.
-    engine.stateMachine.setActive(main.id);
+    engine.stateMachine.setLive(main);
     await tester.pumpAndSettle();
     expect(find.textContaining('PREVIEW · 10 NOTES'), findsOneWidget);
 

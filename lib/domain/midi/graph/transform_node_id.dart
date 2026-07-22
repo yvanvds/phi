@@ -1,8 +1,8 @@
 /// Stable identifier for a [TransformNode] inside a [MidiTransformGraph].
 ///
-/// String-backed and client-minted, mirroring [PerformanceStateId] — the
-/// transform graph has no native counterpart in `package:yse`, and ids are
-/// remapped on load rather than preserved across sessions.
+/// String-backed and client-minted — the transform graph has no native
+/// counterpart in `package:yse`, and ids are remapped on load rather than
+/// preserved across sessions.
 ///
 /// [TransformNodeId.source] is the reserved sentinel for the clip input: the
 /// graph never stores a node under it, but edges may originate from it so the

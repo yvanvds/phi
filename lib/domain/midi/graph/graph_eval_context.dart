@@ -17,8 +17,8 @@ class GraphEvalContext {
   /// No live state, no variables — only [AlwaysCondition] edges fire.
   const GraphEvalContext.empty() : activeState = null, variables = const {};
 
-  /// The `state.` entity address currently "live", mirrored from
-  /// [StateGraph.activeStateAddress] (issue #240). `null` when the
+  /// The `state.` entity address currently "live", mirrored from the state
+  /// machine's `activeStateAddress` (issues #240/#241). `null` when the
   /// performance is between states or the graph is evaluated in isolation
   /// (tests, preview).
   final EntityAddress? activeState;

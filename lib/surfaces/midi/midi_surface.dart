@@ -8,10 +8,10 @@ import '../../domain/midi/midi_note.dart';
 import '../../domain/midi/midi_transform_chain.dart';
 import '../../domain/midi/smf/smf_exception.dart';
 import '../../domain/runtime/runtime_variable_registry.dart';
-import '../../domain/state_machine/state_graph.dart';
 import '../../engine/engine.dart';
 import '../../engine/state/clip_library_controller.dart';
 import '../../engine/state/midi_graph_controller.dart';
+import '../../engine/state/state_machine_controller.dart';
 import '../surface.dart';
 import 'clip_transport_row.dart';
 import 'library/library_panel.dart';
@@ -38,7 +38,7 @@ class MidiSurface extends Surface {
     ValueListenable<double>? playhead,
     MidiFileIo? fileIo,
     MidiGraphController? graphController,
-    StateGraph? stateGraph,
+    StateMachineController? stateMachine,
     RuntimeVariableRegistry? runtimeVariables,
     ClipLibraryController? libraryController,
     super.key,
@@ -49,7 +49,7 @@ class MidiSurface extends Surface {
        _playhead = playhead,
        _fileIo = fileIo,
        _graphController = graphController,
-       _stateGraph = stateGraph,
+       _stateMachine = stateMachine,
        _runtimeVariables = runtimeVariables,
        _libraryController = libraryController;
 
@@ -73,7 +73,7 @@ class MidiSurface extends Surface {
 
   /// The state machine driving the graph's live evaluation context. `null`
   /// falls back to an empty context.
-  final StateGraph? _stateGraph;
+  final StateMachineController? _stateMachine;
 
   /// The runtime-variable registry backing the graph's `var · name = value`
   /// guards and its variables bar (issue #78). `null` falls back to the
@@ -179,7 +179,7 @@ class MidiSurface extends Surface {
         graphController ??
         _graphController ??
         _engine.midiOrNull?.graphController,
-    stateGraph: _stateGraph ?? _engine.stateMachineOrNull?.graph,
+    stateMachine: _stateMachine ?? _engine.stateMachineOrNull,
     runtimeVariables: _runtimeVariables ?? _engine.runtimeVariablesOrNull,
     transport: transport,
     onAuditionNote: _auditionNote,

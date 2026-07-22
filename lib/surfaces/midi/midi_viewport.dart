@@ -22,8 +22,8 @@ import '../../domain/midi/smf/smf_exception.dart';
 import '../../domain/midi/smf/smf_reader.dart';
 import '../../domain/midi/smf/smf_writer.dart';
 import '../../domain/runtime/runtime_variable_registry.dart';
-import '../../domain/state_machine/state_graph.dart';
 import '../../engine/state/midi_graph_controller.dart';
+import '../../engine/state/state_machine_controller.dart';
 import 'clip_transport_row.dart';
 import 'file_selector_midi_file_io.dart';
 import 'graph/graph_preview_strip.dart';
@@ -62,7 +62,7 @@ class MidiViewport extends StatefulWidget {
     this.playhead,
     this.fileIo,
     this.graphController,
-    this.stateGraph,
+    this.stateMachine,
     this.runtimeVariables,
     this.transport,
     this.onImportSmf,
@@ -107,7 +107,7 @@ class MidiViewport extends StatefulWidget {
   /// The state machine, for the graph's live evaluation context and its
   /// condition picker. `null` when no state machine is wired — the graph then
   /// evaluates against an empty context (only unconditional edges fire).
-  final StateGraph? stateGraph;
+  final StateMachineController? stateMachine;
 
   /// The runtime-variable registry backing the graph's `var · name = value`
   /// guards, its live evaluation context, and the variables bar (issue #78).
@@ -176,7 +176,7 @@ class _MidiViewportState extends State<MidiViewport> {
       _graph,
       _graph.graph,
       if (widget.registry != null) widget.registry,
-      if (widget.stateGraph != null) widget.stateGraph,
+      if (widget.stateMachine != null) widget.stateMachine,
       if (widget.runtimeVariables != null) widget.runtimeVariables,
     ]);
     _fileIo = widget.fileIo ?? const FileSelectorMidiFileIo();
@@ -190,7 +190,7 @@ class _MidiViewportState extends State<MidiViewport> {
   }
 
   GraphEvalContext get _evalContext => GraphEvalContext(
-    activeState: widget.stateGraph?.activeStateAddress,
+    activeState: widget.stateMachine?.activeStateAddress,
     variables: widget.runtimeVariables?.snapshot() ?? const {},
   );
 
@@ -529,7 +529,7 @@ class _MidiViewportState extends State<MidiViewport> {
           child: TransformGraphCanvas(
             controller: _graph,
             evalContext: _evalContext,
-            stateGraph: widget.stateGraph,
+            stateMachine: widget.stateMachine,
             runtimeVariables: registry,
           ),
         ),

@@ -75,10 +75,14 @@ void main() {
     engine.start();
     await pumpEventQueue();
 
-    // Exactly one full sync fired at boot — the empty default registry, so an
-    // empty snapshot, but the re-sync path is proven present.
+    // Exactly one full sync fired at boot — the default scratch registry
+    // carries the seeded `intro → verse` state pair (issue #241), so the
+    // snapshot mirrors those two entities.
     expect(mirror.fullSyncs, hasLength(1));
-    expect(mirror.fullSyncs.single, isEmpty);
+    expect(mirror.fullSyncs.single, [
+      EntityAddress.parse('state.intro'),
+      EntityAddress.parse('state.verse'),
+    ]);
   });
 
   test('a stop → start re-init re-pushes a full sync (issue #231)', () async {
@@ -94,7 +98,11 @@ void main() {
     await pumpEventQueue();
 
     expect(mirror.fullSyncs, hasLength(2));
-    expect(mirror.fullSyncs.last, [mix('drums')]);
+    expect(mirror.fullSyncs.last, [
+      EntityAddress.parse('state.intro'),
+      EntityAddress.parse('state.verse'),
+      mix('drums'),
+    ]);
   });
 
   test('bindProject full-syncs the new tree (issue #231)', () async {

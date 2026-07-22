@@ -10,10 +10,9 @@ import 'graph_eval_context.dart';
 /// otherwise.
 ///
 /// Since issue #240 the guard names the state by **entity address** rather
-/// than by the canvas-local `PerformanceStateId` — the uniform `state.` name
-/// used in live code and completion — so a persisted guard re-binds by name
-/// across sessions and rides the ordinary rename-refactor (the registry-backed
-/// wiring lands with issue #241).
+/// than by a canvas-local id — the uniform `state.` name used in live code and
+/// completion — so a persisted guard re-binds by name across sessions and
+/// rides the ordinary rename-refactor (wired registry-wide by issue #241).
 class StateMatchCondition extends EdgeCondition {
   const StateMatchCondition(this.state);
 

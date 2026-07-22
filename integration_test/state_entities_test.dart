@@ -26,10 +26,14 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  StateDocument stateDoc(ProjectController controller, EntityAddress address) =>
-      StateDocument.fromJson(
-        (controller.registry.entityAt(address)!.payload! as Map).cast(),
-      );
+  // The registry-backed state machine (issue #241) normalises loaded
+  // map-native payloads to typed [StateDocument]s — accept both forms.
+  StateDocument stateDoc(ProjectController controller, EntityAddress address) {
+    final payload = controller.registry.entityAt(address)!.payload!;
+    return payload is StateDocument
+        ? payload
+        : StateDocument.fromJson((payload as Map).cast());
+  }
 
   testWidgets('state entities seed, guard delete-impact, and round-trip a '
       'save/reload', (tester) async {

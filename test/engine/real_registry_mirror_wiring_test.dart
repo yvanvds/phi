@@ -30,11 +30,15 @@ void main() {
     await gateway.dispose();
   });
 
+  // A bare engine's scratch registry carries the seeded `intro → verse`
+  // state pair (issue #241), so every full sync mirrors those entities too.
   test('boot pushes a full-sync script through the evaluator', () async {
     engine.start();
     await pumpEventQueue();
 
-    expect(evaluator.calls, ['phi._sync_replace([])']);
+    expect(evaluator.calls, [
+      "phi._sync_replace(['state.intro', 'state.verse'])",
+    ]);
   });
 
   test(
@@ -45,7 +49,7 @@ void main() {
       await pumpEventQueue();
 
       expect(evaluator.calls, [
-        'phi._sync_replace([])',
+        "phi._sync_replace(['state.intro', 'state.verse'])",
         "phi._sync_create('mix.drums')",
       ]);
     },
@@ -61,6 +65,9 @@ void main() {
     await pumpEventQueue();
 
     // The final push is the re-init full sync, carrying the surviving channel.
-    expect(evaluator.calls.last, "phi._sync_replace(['mix.drums'])");
+    expect(
+      evaluator.calls.last,
+      "phi._sync_replace(['state.intro', 'state.verse', 'mix.drums'])",
+    );
   });
 }

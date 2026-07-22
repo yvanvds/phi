@@ -12,11 +12,11 @@ import 'runtime_variable.dart';
 /// closes as the performance moves the variable — rather than matching against
 /// an empty context, as it did while the picker's name/value were free text.
 ///
-/// Surfaced to the MIDI graph exactly the way [StateGraph] is: owned once
-/// (by the engine), passed into the surface and the player, and listened to so
-/// a value change repaints the preview and re-routes the sounding notes.
+/// Surfaced to the MIDI graph exactly the way the state machine is: owned
+/// once (by the engine), passed into the surface and the player, and listened
+/// to so a value change repaints the preview and re-routes the sounding notes.
 ///
-/// A [ChangeNotifier] like [StateGraph]: it notifies on every mutation
+/// A [ChangeNotifier] like the state machine: it notifies on every mutation
 /// (define / remove / value change), and [version] bumps alongside so painters
 /// can compare a cheap int in `shouldRepaint`.
 class RuntimeVariableRegistry extends ChangeNotifier {

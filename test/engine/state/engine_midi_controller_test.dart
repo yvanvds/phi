@@ -8,12 +8,10 @@ import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/midi_transform_chain.dart';
 import 'package:phi/domain/midi/transforms/domain_subscription_transform.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
-import 'package:phi/domain/state_machine/performance_state.dart';
-import 'package:phi/domain/state_machine/performance_state_id.dart';
-import 'package:phi/domain/state_machine/state_graph.dart';
 import 'package:phi/domain/time_domains/time_domain.dart';
 import 'package:phi/engine/bridge/transport_note.dart';
 import 'package:phi/engine/state/engine_midi_controller.dart';
+import 'package:phi/engine/state/state_machine_controller.dart';
 
 import '../test_doubles/fake_midi_gateway.dart';
 import '../test_doubles/fake_midi_transport.dart';
@@ -384,19 +382,19 @@ void main() {
 
     test('a state-guarded branch re-pushes as the state flips', () {
       fakeAsync((async) {
-        const brk = PerformanceStateId('break');
-        final breakState = PerformanceState(
-          id: brk,
+        // Two states so `break` is *not* the auto-seeded live one — `main`
+        // goes live as the first `state.` entity, `break` stays dormant.
+        final stateMachine = StateMachineController();
+        stateMachine.addState(name: 'main', position: Offset.zero);
+        final brk = stateMachine.addState(
           name: 'break',
-          voice: 3,
-          position: Offset.zero,
+          position: const Offset(200, 0),
         );
-        final stateGraph = StateGraph()..addState(breakState);
         final gateway = FakeMidiGateway();
         final controller = EngineMidiController(
           chain: oneNoteChain(),
           gateway: gateway,
-          stateGraph: stateGraph,
+          stateMachine: stateMachine,
         );
 
         // Baseline spine: source → +0 (unconditional), always terminal → 60.
@@ -417,11 +415,11 @@ void main() {
         graph.connect(
           TransformNodeId.source,
           branch.id,
-          condition: StateMatchCondition(breakState.address),
+          condition: StateMatchCondition(brk),
         );
         graph.mode = MidiClipMode.graph;
 
-        // No state live: the branch is closed → only 60 is pushed.
+        // `main` live, not `break`: the branch is closed → only 60 is pushed.
         controller.play();
         async.elapse(const Duration(milliseconds: 40));
         final transport = transportOf(gateway);
@@ -429,13 +427,14 @@ void main() {
 
         // Go live on `break` → the branch opens; the next tick re-evaluates,
         // sees a fresh output instance, and re-pushes 72 alongside 60.
-        stateGraph.setActive(brk);
+        stateMachine.setLive(brk);
         async.elapse(const Duration(milliseconds: 40));
         controller.stop();
 
         expect(transport.events.map((e) => e.pitch), containsAll([60, 72]));
 
         controller.dispose();
+        stateMachine.dispose();
       });
     });
   });
