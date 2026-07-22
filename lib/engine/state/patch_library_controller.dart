@@ -160,7 +160,15 @@ class PatchLibraryController extends ChangeNotifier {
     _openAddress = address;
     _editors.putIfAbsent(
       address,
-      () => PatcherController.bound(_gateway, instanceId: instanceId),
+      // A freshly-bound editor mirrors an empty graph; rebuild it from the live
+      // native instance so a patch loaded from disk (or re-materialised by a
+      // rename) shows its graph rather than a blank canvas (issue #308).
+      // A freshly-bound editor mirrors an empty graph; rebuild it from the live
+      // native instance so a patch loaded from disk (or re-materialised by a
+      // rename) shows its graph rather than a blank canvas (issue #308).
+      () =>
+          PatcherController.bound(_gateway, instanceId: instanceId)
+            ..rebuildFromInstance(),
     );
     notifyListeners();
   }

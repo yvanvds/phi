@@ -297,7 +297,9 @@ void main() {
       final payload = PatchPayload.fromJson(
         (registry.entityAt(patch('p'))!.payload! as Map).cast(),
       );
-      expect(payload.dump, {'objects': 2, 'cables': 0});
+      // The fake dumps a structured, re-parseable graph: two objects, no cables.
+      expect(payload.dump['objects'], hasLength(2));
+      expect(payload.dump['cables'], isEmpty);
       // Placement is carried through untouched by the dump refresh.
       expect(payload.placement, mix('reverb'));
       // The refresh is recorded so it dirty-tracks + journals like any edit.

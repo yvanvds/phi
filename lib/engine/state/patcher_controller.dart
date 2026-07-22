@@ -219,6 +219,93 @@ class PatcherController {
     );
   }
 
+  // ─── graph reconstruction (from a reloaded / re-materialised instance) ──
+
+  /// Rebuild the Dart-side mirror ([graph], [_nativeByNode], [_argsByNode]) from
+  /// the live native instance (issue #308).
+  ///
+  /// A [PatcherController.bound] editor starts with an empty [graph], so a patch
+  /// **loaded from disk** — its dump already `parseJson`'d into the native
+  /// instance by the reconciler — or one whose native instance was re-materialised
+  /// by a rename shows a blank canvas until it is edited. This enumerates the
+  /// instance ([PatcherGateway.enumerate]) and reconstructs every node and cable
+  /// from it, so opening such a patch shows its graph at once.
+  ///
+  /// The native objects and connections **already exist** (the reconciler built
+  /// them), so cables are wired straight into the mirror — no gateway `connect`
+  /// is re-issued. Any prior mirror state is dropped first, so it is safe to call
+  /// on a non-empty editor. Node voice is not carried in the dump, so every
+  /// reconstructed node defaults to voice 1.
+  void rebuildFromInstance() {
+    for (final id in _nativeByNode.keys.toList()) {
+      graph.removeNode(id);
+    }
+    _nativeByNode.clear();
+    _argsByNode.clear();
+
+    final snapshot = _gateway.enumerate(instanceId);
+    for (final obj in snapshot.objects) {
+      final id = PatchNodeId(obj.handleId);
+      _nativeByNode[id] = obj.handleId;
+      _argsByNode[id] = obj.args;
+      final bodied = NodeTypeRegistry.instance.find(obj.type);
+      final ports = obj.ports;
+      graph.addNode(
+        PatchNode(
+          id: id,
+          type: obj.type,
+          title: bodied?.title ?? obj.type,
+          voice: 1,
+          position: obj.position ?? Offset.zero,
+          size:
+              bodied?.defaultSize ?? _sizeForPorts(ports.inputs, ports.outputs),
+          inputs: [
+            for (var i = 0; i < ports.inputs; i++)
+              PatchPort(
+                index: i,
+                side: PatchPortSide.input,
+                kind: ports.inputKinds[i],
+                voice: 1,
+              ),
+          ],
+          outputs: [
+            for (var i = 0; i < ports.outputs; i++)
+              PatchPort(
+                index: i,
+                side: PatchPortSide.output,
+                kind: ports.outputKinds[i],
+                voice: 1,
+              ),
+          ],
+        ),
+      );
+    }
+
+    // Wire cables straight into the mirror — the native connections already
+    // exist, so re-issuing `connect` would double them.
+    for (final conn in snapshot.connections) {
+      final srcId = PatchNodeId(conn.fromHandleId);
+      final srcNode = graph.nodeById(srcId);
+      if (srcNode == null || conn.outlet >= srcNode.outputs.length) continue;
+      if (graph.nodeById(PatchNodeId(conn.toHandleId)) == null) continue;
+      graph.addCable(
+        PatchCable(
+          source: PatchPortId(
+            nodeId: srcId,
+            side: PatchPortSide.output,
+            index: conn.outlet,
+          ),
+          target: PatchPortId(
+            nodeId: PatchNodeId(conn.toHandleId),
+            side: PatchPortSide.input,
+            index: conn.inlet,
+          ),
+          kind: srcNode.outputs[conn.outlet].kind,
+        ),
+      );
+    }
+  }
+
   /// A logical id equal to the native handle when free, else a synthetic
   /// negative id that can never collide with a native (non-negative) handle.
   PatchNodeId _mintLogicalId(int native) {

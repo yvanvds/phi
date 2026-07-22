@@ -8,6 +8,7 @@ import 'package:phi/engine/state/patch_bus_option.dart';
 import 'package:phi/engine/state/patch_library_controller.dart';
 import 'package:phi/engine/state/patch_placement_notice.dart';
 import 'package:phi/engine/state/patch_reconciler.dart';
+import 'package:yse/yse.dart';
 
 import '../test_doubles/fake_patcher_gateway.dart';
 
@@ -130,6 +131,54 @@ void main() {
       );
 
       expect(controller.openAddress, isNull);
+    });
+  });
+
+  group('canvas rebuild from a loaded dump (issue #308)', () {
+    // A structured, fake-parseable dump: sine → dac, one cable.
+    Map<String, Object?> loadedDump() => {
+      'objects': [
+        {'id': 1, 'type': Obj.dSine, 'args': '440', 'x': 40.0, 'y': 60.0},
+        {'id': 2, 'type': Obj.dDac, 'args': '', 'x': 240.0, 'y': 60.0},
+      ],
+      'cables': [
+        {'from': 1, 'outlet': 0, 'to': 2, 'inlet': 0},
+      ],
+    };
+
+    test('opening a patch loaded from a dump rebuilds the editor graph', () {
+      registry.createEntity(
+        patch('loaded'),
+        payload: PatchPayload(dump: loadedDump()).toJson(),
+      );
+      final controller = build();
+      addTearDown(controller.dispose);
+
+      controller.open(patch('loaded'));
+
+      final editor = controller.openEditor!;
+      expect(editor.graph.nodes, hasLength(2));
+      expect(editor.graph.cables, hasLength(1));
+    });
+
+    test('renaming the open patch re-materialises its graph on the canvas', () {
+      registry.createEntity(
+        patch('loaded'),
+        payload: PatchPayload(dump: loadedDump()).toJson(),
+      );
+      final controller = build();
+      addTearDown(controller.dispose);
+      controller.open(patch('loaded'));
+      expect(controller.openEditor!.graph.nodes, hasLength(2));
+
+      controller.rename(patch('loaded'), 'renamed');
+
+      // The reconciler tore the old instance down and re-materialised a fresh
+      // one under the new address; the reopened editor rebuilds from it rather
+      // than showing an empty canvas.
+      expect(controller.openAddress, patch('renamed'));
+      expect(controller.openEditor!.graph.nodes, hasLength(2));
+      expect(controller.openEditor!.graph.cables, hasLength(1));
     });
   });
 

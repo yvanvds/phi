@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/domain/patcher/patch_port_kind.dart';
 import 'package:phi/engine/bridge/patch_object_descriptor.dart';
 import 'package:yse/yse.dart';
 
@@ -201,6 +202,105 @@ void main() {
       gateway.sendBang(a, button, 0);
 
       expect(gateway.instances[a]!.nodes[button]!.bangedInlets, <int>[0]);
+    });
+  });
+
+  group('enumerate (graph read-back for canvas rebuild, issue #308)', () {
+    test('returns every object with its type, args, position and ports', () {
+      final a = gateway.createInstance();
+      final sine = gateway.createObject(a, Obj.dSine, args: '440');
+      final dac = gateway.createObject(a, Obj.dDac);
+      gateway.setNodePosition(a, sine, const Offset(40, 60));
+
+      final snapshot = gateway.enumerate(a);
+
+      expect(snapshot.objects, hasLength(2));
+      final sineObj = snapshot.objects.firstWhere((o) => o.handleId == sine);
+      expect(sineObj.type, Obj.dSine);
+      expect(sineObj.args, '440');
+      expect(sineObj.position, const Offset(40, 60));
+      // Ports come back exactly as inspect reports them.
+      expect(sineObj.ports.inputs, 1);
+      expect(sineObj.ports.outputs, 1);
+      expect(sineObj.ports.outputKinds.single, PatchPortKind.audio);
+      // An object whose position was never set reports null.
+      final dacObj = snapshot.objects.firstWhere((o) => o.handleId == dac);
+      expect(dacObj.position, isNull);
+    });
+
+    test('returns every connection in native handle-id terms', () {
+      final a = gateway.createInstance();
+      final sine = gateway.createObject(a, Obj.dSine);
+      final dac = gateway.createObject(a, Obj.dDac);
+      gateway.connect(
+        a,
+        fromHandleId: sine,
+        outlet: 0,
+        toHandleId: dac,
+        inlet: 0,
+      );
+
+      final connections = gateway.enumerate(a).connections;
+
+      expect(connections, hasLength(1));
+      final c = connections.single;
+      expect(c.fromHandleId, sine);
+      expect(c.outlet, 0);
+      expect(c.toHandleId, dac);
+      expect(c.inlet, 0);
+    });
+
+    test('an empty instance enumerates to nothing', () {
+      final a = gateway.createInstance();
+      final snapshot = gateway.enumerate(a);
+      expect(snapshot.objects, isEmpty);
+      expect(snapshot.connections, isEmpty);
+    });
+
+    test('enumeration is scoped to its own instance', () {
+      final a = gateway.createInstance();
+      final b = gateway.createInstance();
+      gateway.createObject(a, Obj.dSine);
+
+      expect(gateway.enumerate(a).objects, hasLength(1));
+      expect(gateway.enumerate(b).objects, isEmpty);
+    });
+  });
+
+  group('dumpJson / parseJson round-trip (structured, re-parseable)', () {
+    test('a dumped graph re-parses into an identical enumeration', () {
+      final a = gateway.createInstance();
+      final sine = gateway.createObject(a, Obj.dSine, args: '440');
+      final dac = gateway.createObject(a, Obj.dDac);
+      gateway.setNodePosition(a, sine, const Offset(40, 60));
+      gateway.connect(
+        a,
+        fromHandleId: sine,
+        outlet: 0,
+        toHandleId: dac,
+        inlet: 0,
+      );
+      final dump = gateway.dumpJson(a);
+
+      // Parse the dump into a fresh instance and compare its enumeration.
+      final b = gateway.createInstance();
+      gateway.parseJson(b, dump);
+
+      final objects = gateway.enumerate(b).objects;
+      expect(objects, hasLength(2));
+      final sineObj = objects.firstWhere((o) => o.type == Obj.dSine);
+      expect(sineObj.args, '440');
+      expect(sineObj.position, const Offset(40, 60));
+      expect(gateway.enumerate(b).connections, hasLength(1));
+    });
+
+    test('parseJson tolerates an opaque (non-list-objects) dump', () {
+      final a = gateway.createInstance();
+      gateway.createObject(a, Obj.dSine);
+      // A hand-written placeholder dump (objects is a count, not a list) leaves
+      // the instance untouched rather than throwing.
+      gateway.parseJson(a, '{"objects":2,"cables":1}');
+      expect(gateway.enumerate(a).objects, hasLength(1));
     });
   });
 }

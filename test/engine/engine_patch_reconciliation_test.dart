@@ -105,7 +105,9 @@ void main() {
     final payload = PatchPayload.fromJson(
       (registry.entityAt(patch('p'))!.payload! as Map).cast(),
     );
-    expect(payload.dump, {'objects': 1, 'cables': 0});
+    // The fake dumps a structured, re-parseable graph: one object, no cables.
+    expect(payload.dump['objects'], hasLength(1));
+    expect(payload.dump['cables'], isEmpty);
   });
 
   test('a stale placement bus degrades into a surfaced notice', () {

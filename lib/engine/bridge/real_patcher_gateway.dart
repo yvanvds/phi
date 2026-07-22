@@ -5,6 +5,7 @@ import 'package:yse/yse.dart';
 import '../../domain/patcher/patch_port_kind.dart';
 import 'patch_object_descriptor.dart';
 import 'patcher_gateway.dart';
+import 'patcher_graph_snapshot.dart';
 import 'patcher_insert_source.dart';
 import 'patcher_node_snapshot.dart';
 import 'real_materialised_synth.dart' show MixBusResolver;
@@ -111,22 +112,58 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
   }
 
   @override
-  PatcherNodeSnapshot inspect(int instanceId, int handleId) {
-    final h = _inst(instanceId).handles[handleId]!;
-    return PatcherNodeSnapshot(
-      inputs: h.inputs,
-      outputs: h.outputs,
-      inputKinds: [
-        for (var i = 0; i < h.inputs; i++)
-          h.isDspInput(i) ? PatchPortKind.audio : PatchPortKind.control,
-      ],
-      outputKinds: [
-        for (var i = 0; i < h.outputs; i++)
-          h.outputDataType(i) == OutType.buffer
-              ? PatchPortKind.audio
-              : PatchPortKind.control,
-      ],
-    );
+  PatcherNodeSnapshot inspect(int instanceId, int handleId) =>
+      _snapshotOf(_inst(instanceId).handles[handleId]!);
+
+  /// Port topology of one native [PHandle] — shared by [inspect] and
+  /// [enumerate].
+  PatcherNodeSnapshot _snapshotOf(PHandle h) => PatcherNodeSnapshot(
+    inputs: h.inputs,
+    outputs: h.outputs,
+    inputKinds: [
+      for (var i = 0; i < h.inputs; i++)
+        h.isDspInput(i) ? PatchPortKind.audio : PatchPortKind.control,
+    ],
+    outputKinds: [
+      for (var i = 0; i < h.outputs; i++)
+        h.outputDataType(i) == OutType.buffer
+            ? PatchPortKind.audio
+            : PatchPortKind.control,
+    ],
+  );
+
+  @override
+  PatcherGraphSnapshot enumerate(int instanceId) {
+    final inst = _inst(instanceId);
+    final objects = <PatcherObjectSnapshot>[];
+    final connections = <PatcherConnectionSnapshot>[];
+    for (final h in inst.handles.values) {
+      objects.add(
+        PatcherObjectSnapshot(
+          handleId: h.id,
+          type: h.type,
+          args: h.params,
+          position: _positionOf(h),
+          ports: _snapshotOf(h),
+        ),
+      );
+      // Read every connection leaving each outlet — the native side is the
+      // source of truth for the loaded graph's topology.
+      for (var outlet = 0; outlet < h.outputs; outlet++) {
+        final count = h.connectionCount(outlet);
+        for (var c = 0; c < count; c++) {
+          connections.add(
+            PatcherConnectionSnapshot(
+              fromHandleId: h.id,
+              outlet: outlet,
+              toHandleId: h.connectionTargetId(outlet, c),
+              inlet: h.connectionTargetInlet(outlet, c),
+            ),
+          );
+        }
+      }
+    }
+    return PatcherGraphSnapshot(objects: objects, connections: connections);
   }
 
   @override
@@ -142,6 +179,13 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
   Offset? getNodePosition(int instanceId, int handleId) {
     final h = _inst(instanceId).handles[handleId];
     if (h == null) return null;
+    return _positionOf(h);
+  }
+
+  /// The stored `(x, y)` of one native [PHandle], or `null` when either
+  /// coordinate is missing or malformed — shared by [getNodePosition] and
+  /// [enumerate].
+  Offset? _positionOf(PHandle h) {
     final x = double.tryParse(h.getGuiProperty('x'));
     final y = double.tryParse(h.getGuiProperty('y'));
     if (x == null || y == null) return null;
