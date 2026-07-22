@@ -5,10 +5,12 @@ import 'package:phi/app.dart';
 import 'package:phi/design/widgets/channel_strip/channel_strip.dart';
 import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/domain/shell_layout/drop_edge.dart';
+import 'package:phi/domain/shell_layout/layout_node.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/shell/layout/shell_layout_controller.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
+import 'package:phi/surfaces/midi/clip_transport_row.dart';
 import 'package:phi/surfaces/midi/midi_header_strip.dart';
 import 'package:phi/surfaces/midi/midi_viewport.dart';
 import 'package:phi/surfaces/mix/mix_surface.dart';
@@ -131,4 +133,70 @@ void main() {
     session.dispose();
     await engine.dispose();
   });
+
+  testWidgets(
+    'the MIDI transport row scrolls in a very narrow pane without overflowing '
+    '(issue #299)',
+    (tester) async {
+      final engine = PhiEngine(
+        FakeYseGateway(),
+        midiGateway: FakeMidiGateway(),
+        telemetryInterval: const Duration(milliseconds: 20),
+      );
+      final session = SessionState();
+      final layout = ShellLayoutController();
+      addTearDown(layout.dispose);
+
+      // A wide window (so the toolbar/status bar and the sibling Mix pane stay
+      // comfortable), then MIDI is docked into a *very* narrow slice — narrower
+      // than #287's half-width repro, which is why #287 didn't flag this row.
+      tester.view.physicalSize = const Size(1360, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        PhiApp(engine: engine, session: session, layoutController: layout),
+      );
+      await tester.pumpAndSettle();
+
+      // Summon MIDI, split it off to the right of Mix, then squeeze its slice
+      // down to ~1/3 of the centre (~400px) — below the row's ~475px intrinsic
+      // width, where the old fixed Row asserted a RenderFlex overflow.
+      await tester.tap(railFor(SurfaceId.midi));
+      await tester.pumpAndSettle();
+      layout.split('p1', SurfaceId.midi.name, DropEdge.right);
+      await tester.pumpAndSettle();
+      final splitId = (layout.layout.root as LayoutSplit).id;
+      layout.resize(splitId, const [0.66, 0.34]);
+      await tester.pumpAndSettle();
+
+      expect(layout.layout.paneCount, 2);
+      expect(find.byType(MidiViewport), findsOneWidget);
+
+      // The narrow pane is genuinely below the row's intrinsic width…
+      expect(tester.getSize(find.byType(MidiViewport)).width, lessThan(475));
+
+      // …and the transport row degraded to a horizontal scroll rather than
+      // asserting. Scope through the row's outer SingleChildScrollView — its
+      // length TextFields carry their own inner Scrollables, so matching
+      // Scrollable directly under the row would be ambiguous.
+      final rowScroll = find.descendant(
+        of: find.byType(ClipTransportRow),
+        matching: find.byType(SingleChildScrollView),
+      );
+      final transportScroll = tester.state<ScrollableState>(
+        find.descendant(of: rowScroll, matching: find.byType(Scrollable)).first,
+      );
+      expect(transportScroll.position.maxScrollExtent, greaterThan(0));
+
+      // The transport controls are still present — reachable by scrolling.
+      expect(find.byKey(ClipTransportRow.loopKey), findsOneWidget);
+
+      expect(tester.takeException(), isNull);
+
+      session.dispose();
+      await engine.dispose();
+    },
+  );
 }

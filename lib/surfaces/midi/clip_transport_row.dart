@@ -88,6 +88,27 @@ class ClipTransportRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Docked in a pane narrower than its content (issue #299), the transport
+    // row scrolls horizontally instead of asserting a `RenderFlex overflowed`
+    // — matching the header fix from #287. `IntrinsicWidth` gives the `Spacer`
+    // a bounded width to divide (the row's natural width), while
+    // `minWidth: maxWidth` keeps the row filling — the transport cluster pinned
+    // right — whenever the pane is wide enough, so the common layout is
+    // unchanged.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: constraints.maxWidth),
+            child: IntrinsicWidth(child: _buildRow()),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRow() {
     final controls = transport;
     return Row(
       children: [
