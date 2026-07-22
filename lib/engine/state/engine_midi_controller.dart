@@ -658,6 +658,35 @@ class EngineMidiController implements ClipSessionHost {
     }
   }
 
+  /// The live per-domain tempo overrides a state application laid over the
+  /// authored `domain.` tempos (issue #243), keyed by domain name. Performance
+  /// state — never persisted, cleared wholesale on a project swap.
+  final Map<String, double> _domainTempoOverrides = {};
+
+  @override
+  double? domainTempoOverride(String domainName) =>
+      _domainTempoOverrides[domainName];
+
+  /// Lay a live tempo override of [bpm] over the domain at [domain] — the
+  /// clock-binding half of a state's tempos slice (issue #243). Journal-free:
+  /// the authored `domain.` payload is untouched; every playing session
+  /// subscribed to the domain re-paces its transport clock at once, and a
+  /// later-started session picks the override up through its base-tempo
+  /// resolution. A non-positive [bpm] is ignored (clocks cannot run backward).
+  void applyDomainTempo(EntityAddress domain, double bpm) {
+    if (bpm <= 0) return;
+    _domainTempoOverrides[domain.name] = bpm;
+    _applyTempoToPlayingSessions();
+  }
+
+  /// Drop every live tempo override — a fresh performance runs on authored
+  /// tempos. Called by the engine on a project swap.
+  void clearDomainTempoOverrides() {
+    if (_domainTempoOverrides.isEmpty) return;
+    _domainTempoOverrides.clear();
+    _applyTempoToPlayingSessions();
+  }
+
   // ─── shared scene field ──────────────────────────────────────────────────
 
   /// The live scene, keyed by `(channel, pitch)` voice key. Shared across

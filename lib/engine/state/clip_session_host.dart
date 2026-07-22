@@ -40,6 +40,13 @@ abstract interface class ClipSessionHost {
   /// it carries no active domain subscription.
   double get sessionBpm;
 
+  /// The live tempo override a state application (issue #243) laid over the
+  /// domain named [domainName], or `null` when the domain runs at its authored
+  /// tempo. Consulted by a session's base-tempo resolution every tick, so an
+  /// override re-paces the bound clock without touching the `domain.` payload
+  /// — tempos apply through the clock binding, journal-free.
+  double? domainTempoOverride(String domainName);
+
   /// Resolve the chosen MIDI output port to a live device index, or `null` when
   /// none is available/visible (design §5).
   int? resolveOutputPort();

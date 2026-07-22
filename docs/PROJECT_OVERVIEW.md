@@ -735,6 +735,36 @@ main + app          (orchestration)
   exactly → per-entry trim → save → second launch restores the slices
   identically → deleting the captured bus resolves the rest and surfaces
   the missing address).
+  Issue #243 makes entering a state **apply** what it captured — the
+  journal-free application engine (design §4, §8 decision 2). A
+  `StateApplicationEngine` (`lib/engine/state/state_application_engine.dart`)
+  applies the entered state's resolved slices through a `StateSliceApplier`
+  write seam (the mirror of `StateSliceSource`; production
+  `EngineStateSliceApplier` over closures) in fixed order — **variables →
+  tempos → mix → clips → on-enter script** (structure first, sound last,
+  script over everything). Application is performance, not authorship: no
+  payload writes, no journal entries — variables set through the
+  `RuntimeVariableRegistry`, tempos as live per-domain overrides on the clock
+  binding (`EngineMidiController.applyDomainTempo`, consulted by
+  `ClipSession`'s base-tempo resolution and cleared on a project swap), mix
+  levels live + engine-ramped (`PhiEngine.applyLiveBusLevel`, never
+  persisted), and clips play/stop-to-match through the sessions (uncaptured
+  leaves the playing set alone; captured-but-empty stops it). The entry
+  itself comes from `StateMachineController.onStateEntered` — fired by
+  `fire`/`setLive`, *not* by passive live re-seeding (load/rebind/delete
+  fallback), so recovery lands on the authored state. The on-enter `code.`
+  ref evaluates through the shell's shared `CodeEvaluator`
+  (`PhiEngine.stateScriptEvaluator`, wired by the workstation). Every
+  degradation — deleted referents, undefined variables, unstartable clips, a
+  missing or failed script, even a throwing controller — becomes a
+  `StateApplicationNotice` on `PhiEngine.lastStateNotice`, never a crash.
+  Covered by application-engine unit tests (order, partial application,
+  journal-free across applications, every degradation path), applier +
+  tempo-override suites, controller entry-hook tests, and an end-to-end
+  `state_apply_on_fire` integration test (capture → move the performance →
+  save → fire from the canvas snaps variables/tempo/mix/clips back and runs
+  the script while the project stays saved → deleting a captured bus
+  surfaces the notice on the next fire).
 - Time-domains layer seed (issue #60): pure-Dart `TimeDomain` (a named
   BPM tempo reference) and an immutable, copy-on-write `TimeDomainRegistry`
   (name→domain lookup) in `lib/domain/time_domains/`. The minimal object a

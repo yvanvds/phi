@@ -4,11 +4,14 @@ import 'package:phi/domain/midi/graph/graph_eval_context.dart';
 import 'package:phi/domain/midi/midi_clip.dart';
 import 'package:phi/domain/midi/midi_note.dart';
 import 'package:phi/domain/midi/midi_transform_chain.dart';
+import 'package:phi/domain/midi/transforms/domain_subscription_transform.dart';
 import 'package:phi/domain/midi/transforms/transpose_transform.dart';
 import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/scene/scene_field.dart';
 import 'package:phi/domain/synth/sine_synth.dart';
 import 'package:phi/domain/time_domains/tempo_source_stack.dart';
+import 'package:phi/domain/time_domains/time_domain.dart';
+import 'package:phi/domain/time_domains/time_domain_registry.dart';
 import 'package:phi/domain/voice/voice_channel_resolver.dart';
 import 'package:phi/engine/bridge/materialised_synth.dart';
 import 'package:phi/engine/bridge/midi_gateway.dart';
@@ -37,6 +40,12 @@ class _StubHost implements ClipSessionHost {
   bool microtonal = false;
   @override
   double sessionBpm = 120;
+
+  /// Live per-domain tempo overrides, driving [domainTempoOverride] (#243).
+  final Map<String, double> tempoOverrides = {};
+
+  @override
+  double? domainTempoOverride(String domainName) => tempoOverrides[domainName];
 
   /// The voice → channel table this stub flattens against.
   final VoiceChannelResolver voiceResolver;
@@ -549,6 +558,73 @@ void main() {
 
         session.dispose();
       });
+    });
+  });
+
+  group('ClipSession — domain tempo override (issue #243)', () {
+    MidiTransformChain subscribedChain() => MidiTransformChain(
+      source: MidiClip(
+        bars: 2,
+        notes: const [
+          MidiNote(pitch: 60, start: 0.0, duration: 1.0, velocity: 1.0),
+        ],
+      ),
+      transforms: [
+        DomainSubscriptionTransform.resolve(
+          registry: TimeDomainRegistry(const [
+            TimeDomain(name: 'drum', tempo: 124),
+          ]),
+          domainName: 'drum',
+          label: 'domain · drum @ 124',
+        ),
+      ],
+    );
+
+    test('the host override wins over the subscribed authored tempo and '
+        're-paces the live clock', () {
+      fakeAsync((async) {
+        final gateway = FakeMidiGateway();
+        final host = _StubHost(gateway);
+        final session = ClipSession(
+          address: null,
+          host: host,
+          chain: subscribedChain(),
+        );
+
+        // Subscribed: the clock runs at the domain's authored 124.
+        expect(session.effectiveTempo, 124);
+        session.play();
+        async.elapse(const Duration(milliseconds: 20));
+        expect(gateway.transport!.tempo, 124);
+
+        // A state's tempos slice lays a live override over the domain — the
+        // clock re-paces without the note list re-pushing.
+        host.tempoOverrides['drum'] = 100;
+        expect(session.effectiveTempo, 100);
+        session.applyTempo();
+        expect(gateway.transport!.tempo, 100);
+
+        // Clearing the override falls back to the authored tempo.
+        host.tempoOverrides.clear();
+        expect(session.effectiveTempo, 124);
+
+        session.stop();
+        session.dispose();
+      });
+    });
+
+    test('an override on another domain leaves an unsubscribed clip at the '
+        'session tempo', () {
+      final host = _StubHost(FakeMidiGateway())..tempoOverrides['drum'] = 100;
+      final session = ClipSession(
+        address: null,
+        host: host,
+        chain: _twoBarChain(),
+      );
+
+      expect(session.effectiveTempo, host.sessionBpm);
+
+      session.dispose();
     });
   });
 }
