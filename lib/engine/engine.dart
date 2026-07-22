@@ -43,7 +43,9 @@ import 'bridge/audio_device_notice.dart';
 import 'bridge/audio_device_state.dart';
 import 'bridge/bus_tap.dart';
 import 'bridge/code_evaluator.dart';
+import 'bridge/control_plane_dispatcher.dart';
 import 'bridge/engine_log_source.dart';
+import 'bridge/fx_control_port.dart';
 import 'bridge/fx_gateway.dart';
 import 'bridge/macbear_scene_renderer.dart';
 import 'bridge/materialised_synth.dart';
@@ -64,7 +66,9 @@ import 'bridge/scene_renderer.dart';
 import 'bridge/state_current_mirror.dart';
 import 'bridge/synth_gateway.dart';
 import 'bridge/yse_gateway.dart';
+import 'state/audition_voice_control_port.dart';
 import 'state/clip_registry_publisher.dart';
+import 'state/domain_tempo_control_port.dart';
 import 'state/engine_midi_controller.dart';
 import 'state/engine_state_slice_applier.dart';
 import 'state/engine_state_slice_source.dart';
@@ -78,8 +82,11 @@ import 'state/patch_placement_notice.dart';
 import 'state/patch_reconciler.dart';
 import 'state/patcher_controller.dart';
 import 'state/rack_materialiser.dart';
+import 'state/runtime_variable_control_port.dart';
+import 'state/session_clip_control_port.dart';
 import 'state/state_application_engine.dart';
 import 'state/state_application_notice.dart';
+import 'state/state_machine_control_port.dart';
 import 'state/state_machine_controller.dart';
 import 'state/state_trigger_scheduler.dart';
 
@@ -187,6 +194,15 @@ class PhiEngine {
   final BusTap _busTap;
   final EngineLogSource _engineLogSource;
   final Duration _telemetryInterval;
+
+  /// The live-coding **control plane** (issue #334): decodes `phi.ctl.*` frames
+  /// off the engine's [tapBus] seam and routes each to its owning controller —
+  /// the production activation of the dispatcher issue #233 built. Constructed
+  /// on [start] once every owning controller exists and disposed on [stop].
+  /// Silent in production until the tap C API lands (the default [NoOpBusTap]
+  /// yields no frames), but wired and live so a real frame routes the moment it
+  /// arrives.
+  ControlPlaneDispatcher? _controlPlane;
 
   /// The engine's log lines (design `docs/design/diagnostics.md` §2) — yse's
   /// `Log.messages` in production, an empty stream on a bare engine. The shell's
@@ -810,6 +826,19 @@ class PhiEngine {
     return true;
   }
 
+  /// Lay a live tempo override of [bpm] over the `domain.` entity at [domain] —
+  /// the clock-binding half of a state's tempos slice (issue #243) *and* the
+  /// receiving end of the control plane's `domain.<d>.tempo` set (issue #334).
+  /// Journal-free: the playing sessions subscribed to the domain re-pace their
+  /// clocks at once, a running metronome click bound to it re-paces too (issue
+  /// #331), and the authored `domain.` payload is untouched. Shared by the
+  /// state-slice applier and the [DomainTempoControlPort] so both apply through
+  /// exactly one seam.
+  void _applyDomainTempo(EntityAddress domain, double bpm) {
+    _midi?.applyDomainTempo(domain, bpm);
+    _metronome?.applyTempo();
+  }
+
   /// The current effective tempo of the `domain.` entity at [domain] — a live
   /// performance override (a fired state's tempos slice, issue #243) over the
   /// authored payload BPM — or `null` when no such domain exists. What timed
@@ -1025,14 +1054,7 @@ class PhiEngine {
     _stateApplication = StateApplicationEngine(
       applier: EngineStateSliceApplier(
         variables: () => rv,
-        domainTempo: (domain, bpm) {
-          _midi?.applyDomainTempo(domain, bpm);
-          // The metronome click paces from the same live domain tempo (issue
-          // #331): re-pace a running click bound to this domain now the
-          // override has moved it. A no-op when the click is off or its bound
-          // tempo is unchanged.
-          _metronome?.applyTempo();
-        },
+        domainTempo: _applyDomainTempo,
         mixLevel: applyLiveBusLevel,
         playingClips: () => _midi?.playingClipEntries ?? const [],
         playClip: _playSliceClip,
@@ -1064,6 +1086,26 @@ class PhiEngine {
       _applyEnteredState(state);
       _stateTriggers?.onStateEntered(state);
     };
+    // Activate the live-coding control plane over the engine's bus tap (issue
+    // #334): every owning controller now exists, so construct the dispatcher
+    // #233 built and hand it the *real* ports — state fires through the trigger
+    // scheduler, `var` assignments into the runtime registry, `domain.<d>.tempo`
+    // as the same live override the state-slice application uses, clip verbs
+    // onto the session manager (opening a clip from the registry when none is
+    // open yet), and voice notes through the racks audition path. The `fx` leg
+    // is decoded but not yet wired to a live fx-param controller (issue #348,
+    // the fx epic) — it degrades to a graceful no-op. Every degradation is a
+    // notice, never a crash. Silent in production until the tap C API lands
+    // (the default [NoOpBusTap] yields no frames).
+    _controlPlane = ControlPlaneDispatcher(
+      busTap: _busTap,
+      clips: SessionClipControlPort(midi: _midi, documentAt: _clipDocumentAt),
+      voices: AuditionVoiceControlPort(_midi),
+      variables: RuntimeVariableControlPort(rv),
+      states: StateMachineControlPort(_stateTriggers!),
+      tempo: DomainTempoControlPort(_applyDomainTempo),
+      fx: const _UnwiredFxControlPort(),
+    );
     // The rack materialiser (issue #208) reconciles synths per internal voice
     // and insert chains per bus, then hands the live voice table + synth map to
     // the MIDI controller so sessions flatten + connect by routed voice. It runs
@@ -1181,6 +1223,11 @@ class PhiEngine {
     _telemetryTimer?.cancel();
     _telemetryTimer = null;
     if (_started) {
+      // Tear the control plane down first (issue #334): cancel its tap
+      // subscription so no late `phi.ctl` frame routes into a half-disposed
+      // subsystem below. Its owning controllers are disposed further down.
+      unawaited(_controlPlane?.dispose());
+      _controlPlane = null;
       // Dispose the editor controllers first (Dart-side only — they don't own
       // their native instances, the reconciler does), then tear the per-entity
       // patchers down (unmount running sources + dispose their native instances)
@@ -2753,4 +2800,17 @@ class _AppliedSend {
   final int returnId;
   double level;
   final bool preFader;
+}
+
+/// The `fx` leg of the control plane, decoded but **not yet wired** to a live
+/// fx-param controller (issue #334). Issue #316 landed the [FxControlPort] seam
+/// and the dispatcher's `phi.ctl.fx.*` routing; the real adapter over the live
+/// fx registry lands with the fx epic (issue #348). Until then a
+/// `fx.<addr>.<param> = v` frame decodes cleanly and no-ops here — a graceful
+/// degradation, never a crash.
+class _UnwiredFxControlPort implements FxControlPort {
+  const _UnwiredFxControlPort();
+
+  @override
+  void setParam(EntityAddress fx, String param, double value) {}
 }

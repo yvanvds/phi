@@ -1990,22 +1990,38 @@ main + app          (orchestration)
   `(address, value)` frame, and dispatches to the owning controller: clip
   play/stop/pause/loop + group verbs + namespace-wide stop-all, voice note/off
   (the immediate audition path), `var.x = v` assignment, `state[.<machine>].fire`,
-  and `domain.<d>.tempo`. Each controller is reached through a small **port**
-  interface (`ClipControlPort` · `VoiceControlPort` · `VariableControlPort` ·
-  `StateControlPort` · `TempoControlPort`), so the dispatcher lands with fakes
-  and is testable standalone — the real controllers wire in as epics #183
-  (clip sessions) and #203 (voices) merge (design §4 cross-epic note). Malformed
-  frames, unknown namespaces (host-mediated `fx.` params are decoded here too but
-  are out of this issue's scope — filed separately), unknown verbs, and
-  wrong-typed values **degrade gracefully** — a `ControlPlaneNotice` (logged via
-  `debugPrint` by default), never a throw, guarded so a bad frame never tears
-  down the subscription. Not yet wired into `PhiEngine` in production (the tap is
-  still `NoOpBusTap` until the engine dependency lands, mirroring #229's
-  present-but-silent seam). Covered by `control_plane_dispatcher_test.dart` —
-  every verb's dispatch to a fake controller, the graceful-degradation paths, and
-  an end-to-end fake flow (publish through the real `FakeBusTap` broadcast stream
-  → dispatcher → controller effect). The Python emission side is unchanged
-  (already shipped + tested by #230's `test_verbs.py`).
+  `domain.<d>.tempo`, and (since #316) host-mediated `fx.<addr>.<param>` param
+  sets. Each controller is reached through a small **port** interface
+  (`ClipControlPort` · `VoiceControlPort` · `VariableControlPort` ·
+  `StateControlPort` · `TempoControlPort` · `FxControlPort`), so the dispatcher is
+  testable standalone against fakes. Malformed frames, unknown namespaces, unknown
+  verbs, and wrong-typed values **degrade gracefully** — a `ControlPlaneNotice`
+  (logged via `debugPrint` by default), never a throw, guarded so a bad frame
+  never tears down the subscription. Covered by `control_plane_dispatcher_test.dart`
+  — every verb's dispatch to a fake controller, the graceful-degradation paths, and
+  an end-to-end fake flow. The Python emission side is unchanged (already shipped +
+  tested by #230's `test_verbs.py`).
+  **Production activation** (issue #334): `PhiEngine.start` now constructs the
+  dispatcher over the engine's own `tapBus` seam with the **real** ports — `state`
+  via `StateMachineControlPort(stateTriggers)`, `var` via
+  `RuntimeVariableControlPort` over the runtime registry, `domain tempo` via
+  `DomainTempoControlPort` (the same live-override seam a fired state's tempos
+  slice applies through, `_applyDomainTempo` — sessions re-pace, a bound metronome
+  click re-paces), `clip` via `SessionClipControlPort` over the session manager
+  (play/stop/pause/loop/stop-all, with the **open-from-registry** step for a clip
+  with no open session yet), and `voice` via `AuditionVoiceControlPort` over the
+  racks audition path (tracking held notes so a bare `off()` releases them all).
+  The adapters live in `lib/engine/state/`, tolerate an absent MIDI subsystem, and
+  no-op gracefully on unknown targets. The `fx` leg is decoded and routed but its
+  real fx-param controller is deferred (issue #348) — production wires a
+  no-op `_UnwiredFxControlPort` for now. Still silent in production until the tap C
+  API lands (the default `NoOpBusTap` yields no frames, mirroring #229's
+  present-but-silent seam), but live the moment a frame arrives. The dispatcher is
+  torn down first on `stop`, cancelling its subscription before the controllers it
+  routes to. Covered by unit tests for each adapter (`lib/engine/state/*_control_port`)
+  and an end-to-end `control_plane_activation_test.dart` that drives a fake tap
+  through the *engine-constructed* dispatcher — no test scaffolding — to each real
+  port (state fire, var move, domain override, clip play, voice note/off).
 - **The diagnostics log domain** (issue #268, epic #267, design
   `docs/design/diagnostics.md` §2, §6) — the pure-Dart foundation for the unified
   log, seams + fakes, no UI yet (the panel is #270, source wiring #269). A
