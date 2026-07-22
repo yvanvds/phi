@@ -604,12 +604,15 @@ class PhiEngine {
     // names (design §3, issue #231). The incremental event stream keeps it in
     // step from here.
     _mirrorBinder.resync();
-    // Re-point the state machine at the project's `state.` namespace (issue
-    // #241): the canvas re-renders from the new registry and the live state
-    // re-seeds from its first state.
-    _stateMachine?.rebind(registry: registry, recordCommand: recordCommand);
     _teardownChannels();
     _syncChannelsFromRegistry();
+    // Re-point the state machine at the project's `state.` namespace (issue
+    // #241): the canvas re-renders from the new registry and the live state
+    // re-seeds from its first state. After the channel sync on purpose — the
+    // rebind normalises map-native `state.` payloads, and that registry
+    // notification must land on an already-reconciled channel/rack state (a
+    // premature pass here used to materialise the voice synths twice).
+    _stateMachine?.rebind(registry: registry, recordCommand: recordCommand);
     _adoptClipAndRebindPublisher();
     // Rebind the patcher entity strip to the new project's `patch.` namespace,
     // seeding a default patch when it carries none, and open the first (issue
