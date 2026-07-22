@@ -16,6 +16,7 @@ void main() {
         target: verse,
         armed: true,
         fireOn: 'timed',
+        triggerKind: 'timed',
       );
 
       // Same edge: this is what lets the controller key its arm set by
@@ -27,15 +28,21 @@ void main() {
 
     test('copyWith replaces the display fields and keeps the endpoints', () {
       final t = StateTransition(source: intro, target: verse);
-      final armed = t.copyWith(armed: true, fireOn: 'code');
+      final armed = t.copyWith(
+        armed: true,
+        fireOn: 'code',
+        triggerKind: 'code',
+      );
 
       expect(armed.source, intro);
       expect(armed.target, verse);
       expect(armed.armed, isTrue);
       expect(armed.fireOn, 'code');
+      expect(armed.triggerKind, 'code');
       // Defaults: manual, not armed.
       expect(t.armed, isFalse);
       expect(t.fireOn, 'manual');
+      expect(t.triggerKind, 'manual');
     });
   });
 }

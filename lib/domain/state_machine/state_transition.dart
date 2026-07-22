@@ -6,8 +6,9 @@ import '../project/entity_address.dart';
 /// Immutable value object the registry-backed `StateMachineController`
 /// derives from the source state's persisted `StateTransitionSpec` list: the
 /// [source] / [target] addresses come from the payload, [fireOn] from the
-/// spec's label or trigger kind, and [armed] from the controller's transient
-/// arm set — arming is performance state and never persists.
+/// spec's label or trigger kind, [triggerKind] from the spec's trigger, and
+/// [armed] from the controller's transient arm set — arming is performance
+/// state and never persists.
 ///
 /// Equality is on `(source, target)` only — two transitions with the same
 /// endpoints but different `armed` / `fireOn` are still "the same edge". That
@@ -20,6 +21,7 @@ class StateTransition {
     required this.target,
     this.armed = false,
     this.fireOn = 'manual',
+    this.triggerKind = 'manual',
   });
 
   /// The `state.` entity whose payload carries this transition.
@@ -37,11 +39,20 @@ class StateTransition {
   /// when set, its trigger kind otherwise ("manual", "timed", …).
   final String fireOn;
 
-  StateTransition copyWith({bool? armed, String? fireOn}) => StateTransition(
+  /// The wire tag of the spec's trigger ("manual" / "code" / "timed" /
+  /// "variable") — what the canvas badges the transition with (issue #244).
+  final String triggerKind;
+
+  StateTransition copyWith({
+    bool? armed,
+    String? fireOn,
+    String? triggerKind,
+  }) => StateTransition(
     source: source,
     target: target,
     armed: armed ?? this.armed,
     fireOn: fireOn ?? this.fireOn,
+    triggerKind: triggerKind ?? this.triggerKind,
   );
 
   @override

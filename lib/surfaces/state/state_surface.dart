@@ -27,7 +27,11 @@ class StateSurface extends Surface {
     return Container(
       color: PhiColors.bg0,
       child: controller != null
-          ? StateCanvas(controller: controller, session: session)
+          ? StateCanvas(
+              controller: controller,
+              session: session,
+              variables: engine.runtimeVariablesOrNull,
+            )
           : const _Offline(),
     );
   }
