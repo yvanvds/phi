@@ -74,5 +74,38 @@ void main() {
       // stay pinned to the right exactly as in the maximized layout.
       expect(headerScroll(tester).position.maxScrollExtent, equals(0));
     });
+
+    group('SNAP label (issue #274)', () {
+      testWidgets('drops the SNAP label but keeps the picker when narrow', (
+        tester,
+      ) async {
+        // A pane below the label breakpoint: the labelled control degrades to
+        // the compact unlabelled picker (whose closed value already reads as the
+        // snap control) rather than crowding the header.
+        await pumpAtWidth(tester, MidiHeaderStrip.snapLabelBreakpoint - 200);
+
+        expect(tester.takeException(), isNull);
+        expect(find.byKey(MidiHeaderStrip.snapLabelKey), findsNothing);
+        expect(find.text('SNAP'), findsNothing);
+        // The picker itself is never dropped — only its text label folds away.
+        expect(find.byKey(MidiHeaderStrip.snapPickerKey), findsOneWidget);
+      });
+
+      testWidgets('restores a labelled SNAP control when there is room', (
+        tester,
+      ) async {
+        await pumpAtWidth(tester, 1800);
+
+        expect(tester.takeException(), isNull);
+        // The label is back, sitting beside the still-present picker…
+        expect(find.byKey(MidiHeaderStrip.snapLabelKey), findsOneWidget);
+        expect(find.text('SNAP'), findsOneWidget);
+        expect(find.byKey(MidiHeaderStrip.snapPickerKey), findsOneWidget);
+        // …and restoring it did not push the header into a scroll: the wide
+        // layout still fits everything, which is the overflow the earlier PR
+        // (issue #189) avoided by dropping the label.
+        expect(headerScroll(tester).position.maxScrollExtent, equals(0));
+      });
+    });
   });
 }

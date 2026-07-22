@@ -48,8 +48,42 @@ class MidiHeaderStrip extends StatelessWidget {
   /// Key on the header's snap-grid picker, so tests can drive it.
   static const Key snapPickerKey = Key('MidiHeaderStrip.snapPicker');
 
+  /// Key on the restored `SNAP` text label (issue #274). Present only when the
+  /// header has room for it, so tests can assert the responsive behaviour.
+  static const Key snapLabelKey = Key('MidiHeaderStrip.snapLabel');
+
+  /// At or above this pane width the snap picker regains its `SNAP` text label
+  /// (issue #274); below it the header degrades to the compact unlabelled
+  /// picker — whose closed value (`1/16`, `1/8T`, `off`) already reads as the
+  /// snap control — so restoring the label never forces the already-full header
+  /// into a horizontal scroll (issue #189 dropped it for exactly that reason).
+  /// The value sits just above the header's natural width with the label, so it
+  /// appears whenever it fits and folds away as the pane tightens.
+  static const double snapLabelBreakpoint = 940;
+
   @override
   Widget build(BuildContext context) {
+    // Docked in a pane narrower than its content (issue #287), the header
+    // scrolls horizontally instead of asserting a `RenderFlex overflowed`.
+    // `IntrinsicWidth` gives the `Expanded` caption a bounded width to divide
+    // (the row's natural width), while `minWidth: maxWidth` keeps the row
+    // filling — and the trailing capsules pinned right — whenever the pane is
+    // wide enough, so the common maximized layout is unchanged.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final showSnapLabel = constraints.maxWidth >= snapLabelBreakpoint;
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: constraints.maxWidth),
+            child: IntrinsicWidth(child: _buildRow(showSnapLabel)),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRow(bool showSnapLabel) {
     final caption = errorText == null
         ? Text(
             '$noteCount notes · $bars bars · interpreted, not played',
@@ -65,12 +99,20 @@ class MidiHeaderStrip extends StatelessWidget {
           );
 
     final onGrid = onGridChanged;
-    final row = Row(
+    return Row(
       children: [
         Text('midi · $clipName'.toUpperCase(), style: PhiType.caption()),
         const SizedBox(width: 8),
         Expanded(child: caption),
         if (onGrid != null) ...[
+          if (showSnapLabel) ...[
+            Text(
+              'snap'.toUpperCase(),
+              key: snapLabelKey,
+              style: PhiType.caption(),
+            ),
+            const SizedBox(width: 6),
+          ],
           _SnapPicker(value: gridDivision ?? SnapGrid.off, onChanged: onGrid),
           const SizedBox(width: 6),
         ],
@@ -86,22 +128,6 @@ class MidiHeaderStrip extends StatelessWidget {
         const SizedBox(width: 6),
         const Capsule(label: 'domain · drum', color: PhiColors.cool),
       ],
-    );
-
-    // Docked in a pane narrower than its content (issue #287), the header
-    // scrolls horizontally instead of asserting a `RenderFlex overflowed`.
-    // `IntrinsicWidth` gives the `Expanded` caption a bounded width to divide
-    // (the row's natural width), while `minWidth: maxWidth` keeps the row
-    // filling — and the trailing capsules pinned right — whenever the pane is
-    // wide enough, so the common maximized layout is unchanged.
-    return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minWidth: constraints.maxWidth),
-          child: IntrinsicWidth(child: row),
-        ),
-      ),
     );
   }
 }
