@@ -765,6 +765,42 @@ main + app          (orchestration)
   save → fire from the canvas snaps variables/tempo/mix/clips back and runs
   the script while the project stays saved → deleting a captured bus
   surfaces the notice on the next fire).
+  Issue #244 makes the stored `StateTrigger` data **behave** (design §5, §8
+  decision 3). A `StateTriggerScheduler`
+  (`lib/engine/state/state_trigger_scheduler.dart`, created in
+  `PhiEngine.start`, exposed as `stateTriggers`) owns the three non-manual
+  kinds: **timed** triggers arm on *entry* (the engine chains
+  `onStateEntered` beside the application engine — a passively re-seeded
+  live state starts no timers) with one reserved transport clock per
+  schedule (`phi.state.timed.*`) paced from the domain's effective tempo
+  (live override over the authored BPM) and checked by **querying the
+  engine clock** each frame (the count-in precedent — no Dart timer in the
+  timing path), cancelled when the source state is left early;
+  **variable** triggers watch the `RuntimeVariableRegistry` and fire only
+  on a change *onto* the match value (an already-matching value when the
+  watcher arms never fires); **code** is `StateTriggerScheduler.fireTo`,
+  adapted to the control plane's `StateControlPort` by
+  `StateMachineControlPort` (v1: one machine, the qualifier is ignored) —
+  kind-agnostic by design, the seam any trigger source can ride. Renames
+  follow the refactor (`onStateMoved` remaps armed references in place, and
+  the schedule sync is positional so a rename mid-count keeps the count); a
+  fired transition whose target was deleted no-ops with a notice on
+  `lastStateNotice`; `bindProject` cancels the old performance's schedules.
+  Arming stays meaningful for **manual** transitions only:
+  `StateMachineController.toggleArmed` refuses non-manual arms, and the
+  journaled `setTrigger` drops the arm when a trigger leaves manual. On the
+  canvas each transition wears a `StateTransitionBadge` at its curve
+  midpoint naming the kind — the badge is the tap target (tap-to-arm moved
+  to the badge for manual; the trigger editor for the rest) and tapping the
+  curve opens the `StateTriggerEditor` dialog (kind + beats/domain from the
+  project's `domain.` entities + variable/value from the runtime registry)
+  for any kind. Covered by scheduler unit tests (fake-clock timed fire,
+  cancellation on early exit, re-pace mid-count, rename-keeps-the-count,
+  variable-match on change, fireTo resolution, every degradation), control
+  port + controller trigger suites, badge/editor widget tests, and an
+  end-to-end `state_triggers` integration test (badge → arm on the badge →
+  editor authors timed (clock armed on the entered live state) → variable
+  (schedule cancels; the variable change fires the transition) → fireTo).
 - Time-domains layer seed (issue #60): pure-Dart `TimeDomain` (a named
   BPM tempo reference) and an immutable, copy-on-write `TimeDomainRegistry`
   (name→domain lookup) in `lib/domain/time_domains/`. The minimal object a

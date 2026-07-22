@@ -5,14 +5,22 @@ import '../../design/tokens/phi_type.dart';
 import '../../design/widgets/dialog/delete_impact_dialog.dart';
 import '../../design/widgets/patcher/patch_grid_painter.dart';
 import '../../design/widgets/state_machine/state_canvas_constants.dart';
+import '../../design/widgets/state_machine/state_transition_geometry.dart';
 import '../../domain/project/entity_address.dart';
+import '../../domain/project/registry_entity.dart';
+import '../../domain/project/registry_kinds.dart';
+import '../../domain/runtime/runtime_variable_registry.dart';
 import '../../domain/session/session_state.dart';
 import '../../domain/state_machine/state_transition.dart';
+import '../../domain/state_machine/store/state_trigger.dart';
+import '../../domain/time_domains/time_domain.dart';
 import '../../engine/state/state_entity_selection.dart';
 import '../../engine/state/state_machine_controller.dart';
 import 'state_ghost_transition.dart';
 import 'state_node_view.dart';
+import 'state_transition_badge.dart';
 import 'state_transition_layer.dart';
+import 'state_trigger_editor.dart';
 
 /// The state-graph pan/zoom canvas, rendered from the registry through the
 /// [StateMachineController] (issue #241). Hosts the grid backdrop (reused
@@ -24,15 +32,27 @@ import 'state_transition_layer.dart';
 /// canvas offers *new state* at that spot; a secondary tap on a node
 /// offers *duplicate* and *delete* (the latter behind the delete-impact
 /// dialog when other entities still point at the state).
+///
+/// Each transition is badged with its trigger kind at the curve midpoint
+/// (issue #244). The badge is the tap target: on a **manual** transition it
+/// toggles the arm (tap-to-arm moved to the badge, design §5); on any other
+/// kind it opens the trigger editor. Tapping the curve itself opens the
+/// editor for every kind.
 class StateCanvas extends StatefulWidget {
   const StateCanvas({
     required this.controller,
     required this.session,
+    this.variables,
     super.key,
   });
 
   final StateMachineController controller;
   final SessionState session;
+
+  /// The runtime-variable registry the trigger editor's variable picker
+  /// offers definitions from (issue #244). `null` — a bare setup — leaves the
+  /// picker empty.
+  final RuntimeVariableRegistry? variables;
 
   @override
   State<StateCanvas> createState() => _StateCanvasState();
@@ -102,7 +122,7 @@ class _StateCanvasState extends State<StateCanvas> {
                       transitions: transitions,
                       nodeRects: rects,
                       version: controller.version,
-                      onTransitionTap: controller.toggleArmed,
+                      onTransitionTap: _openTriggerEditor,
                     ),
                   ),
                   // Above the transition layer (whose paint hit-tests the
@@ -118,6 +138,9 @@ class _StateCanvasState extends State<StateCanvas> {
                       ),
                     ),
                   ),
+                  // Trigger-kind badges at the curve midpoints (issue #244):
+                  // tap-to-arm for manual, the trigger editor otherwise.
+                  for (final t in transitions) ?_badgeFor(t, rects),
                   for (final n in nodes)
                     Positioned(
                       left: n.position.dx,
@@ -189,6 +212,86 @@ class _StateCanvasState extends State<StateCanvas> {
       if (r.contains(local)) return n.address;
     }
     return null;
+  }
+
+  // ─── trigger badges + editor (issue #244) ───────────────────────────────
+
+  /// The trigger-kind badge for [transition], centred on its curve midpoint —
+  /// or `null` when either endpoint is missing from [rects].
+  Widget? _badgeFor(
+    StateTransition transition,
+    Map<EntityAddress, Rect> rects,
+  ) {
+    final src = rects[transition.source];
+    final dst = rects[transition.target];
+    if (src == null || dst == null) return null;
+    final mid = StateTransitionGeometry.pointAt(
+      StateTransitionGeometry.curveBetween(src, dst),
+      0.5,
+    );
+    return Positioned(
+      key: ValueKey(
+        'badge:${transition.source.format()}>${transition.target.format()}',
+      ),
+      left: mid.dx,
+      top: mid.dy,
+      child: FractionalTranslation(
+        translation: const Offset(-0.5, -0.5),
+        child: StateTransitionBadge(
+          kind: transition.triggerKind,
+          armed: transition.armed,
+          onTap: () => _onBadgeTap(transition),
+        ),
+      ),
+    );
+  }
+
+  /// A badge tap: the arm toggle for a manual transition (tap-to-arm moved to
+  /// the badge, design §5); the trigger editor for every other kind.
+  void _onBadgeTap(StateTransition transition) {
+    final trigger = _controller.triggerOf(transition.source, transition.target);
+    if (trigger is ManualTrigger) {
+      _controller.toggleArmed(transition);
+    } else {
+      _openTriggerEditor(transition);
+    }
+  }
+
+  /// Open the trigger editor for [transition] and write the edited trigger
+  /// back as one journaled payload update.
+  Future<void> _openTriggerEditor(StateTransition transition) async {
+    final trigger = _controller.triggerOf(transition.source, transition.target);
+    if (trigger == null) return;
+    final edited = await StateTriggerEditor.show(
+      context,
+      initial: trigger,
+      domains: _domainOptions(),
+      variables: widget.variables?.variables.toList() ?? const [],
+    );
+    if (edited == null || edited == trigger || !mounted) return;
+    _controller.setTrigger(transition.source, transition.target, edited);
+  }
+
+  /// The project's `domain.` clocks a timed trigger can count on — top-level
+  /// entities with a decoded [TimeDomain] payload, in registry order (the
+  /// capture seam's shape).
+  List<TriggerDomainOption> _domainOptions() {
+    final result = <TriggerDomainOption>[];
+    for (final node in _controller.registry.childrenOfKind(
+      RegistryKinds.domain,
+    )) {
+      if (node is! RegistryEntity) continue;
+      final payload = node.payload;
+      if (payload is! TimeDomain) continue;
+      result.add((
+        address: EntityAddress(
+          kind: RegistryKinds.domain,
+          segments: [node.name],
+        ),
+        tempo: payload.tempo,
+      ));
+    }
+    return result;
   }
 
   // ─── context menus (standard affordances, issue #241) ───────────────────

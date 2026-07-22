@@ -23,6 +23,7 @@ import '../../domain/state_machine/state_node_data.dart';
 import '../../domain/state_machine/state_transition.dart';
 import '../../domain/state_machine/store/state_document.dart';
 import '../../domain/state_machine/store/state_transition_spec.dart';
+import '../../domain/state_machine/store/state_trigger.dart';
 import 'state_slice_source.dart';
 
 /// The registry-backed state machine (design `docs/design/state-graph.md` §3,
@@ -182,6 +183,7 @@ class StateMachineController extends ChangeNotifier {
             StateTransition(source: entry.key, target: spec.to),
           ),
           fireOn: spec.label ?? spec.trigger.kind,
+          triggerKind: spec.trigger.kind,
         );
         if (!result.contains(transition)) result.add(transition);
       }
@@ -407,6 +409,63 @@ class StateMachineController extends ChangeNotifier {
     );
   }
 
+  /// The persisted trigger of the first [source] → [target] transition, or
+  /// `null` when no such transition exists — what the canvas badge and the
+  /// trigger editor read (issue #244).
+  StateTrigger? triggerOf(EntityAddress source, EntityAddress target) {
+    for (final spec
+        in _docs[source]?.transitions ?? const <StateTransitionSpec>[]) {
+      if (spec.to == target) return spec.trigger;
+    }
+    return null;
+  }
+
+  /// Replace the trigger of the [source] → [target] transition with [trigger]
+  /// — one journaled payload update, so a trigger edit dirties, saves and
+  /// undoes like any other authored change (issue #244). Arming stays
+  /// meaningful only for manual transitions (design §5), so a trigger moving
+  /// away from manual drops any arm on the transition. Returns whether a
+  /// transition was found (`true` with no journal write when the trigger is
+  /// already [trigger]).
+  bool setTrigger(
+    EntityAddress source,
+    EntityAddress target,
+    StateTrigger trigger,
+  ) {
+    final document = _docs[source];
+    if (document == null) return false;
+    if (!document.transitions.any((s) => s.to == target)) return false;
+    final armDropped = trigger is! ManualTrigger
+        ? _armed.remove(StateTransition(source: source, target: target))
+        : false;
+    if (document.transitions.every(
+      (s) => s.to != target || s.trigger == trigger,
+    )) {
+      if (armDropped) _bumpAndNotify();
+      return true;
+    }
+    _apply(
+      UpdateEntityPayloadCommand(
+        _registry,
+        source,
+        document.copyWith(
+          transitions: [
+            for (final spec in document.transitions)
+              if (spec.to == target)
+                StateTransitionSpec(
+                  to: spec.to,
+                  trigger: trigger,
+                  label: spec.label,
+                )
+              else
+                spec,
+          ],
+        ),
+      ),
+    );
+    return true;
+  }
+
   // ─── captured slices (issue #242) ───────────────────────────────────────
 
   /// The live-performance reader capture-from-live pulls each category from
@@ -523,14 +582,20 @@ class StateMachineController extends ChangeNotifier {
 
   /// Toggle the arm on the persisted transition matching [transition]'s
   /// endpoints. Arming is performance state — nothing journals. No-op if no
-  /// matching transition exists.
+  /// matching transition exists. Arming stays meaningful for **manual**
+  /// transitions only (design §5): timed / variable / code transitions fire
+  /// without arming, so an arm on one is refused (a stale arm still clears).
   void toggleArmed(StateTransition transition) {
     final reference = StateTransition(
       source: transition.source,
       target: transition.target,
     );
     if (!_transitionExists(reference)) return;
-    if (!_armed.remove(reference)) _armed.add(reference);
+    if (!_armed.remove(reference)) {
+      final trigger = triggerOf(reference.source, reference.target);
+      if (trigger is! ManualTrigger) return;
+      _armed.add(reference);
+    }
     _bumpAndNotify();
   }
 

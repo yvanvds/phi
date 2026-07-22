@@ -75,7 +75,11 @@ class StateNodeFrame extends StatelessWidget {
             boxShadow: _glow(),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            // Vertical padding stays smaller than the visual 8px the preview
+            // implies: the Column centres its two lines anyway (identical
+            // render), and the slack keeps taller fallback glyph metrics
+            // (the ▲ / ● capsules under the test font) from overflowing.
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,

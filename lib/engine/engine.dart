@@ -78,6 +78,7 @@ import 'state/rack_materialiser.dart';
 import 'state/state_application_engine.dart';
 import 'state/state_application_notice.dart';
 import 'state/state_machine_controller.dart';
+import 'state/state_trigger_scheduler.dart';
 
 /// High-level façade over the YSE audio engine.
 ///
@@ -312,6 +313,24 @@ class PhiEngine {
 
   /// Nullable variant of [stateMachine] — `null` before [start].
   StateMachineController? get stateMachineOrNull => _stateMachine;
+
+  StateTriggerScheduler? _stateTriggers;
+
+  /// The transition trigger behaviour (design state-graph §5, issue #244):
+  /// timed schedules on reserved domain-paced clocks, variable watchers on
+  /// the runtime registry, and the code-fire seam (`fireTo`). Created on
+  /// [start], torn down on [stop]. Throws before [start]; use
+  /// [stateTriggersOrNull] for the nullable variant.
+  StateTriggerScheduler get stateTriggers {
+    final s = _stateTriggers;
+    if (s == null) {
+      throw StateError('PhiEngine.stateTriggers used before start()');
+    }
+    return s;
+  }
+
+  /// Nullable variant of [stateTriggers] — `null` before [start].
+  StateTriggerScheduler? get stateTriggersOrNull => _stateTriggers;
 
   /// The journal-free state application engine (design state-graph §4, issue
   /// #243) — applies an entered state's captured slices through the owning
@@ -641,6 +660,11 @@ class PhiEngine {
     // notification must land on an already-reconciled channel/rack state (a
     // premature pass here used to materialise the voice synths twice).
     _stateMachine?.rebind(registry: registry, recordCommand: recordCommand);
+    // The previous performance's armed triggers die with it too (issue #244):
+    // a timed schedule from the old project must never fire into the new
+    // one's addresses, and the new live state re-seeds passively (not an
+    // entry), so nothing re-arms until the performer enters a state.
+    _stateTriggers?.cancelAll();
     // The previous performance's live tempo overrides (a fired state's tempos
     // slice, issue #243) die with it — the new project runs on its authored
     // domain tempos until one of *its* states applies.
@@ -737,6 +761,17 @@ class PhiEngine {
     midi.setSessionLoop(entry.clip, entry.loop);
     midi.playSession(entry.clip);
     return true;
+  }
+
+  /// The current effective tempo of the `domain.` entity at [domain] — a live
+  /// performance override (a fired state's tempos slice, issue #243) over the
+  /// authored payload BPM — or `null` when no such domain exists. What timed
+  /// transition schedules pace their reserved clocks from (issue #244).
+  double? _effectiveDomainTempo(EntityAddress domain) {
+    final override = _midi?.domainTempoOverride(domain.name);
+    if (override != null) return override;
+    final payload = _mixRegistry.entityAt(domain)?.payload;
+    return payload is TimeDomain ? payload.tempo : null;
   }
 
   /// The stored source of the `code.` entity at [address], or `null` when no
@@ -865,7 +900,12 @@ class PhiEngine {
     // `state.` entity moves, repoint every open session's guard edges so a
     // state-guarded branch keeps routing — the stored clip follows through
     // the edited session's registry publisher.
-    sm.onStateMoved = (from, to) => _midi?.repointStateGuards(from, to);
+    sm.onStateMoved = (from, to) {
+      _midi?.repointStateGuards(from, to);
+      // The armed trigger references follow too (issue #244): a rename
+      // mid-count keeps the count, a rename mid-watch keeps the watch.
+      _stateTriggers?.onStateMoved(from, to);
+    };
     final rv = RuntimeVariableRegistry();
     _runtimeVariables = rv;
     // MIDI subsystem is optional — tests that don't inject a MidiGateway get
@@ -934,7 +974,28 @@ class PhiEngine {
       scriptSourceOf: _codeSourceAt,
       onNotice: (notice) => _lastStateNotice.value = notice,
     );
-    sm.onStateEntered = _applyEnteredState;
+    // The trigger behaviour (design state-graph §5, issue #244): timed
+    // transitions count on reserved clocks paced from their `domain.` entity's
+    // effective tempo, variable transitions watch the runtime registry, and
+    // `fireTo` is the control plane's `state.fire` seam. Degradations surface
+    // on [lastStateNotice] exactly like the application engine's.
+    _stateTriggers = StateTriggerScheduler(
+      stateMachine: sm,
+      variables: rv,
+      createTransport: mg == null
+          ? null
+          : ({required String clockName, required double tempo}) =>
+                mg.createTransport(clockName: clockName, tempo: tempo),
+      domainTempo: _effectiveDomainTempo,
+      onNotice: (notice) => _lastStateNotice.value = notice,
+    );
+    // Entering a state applies its slices *and* arms its outbound timed
+    // triggers — application first, so a tempos slice is already live when
+    // the entry beat is captured on the domain clock.
+    sm.onStateEntered = (state) {
+      _applyEnteredState(state);
+      _stateTriggers?.onStateEntered(state);
+    };
     // The rack materialiser (issue #208) reconciles synths per internal voice
     // and insert chains per bus, then hands the live voice table + synth map to
     // the MIDI controller so sessions flatten + connect by routed voice. It runs
@@ -1058,6 +1119,10 @@ class PhiEngine {
       _patchReconciler?.teardown();
       _patchReconciler = null;
       _patcherGateway?.disposeAll();
+      // The trigger scheduler listens to the state machine and the runtime
+      // variables — detach it (and its reserved clocks) before they go.
+      _stateTriggers?.dispose();
+      _stateTriggers = null;
       _stateMachine?.dispose();
       _stateMachine = null;
       _stateApplication = null;
