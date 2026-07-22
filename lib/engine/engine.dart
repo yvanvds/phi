@@ -59,6 +59,7 @@ import 'bridge/real_yse_gateway.dart';
 import 'bridge/registry_mirror.dart';
 import 'bridge/registry_mirror_binder.dart';
 import 'bridge/scene_renderer.dart';
+import 'bridge/state_current_mirror.dart';
 import 'bridge/synth_gateway.dart';
 import 'bridge/yse_gateway.dart';
 import 'state/clip_registry_publisher.dart';
@@ -342,7 +343,33 @@ class PhiEngine {
   /// the shell (the Code surface's evaluator) and handed in here so a state's
   /// script and the editor share one interpreter and one `phi` library. While
   /// `null` (the bare default) on-enter scripts skip with a [lastStateNotice].
-  CodeEvaluator? stateScriptEvaluator;
+  ///
+  /// Wiring an evaluator also seeds the interpreter's `state.current` readable
+  /// (issue #246): the shell hands the evaluator in after [start], so the
+  /// [StateCurrentMirror] pushes the live state the moment there is an
+  /// interpreter to read it.
+  CodeEvaluator? get stateScriptEvaluator => _stateScriptEvaluator;
+  set stateScriptEvaluator(CodeEvaluator? value) {
+    _stateScriptEvaluator = value;
+    if (value != null && _started) {
+      _stateCurrentMirror.push(_stateMachine?.activeStateAddress);
+    }
+  }
+
+  CodeEvaluator? _stateScriptEvaluator;
+
+  /// Mirrors the live state into the interpreter's `phi` name table — the
+  /// `state.current` readable (issue #246). Pushes ride the shared
+  /// [stateScriptEvaluator]; a live-state change with no evaluator wired is
+  /// simply not mirrored (nothing can read it).
+  late final StateCurrentMirror _stateCurrentMirror = StateCurrentMirror(
+    () => _stateScriptEvaluator,
+  );
+
+  /// The listener [start] hangs on the state machine so every live-state
+  /// change — an entry, a load's passive re-seed, a rename remapping the live
+  /// address — re-pushes `state.current`. Detached on [stop].
+  VoidCallback? _stateCurrentListener;
 
   /// The most recent state-application degradation — a deleted slice referent,
   /// a skipped variable or clip, a missing or failed on-enter script — or
@@ -906,6 +933,14 @@ class PhiEngine {
       // mid-count keeps the count, a rename mid-watch keeps the watch.
       _stateTriggers?.onStateMoved(from, to);
     };
+    // Mirror the live state into the interpreter's `state.current` (issue
+    // #246) on every controller change — an entry, a load's passive re-seed,
+    // a rename remapping the live address. The controller notifies *before*
+    // it publishes an entry through [onStateEntered], so the push enters the
+    // shared evaluator's queue ahead of the entered state's on-enter script.
+    void currentListener() => _stateCurrentMirror.push(sm.activeStateAddress);
+    _stateCurrentListener = currentListener;
+    sm.addListener(currentListener);
     final rv = RuntimeVariableRegistry();
     _runtimeVariables = rv;
     // MIDI subsystem is optional — tests that don't inject a MidiGateway get
@@ -1062,6 +1097,11 @@ class PhiEngine {
     // mirror to repopulate the name table. A no-op for the production
     // `NoOpRegistryMirror`; the live-coding shell wiring hangs a real mirror here.
     _mirrorBinder.resync();
+    // Seed the interpreter's `state.current` beside the table sync (issue
+    // #246). The re-init blanked any previous push, so the de-dupe memo is
+    // reset first — an unchanged live state still re-seeds the fresh table.
+    _stateCurrentMirror.reset();
+    _stateCurrentMirror.push(sm.activeStateAddress);
   }
 
   /// Build (or, after a project swap, rebind) the [PatchLibraryController] and
@@ -1123,6 +1163,14 @@ class PhiEngine {
       // variables — detach it (and its reserved clocks) before they go.
       _stateTriggers?.dispose();
       _stateTriggers = null;
+      // The `state.current` mirror's listener goes with the controller; the
+      // memo resets so the next start re-seeds the re-inited interpreter.
+      final currentListener = _stateCurrentListener;
+      if (currentListener != null) {
+        _stateMachine?.removeListener(currentListener);
+        _stateCurrentListener = null;
+      }
+      _stateCurrentMirror.reset();
       _stateMachine?.dispose();
       _stateMachine = null;
       _stateApplication = null;
