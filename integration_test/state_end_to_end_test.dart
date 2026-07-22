@@ -16,6 +16,7 @@ import 'package:phi/domain/state_machine/store/state_trigger.dart';
 import 'package:phi/engine/bridge/bus_tap.dart';
 import 'package:phi/engine/bridge/clip_control_port.dart';
 import 'package:phi/engine/bridge/control_plane_dispatcher.dart';
+import 'package:phi/engine/bridge/fx_control_port.dart';
 import 'package:phi/engine/bridge/tempo_control_port.dart';
 import 'package:phi/engine/bridge/variable_control_port.dart';
 import 'package:phi/engine/bridge/voice_control_port.dart';
@@ -112,6 +113,7 @@ void main() {
       variables: inert,
       states: StateMachineControlPort(engine.stateTriggers),
       tempo: inert,
+      fx: inert,
       onNotice: notices.add,
     );
     addTearDown(dispatcher.dispose);
@@ -292,7 +294,8 @@ class _InertPorts
         ClipControlPort,
         VoiceControlPort,
         VariableControlPort,
-        TempoControlPort {
+        TempoControlPort,
+        FxControlPort {
   @override
   void play(EntityAddress target) {}
 
@@ -319,4 +322,7 @@ class _InertPorts
 
   @override
   void setTempo(EntityAddress domain, double bpm) {}
+
+  @override
+  void setParam(EntityAddress fx, String param, double value) {}
 }

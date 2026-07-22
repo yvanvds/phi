@@ -3,6 +3,7 @@ import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/engine/bridge/bus_tap.dart';
 import 'package:phi/engine/bridge/clip_control_port.dart';
 import 'package:phi/engine/bridge/control_plane_dispatcher.dart';
+import 'package:phi/engine/bridge/fx_control_port.dart';
 import 'package:phi/engine/bridge/state_control_port.dart';
 import 'package:phi/engine/bridge/tempo_control_port.dart';
 import 'package:phi/engine/bridge/variable_control_port.dart';
@@ -19,7 +20,8 @@ class _RecordingControllers
         VoiceControlPort,
         VariableControlPort,
         StateControlPort,
-        TempoControlPort {
+        TempoControlPort,
+        FxControlPort {
   final List<String> calls = [];
 
   final List<EntityAddress> plays = [];
@@ -34,6 +36,7 @@ class _RecordingControllers
   final List<(String, Object?)> sets = [];
   final List<(EntityAddress?, String)> fires = [];
   final List<(EntityAddress, double)> tempos = [];
+  final List<(EntityAddress, String, double)> fxSets = [];
 
   @override
   void play(EntityAddress target) {
@@ -94,6 +97,12 @@ class _RecordingControllers
     tempos.add((domain, bpm));
     calls.add('tempo $domain $bpm');
   }
+
+  @override
+  void setParam(EntityAddress fx, String param, double value) {
+    fxSets.add((fx, param, value));
+    calls.add('fx $fx $param $value');
+  }
 }
 
 void main() {
@@ -113,6 +122,7 @@ void main() {
       variables: ctl,
       states: ctl,
       tempo: ctl,
+      fx: ctl,
       onNotice: notices.add,
     );
   });
@@ -205,12 +215,45 @@ void main() {
     });
   });
 
+  group('fx verbs (host-mediated param sets)', () {
+    test('a param set routes the fx address, param name, and value', () {
+      // The exact frame `fx.reverb.mix = 0.25` publishes (python/tests/
+      // test_verbs.py::FxVerbTest → `('phi.ctl.fx.reverb.mix', 0.25)`).
+      send('phi.ctl.fx.reverb.mix', const BusFloat(0.25));
+      expect(ctl.fxSets, [(EntityAddress.parse('fx.reverb'), 'mix', 0.25)]);
+      expect(notices, isEmpty);
+    });
+
+    test('an int value coerces to a double (an integral knob)', () {
+      send('phi.ctl.fx.big_delay.taps', const BusInt(3));
+      expect(ctl.fxSets, [(EntityAddress.parse('fx.big_delay'), 'taps', 3.0)]);
+    });
+
+    test('a grouped fx address keeps every segment but the param', () {
+      send('phi.ctl.fx.bus.reverb.mix', const BusFloat(0.4));
+      expect(ctl.fxSets, [(EntityAddress.parse('fx.bus.reverb'), 'mix', 0.4)]);
+    });
+  });
+
   group('graceful degradation (notice, never a crash, never a route)', () {
-    test('an unknown namespace is dropped (e.g. host-mediated fx, not yet '
-        'in scope)', () {
-      send('phi.ctl.fx.reverb.mix', const BusFloat(0.4));
+    test('an unknown namespace is dropped', () {
+      // `fx` now routes (see the fx group); an unrecognised namespace still
+      // degrades gracefully rather than throwing.
+      send('phi.ctl.synth.bells.cutoff', const BusFloat(0.4));
       expect(ctl.calls, isEmpty);
-      expect(notices.single, contains('unknown control namespace "fx"'));
+      expect(notices.single, contains('unknown control namespace "synth"'));
+    });
+
+    test('an fx set with no param is dropped (bare fx address)', () {
+      send('phi.ctl.fx.reverb', const BusFloat(0.4));
+      expect(ctl.calls, isEmpty);
+      expect(notices.single, contains('needs an fx address and a param'));
+    });
+
+    test('an fx param with a non-numeric value is dropped, not routed', () {
+      send('phi.ctl.fx.reverb.mix', const BusString('loud'));
+      expect(ctl.fxSets, isEmpty);
+      expect(notices.single, contains('expected a number'));
     });
 
     test('the bare prefix carries no command', () {
@@ -291,12 +334,14 @@ void main() {
         tap.publish('phi.ctl.clip.drums.intro_fill.play', const BusInt(1));
         tap.publish('phi.ctl.voice.bells.note', const BusFloatList([60, 100]));
         tap.publish('phi.ctl.var.section', const BusString('b'));
+        tap.publish('phi.ctl.fx.reverb.mix', const BusFloat(0.25));
 
         await pumpEventQueue();
 
         expect(ctl.plays, [EntityAddress.parse('clip.drums.intro_fill')]);
         expect(ctl.notes, [(EntityAddress.parse('voice.bells'), 60, 100)]);
         expect(ctl.sets, [('section', 'b')]);
+        expect(ctl.fxSets, [(EntityAddress.parse('fx.reverb'), 'mix', 0.25)]);
         expect(notices, isEmpty);
       });
 

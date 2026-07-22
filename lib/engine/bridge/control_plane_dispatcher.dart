@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../../domain/project/entity_address.dart';
 import 'bus_tap.dart';
 import 'clip_control_port.dart';
+import 'fx_control_port.dart';
 import 'state_control_port.dart';
 import 'tempo_control_port.dart';
 import 'variable_control_port.dart';
@@ -34,10 +35,11 @@ typedef ControlPlaneNotice = void Function(String message);
 /// | `phi.ctl.var.<name>`                 | [VariableControlPort.set]          |
 /// | `phi.ctl.state[.<m>].fire`           | [StateControlPort.fire]            |
 /// | `phi.ctl.domain.<d>.tempo`           | [TempoControlPort.setTempo]        |
+/// | `phi.ctl.fx.<a>.<param>`             | [FxControlPort.setParam]           |
 ///
-/// **Graceful degradation.** A malformed frame, an unknown namespace (`fx.` is
-/// host-mediated too but out of this issue's scope), an unknown verb, or a
-/// wrong-typed value never throws: it is reported through [onNotice] (or logged)
+/// **Graceful degradation.** A malformed frame, an unknown namespace, an
+/// unknown verb, or a wrong-typed value never throws: it is reported through
+/// [onNotice] (or logged)
 /// and dropped. Every decode runs inside a guard, so even an unexpected error
 /// degrades to a notice rather than tearing down the tap subscription.
 ///
@@ -56,12 +58,14 @@ class ControlPlaneDispatcher {
     required VariableControlPort variables,
     required StateControlPort states,
     required TempoControlPort tempo,
+    required FxControlPort fx,
     ControlPlaneNotice? onNotice,
   }) : _clips = clips,
        _voices = voices,
        _variables = variables,
        _states = states,
        _tempo = tempo,
+       _fx = fx,
        _onNotice = onNotice {
     _subscription = busTap.subscribe(prefix).listen(handleFrame);
   }
@@ -75,6 +79,7 @@ class ControlPlaneDispatcher {
   final VariableControlPort _variables;
   final StateControlPort _states;
   final TempoControlPort _tempo;
+  final FxControlPort _fx;
   final ControlPlaneNotice? _onNotice;
 
   StreamSubscription<BusTapFrame>? _subscription;
@@ -122,6 +127,8 @@ class ControlPlaneDispatcher {
         _routeState(frame, tail);
       case 'domain':
         _routeDomain(frame, tail);
+      case 'fx':
+        _routeFx(frame, tail);
       default:
         _drop(frame, 'unknown control namespace "$namespace"');
     }
@@ -235,6 +242,23 @@ class ControlPlaneDispatcher {
     }
     _tempo.setTempo(
       EntityAddress(kind: 'domain', segments: path),
+      _asDouble(frame.value),
+    );
+  }
+
+  // ─── fx: `fx.<addr>.<param> = value` (host-mediated param set) ─────────────
+  void _routeFx(BusTapFrame frame, List<String> tail) {
+    // `phi.ctl.fx.<addr>.<param>` needs at least an fx address segment *and* a
+    // trailing param name; a bare `fx.reverb` names no param and degrades.
+    if (tail.length < 2) {
+      _drop(frame, 'fx set needs an fx address and a param');
+      return;
+    }
+    final param = tail.last;
+    final path = tail.sublist(0, tail.length - 1); // the fx entity, may nest
+    _fx.setParam(
+      EntityAddress(kind: 'fx', segments: path),
+      param,
       _asDouble(frame.value),
     );
   }
