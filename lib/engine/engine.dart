@@ -43,6 +43,7 @@ import 'bridge/audio_device_notice.dart';
 import 'bridge/audio_device_state.dart';
 import 'bridge/bus_tap.dart';
 import 'bridge/code_evaluator.dart';
+import 'bridge/engine_log_source.dart';
 import 'bridge/fx_gateway.dart';
 import 'bridge/macbear_scene_renderer.dart';
 import 'bridge/materialised_synth.dart';
@@ -51,6 +52,7 @@ import 'bridge/no_op_bus_tap.dart';
 import 'bridge/no_op_registry_mirror.dart';
 import 'bridge/patcher_gateway.dart';
 import 'bridge/patcher_insert_source.dart';
+import 'bridge/real_engine_log_source.dart';
 import 'bridge/real_fx_gateway.dart';
 import 'bridge/real_midi_gateway.dart';
 import 'bridge/real_patcher_gateway.dart';
@@ -96,6 +98,7 @@ class PhiEngine {
     FxGateway? fxGateway,
     RegistryMirror registryMirror = const NoOpRegistryMirror(),
     BusTap busTap = const NoOpBusTap(),
+    EngineLogSource engineLogSource = const NoOpEngineLogSource(),
     Duration telemetryInterval = const Duration(milliseconds: 50),
   }) : _sceneRenderer = sceneRenderer,
        _patcherGateway = patcherGateway,
@@ -104,6 +107,7 @@ class PhiEngine {
        _fxGateway = fxGateway,
        _mirrorBinder = RegistryMirrorBinder(registryMirror),
        _busTap = busTap,
+       _engineLogSource = engineLogSource,
        _telemetryInterval = telemetryInterval {
     // The registry is the source of truth for the channel set (design §8): the
     // engine materialises its `MixerChannel`s from `mix.` entities and re-syncs
@@ -156,6 +160,7 @@ class PhiEngine {
       sceneRenderer: sceneRenderer ?? MacbearSceneRenderer(),
       patcherGateway: patcher,
       midiGateway: midiGateway ?? RealMidiGateway(),
+      engineLogSource: const RealEngineLogSource(),
       synthGateway: synthGateway ?? RealSynthGateway(busResolver: busResolver),
       fxGateway:
           fxGateway ??
@@ -173,7 +178,15 @@ class PhiEngine {
   final SynthGateway? _synthGateway;
   final FxGateway? _fxGateway;
   final BusTap _busTap;
+  final EngineLogSource _engineLogSource;
   final Duration _telemetryInterval;
+
+  /// The engine's log lines (design `docs/design/diagnostics.md` §2) — yse's
+  /// `Log.messages` in production, an empty stream on a bare engine. The shell's
+  /// log coordinator subscribes and records each line into the unified log;
+  /// subscribing replaces yse's own file sink. yse carries no per-message level,
+  /// so the level is classified downstream.
+  Stream<String> get engineLogMessages => _engineLogSource.messages;
 
   /// Subscribe to the engine's **host bus tap** for every publish whose address
   /// falls under [prefix] (design `docs/design/live-coding.md` §4). The

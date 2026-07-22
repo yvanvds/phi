@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../design/tokens/phi_colors.dart';
+import '../domain/log/log_level.dart';
+import '../domain/log/session_log.dart';
 import '../domain/midi/clip_editor.dart';
 import '../domain/midi/custom_transform_registry.dart';
 import '../domain/midi/midi_clip_seed.dart';
@@ -15,6 +17,7 @@ import '../domain/project/lifecycle/project_directory_picker.dart';
 import '../domain/project/undo_scopes.dart';
 import '../domain/session/session_state.dart';
 import '../domain/shell_layout/layout_node.dart';
+import '../engine/bridge/audio_device_notice.dart';
 import '../engine/bridge/code_evaluator.dart';
 import '../engine/bridge/dx7_fm_bank_reader.dart';
 import '../engine/bridge/no_op_code_evaluator.dart';
@@ -36,6 +39,9 @@ import 'bottom_status/bottom_status.dart';
 import 'commands/command_palette.dart';
 import 'commands/command_registry.dart';
 import 'commands/shell_commands.dart';
+import 'diagnostics/log_coordinator.dart';
+import 'diagnostics/notice_center.dart';
+import 'diagnostics/phi_toast_overlay.dart';
 import 'layout/shell_layout_controller.dart';
 import 'layout/split_tree_view.dart';
 import 'layout/splitter_resize.dart';
@@ -65,11 +71,24 @@ class Workstation extends StatefulWidget {
     this.customTransformRegistry,
     this.layoutController,
     this.commandRegistry,
+    this.noticeCenter,
+    this.sessionLog,
     super.key,
   });
 
   final PhiEngine engine;
   final SessionState session;
+
+  /// The notice channel + unified log (design `docs/design/diagnostics.md` §2,
+  /// §3). `null` lets the shell build and own one; tests inject one to inspect
+  /// the toasts a fallback raised and the entries the sources logged.
+  final NoticeCenter? noticeCenter;
+
+  /// The session-file mirror handed down by the production entry point so engine
+  /// / Python / app entries land on disk. `null` in tests and the bare shell —
+  /// the log then lives in memory only. Ignored when [noticeCenter] is injected
+  /// (that center already owns its recorder).
+  final SessionLog? sessionLog;
 
   /// The command registry backing the command palette (design
   /// `docs/design/shell-layout.md` §4). `null` lets the shell build and own one,
@@ -156,6 +175,16 @@ class _WorkstationState extends State<Workstation> {
     for (final id in SurfaceId.values) id.name,
   };
 
+  /// The notice channel + unified log the shell surfaces through (design §3).
+  /// Built here (owning its store) unless a test injected one. The toast overlay
+  /// reads its [ToastController]; the retrofitted engine notices call [notice].
+  late final NoticeCenter _noticeCenter;
+  late final bool _ownsNoticeCenter;
+
+  /// Feeds the two log-only sources — the engine stream and Python tracebacks —
+  /// into the notice center's recorder (design §2). Disposed with the shell.
+  late final LogCoordinator _logCoordinator;
+
   late final CodeEvaluator _codeEvaluator;
   late final bool _ownsCodeEvaluator;
   late final CustomTransformRegistry _customTransforms;
@@ -238,6 +267,30 @@ class _WorkstationState extends State<Workstation> {
     // evaluator the Code surface evaluates blocks with — one interpreter, one
     // `phi` library, so a state's script can do anything live code can.
     widget.engine.stateScriptEvaluator = _codeEvaluator;
+
+    // The notice channel + unified log (design §2, §3). Own one unless a test
+    // injected it; the production session-file mirror (if any) rides on the
+    // recorder so engine / Python / app entries land on disk too.
+    _ownsNoticeCenter = widget.noticeCenter == null;
+    _noticeCenter =
+        widget.noticeCenter ??
+        NoticeCenter.build(sessionLog: widget.sessionLog);
+    // Wire the two log-only sources into the recorder (design §2): the engine's
+    // `Log.messages` (subscribing replaces yse's own file sink) and the Python
+    // interpreter's tracebacks off the evaluator's stream (the Code strip is the
+    // other consumer of the same stream).
+    _logCoordinator = LogCoordinator(
+      recorder: _noticeCenter.recorder,
+      engineMessages: widget.engine.engineLogMessages,
+      pythonEvents: _codeEvaluator.events,
+    );
+    // Retrofit sweep (design §3, §8 decision 3): the shipped ad-hoc notice
+    // sites — the audio device fallback and the state / patch degradation paths
+    // — surface through the one channel instead of vanishing on an unread
+    // notifier. One listener each; behaviour-preserving.
+    widget.engine.lastAudioNotice.addListener(_onAudioNotice);
+    widget.engine.lastStateNotice.addListener(_onStateNotice);
+    widget.engine.lastPatchNotice.addListener(_onPatchNotice);
     _ownsCustomTransforms = widget.customTransformRegistry == null;
     _customTransforms =
         widget.customTransformRegistry ?? CustomTransformRegistry();
@@ -333,6 +386,36 @@ class _WorkstationState extends State<Workstation> {
   void _onPanic() {
     widget.engine.panic();
     if (widget.session.isPlaying) widget.session.stop();
+  }
+
+  /// Surfaces the engine's latest audio-device fallback through the notice
+  /// channel (design §3 retrofit): a lost-all-output notice is an error, every
+  /// other fallback (unplugged device, unsupported rate/buffer, reverted switch)
+  /// a warning — a set carries on, just degraded.
+  void _onAudioNotice() {
+    final notice = widget.engine.lastAudioNotice.value;
+    if (notice == null) return;
+    final level = notice.kind == AudioNoticeKind.noAudioDevice
+        ? LogLevel.error
+        : LogLevel.warning;
+    _noticeCenter.notice(notice.message, level: level);
+  }
+
+  /// Surfaces a state-application degradation (a missing referent, an undefined
+  /// variable, an unstartable clip) through the notice channel (design §3
+  /// retrofit) at warning level — the state still entered, just partially.
+  void _onStateNotice() {
+    final notice = widget.engine.lastStateNotice.value;
+    if (notice == null) return;
+    _noticeCenter.notice(notice.message, level: LogLevel.warning);
+  }
+
+  /// Surfaces a patch-placement degradation (a stale bus, an unplaceable insert)
+  /// through the notice channel (design §3 retrofit) at warning level.
+  void _onPatchNotice() {
+    final notice = widget.engine.lastPatchNotice.value;
+    if (notice == null) return;
+    _noticeCenter.notice(notice.message, level: LogLevel.warning);
   }
 
   /// Wires the engine's registry-backed channel sync, the project menu, the
@@ -489,6 +572,13 @@ class _WorkstationState extends State<Workstation> {
     _layout.removeListener(_onLayoutChanged);
     if (_ownsLayout) _layout.dispose();
     if (_ownsCommands) _commands.dispose();
+    // Detach the retrofit notice listeners before the engine disposes their
+    // notifiers, then tear down the log sources and (when owned) the channel.
+    widget.engine.lastAudioNotice.removeListener(_onAudioNotice);
+    widget.engine.lastStateNotice.removeListener(_onStateNotice);
+    widget.engine.lastPatchNotice.removeListener(_onPatchNotice);
+    unawaited(_logCoordinator.dispose());
+    if (_ownsNoticeCenter) _noticeCenter.dispose();
     widget.projectController?.removeListener(_bindEngineRegistry);
     widget.projectController?.layoutRestored.removeListener(_onLayoutRestored);
     _libraryController?.dispose();
@@ -611,31 +701,45 @@ class _WorkstationState extends State<Workstation> {
       bindings: _commands.shortcutBindings(),
       child: Material(
         color: PhiColors.bg0,
-        child: Column(
+        child: Stack(
           children: [
-            TopToolbar(
-              session: widget.session,
-              projectController: widget.projectController,
-              directoryPicker: widget.directoryPicker,
-              onOpenSettings: widget.projectController != null
-                  ? _openSettings
-                  : null,
-              metronome: widget.engine.metronomeOrNull,
-              countIn: widget.engine.midiOrNull?.countIn,
-            ),
-            Expanded(
-              child: Row(
+            Positioned.fill(
+              child: Column(
                 children: [
-                  LeftRail(selected: _focusedSurfaceId, onSelect: _onSelect),
-                  Expanded(child: _buildCentre()),
-                  RightInspector(session: widget.session),
+                  TopToolbar(
+                    session: widget.session,
+                    projectController: widget.projectController,
+                    directoryPicker: widget.directoryPicker,
+                    onOpenSettings: widget.projectController != null
+                        ? _openSettings
+                        : null,
+                    metronome: widget.engine.metronomeOrNull,
+                    countIn: widget.engine.midiOrNull?.countIn,
+                  ),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        LeftRail(
+                          selected: _focusedSurfaceId,
+                          onSelect: _onSelect,
+                        ),
+                        Expanded(child: _buildCentre()),
+                        RightInspector(session: widget.session),
+                      ],
+                    ),
+                  ),
+                  BottomStatus(
+                    engine: widget.engine,
+                    session: widget.session,
+                    onPanic: _onPanic,
+                  ),
                 ],
               ),
             ),
-            BottomStatus(
-              engine: widget.engine,
-              session: widget.session,
-              onPanic: _onPanic,
+            // The notice channel's transient toasts float above the chrome,
+            // bottom-centre (design §3) — non-interactive, so clicks pass through.
+            Positioned.fill(
+              child: PhiToastOverlay(controller: _noticeCenter.toasts),
             ),
           ],
         ),

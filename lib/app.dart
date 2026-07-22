@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 
 import 'design/theme.dart';
+import 'domain/log/real_log_file_store.dart';
+import 'domain/log/session_log.dart';
 import 'domain/midi/custom_transform_registry.dart';
 import 'domain/project/app_settings/app_settings_controller.dart';
 import 'domain/project/app_settings/real_app_settings_store.dart';
@@ -17,6 +20,7 @@ import 'engine/bridge/code_evaluator.dart';
 import 'engine/bridge/code_evaluator_factory.dart';
 import 'engine/engine.dart';
 import 'shell/commands/command_registry.dart';
+import 'shell/diagnostics/notice_center.dart';
 import 'shell/layout/shell_layout_controller.dart';
 import 'shell/project/file_selector_project_directory_picker.dart';
 import 'shell/workstation.dart';
@@ -35,6 +39,7 @@ class PhiApp extends StatefulWidget {
     this.customTransformRegistry,
     this.layoutController,
     this.commandRegistry,
+    this.noticeCenter,
   });
 
   /// Optional engine override — tests inject a fake-backed engine here so
@@ -83,6 +88,12 @@ class PhiApp extends StatefulWidget {
   /// inject one to inspect what the shell registered.
   final CommandRegistry? commandRegistry;
 
+  /// Optional notice channel + unified log (design `docs/design/diagnostics.md`
+  /// §2, §3). `null` lets the workstation build and own one (production also
+  /// mirrors it to a session file); tests inject one to inspect the toasts a
+  /// fallback raised and the entries the sources logged.
+  final NoticeCenter? noticeCenter;
+
   @override
   State<PhiApp> createState() => _PhiAppState();
 }
@@ -96,6 +107,15 @@ class _PhiAppState extends State<PhiApp> {
   /// can be disposed. `null` when a test injected its own evaluator, or when an
   /// injected engine means we never took the production path (issue #232).
   CodeEvaluator? _ownedCodeEvaluator;
+
+  /// The production session-file mirror (design `docs/design/diagnostics.md`
+  /// §2): booted on the production path so engine / Python / app log entries
+  /// land under `%APPDATA%/phi/logs/`, closed with a clean-shutdown marker on
+  /// orderly exit. `null` when a test injected an engine (no disk in tests) or a
+  /// notice center (it owns its own recorder). Crash surfacing of that file is
+  /// #272.
+  SessionLog? _sessionLog;
+
   late final SessionState _session;
   late final bool _ownsSession;
   late final ProjectController _projectController;
@@ -122,6 +142,15 @@ class _PhiAppState extends State<PhiApp> {
       // never imports `package:yse`. Skipped when a test injected an evaluator.
       if (widget.codeEvaluator == null) {
         _ownedCodeEvaluator = buildCodeEvaluator();
+      }
+      // Production only: mirror the unified log to a per-session file under
+      // `%APPDATA%/phi/logs/` (design §2). Skipped when a test injected a notice
+      // center — it owns its own recorder and wants no disk. Booting is
+      // fire-and-forget; early entries that predate it stay in the ring buffer.
+      if (widget.noticeCenter == null) {
+        final sessionLog = SessionLog(files: RealLogFileStore());
+        _sessionLog = sessionLog;
+        unawaited(sessionLog.boot());
       }
     }
     _engine.start();
@@ -172,6 +201,11 @@ class _PhiAppState extends State<PhiApp> {
       _engine.stop();
     }
     _ownedCodeEvaluator?.dispose();
+    // Mark this session's orderly shutdown (design §2, §6): the marker's
+    // presence at the next boot means we did not crash. Fire-and-forget — the
+    // widget is going away regardless.
+    final sessionLog = _sessionLog;
+    if (sessionLog != null) unawaited(sessionLog.close());
     if (_ownsSession) {
       _session.dispose();
     }
@@ -195,6 +229,8 @@ class _PhiAppState extends State<PhiApp> {
         customTransformRegistry: widget.customTransformRegistry,
         layoutController: widget.layoutController,
         commandRegistry: widget.commandRegistry,
+        noticeCenter: widget.noticeCenter,
+        sessionLog: _sessionLog,
       ),
     );
   }
