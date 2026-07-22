@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'patch_object_descriptor.dart';
+import 'patcher_graph_snapshot.dart';
 import 'patcher_node_snapshot.dart';
 
 /// Abstract port over `package:yse`'s `Patcher` + `Sound.fromPatcher`.
@@ -60,6 +61,17 @@ abstract interface class PatcherGateway {
 
   /// Inspect a node's port topology (counts + audio/control kinds).
   PatcherNodeSnapshot inspect(int instanceId, int handleId);
+
+  /// Enumerate the whole live graph of [instanceId] — every object (its handle
+  /// id, type, args, stored position, and port topology) and every connection.
+  ///
+  /// The seam that lets the editor **rebuild its canvas from a reloaded dump**
+  /// (issue #308): after the reconciler `parseJson`s a patch's dump into a fresh
+  /// native instance, the object handles, types, args and positions are all in
+  /// the engine (positions ride in GUI properties) but the editor's Dart-side
+  /// mirror is empty — this call reads them back so the mirror can be
+  /// reconstructed. Returns [PatcherGraphSnapshot.empty] for an empty patcher.
+  PatcherGraphSnapshot enumerate(int instanceId);
 
   // ─── canvas state, persisted to native via GUI properties ────────────
 

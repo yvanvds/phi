@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:ui';
 
 import 'package:phi/domain/patcher/patch_port_kind.dart';
 import 'package:phi/engine/bridge/patch_object_descriptor.dart';
 import 'package:phi/engine/bridge/patcher_gateway.dart';
+import 'package:phi/engine/bridge/patcher_graph_snapshot.dart';
 import 'package:phi/engine/bridge/patcher_node_snapshot.dart';
 import 'package:yse/yse.dart';
 
@@ -135,6 +137,32 @@ class FakePatcherGateway implements PatcherGateway {
   }
 
   @override
+  PatcherGraphSnapshot enumerate(int instanceId) {
+    final inst = _inst(instanceId);
+    return PatcherGraphSnapshot(
+      objects: [
+        for (final entry in inst.nodes.entries)
+          PatcherObjectSnapshot(
+            handleId: entry.key,
+            type: entry.value.type,
+            args: entry.value.args,
+            position: entry.value.position,
+            ports: inspect(instanceId, entry.key),
+          ),
+      ],
+      connections: [
+        for (final c in inst.cables)
+          PatcherConnectionSnapshot(
+            fromHandleId: c.fromHandleId,
+            outlet: c.outlet,
+            toHandleId: c.toHandleId,
+            inlet: c.inlet,
+          ),
+      ],
+    );
+  }
+
+  @override
   void setNodePosition(int instanceId, int handleId, Offset position) {
     calls.add(
       'setNodePosition:$handleId:${position.dx.toStringAsFixed(1)}'
@@ -222,15 +250,83 @@ class FakePatcherGateway implements PatcherGateway {
     inst.mountedBus = null;
   }
 
+  /// Serialise the instance to a **structured, re-parseable** dump — objects
+  /// (id · type · args · optional x/y) and cables — so a flush → reload
+  /// round-trip through [parseJson] faithfully reconstructs the graph, the way
+  /// the real gateway's libyse dump does. (The old summary form carried only
+  /// counts, which could not be rebuilt from.)
   @override
   String dumpJson(int instanceId) {
     final inst = _inst(instanceId);
-    return '{"objects":${inst.nodes.length},"cables":${inst.cables.length}}';
+    return jsonEncode({
+      'objects': [
+        for (final entry in inst.nodes.entries)
+          {
+            'id': entry.key,
+            'type': entry.value.type,
+            'args': entry.value.args,
+            if (entry.value.position != null) 'x': entry.value.position!.dx,
+            if (entry.value.position != null) 'y': entry.value.position!.dy,
+          },
+      ],
+      'cables': [
+        for (final c in inst.cables)
+          {
+            'from': c.fromHandleId,
+            'outlet': c.outlet,
+            'to': c.toHandleId,
+            'inlet': c.inlet,
+          },
+      ],
+    });
   }
 
+  /// Reconstruct the instance from a [dumpJson]-shaped [content]. Tolerant of
+  /// opaque/summary dumps (an `objects` that is not a list): those log and leave
+  /// the instance untouched, so legacy tests that pass hand-written placeholder
+  /// dumps still work. The `parseJson:<length>` log line is always recorded.
   @override
   void parseJson(int instanceId, String content) {
     calls.add('parseJson:${content.length}');
+    if (content.isEmpty) return;
+    final decoded = jsonDecode(content);
+    if (decoded is! Map) return;
+    final objects = decoded['objects'];
+    if (objects is! List) return; // opaque/summary dump — nothing to rebuild.
+    final inst = _inst(instanceId);
+    inst.nodes.clear();
+    inst.cables.clear();
+    inst.receivers.clear();
+    for (final raw in objects) {
+      if (raw is! Map) continue;
+      final id = (raw['id'] as num).toInt();
+      final type = raw['type'] as String? ?? '';
+      final args = raw['args'] as String? ?? '';
+      final node = FakeNode(type: type, args: args);
+      final x = raw['x'];
+      final y = raw['y'];
+      if (x is num && y is num) {
+        node.position = Offset(x.toDouble(), y.toDouble());
+      }
+      inst.nodes[id] = node;
+      if (type == Obj.gReceive && args.isNotEmpty) inst.receivers.add(args);
+      // Keep freshly-minted ids clear of the reconstructed ones.
+      if (id >= _nextObjectId) _nextObjectId = id + 1;
+    }
+    final cables = decoded['cables'];
+    if (cables is List) {
+      for (final raw in cables) {
+        if (raw is! Map) continue;
+        inst.cables.add(
+          FakeCable(
+            fromHandleId: (raw['from'] as num).toInt(),
+            outlet: (raw['outlet'] as num).toInt(),
+            toHandleId: (raw['to'] as num).toInt(),
+            inlet: (raw['inlet'] as num).toInt(),
+          ),
+        );
+      }
+    }
   }
 
   @override

@@ -1854,12 +1854,11 @@ main + app          (orchestration)
   tests (`patch_entity_strip_test`, `patch_placement_bar_test` — each affordance and
   the placement UI against the fake gateway), and an end-to-end
   `patcher_entity_strip` integration test (switch patches → place on master →
-  start/stop; a placement round-trips a save/reload). **Known v1 limitation:**
-  opening a patch loaded from disk (or renaming the open one) shows an empty canvas
-  until edited — rebuilding the editor's node mirror from a reloaded engine dump
-  needs a gateway object-enumeration call that does not exist yet (a `dart-yse`
-  capability); the audio (reconciler-materialised graph) is unaffected. Filed as a
-  follow-up.
+  start/stop; a placement round-trips a save/reload). **v1 limitation, resolved in
+  #308:** opening a patch loaded from disk (or renaming the open one) showed an
+  empty canvas until edited — the editor's node mirror wasn't rebuilt from the
+  reloaded engine dump; the audio (reconciler-materialised graph) was unaffected
+  either way.
 - **Patcher as an insert effect** (issue #225, patcher epic, design
   `docs/design/patcher.md` §4 role 2, §11; the last slice of the epic) — the
   reserved `fx.` kind `patcherInsert` (racks §5) becomes real, wiring a patcher
@@ -1898,6 +1897,35 @@ main + app          (orchestration)
   off the offer), and an end-to-end `mix_patcher_insert` integration test (pick a
   patcher insert in the real app → both-direction delete-impact → save → reload
   restores the insert and its `fx → patch` reference).
+- **Patcher: rebuild the editor canvas from a reloaded dump** (issue #308, patcher
+  epic follow-up to #224) — closes the v1 gap where opening a patch **loaded from
+  disk**, or **renaming** the open one, showed an empty canvas until edited: the
+  reconciler had parsed the dump into the live native instance, but the editor's
+  Dart-side mirror started empty. The `PatcherGateway` gains an **object-enumeration**
+  seam — `enumerate(instanceId)` returns a `PatcherGraphSnapshot` (every object's
+  handle id · type · args · stored position · port topology, plus every connection
+  in native handle-id terms). The capability was already in the `dart-yse` wrapper
+  (`PHandle.type` / `.params`, `Patcher.objects` / `getHandleAt`, and the
+  `connectionCount` / `connectionTargetId` / `connectionTargetInlet` introspection),
+  so `RealPatcherGateway` builds it FFI-side with no new `dart-yse` call. A new
+  `PatcherController.rebuildFromInstance()` reconstructs the `PatchGraph` +
+  `_nativeByNode` / `_argsByNode` from that snapshot — cables wired straight into
+  the mirror (the native connections already exist, so no `connect` is re-issued),
+  node voice defaulting to 1 (not carried in the dump). `PatchLibraryController.open`
+  calls it when it first binds an editor to a reconciler instance, so opening a
+  loaded patch — or the rename path (flush → move → re-materialise → re-open) —
+  shows the graph at once; the surface's demo-seed stays `initState`-only, so a
+  reopened non-first patch is never re-seeded over its loaded graph. The
+  `FakePatcherGateway`'s `dumpJson` / `parseJson` were upgraded to a **structured,
+  re-parseable** round-trip (was a bare `{objects:N,cables:M}` summary) so the fake
+  faithfully models a reload; `enumerate` reads the live instance the same way the
+  real one does. Covered by gateway unit tests (`enumerate` objects / connections /
+  scoping / empty; dump→parse→enumerate round-trip), `PatcherController` rebuild
+  tests (nodes · ports · args · positions · cables · idempotency · no re-issued
+  connects · id-map wiring), `PatchLibraryController` tests (open a loaded dump
+  rebuilds the canvas; rename re-materialises it), and an end-to-end
+  `patcher_reload_canvas` integration test (duplicate the seeded patch → the copy
+  opens with its three-node graph rebuilt, not a blank canvas).
 - **The `phi` live-coding library core** (issue #230, live-coding epic, design
   `docs/design/live-coding.md` §3–§4) — the friendly object layer the Code
   surface will run, shipped as **plain Python source** in the repo under
