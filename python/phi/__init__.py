@@ -276,9 +276,32 @@ def _sync_replace(addresses):
 
 def _reset():
     """Clear the whole table — test/boot convenience."""
+    global _state_current
     for root in _roots.values():
         root.children.clear()
         root.params.clear()
+    _state_current = None
+
+
+# --------------------------------------------------------------------------- #
+# The live state (host -> interpreter; issue #246)                            #
+# --------------------------------------------------------------------------- #
+#: The live state's path under ``state.`` (``'verse'``, ``'songs.verse'``) —
+#: what ``state.current`` reads. ``None`` until the host pushes one.
+_state_current = None
+
+
+def _sync_state_current(path):
+    """Host push (issue #246): record the live state so ``state.current``
+    reads it.
+
+    ``path`` is the live state's path under ``state.`` (``'verse'``,
+    ``'songs.verse'``); ``None`` or ``''`` clears it. The host re-pushes on
+    every live-state change — fires, loads, renames — so the value tracks the
+    performance the way the ``_sync_*`` table calls track the registry.
+    """
+    global _state_current
+    _state_current = path or None
 
 
 # --------------------------------------------------------------------------- #
@@ -342,6 +365,11 @@ class _Proxy:
         if name.startswith('_'):
             raise AttributeError(name)
         entry = object.__getattribute__(self, '_entry')
+        if name == 'current' and entry is _roots['state']:
+            # ``state.current`` — the live state's path, host-pushed (issue
+            # #246). Reserved on the state root; a state literally named
+            # ``current`` is shadowed by design.
+            return _state_current
         child = entry.children.get(name)
         if child is None:
             raise AttributeError(
@@ -351,7 +379,10 @@ class _Proxy:
 
     def __dir__(self):
         entry = object.__getattribute__(self, '_entry')
-        return sorted(set(entry.children) | set(_VERB_NAMES))
+        names = set(entry.children) | set(_VERB_NAMES)
+        if entry is _roots['state']:
+            names.add('current')  # the live-state readable (issue #246)
+        return sorted(names)
 
     def __iter__(self):
         entry = object.__getattribute__(self, '_entry')
@@ -411,8 +442,26 @@ class _Proxy:
         _emit_ctl(_join(self._entry.address, 'off'), payload)
 
     # -- state verb -------------------------------------------------------- #
-    def fire(self, target):
-        _emit_ctl(_join(self._entry.address, 'fire'), str(target))
+    def fire(self, target=None):
+        """Fire the state machine toward a target state.
+
+        ``state.fire('verse')`` — the root form — carries the target name;
+        ``state.<machine>.fire('verse')`` addresses a named machine. Without
+        a target — ``state.verse.fire()``, issue #246 — the entity *is* the
+        target: v1 has one machine, so the entity's own path rides the root
+        ``phi.ctl.state.fire`` address.
+        """
+        entry = self._entry
+        if target is not None:
+            _emit_ctl(_join(entry.address, 'fire'), str(target))
+            return
+        kind, path = _split(entry.address)
+        if kind != 'state' or not path:
+            raise TypeError(
+                'fire() without a target needs a state entity '
+                '(state.verse.fire()); pass the target state here',
+            )
+        _emit_ctl(_join('state', 'fire'), '.'.join(path))
 
     # -- mix / fx / patch parameter verbs ---------------------------------- #
     def set(self, *args):

@@ -150,6 +150,42 @@ class StateVerbTest(PhiTestCase):
         phi.state.fire('break')
         self.assertEqual(self.sent[-1], ('phi.ctl.state.fire', 'break'))
 
+    def test_entity_fire_without_target_fires_toward_itself(self):
+        # ``state.verse.fire()`` (issue #246): v1 has one machine, so the
+        # entity's own path rides the root fire address as the target.
+        phi._sync_create('state.verse')
+        phi.state.verse.fire()
+        self.assertEqual(self.sent[-1], ('phi.ctl.state.fire', 'verse'))
+
+    def test_grouped_entity_fire_publishes_its_dotted_path(self):
+        phi._sync_create('state.songs.verse')
+        phi.state.songs.verse.fire()
+        self.assertEqual(self.sent[-1], ('phi.ctl.state.fire', 'songs.verse'))
+
+    def test_entity_fire_follows_a_rename(self):
+        phi._sync_create('state.verse')
+        bound = phi.state.verse
+        phi._sync_rename('state.verse', 'state.chorus')
+        bound.fire()
+        self.assertEqual(self.sent[-1], ('phi.ctl.state.fire', 'chorus'))
+
+    def test_root_fire_without_target_raises(self):
+        with self.assertRaises(TypeError):
+            phi.state.fire()
+
+    def test_fire_without_target_outside_state_raises(self):
+        phi._sync_create('voice.bells')
+        with self.assertRaises(TypeError):
+            phi.voice.bells.fire()
+
+    def test_named_machine_fire_keeps_the_machine_address(self):
+        phi._sync_create('state.machine2')
+        phi.state.machine2.fire('break')
+        self.assertEqual(
+            self.sent[-1],
+            ('phi.ctl.state.machine2.fire', 'break'),
+        )
+
 
 class VarVerbTest(PhiTestCase):
     def test_string_assignment_keeps_its_type(self):
