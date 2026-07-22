@@ -1997,6 +1997,37 @@ main + app          (orchestration)
   notification, marker lifecycle + crash detection + retention against a fake
   filesystem) and a real-filesystem round-trip test of the `dart:io` store and a
   full boot/append/close cycle.
+- **Log sources + the notice channel** (issue #269, epic #267, design
+  `docs/design/diagnostics.md` §2, §3, §8 decision 3) — wires the three sources
+  into the #268 store and adds the shared "surfaced notice" home. A pure-Dart
+  `LogRecorder` (`lib/domain/log/`) is the single write path: it stamps each entry
+  off the injected `Clock`, appends to the `LogStore`, and — once booted — mirrors
+  it to the `SessionLog` file (fire-and-forget; entries predating boot stay in the
+  ring buffer only). Sources: the **engine** stream rides a new bridge seam
+  (`EngineLogSource` — `RealEngineLogSource` forwards yse's `Log.messages`,
+  subscribing replaces yse's own file sink; `NoOpEngineLogSource` for a bare
+  engine), exposed as `PhiEngine.engineLogMessages`; the **Python** interpreter's
+  tracebacks are read off the Code evaluator's `EvalStderr` frames (the same stream
+  the Code strip renders — two consumers). A shell `LogCoordinator`
+  (`lib/shell/diagnostics/`) subscribes both into the recorder, classifying
+  level-less engine lines via a pure `engineLogLevel` heuristic. The **notice
+  channel** is `NoticeCenter.notice(message, {level})` — one call shows a transient
+  toast (`ToastController` + `PhiToastOverlay`/`PhiToast`, bottom-centre,
+  non-interactive) *and* writes an app-sourced log entry, the single home for every
+  design's "surfaced notice". The **retrofit sweep** points the shipped ad-hoc
+  notice sites at it: the `Workstation` listens to the engine's `lastAudioNotice`
+  (device fallback — `noAudioDevice` at error, else warning) / `lastStateNotice` /
+  `lastPatchNotice` degradation notifiers and surfaces each through the channel
+  (a grep-assert test keeps `lib/` free of direct `SnackBar` / `ScaffoldMessenger`
+  sites). The production entry point (`PhiApp`) boots a `SessionLog` over
+  `RealLogFileStore` so entries land on disk, closing it with the clean-shutdown
+  marker on exit (crash *surfacing* of that file is #272). Covered by unit tests
+  (recorder stamping + source/level + guarded file mirror, level heuristic, log
+  coordinator, toast controller, notice-center toast+log pairing), a
+  `PhiToastOverlay` widget test (render, auto-dismiss, click-through), the sweep
+  grep-assert, and an end-to-end `notice_channel` integration test (a device
+  fallback toasts *and* logs through the real app; a Python traceback lands at
+  error level).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
