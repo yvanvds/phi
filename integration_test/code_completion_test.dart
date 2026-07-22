@@ -120,6 +120,20 @@ void main() {
       phiMethodTable,
     );
 
+    // `state.` → the seeded graph's states — the rows the live-code mirror
+    // exposes to scripts (issue #246).
+    final states = items('state.');
+    expect(states.map((i) => i.identifier).toList(), ['intro', 'verse']);
+    expect(states.every((i) => i.kind == PhiCompletionItemKind.entity), isTrue);
+
+    // `state.verse.` → the method table again; `fire` is what
+    // `state.verse.fire()` completes from.
+    expect(
+      items('state.verse.').map((i) => i.identifier).toList(),
+      phiMethodTable,
+    );
+    expect(phiMethodTable, contains('fire'));
+
     // A plain Python line pops nothing.
     expect(build('print('), isNull);
     expect(build('gain'), isNull);
