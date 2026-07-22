@@ -36,7 +36,7 @@ main + app          (orchestration)
 ├── design          (tokens + reusable widgets — no domain knowledge)
 ├── domain          (pure-Dart models — session/ wired; more arrives later)
 ├── platform        (windows-specific bits — empty for now)
-└── core            (cross-cutting helpers — empty for now)
+└── core            (cross-cutting helpers — `Clock` wall-clock seam)
 ```
 
 ## Current phase
@@ -1978,6 +1978,25 @@ main + app          (orchestration)
   an end-to-end fake flow (publish through the real `FakeBusTap` broadcast stream
   → dispatcher → controller effect). The Python emission side is unchanged
   (already shipped + tested by #230's `test_verbs.py`).
+- **The diagnostics log domain** (issue #268, epic #267, design
+  `docs/design/diagnostics.md` §2, §6) — the pure-Dart foundation for the unified
+  log, seams + fakes, no UI yet (the panel is #270, source wiring #269). A
+  `LogEntry` (`lib/domain/log/`) tags each line with its `LogSource`
+  (engine / python / app) + `LogLevel` (debug → error) + injected time + text,
+  and `format()`s to one plain readable file line. A `LogStore` (ChangeNotifier)
+  is the ~2000-entry ring buffer the panel will watch, dropping the oldest when
+  full. `SessionLog` mirrors the store to `%APPDATA%/phi/logs/phi-<timestamp>.log`
+  over a `LogFileStore` seam (`RealLogFileStore` on `dart:io`, faked in tests):
+  `boot` opens the session file, prunes to the newest 20 sessions, and turns the
+  **clean-shutdown marker** into crash detection — a marker *present* at boot means
+  the last session exited cleanly (it is consumed), *absent* means it crashed, so
+  `boot` returns a `CrashReport` pointing at the previous session's log (design §6);
+  `close` writes the marker at orderly shutdown. Time comes from a new `Clock`
+  seam (`lib/core/`, `SystemClock` in production) — no `DateTime.now()` in the
+  domain. Covered by unit tests (entry format/equality, ring-buffer eviction +
+  notification, marker lifecycle + crash detection + retention against a fake
+  filesystem) and a real-filesystem round-trip test of the `dart:io` store and a
+  full boot/append/close cycle.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
