@@ -829,6 +829,41 @@ main + app          (orchestration)
   the live engine, on-enter to the seeded `code.scratch`, trigger + label
   edits re-badging the canvas, canvas-authored state offered by the add
   picker, inspector-side remove dropping the canvas badge).
+  Issue #246 completes the epic with the **end-to-end + live-code wiring**.
+  `state.` rows already ride the registry mirror like every kind (the boot
+  full sync carries the seeded `intro`/`verse`); the `phi` library's `fire`
+  verb gains the entity form — `state.verse.fire()` publishes the root
+  `phi.ctl.state.fire` carrying the entity's own path as the target (v1: one
+  machine; `state.fire('verse')` and the named-machine form are unchanged) —
+  and the state root gains a **`state.current` readable** (the live state's
+  path, `None` until pushed; reserved on the root, listed by `dir(state)`).
+  The host side of that readable is a `StateCurrentMirror`
+  (`lib/engine/bridge/`): `PhiEngine` pushes
+  `phi._sync_state_current(...)` scripts through the shared
+  `stateScriptEvaluator` (de-duped, fire-and-forget, the `RealRegistryMirror`
+  pattern) on every live-state change — entries, passive re-seeds, renames —
+  seeded at boot beside the mirror resync (memo reset across a stop → start
+  re-init) and, because the controller notifies before it publishes an entry,
+  queued **ahead of** the entered state's on-enter script, so the script
+  already reads the new value; wiring the evaluator late seeds it
+  immediately. Fire-from-code dispatches through #233's control plane —
+  `phi.ctl.state.fire` → `ControlPlaneDispatcher` →
+  `StateMachineControlPort` → `StateTriggerScheduler.fireTo` → the normal
+  fire path — with the production dispatcher construction deferred to #334
+  (blocked on the engine host bus tap, the #314/#316 pattern). Completion
+  fixtures cover the `state.` namespace (the seeded states, the method
+  table's `fire`). Covered by the python suite (entity / grouped /
+  renamed-proxy fire forms, root-fire and non-state errors, `state.current`
+  sync + reset + `dir`), `StateCurrentMirror` unit tests, a
+  `state_current_wiring` engine suite (boot seed, entry/rename re-push,
+  push-before-on-enter-script ordering, re-init re-seed), and the end-to-end
+  `state_end_to_end` integration test — a two-state performance walking
+  capture → fire-from-code on the exact frame `state.verse.fire()` emits
+  (mix + variable slices apply, the journal stays empty, `state.current`
+  reaches the evaluator, a `state.verse`-guarded MIDI-graph branch re-routes
+  the preview exactly as a manual fire) → the timed follow-on armed on entry
+  and cancelled on early manual exit → a variable-match transition re-firing
+  and re-routing the guarded branch, with the LIVE capsule following.
 - Time-domains layer seed (issue #60): pure-Dart `TimeDomain` (a named
   BPM tempo reference) and an immutable, copy-on-write `TimeDomainRegistry`
   (name→domain lookup) in `lib/domain/time_domains/`. The minimal object a
