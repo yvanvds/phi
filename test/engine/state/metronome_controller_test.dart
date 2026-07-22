@@ -257,4 +257,102 @@ void main() {
       controller.dispose();
     });
   });
+
+  group('MetronomeController — state-applied domain tempo overrides (#331)', () {
+    late FakeMidiGateway gateway;
+    late Map<String, double> overrides;
+    var registry = TimeDomainRegistry(const [
+      TimeDomain(name: 'drum', tempo: 120),
+      TimeDomain(name: 'pad', tempo: 60),
+    ]);
+
+    MetronomeController build({
+      String? domainName,
+      double sessionTempo = 100,
+    }) => MetronomeController(
+      gateway: gateway,
+      domains: () => registry,
+      sessionTempo: () => sessionTempo,
+      domainTempoOverride: (name) => overrides[name],
+      domainName: domainName,
+    );
+
+    setUp(() {
+      gateway = FakeMidiGateway();
+      overrides = {};
+      registry = TimeDomainRegistry(const [
+        TimeDomain(name: 'drum', tempo: 120),
+        TimeDomain(name: 'pad', tempo: 60),
+      ]);
+    });
+
+    test('a state override on the bound domain re-paces the running click', () {
+      final controller = build(domainName: 'drum'); // authored 120
+      controller.setEnabled(true);
+      final t = gateway.transport!;
+      expect(t.tempo, 120, reason: 'starts on the authored domain tempo');
+
+      // A state application lays a live tempo override over `drum`; the engine
+      // re-paces the click.
+      overrides['drum'] = 90;
+      controller.applyTempo();
+      expect(t.tempo, 90, reason: 'the click tracks the applied override');
+
+      // The authored payload is untouched — the picker still reads 120.
+      expect(controller.boundDomain?.tempo, 120);
+
+      controller.dispose();
+    });
+
+    test(
+      'the override wins over the authored tempo when starting the click',
+      () {
+        overrides['drum'] = 75;
+        final controller = build(domainName: 'drum'); // authored 120
+        controller.setEnabled(true);
+        // Enabling mints the transport at the base tempo — already the override.
+        expect(gateway.transport!.tempo, 75);
+        controller.dispose();
+      },
+    );
+
+    test('clearing the overrides falls back to the authored tempo', () {
+      overrides['drum'] = 90;
+      final controller = build(domainName: 'drum');
+      controller.setEnabled(true);
+      expect(gateway.transport!.tempo, 90);
+
+      // A project swap clears every live override; the engine refreshes the
+      // metronome, which re-paces to the authored domain tempo.
+      overrides.clear();
+      controller.refreshDomains();
+      expect(gateway.transport!.tempo, 120);
+
+      controller.dispose();
+    });
+
+    test('an override on a different domain never re-paces the click', () {
+      final controller = build(domainName: 'drum');
+      controller.setEnabled(true);
+      final t = gateway.transport!;
+      final pushesBefore = t.pushCount;
+
+      // A state re-tempos `pad`, not the bound `drum` — the click holds.
+      overrides['pad'] = 200;
+      controller.applyTempo();
+      expect(t.tempo, 120);
+      expect(t.pushCount, pushesBefore, reason: 're-pacing never re-pushes');
+
+      controller.dispose();
+    });
+
+    test('with no domain bound, an override is ignored (session tempo)', () {
+      overrides['drum'] = 90;
+      final controller = build(domainName: null, sessionTempo: 100);
+      controller.setEnabled(true);
+      // The click paces from the session tempo — no bound domain to override.
+      expect(gateway.transport!.tempo, 100);
+      controller.dispose();
+    });
+  });
 }

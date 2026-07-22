@@ -995,6 +995,12 @@ class PhiEngine {
         domains: _sessionTimeDomains,
         sessionTempo: () => _midi?.sessionBpm ?? 120,
         clickSynth: _ensureClickSynth,
+        // A state application can override the bound domain's tempo (issue
+        // #331): the click reads the same live override the subscribed clip
+        // sessions do, so firing a state that re-tempos the domain re-paces the
+        // click too — and it falls back to the authored tempo when the
+        // overrides clear (project swap).
+        domainTempoOverride: (name) => _midi?.domainTempoOverride(name),
       );
     }
     // Capture-from-live (design state-graph §4, issue #242): the state machine
@@ -1019,7 +1025,14 @@ class PhiEngine {
     _stateApplication = StateApplicationEngine(
       applier: EngineStateSliceApplier(
         variables: () => rv,
-        domainTempo: (domain, bpm) => _midi?.applyDomainTempo(domain, bpm),
+        domainTempo: (domain, bpm) {
+          _midi?.applyDomainTempo(domain, bpm);
+          // The metronome click paces from the same live domain tempo (issue
+          // #331): re-pace a running click bound to this domain now the
+          // override has moved it. A no-op when the click is off or its bound
+          // tempo is unchanged.
+          _metronome?.applyTempo();
+        },
         mixLevel: applyLiveBusLevel,
         playingClips: () => _midi?.playingClipEntries ?? const [],
         playClip: _playSliceClip,
