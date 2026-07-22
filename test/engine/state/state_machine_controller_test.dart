@@ -6,10 +6,37 @@ import 'package:phi/domain/project/commands/update_entity_payload_command.dart';
 import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/project/project_command.dart';
 import 'package:phi/domain/project/project_registry.dart';
+import 'package:phi/domain/state_machine/slices/clip_slice_entry.dart';
+import 'package:phi/domain/state_machine/slices/mix_slice_entry.dart';
+import 'package:phi/domain/state_machine/slices/state_slice_category.dart';
+import 'package:phi/domain/state_machine/slices/state_slices.dart';
+import 'package:phi/domain/state_machine/slices/tempo_slice_entry.dart';
 import 'package:phi/domain/state_machine/state_transition.dart';
 import 'package:phi/domain/state_machine/store/state_document.dart';
 import 'package:phi/domain/state_machine/store/state_seed.dart';
 import 'package:phi/engine/state/state_machine_controller.dart';
+import 'package:phi/engine/state/state_slice_source.dart';
+
+/// A [StateSliceSource] handing back whatever the test staged — the fake
+/// "owning controllers" capture-from-live reads (issue #242).
+class _FakeSliceSource implements StateSliceSource {
+  List<ClipSliceEntry> clips = [];
+  List<MixSliceEntry> mix = [];
+  Map<String, String> variables = {};
+  List<TempoSliceEntry> tempos = [];
+
+  @override
+  List<ClipSliceEntry> captureClips() => List.of(clips);
+
+  @override
+  List<MixSliceEntry> captureMix() => List.of(mix);
+
+  @override
+  Map<String, String> captureVariables() => Map.of(variables);
+
+  @override
+  List<TempoSliceEntry> captureTempos() => List.of(tempos);
+}
 
 /// The registry-backed [StateMachineController] (issue #241): the canvas
 /// view derives from `state.` entities, structural edits are journaled
@@ -372,6 +399,183 @@ void main() {
 
       controller.endTransitionDrag();
       expect(controller.dragSourceState, isNull);
+    });
+  });
+
+  group('captured slices (issue #242)', () {
+    late _FakeSliceSource source;
+    final drums = EntityAddress.parse('clip.drums');
+    final pads = EntityAddress.parse('mix.pads');
+    final drum = EntityAddress.parse('domain.drum');
+
+    setUp(() {
+      source = _FakeSliceSource()
+        ..clips = [ClipSliceEntry(clip: drums, loop: false)]
+        ..mix = [MixSliceEntry(bus: pads, volume: 0.4, muted: true)]
+        ..variables = {'section': 'a'}
+        ..tempos = [TempoSliceEntry(domain: drum, bpm: 124)];
+      controller.sliceSource = source;
+    });
+
+    test('captureSlice reflects the live source exactly, per category', () {
+      for (final category in StateSliceCategory.values) {
+        expect(controller.captureSlice(introStateAddress, category), isTrue);
+      }
+      final slices = docAt(introStateAddress).slices;
+      expect(slices.clips, source.clips);
+      expect(slices.mix, source.mix);
+      expect(slices.variables, source.variables);
+      expect(slices.tempos, source.tempos);
+      // Four captures, four journaled payload updates — authored edits.
+      expect(recorded.whereType<UpdateEntityPayloadCommand>(), hasLength(4));
+    });
+
+    test('capture without a source, or of an unknown state, reports false', () {
+      controller.sliceSource = null;
+      expect(
+        controller.captureSlice(introStateAddress, StateSliceCategory.clips),
+        isFalse,
+      );
+      controller.sliceSource = source;
+      expect(
+        controller.captureSlice(addr('state.ghost'), StateSliceCategory.clips),
+        isFalse,
+      );
+      expect(recorded, isEmpty);
+    });
+
+    test('recapturing replaces the category wholesale', () {
+      controller.captureSlice(introStateAddress, StateSliceCategory.clips);
+      source.clips = [ClipSliceEntry(clip: addr('clip.bass'))];
+      controller.captureSlice(introStateAddress, StateSliceCategory.clips);
+      expect(docAt(introStateAddress).slices.clips, source.clips);
+    });
+
+    test('a capture matching the stored slices journals nothing', () {
+      controller.captureSlice(introStateAddress, StateSliceCategory.mix);
+      final before = recorded.length;
+      expect(
+        controller.captureSlice(introStateAddress, StateSliceCategory.mix),
+        isTrue,
+      );
+      expect(recorded.length, before);
+    });
+
+    test(
+      'a live-empty category captures as empty, distinct from uncaptured',
+      () {
+        source.clips = [];
+        controller.captureSlice(introStateAddress, StateSliceCategory.clips);
+        final slices = docAt(introStateAddress).slices;
+        expect(slices.clips, isNotNull);
+        expect(slices.clips, isEmpty);
+        expect(slices.isCaptured(StateSliceCategory.clips), isTrue);
+        expect(slices.isCaptured(StateSliceCategory.mix), isFalse);
+      },
+    );
+
+    test('clearSlice un-captures one category; a no-op when uncaptured', () {
+      controller.captureSlice(introStateAddress, StateSliceCategory.clips);
+      controller.captureSlice(introStateAddress, StateSliceCategory.tempos);
+
+      controller.clearSlice(introStateAddress, StateSliceCategory.clips);
+      final slices = docAt(introStateAddress).slices;
+      expect(slices.clips, isNull);
+      expect(slices.tempos, source.tempos);
+
+      final before = recorded.length;
+      controller.clearSlice(introStateAddress, StateSliceCategory.clips);
+      controller.clearSlice(introStateAddress, StateSliceCategory.mix);
+      expect(recorded.length, before);
+    });
+
+    test('per-entry removal edits the capture without recapturing', () {
+      source.clips = [
+        ClipSliceEntry(clip: drums, loop: false),
+        ClipSliceEntry(clip: addr('clip.bass')),
+      ];
+      controller.captureSlice(introStateAddress, StateSliceCategory.clips);
+      controller.captureSlice(introStateAddress, StateSliceCategory.variables);
+
+      controller.removeClipSliceEntry(introStateAddress, drums);
+      expect(docAt(introStateAddress).slices.clips, [
+        ClipSliceEntry(clip: addr('clip.bass')),
+      ]);
+
+      // Removing the last entry keeps the category captured-but-empty.
+      controller.removeClipSliceEntry(introStateAddress, addr('clip.bass'));
+      expect(docAt(introStateAddress).slices.clips, isEmpty);
+      expect(docAt(introStateAddress).slices.clips, isNotNull);
+
+      controller.removeVariableSliceEntry(introStateAddress, 'section');
+      expect(docAt(introStateAddress).slices.variables, isEmpty);
+      expect(docAt(introStateAddress).slices.variables, isNotNull);
+
+      // Absent entries and uncaptured categories journal nothing.
+      final before = recorded.length;
+      controller.removeClipSliceEntry(introStateAddress, drums);
+      controller.removeMixSliceEntry(introStateAddress, pads);
+      controller.removeTempoSliceEntry(introStateAddress, drum);
+      expect(recorded.length, before);
+    });
+
+    test('captured and edited slices round-trip through the payload JSON', () {
+      controller.captureSlice(introStateAddress, StateSliceCategory.clips);
+      controller.captureSlice(introStateAddress, StateSliceCategory.mix);
+      controller.captureSlice(introStateAddress, StateSliceCategory.variables);
+      controller.captureSlice(introStateAddress, StateSliceCategory.tempos);
+      controller.removeMixSliceEntry(introStateAddress, pads);
+
+      final document = docAt(introStateAddress);
+      expect(StateDocument.fromJson(document.toJson()), document);
+    });
+
+    test('undoing a capture restores the previous payload exactly', () {
+      final before = docAt(introStateAddress);
+      controller.captureSlice(introStateAddress, StateSliceCategory.variables);
+      expect(docAt(introStateAddress), isNot(before));
+
+      recorded.whereType<UpdateEntityPayloadCommand>().single.revert();
+      expect(docAt(introStateAddress), before);
+    });
+
+    test('captured references feed the back-reference index and follow a '
+        'rename', () async {
+      registry.createEntity(drums);
+      controller.captureSlice(introStateAddress, StateSliceCategory.clips);
+
+      // Delete-impact on the captured clip lists the state (issue #240's
+      // machinery, now fed by capture).
+      expect(
+        registry.impactOfRemoving(drums).referrers,
+        contains(introStateAddress),
+      );
+
+      // Rename-refactor rewrites the slice entry (issue #242 done-when).
+      final percussion = EntityAddress.parse('clip.percussion');
+      registry.move(drums, percussion);
+      await pumpEventQueue();
+      expect(docAt(introStateAddress).slices.clips!.single.clip, percussion);
+    });
+
+    test('resolveSlicesOf drops deleted referents and surfaces them', () {
+      registry.createEntity(drums);
+      source.clips = [
+        ClipSliceEntry(clip: drums),
+        ClipSliceEntry(clip: addr('clip.ghost')),
+      ];
+      controller.captureSlice(introStateAddress, StateSliceCategory.clips);
+      controller.captureSlice(introStateAddress, StateSliceCategory.variables);
+
+      final resolution = controller.resolveSlicesOf(introStateAddress);
+      expect(resolution.applicable.clips, [ClipSliceEntry(clip: drums)]);
+      expect(resolution.applicable.variables, source.variables);
+      expect(resolution.missing, {addr('clip.ghost')});
+
+      // An unknown state resolves the empty slices.
+      final empty = controller.resolveSlicesOf(addr('state.ghost'));
+      expect(empty.applicable, StateSlices.empty);
+      expect(empty.hasMissing, isFalse);
     });
   });
 

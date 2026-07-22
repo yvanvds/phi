@@ -697,6 +697,44 @@ main + app          (orchestration)
   reference-sync tests, and an end-to-end `state_entities` integration test
   (seed → delete-impact → save → second launch restores the payloads
   identically).
+  Issue #242 makes the slices **capturable from the live performance**.
+  Capture is per category and explicit (design §4 — never a whole-world
+  snapshot): `StateMachineController.captureSlice(address, category)` reads a
+  `StateSliceSource` seam (`lib/engine/state/state_slice_source.dart`) and
+  writes the state's payload as one journaled command — capturing is
+  authorship (it dirties, saves, undoes), while *applying* a state stays
+  journal-free (#243). The production source (`EngineStateSliceSource`,
+  wired in `PhiEngine.start` through closures so a project swap needs no
+  rewiring) reads each category off its owning controller: **clips** from
+  `EngineMidiController.playingClipEntries` (the playing sessions with clip
+  addresses + live loop flags; the boot session contributes nothing),
+  **mix** off the materialised `mixTree` (strips *and* group buses with
+  their live volume/mute; master is implicit and returns sit outside the
+  tree, so neither captures), **variables** from the
+  `RuntimeVariableRegistry`'s current values, and **tempos** from the bound
+  registry's top-level `domain.` entities (authored tempo — a transient
+  fader bend is performance, not the domain's tempo). A live-empty category
+  captures as empty — meaningfully distinct from uncaptured. Editing rides
+  the same journaled path: `clearSlice` un-captures a category, and the
+  per-entry `remove…SliceEntry` methods (backed by pure
+  `StateSlices.without…` helpers) trim one clip/bus/variable/tempo without
+  recapturing — removing the last entry keeps the category
+  captured-but-empty. Captured entries are entity addresses declared as
+  payload references, so rename-refactor rewrites them and delete-impact on
+  a clip/bus/domain lists the states that captured it; a *deleted* referent
+  degrades gracefully at apply time through `StateSliceResolution`
+  (`lib/domain/state_machine/slices/`) /
+  `StateMachineController.resolveSlicesOf` — the surviving entries stay
+  applicable and the missing addresses are surfaced for #243's notice.
+  Covered by domain unit tests (category helpers, per-entry editing,
+  resolution), controller capture tests against a fake source (capture
+  reflects the source exactly, recapture replaces, clear/remove journal +
+  undo, references follow a rename), an `EngineStateSliceSource` +
+  `playingClipEntries` suite, and an end-to-end `state_slices` integration
+  test (really-playing clip + live bus + variables + `domain.drum` captured
+  exactly → per-entry trim → save → second launch restores the slices
+  identically → deleting the captured bus resolves the rest and surfaces
+  the missing address).
 - Time-domains layer seed (issue #60): pure-Dart `TimeDomain` (a named
   BPM tempo reference) and an immutable, copy-on-write `TimeDomainRegistry`
   (name→domain lookup) in `lib/domain/time_domains/`. The minimal object a

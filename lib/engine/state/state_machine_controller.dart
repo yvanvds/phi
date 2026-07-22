@@ -16,10 +16,14 @@ import '../../domain/project/registry_event.dart';
 import '../../domain/project/registry_group.dart';
 import '../../domain/project/registry_kinds.dart';
 import '../../domain/project/registry_node.dart';
+import '../../domain/state_machine/slices/state_slice_category.dart';
+import '../../domain/state_machine/slices/state_slice_resolution.dart';
+import '../../domain/state_machine/slices/state_slices.dart';
 import '../../domain/state_machine/state_node_data.dart';
 import '../../domain/state_machine/state_transition.dart';
 import '../../domain/state_machine/store/state_document.dart';
 import '../../domain/state_machine/store/state_transition_spec.dart';
+import 'state_slice_source.dart';
 
 /// The registry-backed state machine (design `docs/design/state-graph.md` §3,
 /// issue #241): reads and writes `state.` entities, so the canvas renders
@@ -394,6 +398,118 @@ class StateMachineController extends ChangeNotifier {
       ),
     );
   }
+
+  // ─── captured slices (issue #242) ───────────────────────────────────────
+
+  /// The live-performance reader capture-from-live pulls each category from
+  /// (design `docs/design/state-graph.md` §4) — wired by the engine to the
+  /// real controllers (`EngineStateSliceSource`), faked in tests. `null` (the
+  /// bare default) makes [captureSlice] report `false`; clearing and per-entry
+  /// editing need no source.
+  StateSliceSource? sliceSource;
+
+  /// Capture [category] from the live performance into the state at
+  /// [address] — one journaled payload update, so a capture dirties, saves
+  /// and undoes like any other authored edit. (Capturing is authorship;
+  /// *applying* a state is performance and journals nothing — issue #243.)
+  ///
+  /// Recapturing replaces the category wholesale. A live-empty category
+  /// captures as empty — meaningfully distinct from uncaptured ("no clips
+  /// playing" stops everything the state knows about). Returns whether the
+  /// capture happened — `false` without a [sliceSource] or for an unknown
+  /// state; `true` (with no journal write) when the capture matches what is
+  /// already stored.
+  bool captureSlice(EntityAddress address, StateSliceCategory category) {
+    final source = sliceSource;
+    final document = _docs[address];
+    if (source == null || document == null) return false;
+    final slices = switch (category) {
+      StateSliceCategory.clips => document.slices.copyWith(
+        clips: source.captureClips(),
+      ),
+      StateSliceCategory.mix => document.slices.copyWith(
+        mix: source.captureMix(),
+      ),
+      StateSliceCategory.variables => document.slices.copyWith(
+        variables: source.captureVariables(),
+      ),
+      StateSliceCategory.tempos => document.slices.copyWith(
+        tempos: source.captureTempos(),
+      ),
+    };
+    if (slices != document.slices) _updateSlices(address, document, slices);
+    return true;
+  }
+
+  /// Clear [category] on the state at [address] back to uncaptured — entering
+  /// the state then leaves that category untouched (design §4). One journaled
+  /// payload update; a no-op when the state is unknown or the category is
+  /// already uncaptured.
+  void clearSlice(EntityAddress address, StateSliceCategory category) {
+    final document = _docs[address];
+    if (document == null || !document.slices.isCaptured(category)) return;
+    _updateSlices(address, document, document.slices.cleared(category));
+  }
+
+  /// Remove the captured clips entry for [clip] from the state at [address]
+  /// without recapturing — removing the last entry keeps the category
+  /// captured-but-empty. One journaled payload update; a no-op when the state
+  /// is unknown, the category is uncaptured, or the entry is absent.
+  void removeClipSliceEntry(EntityAddress address, EntityAddress clip) =>
+      _editSlices(address, (slices) => slices.withoutClip(clip));
+
+  /// Remove the captured mix entry for [bus] — see [removeClipSliceEntry].
+  void removeMixSliceEntry(EntityAddress address, EntityAddress bus) =>
+      _editSlices(address, (slices) => slices.withoutBus(bus));
+
+  /// Remove the captured variable [name] — see [removeClipSliceEntry].
+  void removeVariableSliceEntry(EntityAddress address, String name) =>
+      _editSlices(address, (slices) => slices.withoutVariable(name));
+
+  /// Remove the captured tempo entry for [domain] — see
+  /// [removeClipSliceEntry].
+  void removeTempoSliceEntry(EntityAddress address, EntityAddress domain) =>
+      _editSlices(address, (slices) => slices.withoutTempo(domain));
+
+  /// The apply-time resolution of the captured slices of the state at
+  /// [address] against the current registry (issue #242): entries whose
+  /// referents still exist are applicable, deleted referents are dropped and
+  /// surfaced as missing — the graceful-degradation partition the application
+  /// engine (#243) applies and raises its notice from. Resolves the empty
+  /// slices for an unknown state.
+  StateSliceResolution resolveSlicesOf(EntityAddress address) =>
+      StateSliceResolution.of(
+        _docs[address]?.slices ?? StateSlices.empty,
+        exists: _registry.contains,
+      );
+
+  void _editSlices(
+    EntityAddress address,
+    StateSlices Function(StateSlices) edit,
+  ) {
+    final document = _docs[address];
+    if (document == null) return;
+    final edited = edit(document.slices);
+    if (edited == document.slices) return;
+    _updateSlices(address, document, edited);
+  }
+
+  /// Write [slices] into [document] at [address] as one journaled payload
+  /// update. The typed [StateDocument] is a `ReferenceSource`, so the new
+  /// slice entries' clip / bus / domain addresses enter the back-reference
+  /// index with the same command — rename-refactor rewrites them and
+  /// delete-impact lists the state.
+  void _updateSlices(
+    EntityAddress address,
+    StateDocument document,
+    StateSlices slices,
+  ) => _apply(
+    UpdateEntityPayloadCommand(
+      _registry,
+      address,
+      document.copyWith(slices: slices),
+    ),
+  );
 
   // ─── arming + firing ────────────────────────────────────────────────────
 

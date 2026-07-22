@@ -14,6 +14,7 @@ import '../../domain/scene/pick_ray.dart';
 import '../../domain/scene/scatter.dart';
 import '../../domain/scene/scene_demo.dart';
 import '../../domain/scene/scene_field.dart';
+import '../../domain/state_machine/slices/clip_slice_entry.dart';
 import '../../domain/time_domains/fader_tempo_source.dart';
 import '../../domain/time_domains/tempo_source_stack.dart';
 import '../../domain/voice/voice_channel_resolver.dart';
@@ -188,6 +189,18 @@ class EngineMidiController implements ClipSessionHost {
 
   /// The session for [address], or `null` when none is open for it.
   ClipSession? sessionFor(EntityAddress address) => _sessions[address];
+
+  /// The clips slice of the live performance (design state-graph §4, issue
+  /// #242): one entry per **playing** session with a clip entity address —
+  /// edited or library, whatever is currently sounding — carrying the
+  /// session's live loop flag. The boot session (no address) contributes
+  /// nothing; paused and stopped sessions are not playing. This is what the
+  /// state machine's capture-from-live seam reads.
+  List<ClipSliceEntry> get playingClipEntries => [
+    for (final session in _sessions.values)
+      if (session.isPlaying && session.address != null)
+        ClipSliceEntry(clip: session.address!, loop: session.loop),
+  ];
 
   /// Open the clip entity at [address] as the edited session (design §3, §4):
   /// its session becomes the one the editor binds to. Reuses an already-open

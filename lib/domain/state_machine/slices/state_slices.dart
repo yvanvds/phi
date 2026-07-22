@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../project/entity_address.dart';
 import 'clip_slice_entry.dart';
 import 'mix_slice_entry.dart';
+import 'state_slice_category.dart';
 import 'tempo_slice_entry.dart';
 
 /// The explicitly captured, per-category slices a `state.` entity carries —
@@ -91,6 +92,79 @@ class StateSlices {
         variables: variables,
         tempos: tempos?.map((e) => e.withReferenceUpdated(from, to)).toList(),
       );
+
+  /// Whether [category] is captured on this state. A captured-but-empty
+  /// list/map counts — it constrains ("nothing playing"), unlike `null`.
+  bool isCaptured(StateSliceCategory category) => switch (category) {
+    StateSliceCategory.clips => clips != null,
+    StateSliceCategory.mix => mix != null,
+    StateSliceCategory.variables => variables != null,
+    StateSliceCategory.tempos => tempos != null,
+  };
+
+  /// A copy with [category] back to uncaptured (`null`) — entering the state
+  /// then leaves that category untouched. The other categories are unchanged.
+  StateSlices cleared(StateSliceCategory category) => switch (category) {
+    StateSliceCategory.clips => copyWith(clearClips: true),
+    StateSliceCategory.mix => copyWith(clearMix: true),
+    StateSliceCategory.variables => copyWith(clearVariables: true),
+    StateSliceCategory.tempos => copyWith(clearTempos: true),
+  };
+
+  // ─── per-entry editing (issue #242) ───────────────────────────────────────
+  //
+  // Remove one captured entry without recapturing the category. Removing the
+  // last entry keeps the category captured-but-empty — the performer edited
+  // the capture down, they did not un-capture it. Each returns `this` when
+  // the category is uncaptured or the entry is absent.
+
+  /// A copy without the clips entry for [clip].
+  StateSlices withoutClip(EntityAddress clip) {
+    final entries = clips;
+    if (entries == null || !entries.any((e) => e.clip == clip)) return this;
+    return copyWith(
+      clips: [
+        for (final e in entries)
+          if (e.clip != clip) e,
+      ],
+    );
+  }
+
+  /// A copy without the mix entry for [bus].
+  StateSlices withoutBus(EntityAddress bus) {
+    final entries = mix;
+    if (entries == null || !entries.any((e) => e.bus == bus)) return this;
+    return copyWith(
+      mix: [
+        for (final e in entries)
+          if (e.bus != bus) e,
+      ],
+    );
+  }
+
+  /// A copy without the captured variable named [name].
+  StateSlices withoutVariable(String name) {
+    final captured = variables;
+    if (captured == null || !captured.containsKey(name)) return this;
+    return copyWith(
+      variables: {
+        for (final entry in captured.entries)
+          if (entry.key != name) entry.key: entry.value,
+      },
+    );
+  }
+
+  /// A copy without the tempo entry for [domain].
+  StateSlices withoutTempo(EntityAddress domain) {
+    final entries = tempos;
+    if (entries == null || !entries.any((e) => e.domain == domain)) return this;
+    return copyWith(
+      tempos: [
+        for (final e in entries)
+          if (e.domain != domain) e,
+      ],
+    );
+  }
 
   /// A copy with the given categories replaced. Passing a value captures (or
   /// re-captures) that category; the paired `clear…` flag un-captures it back
