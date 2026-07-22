@@ -12,6 +12,7 @@ void main() {
     int bars = 4,
     int beatsPerBar = 4,
     bool autoExtend = true,
+    double width = 900,
     required ValueChanged<int> onBarsChanged,
     ValueChanged<int>? onBeatsPerBarChanged,
     ValueChanged<bool>? onAutoExtendChanged,
@@ -21,7 +22,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: SizedBox(
-            width: 900,
+            width: width,
             child: ClipTransportRow(
               bars: bars,
               beatsPerBar: beatsPerBar,
@@ -135,4 +136,81 @@ void main() {
 
     expect(log, ['play', 'pause', 'stop', 'loop']);
   });
+
+  testWidgets(
+    'degrades to a horizontal scroll in a narrow pane without overflowing '
+    '(issue #299)',
+    (tester) async {
+      // A pane far narrower than the row's ~475px intrinsic width, with the
+      // transport cluster wired so the full content is present. Without the
+      // scroll fallback this asserts a `RenderFlex overflowed`.
+      await pumpRow(
+        tester,
+        width: 412,
+        onBarsChanged: (_) {},
+        transport: ClipTransportControls(
+          isPlaying: false,
+          isPaused: false,
+          loop: false,
+          onPlay: () {},
+          onPause: () {},
+          onStop: () {},
+          onToggleLoop: () {},
+        ),
+      );
+
+      // No RenderFlex overflow was thrown laying out the narrow row…
+      expect(tester.takeException(), isNull);
+
+      // …because it degraded to a horizontal scroll view whose content is
+      // wider than the pane (so it scrolls rather than clipping/asserting).
+      // Scope through the outer SingleChildScrollView — the length TextFields
+      // each carry their own inner Scrollable, so matching Scrollable directly
+      // would be ambiguous.
+      expect(scrollExtentOf(tester), greaterThan(0));
+
+      // The transport buttons are still present — just reachable by scrolling.
+      expect(find.byKey(ClipTransportRow.loopKey), findsOneWidget);
+    },
+  );
+
+  testWidgets('fills a wide pane, pinning the transport cluster right', (
+    tester,
+  ) async {
+    // At a comfortable width the row still fills its pane (the Spacer expands),
+    // so the common maximized layout is unchanged and does not scroll.
+    await pumpRow(
+      tester,
+      width: 900,
+      onBarsChanged: (_) {},
+      transport: ClipTransportControls(
+        isPlaying: false,
+        isPaused: false,
+        loop: false,
+        onPlay: () {},
+        onPause: () {},
+        onStop: () {},
+        onToggleLoop: () {},
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(scrollExtentOf(tester), 0);
+  });
+}
+
+/// The max horizontal scroll extent of the transport row's outer scroll view.
+/// Scopes through the [SingleChildScrollView] the row wraps its content in, so
+/// the length fields' own inner [Scrollable]s don't make the match ambiguous;
+/// `> 0` means the content is wider than the pane (it degraded to a scroll),
+/// `== 0` means it filled the pane exactly (no overflow, common wide layout).
+double scrollExtentOf(WidgetTester tester) {
+  final outer = find.descendant(
+    of: find.byType(ClipTransportRow),
+    matching: find.byType(SingleChildScrollView),
+  );
+  final scrollable = tester.state<ScrollableState>(
+    find.descendant(of: outer, matching: find.byType(Scrollable)).first,
+  );
+  return scrollable.position.maxScrollExtent;
 }
