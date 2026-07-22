@@ -66,6 +66,23 @@ void main() {
     expect(engine.patches.instanceIdOf(patch('swirl')), isNotNull);
   });
 
+  test(
+    'a bound patch names its native instance for engine-direct addressing',
+    () {
+      final registry = registryWith({patch('swirl'): PatchPayload.empty});
+      addTearDown(registry.dispose);
+
+      engine.bindProject(registry);
+
+      // End-to-end through the real engine wiring: opening the patch names its
+      // native instance by the kind-stripped address, so a value published to
+      // patcher.swirl.<slot> reaches it engine-direct (issue #318).
+      final id = engine.patches.instanceIdOf(patch('swirl'))!;
+      expect(patcher.instances[id]!.busName, 'swirl');
+      expect(patcher.deliverToPatcherBus('patcher.swirl.0', 1), isTrue);
+    },
+  );
+
   test('start mounts the source on its placement bus, stop unmounts it', () {
     final registry = registryWith({
       mix('reverb'): const MixStrip(voice: 1),

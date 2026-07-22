@@ -45,9 +45,20 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
   }
 
   @override
-  int createInstance({int mainOutputs = 2}) {
+  int createInstance({int mainOutputs = 2, String name = ''}) {
     final id = _nextInstanceId++;
-    _instances[id] = _PatcherInstance(Patcher(mainOutputs: mainOutputs));
+    // [name] is the engine-direct bus name (the kind-stripped `patch.` entity
+    // address) the instance should register under so it is reachable at
+    // `patcher.<name>.<slot>` (issue #318). Forwarding it to the native patcher
+    // is blocked on a bridge capability: dart-yse's `Patcher` surfaces no name
+    // setter over the C ABI yet (filed as yvanvds/dart-yse#50). The name is
+    // retained here so the phi side is fully wired; until the capability ships a
+    // phi-created patcher stays anonymous natively, and the wire-up is then one
+    // line below: `if (name.isNotEmpty) inst.patcher.name(name);`.
+    _instances[id] = _PatcherInstance(
+      Patcher(mainOutputs: mainOutputs),
+      busName: name,
+    );
     return id;
   }
 
@@ -334,9 +345,15 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
 /// One open patcher: its native [Patcher], handle table, and at most one
 /// [Sound] mounting it on a mix bus.
 class _PatcherInstance {
-  _PatcherInstance(this.patcher);
+  _PatcherInstance(this.patcher, {this.busName = ''});
 
   final Patcher patcher;
+
+  /// The engine-direct bus name this instance should register under — the
+  /// kind-stripped `patch.` entity address (issue #318). Retained pending
+  /// dart-yse's `Patcher.name` (yvanvds/dart-yse#50); see [createInstance].
+  final String busName;
+
   final Map<int, PHandle> handles = {};
   Sound? mounted;
 

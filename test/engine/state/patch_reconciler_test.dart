@@ -352,4 +352,62 @@ void main() {
       );
     });
   });
+
+  group('engine-direct bus name (issue #318)', () {
+    test('names each open patcher by its kind-stripped address', () {
+      final registry = registryWith({patch('swirl'): PatchPayload.empty});
+      addTearDown(registry.dispose);
+      final reconciler = build();
+
+      reconciler.sync(registry);
+
+      final id = reconciler.instanceIdOf(patch('swirl'))!;
+      // The native instance registers under the kind-stripped address, so a
+      // publish to patcher.swirl.<slot> reaches it engine-direct.
+      expect(gateway.instances[id]!.busName, 'swirl');
+      expect(gateway.deliverToPatcherBus('patcher.swirl.0', 1), isTrue);
+    });
+
+    test('a grouped patch is named by its full dotted path', () {
+      final grouped = EntityAddress(
+        kind: RegistryKinds.patch,
+        segments: ['fx', 'swirl'],
+      );
+      final registry = registryWith({grouped: PatchPayload.empty});
+      addTearDown(registry.dispose);
+      final reconciler = build();
+
+      reconciler.sync(registry);
+
+      final id = reconciler.instanceIdOf(grouped)!;
+      // patch.fx.swirl → bus name fx.swirl → patcher.fx.swirl.<slot>.
+      expect(gateway.instances[id]!.busName, 'fx.swirl');
+      expect(gateway.deliverToPatcherBus('patcher.fx.swirl.2', 5), isTrue);
+    });
+
+    test(
+      'renaming a patch re-registers the instance under the new address',
+      () {
+        final reconciler = build();
+
+        final before = registryWith({patch('swirl'): PatchPayload.empty});
+        addTearDown(before.dispose);
+        reconciler.sync(before);
+        final oldId = reconciler.instanceIdOf(patch('swirl'))!;
+        expect(gateway.instances[oldId]!.busName, 'swirl');
+
+        // A rename shows up as the old address gone + a new one present.
+        final after = registryWith({patch('whirl'): PatchPayload.empty});
+        addTearDown(after.dispose);
+        reconciler.sync(after);
+
+        expect(reconciler.isOpen(patch('swirl')), isFalse);
+        final newId = reconciler.instanceIdOf(patch('whirl'))!;
+        expect(gateway.instances[newId]!.busName, 'whirl');
+        // The old bus name no longer resolves; the new one does.
+        expect(gateway.deliverToPatcherBus('patcher.swirl.0', 1), isFalse);
+        expect(gateway.deliverToPatcherBus('patcher.whirl.0', 1), isTrue);
+      },
+    );
+  });
 }

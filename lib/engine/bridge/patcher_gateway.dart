@@ -21,7 +21,15 @@ abstract interface class PatcherGateway {
 
   /// Create a native patcher instance with [mainOutputs] audio output
   /// channels and return the id that keys every subsequent op.
-  int createInstance({int mainOutputs = 2});
+  ///
+  /// [name] is the **engine-direct bus name** the instance registers under —
+  /// the kind-stripped `patch.` entity address (e.g. `fx.swirl` for
+  /// `patch.fx.swirl`), so it is reachable at `patcher.<name>.<slot>` and the
+  /// live-coding `patch.<name>.send(slot, v)` verb lands on it engine-side with
+  /// no host round-trip (issue #318, design `docs/design/patcher.md`). The empty
+  /// string (the default) creates an **anonymous** instance that is not
+  /// bus-addressable.
+  int createInstance({int mainOutputs = 2, String name = ''});
 
   /// Dispose one instance, tearing down its native patcher and any mounted
   /// [Sound] first. No-op for an unknown id.

@@ -23,6 +23,12 @@ class FakePatcherGateway implements PatcherGateway {
   int _nextInstanceId = 1;
   int _nextObjectId = 1;
 
+  /// Models the engine-direct patcher bus (issue #318): a **named** instance
+  /// registers here (kind-stripped bus name → instance id) so a publish to
+  /// `patcher.<name>.<slot>` — see [deliverToPatcherBus] — resolves to it.
+  /// Anonymous instances never register and are unreachable.
+  final Map<String, int> _patcherBus = {};
+
   /// Override the default port topology for a given object type. Tests can
   /// stub e.g. an exotic node with custom inlet/outlet counts.
   final Map<String, PatcherNodeSnapshot> topologyOverrides = {};
@@ -51,23 +57,51 @@ class FakePatcherGateway implements PatcherGateway {
   FakeInstance _inst(int instanceId) => instances[instanceId]!;
 
   @override
-  int createInstance({int mainOutputs = 2}) {
+  int createInstance({int mainOutputs = 2, String name = ''}) {
     final id = _nextInstanceId++;
     calls.add('createInstance:$id:$mainOutputs');
-    instances[id] = FakeInstance(mainOutputs: mainOutputs);
+    instances[id] = FakeInstance(mainOutputs: mainOutputs, busName: name);
+    // A named instance registers on the engine-direct patcher bus (issue #318);
+    // last registration wins, so a rename (new instance, new name) re-registers.
+    if (name.isNotEmpty) _patcherBus[name] = id;
     return id;
   }
 
   @override
   void disposeInstance(int instanceId) {
     calls.add('disposeInstance:$instanceId');
-    instances.remove(instanceId);
+    final inst = instances.remove(instanceId);
+    if (inst != null && _patcherBus[inst.busName] == instanceId) {
+      _patcherBus.remove(inst.busName);
+    }
   }
 
   @override
   void disposeAll() {
     calls.add('disposeAll');
     instances.clear();
+    _patcherBus.clear();
+  }
+
+  /// Model an engine-direct publish to the patcher bus [address]
+  /// (`patcher.<name>.<slot>`): resolve the instance registered under `<name>`
+  /// and record [value] at its `<slot>`, returning whether one was reachable
+  /// there (issue #318). Stands in for the native engine routing a
+  /// `patch.<name>.send(slot, v)` verb to the patcher named `<name>`; an
+  /// anonymous (unregistered) target returns false.
+  bool deliverToPatcherBus(String address, double value) {
+    const prefix = 'patcher.';
+    if (!address.startsWith(prefix)) return false;
+    final rest = address.substring(prefix.length);
+    final lastDot = rest.lastIndexOf('.');
+    if (lastDot <= 0) return false;
+    final name = rest.substring(0, lastDot);
+    final slot = int.tryParse(rest.substring(lastDot + 1));
+    if (slot == null) return false;
+    final id = _patcherBus[name];
+    if (id == null) return false;
+    instances[id]!.busSlots[slot] = value;
+    return true;
   }
 
   @override
@@ -448,9 +482,18 @@ class FakePatcherGateway implements PatcherGateway {
 
 /// One patcher instance's in-memory state.
 class FakeInstance {
-  FakeInstance({required this.mainOutputs});
+  FakeInstance({required this.mainOutputs, this.busName = ''});
 
   final int mainOutputs;
+
+  /// The engine-direct bus name this instance is registered under — the
+  /// kind-stripped `patch.` address (issue #318). Empty = anonymous.
+  final String busName;
+
+  /// Values delivered engine-direct to `patcher.<busName>.<slot>`, keyed by
+  /// slot — recorded by [FakePatcherGateway.deliverToPatcherBus].
+  final Map<int, double> busSlots = {};
+
   final Map<int, FakeNode> nodes = {};
   final List<FakeCable> cables = [];
   final Set<String> receivers = {};
