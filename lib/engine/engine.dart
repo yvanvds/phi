@@ -140,6 +140,7 @@ class PhiEngine {
     MidiGateway? midiGateway,
     SynthGateway? synthGateway,
     FxGateway? fxGateway,
+    RegistryMirror registryMirror = const NoOpRegistryMirror(),
   }) {
     final yse = RealYseGateway();
     // The synth + fx gateways resolve a mix-bus channel id into the live yse
@@ -168,6 +169,12 @@ class PhiEngine {
             busResolver: busResolver,
             patcherInsertSource: insertSource,
           ),
+      // The live-coding name-table mirror (issue #314). Defaults to the no-op;
+      // the app composition root hands in a `RealRegistryMirror` bound to the
+      // shared Code evaluator when the build has Python, so create / rename /
+      // regroup / delete + the boot resync populate the interpreter's `phi`
+      // table.
+      registryMirror: registryMirror,
     );
   }
 

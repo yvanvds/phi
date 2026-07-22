@@ -19,6 +19,7 @@ import 'domain/project/store/registry_codecs.dart';
 import 'domain/session/session_state.dart';
 import 'engine/bridge/code_evaluator.dart';
 import 'engine/bridge/code_evaluator_factory.dart';
+import 'engine/bridge/registry_mirror_factory.dart';
 import 'engine/engine.dart';
 import 'shell/commands/command_registry.dart';
 import 'shell/diagnostics/notice_center.dart';
@@ -147,14 +148,25 @@ class _PhiAppState extends State<PhiApp> {
       _engine = injectedEngine;
       _ownsEngine = false;
     } else {
-      _engine = PhiEngine.production();
-      _ownsEngine = true;
-      // Production only: wire real Python end-to-end when the engine build has
-      // CPython, else the no-op. Gated behind the bridge factory so this layer
-      // never imports `package:yse`. Skipped when a test injected an evaluator.
+      // Composition root: build the shared Code evaluator *before* the engine
+      // (issue #314). Real Python end-to-end when the engine build has CPython,
+      // else the no-op — gated behind the bridge factory so this layer never
+      // imports `package:yse`. Skipped when a test injected an evaluator.
+      final CodeEvaluator evaluator;
       if (widget.codeEvaluator == null) {
-        _ownedCodeEvaluator = buildCodeEvaluator();
+        evaluator = _ownedCodeEvaluator = buildCodeEvaluator();
+      } else {
+        evaluator = widget.codeEvaluator!;
       }
+      // Wire the live name-table mirror to that same evaluator (issue #314): on
+      // a Python build, creating / renaming a mix/clip/voice entity — and the
+      // boot-time full sync — repopulate the interpreter's `phi` name table, and
+      // the pushes ride the same ordered queue as user blocks. The bridge
+      // factory falls back to the no-op on a Python-less build.
+      _engine = PhiEngine.production(
+        registryMirror: buildRegistryMirror(evaluator),
+      );
+      _ownsEngine = true;
       // Production only: mirror the unified log to a per-session file under
       // `%APPDATA%/phi/logs/` (design §2). Skipped when a test injected a notice
       // center — it owns its own recorder and wants no disk. Booting is
