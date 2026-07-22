@@ -44,6 +44,7 @@ List<PhiCommand> buildShellCommands({
   required VoidCallback onCycleTabBackward,
   required VoidCallback onOpenCommandPalette,
   required VoidCallback onPanic,
+  VoidCallback? onToggleLogPanel,
   VoidCallback? onNewProject,
   VoidCallback? onOpenProject,
   VoidCallback? onSaveProject,
@@ -159,6 +160,19 @@ List<PhiCommand> buildShellCommands({
       category: 'View',
       invoke: session.toggleProjection,
     ),
+    // Log panel — the bottom-drawer log (design `docs/design/diagnostics.md`
+    // §4): the status-bar toggle, this palette command, and Ctrl+J all open it
+    // through the one controller. `J` is a layout-*named* logical key, so the
+    // chord resolves the same on the performer's AZERTY as on QWERTY. Present
+    // only when the shell wires the log panel controller (always, in the app).
+    if (onToggleLogPanel != null)
+      PhiCommand(
+        id: 'view.log',
+        title: 'Toggle Log',
+        category: 'View',
+        invoke: onToggleLogPanel,
+        shortcut: const CommandShortcut(LogicalKeyboardKey.keyJ, control: true),
+      ),
     // Project ops — present only when the project stack is wired.
     if (onNewProject != null)
       PhiCommand(

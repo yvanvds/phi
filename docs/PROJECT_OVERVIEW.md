@@ -2028,6 +2028,34 @@ main + app          (orchestration)
   grep-assert, and an end-to-end `notice_channel` integration test (a device
   fallback toasts *and* logs through the real app; a Python traceback lands at
   error level).
+- **The log panel drawer** (issue #270, epic #267, design
+  `docs/design/diagnostics.md` §4, §5) — the bottom-drawer log built on the #268
+  store, above the status bar. A pure-Dart `LogFilter` (`lib/domain/log/`) is the
+  combinable query — a minimum level (this level and above), an included-source
+  set, and a case-insensitive text search, all AND-ed in one `apply` pass — and
+  `LogTranscript.of` renders a run of entries to paste-ready text (the session-file
+  line shape; reusable by #272's report bundle). A shell `LogPanelController`
+  (`lib/shell/diagnostics/`, ChangeNotifier over the shared `LogStore`) owns the
+  open state, the live filter, copy (through an injectable clipboard seam), and the
+  **status-bar error badge** — the count of error entries recorded *while the drawer
+  was closed* since it was last open, accrued by diffing the store's tail (a ring
+  rollover can only under-count, never invent). `LogPanel` is the drawer: entries
+  render newest-*last* with **auto-follow** (a `ScrollNotification`-driven follow
+  flag pinned to the bottom; a user drag up pauses it and reveals a jump-to-newest
+  pill; a drag back or the pill resumes), a `LogFilterBar` of level/source chips +
+  a search field, a `SelectionArea`-wrapped list for drag-select copy, and header
+  copy / clear-filters / close. `LogPanelToggle` sits in the `BottomStatus`: it
+  toggles the drawer, lights while open, and badges the unseen-error count —
+  tapping it *with* a badge opens filtered to errors and clears (design §5). A
+  `view.log` command (Ctrl+J, a layout-named logical key) shares the plain-toggle
+  path with the toggle and palette. Covered by unit tests (`LogFilter` predicates +
+  equality, `LogTranscript`, `LogPanelController` badge accrual/clear/rebase +
+  filter mutations + copy), widget tests (`LogPanel` follow/pause/jump, every
+  filter combination, search, copy output, empty state, close; `LogPanelToggle`
+  badge display + tap-opens-to-errors), the `shell_commands` Ctrl+J assertion, and
+  an end-to-end `log_panel` integration test (toggle + Ctrl+J open, filter/search
+  narrow, copy writes the visible set, the error badge opens filtered to errors and
+  clears).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

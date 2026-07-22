@@ -40,6 +40,8 @@ import 'commands/command_palette.dart';
 import 'commands/command_registry.dart';
 import 'commands/shell_commands.dart';
 import 'diagnostics/log_coordinator.dart';
+import 'diagnostics/log_panel.dart';
+import 'diagnostics/log_panel_controller.dart';
 import 'diagnostics/notice_center.dart';
 import 'diagnostics/phi_toast_overlay.dart';
 import 'layout/shell_layout_controller.dart';
@@ -185,6 +187,10 @@ class _WorkstationState extends State<Workstation> {
   /// into the notice center's recorder (design §2). Disposed with the shell.
   late final LogCoordinator _logCoordinator;
 
+  /// Drives the bottom-drawer log panel + the status-bar error badge (design §4,
+  /// §5, issue #270) over the notice center's shared [LogStore]. Owned here.
+  late final LogPanelController _logPanel;
+
   late final CodeEvaluator _codeEvaluator;
   late final bool _ownsCodeEvaluator;
   late final CustomTransformRegistry _customTransforms;
@@ -284,6 +290,10 @@ class _WorkstationState extends State<Workstation> {
       engineMessages: widget.engine.engineLogMessages,
       pythonEvents: _codeEvaluator.events,
     );
+    // The log panel + status-bar badge read the same shared store (issue #270,
+    // design §4). Owned here; disposed before the notice center so it detaches
+    // its store listener before the store goes away.
+    _logPanel = LogPanelController(store: _noticeCenter.log);
     // Retrofit sweep (design §3, §8 decision 3): the shipped ad-hoc notice
     // sites — the audio device fallback and the state / patch degradation paths
     // — surface through the one channel instead of vanishing on an unread
@@ -352,6 +362,9 @@ class _WorkstationState extends State<Workstation> {
         // Panic routes through the shell handler (issue #264) — the same action
         // the status-bar button fires.
         onPanic: _onPanic,
+        // The log drawer's plain open/close — shared by the status-bar toggle,
+        // this command, and Ctrl+J (issue #270, design §4).
+        onToggleLogPanel: _logPanel.toggle,
         onNewProject: actions == null
             ? null
             : () => unawaited(actions.newProject(context)),
@@ -577,6 +590,9 @@ class _WorkstationState extends State<Workstation> {
     widget.engine.lastAudioNotice.removeListener(_onAudioNotice);
     widget.engine.lastStateNotice.removeListener(_onStateNotice);
     widget.engine.lastPatchNotice.removeListener(_onPatchNotice);
+    // Detach the panel's store listener before the notice center (maybe) drops
+    // the store it listens to.
+    _logPanel.dispose();
     unawaited(_logCoordinator.dispose());
     if (_ownsNoticeCenter) _noticeCenter.dispose();
     widget.projectController?.removeListener(_bindEngineRegistry);
@@ -728,9 +744,19 @@ class _WorkstationState extends State<Workstation> {
                       ],
                     ),
                   ),
+                  // The log drawer sits above the status bar (design §4,
+                  // decision 2), shown only while open; the status bar's toggle
+                  // + error badge drive it.
+                  AnimatedBuilder(
+                    animation: _logPanel,
+                    builder: (context, _) => _logPanel.isOpen
+                        ? LogPanel(controller: _logPanel)
+                        : const SizedBox.shrink(),
+                  ),
                   BottomStatus(
                     engine: widget.engine,
                     session: widget.session,
+                    logPanel: _logPanel,
                     onPanic: _onPanic,
                   ),
                 ],

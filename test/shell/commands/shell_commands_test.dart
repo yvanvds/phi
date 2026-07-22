@@ -86,6 +86,31 @@ void main() {
     expect(byId(commands, 'project.save').shortcut!.label, 'Ctrl+S');
   });
 
+  test('the log toggle is a View command on Ctrl+J when wired', () {
+    final commands = buildShellCommands(
+      session: session,
+      onSummonSurface: (id) => fired.add('summon:${id.name}'),
+      onUndo: () => fired.add('undo'),
+      onRedo: () => fired.add('redo'),
+      onCycleTabForward: () => fired.add('next'),
+      onCycleTabBackward: () => fired.add('prev'),
+      onOpenCommandPalette: () => fired.add('palette'),
+      onPanic: () => fired.add('panic'),
+      onToggleLogPanel: () => fired.add('log'),
+    );
+    final log = byId(commands, 'view.log');
+    expect(log.category, 'View');
+    expect(log.shortcut!.label, 'Ctrl+J');
+    log.invoke();
+    expect(fired, ['log']);
+  });
+
+  test('the log toggle is omitted when no callback is wired', () {
+    // The bare `build()` above passes no onToggleLogPanel — the command is
+    // simply absent (like the project ops), so its chord claims nothing.
+    expect(build().where((c) => c.id == 'view.log'), isEmpty);
+  });
+
   test('panic is a permanent Transport command on F12', () {
     final commands = build();
     final panic = byId(commands, 'transport.panic');
