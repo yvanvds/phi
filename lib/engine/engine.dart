@@ -60,6 +60,7 @@ import 'bridge/synth_gateway.dart';
 import 'bridge/yse_gateway.dart';
 import 'state/clip_registry_publisher.dart';
 import 'state/engine_midi_controller.dart';
+import 'state/engine_state_slice_source.dart';
 import 'state/engine_telemetry.dart';
 import 'state/metronome_controller.dart';
 import 'state/mix_tree_node.dart';
@@ -814,6 +815,18 @@ class PhiEngine {
         clickSynth: _ensureClickSynth,
       );
     }
+    // Capture-from-live (design state-graph §4, issue #242): the state machine
+    // reads each slice category off its owning controller through this source —
+    // the playing clip sessions, the materialised mix tree, the runtime
+    // variables, and the bound registry's `domain.` tempos. Closures read the
+    // live fields, so a project swap (bindRegistry) needs no rewiring; without
+    // a MIDI gateway the clips category simply captures empty.
+    sm.sliceSource = EngineStateSliceSource(
+      playingClips: () => _midi?.playingClipEntries ?? const [],
+      mixNodes: () => _mixTree.value,
+      variables: () => rv,
+      registry: () => _mixRegistry,
+    );
     // The rack materialiser (issue #208) reconciles synths per internal voice
     // and insert chains per bus, then hands the live voice table + synth map to
     // the MIDI controller so sessions flatten + connect by routed voice. It runs
