@@ -45,6 +45,7 @@ List<PhiCommand> buildShellCommands({
   required VoidCallback onOpenCommandPalette,
   required VoidCallback onPanic,
   VoidCallback? onToggleLogPanel,
+  VoidCallback? onCopyDiagnostics,
   VoidCallback? onNewProject,
   VoidCallback? onOpenProject,
   VoidCallback? onSaveProject,
@@ -172,6 +173,17 @@ List<PhiCommand> buildShellCommands({
         category: 'View',
         invoke: onToggleLogPanel,
         shortcut: const CommandShortcut(LogicalKeyboardKey.keyJ, control: true),
+      ),
+    // Copy diagnostics — the report bundle (design §6, issue #272): the same
+    // paste-ready block the settings DIAGNOSTICS copy button yields, one keystroke
+    // away for filing an issue against yourself mid-set. Present whenever the shell
+    // wires the log store (always, in the app); no default chord.
+    if (onCopyDiagnostics != null)
+      PhiCommand(
+        id: 'app.copyDiagnostics',
+        title: 'Copy Diagnostics',
+        category: 'App',
+        invoke: onCopyDiagnostics,
       ),
     // Project ops — present only when the project stack is wired.
     if (onNewProject != null)

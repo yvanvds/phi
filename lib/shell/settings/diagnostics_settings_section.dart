@@ -17,13 +17,28 @@ import '../../engine/state/engine_telemetry.dart';
 /// The rows read live engine facts, **not** stored settings — the libYSE
 /// version, the resolved `YSE_DLL_PATH`, the device actually open, and the
 /// dropped-callback counter (which ticks with telemetry). The copy button yields
-/// a paste-ready plain-text block of exactly these facts.
+/// a paste-ready plain-text block.
+///
+/// When the shell supplies [report] (production, via `DiagnosticsReport`), the
+/// button copies the **full** diagnostics bundle — the same block the "Copy
+/// Diagnostics" palette command produces, adding the app version, the live audio
+/// state, the open project path, and the last 200 log lines (design §6, issue
+/// #272). Without it (a bare section, e.g. a focused widget test) the button
+/// falls back to the read-only facts shown here.
 class DiagnosticsSettingsSection extends StatelessWidget {
-  const DiagnosticsSettingsSection({required this.engine, super.key});
+  const DiagnosticsSettingsSection({
+    required this.engine,
+    this.report,
+    super.key,
+  });
 
   /// The engine façade — the only path above the bridge to the library version,
   /// resolved path, active device, and drop counter.
   final PhiEngine engine;
+
+  /// Builds the full paste-ready diagnostics bundle at the moment of the tap.
+  /// `null` in a bare section, which then copies just the rows below.
+  final String Function()? report;
 
   static const String _pathUnset = '(not set — bundled library)';
 
@@ -65,7 +80,7 @@ class DiagnosticsSettingsSection extends StatelessWidget {
               const SizedBox(height: PhiSpacing.s5),
               Align(
                 alignment: Alignment.centerLeft,
-                child: _CopyButton(report: () => _report(drops)),
+                child: _CopyButton(report: report ?? () => _report(drops)),
               ),
             ],
           ),

@@ -40,13 +40,40 @@ void main() {
     await gateway.dispose();
   });
 
-  Future<void> pumpSection(WidgetTester tester) async {
+  Future<void> pumpSection(
+    WidgetTester tester, {
+    String Function()? report,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: DiagnosticsSettingsSection(engine: engine)),
+        home: Scaffold(
+          body: DiagnosticsSettingsSection(engine: engine, report: report),
+        ),
       ),
     );
     await tester.pumpAndSettle();
+  }
+
+  Future<String?> captureCopy(WidgetTester tester) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (MethodCall call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await tester.tap(find.text('copy for bug report'));
+    await tester.pumpAndSettle();
+    return copied;
   }
 
   testWidgets('renders the read-only diagnostic facts', (tester) async {
@@ -71,28 +98,10 @@ void main() {
   });
 
   testWidgets('the copy button yields a paste-ready block', (tester) async {
-    String? copied;
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.platform,
-      (MethodCall call) async {
-        if (call.method == 'Clipboard.setData') {
-          copied = (call.arguments as Map)['text'] as String;
-        }
-        return null;
-      },
-    );
-    addTearDown(
-      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        null,
-      ),
-    );
-
     await pumpSection(tester);
-    await tester.tap(find.text('copy for bug report'));
-    await tester.pumpAndSettle();
+    final copied = await captureCopy(tester);
 
-    // The confirmation shows and the clipboard holds the full block.
+    // The confirmation shows and the clipboard holds the read-only block.
     expect(find.text('copied'), findsOneWidget);
     expect(copied, isNotNull);
     expect(copied, contains('Phi diagnostics'));
@@ -100,5 +109,20 @@ void main() {
     expect(copied, contains(r'YSE_DLL_PATH: C:\engine\yse\bin'));
     expect(copied, contains('Active device: Alpha · WASAPI'));
     expect(copied, contains('Dropped callbacks: 3'));
+  });
+
+  testWidgets('a supplied report builder copies the full bundle instead', (
+    tester,
+  ) async {
+    // Production wires `report` to `DiagnosticsReport.compose` (issue #272); the
+    // button then copies whatever it yields, not the read-only rows.
+    await pumpSection(
+      tester,
+      report: () => 'FULL BUNDLE\nLog (last 200 lines):',
+    );
+    final copied = await captureCopy(tester);
+
+    expect(find.text('copied'), findsOneWidget);
+    expect(copied, 'FULL BUNDLE\nLog (last 200 lines):');
   });
 }
