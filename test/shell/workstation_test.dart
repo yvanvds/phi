@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/app.dart';
 import 'package:phi/domain/session/session_state.dart';
@@ -21,6 +22,14 @@ void main() {
   Finder railFor(SurfaceId id) =>
       find.byWidgetPredicate((w) => w is RailButton && w.label == id.label);
 
+  // The full shell's bottom status bar is a wide strip (LIVE + panic + four
+  // telemetry chips + the audio-device chip + MIDI dot + log toggle); give it a
+  // performance width so it doesn't overflow the 800px test default.
+  Future<void> widen(WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(1400, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+  }
+
   // The Scene viewport also seeds setCamera/setAgents on mount; isolate the
   // visibility signal so these assertions track only on-/off-stage changes.
   List<String> visibilityCalls(FakeSceneRenderer r) =>
@@ -33,6 +42,7 @@ void main() {
     final engine = PhiEngine(FakeYseGateway(), sceneRenderer: renderer);
     final session = SessionState();
 
+    await widen(tester);
     await tester.pumpWidget(PhiApp(engine: engine, session: session));
     await tester.pumpAndSettle();
 
@@ -53,6 +63,7 @@ void main() {
     final engine = PhiEngine(FakeYseGateway(), sceneRenderer: renderer);
     final session = SessionState();
 
+    await widen(tester);
     await tester.pumpWidget(PhiApp(engine: engine, session: session));
     await tester.pumpAndSettle();
 
@@ -82,6 +93,7 @@ void main() {
     final engine = PhiEngine(FakeYseGateway(), sceneRenderer: renderer);
     final session = SessionState();
 
+    await widen(tester);
     await tester.pumpWidget(PhiApp(engine: engine, session: session));
     await tester.pumpAndSettle();
 

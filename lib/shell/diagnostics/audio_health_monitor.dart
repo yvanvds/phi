@@ -1,0 +1,111 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+
+import '../../domain/log/log_level.dart';
+import '../../engine/bridge/audio_device_notice.dart';
+import '../../engine/bridge/audio_device_state.dart';
+import 'audio_device_health.dart';
+import 'notice_center.dart';
+
+/// Derives the status-bar audio-device [AudioDeviceHealth] (design
+/// `docs/design/diagnostics.md` §5) and logs every transition through the notice
+/// channel.
+///
+/// It polls `activeAudioState()` on the engine's existing telemetry [tick] and
+/// tracks the most recent device-change / fallback notice (from
+/// [PhiEngine.lastAudioNotice]) to tell a transient drop apart from a total loss:
+///
+/// - a device open (`sampleRate > 0`) → [AudioDeviceHealth.ok];
+/// - no device open with a [AudioNoticeKind.noAudioDevice] notice standing →
+///   [AudioDeviceHealth.lost];
+/// - no device open otherwise (the auto-reconnect window) →
+///   [AudioDeviceHealth.reconnecting].
+///
+/// Reaching a healthy device clears the tracked cause, so a later drop reads as
+/// reconnecting rather than a stale loss. Every *transition* is surfaced (design
+/// §5): dropping to reconnecting/lost raises a notice (toast + log), while
+/// recovery back to ok logs at info — through the same channel, without a toast.
+class AudioHealthMonitor {
+  /// Wires the monitor to the engine's live signals and the notice channel.
+  ///
+  /// [tick] is the telemetry stream to re-evaluate on (`PhiEngine.telemetry`);
+  /// [readState] reads the live device snapshot (`PhiEngine.activeAudioState`);
+  /// [lastNotice] is the retained fallback notice (`PhiEngine.lastAudioNotice`);
+  /// and [notices] is the channel each transition is surfaced through.
+  AudioHealthMonitor({
+    required Stream<void> tick,
+    required AudioDeviceState Function() readState,
+    required ValueListenable<AudioDeviceNotice?> lastNotice,
+    required NoticeCenter notices,
+  }) : _readState = readState,
+       _lastNotice = lastNotice,
+       _notices = notices {
+    _lastNoticeKind = lastNotice.value?.kind;
+    _lastNotice.addListener(_onNoticeChanged);
+    _tickSub = tick.listen(_onTick);
+  }
+
+  final AudioDeviceState Function() _readState;
+  final ValueListenable<AudioDeviceNotice?> _lastNotice;
+  final NoticeCenter _notices;
+
+  late final StreamSubscription<void> _tickSub;
+
+  /// The most recent fallback notice kind seen since the device was last healthy
+  /// — the discriminator between a transient drop and a total loss.
+  AudioNoticeKind? _lastNoticeKind;
+
+  final ValueNotifier<AudioDeviceHealth> _health = ValueNotifier(
+    AudioDeviceHealth.ok,
+  );
+
+  /// The live health the status-bar chip watches.
+  ValueListenable<AudioDeviceHealth> get health => _health;
+
+  void _onNoticeChanged() {
+    final notice = _lastNotice.value;
+    if (notice != null) _lastNoticeKind = notice.kind;
+  }
+
+  void _onTick(void _) {
+    final deviceOpen = _readState().sampleRate > 0;
+    final next = deviceOpen
+        ? AudioDeviceHealth.ok
+        : (_lastNoticeKind == AudioNoticeKind.noAudioDevice
+              ? AudioDeviceHealth.lost
+              : AudioDeviceHealth.reconnecting);
+    // A healthy device resets the cause, so the *next* drop reads as a fresh
+    // reconnect attempt rather than inheriting an old loss.
+    if (deviceOpen) _lastNoticeKind = null;
+    if (next == _health.value) return;
+    _surface(next);
+    _health.value = next;
+  }
+
+  /// Logs the transition to [next] through the notice channel (design §5).
+  void _surface(AudioDeviceHealth next) {
+    switch (next) {
+      case AudioDeviceHealth.reconnecting:
+        _notices.notice(
+          'Audio device dropped — reconnecting…',
+          level: LogLevel.warning,
+        );
+      case AudioDeviceHealth.lost:
+        _notices.notice(
+          'Audio device lost — running without audio output.',
+          level: LogLevel.error,
+        );
+      case AudioDeviceHealth.ok:
+        // Recovery is a quiet trace, not a toast (design §5): log at info.
+        _notices.recorder.app('Audio device recovered.', level: LogLevel.info);
+    }
+  }
+
+  /// Detaches the tick and notice listeners and releases the health notifier.
+  void dispose() {
+    _lastNotice.removeListener(_onNoticeChanged);
+    unawaited(_tickSub.cancel());
+    _health.dispose();
+  }
+}

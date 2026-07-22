@@ -24,6 +24,7 @@ class SettingsDialog extends StatefulWidget {
   const SettingsDialog({
     required this.engine,
     required this.settings,
+    this.initialSection = SettingsSection.audio,
     super.key,
   });
 
@@ -34,17 +35,27 @@ class SettingsDialog extends StatefulWidget {
   /// The single settings owner (design §7) the AUDIO section persists through.
   final AppSettingsController settings;
 
-  /// Opens the dialog as a modal overlay over [context]. Resolves when it is
-  /// dismissed (there is nothing to return — every edit already applied).
+  /// The section shown first — AUDIO by default, so the status-bar audio chip's
+  /// click-through lands straight on the device pickers (issue #271).
+  final SettingsSection initialSection;
+
+  /// Opens the dialog as a modal overlay over [context], starting on
+  /// [initialSection] (AUDIO by default). Resolves when it is dismissed (there is
+  /// nothing to return — every edit already applied).
   static Future<void> show(
     BuildContext context, {
     required PhiEngine engine,
     required AppSettingsController settings,
+    SettingsSection initialSection = SettingsSection.audio,
   }) {
     return showDialog<void>(
       context: context,
       barrierColor: const Color(0xCC000000),
-      builder: (_) => SettingsDialog(engine: engine, settings: settings),
+      builder: (_) => SettingsDialog(
+        engine: engine,
+        settings: settings,
+        initialSection: initialSection,
+      ),
     );
   }
 
@@ -53,7 +64,7 @@ class SettingsDialog extends StatefulWidget {
 }
 
 class _SettingsDialogState extends State<SettingsDialog> {
-  SettingsSection _section = SettingsSection.audio;
+  late SettingsSection _section = widget.initialSection;
 
   @override
   Widget build(BuildContext context) {
