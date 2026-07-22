@@ -6,6 +6,8 @@ import '../../design/tokens/phi_type.dart';
 import '../../domain/session/session_state.dart';
 import '../../engine/engine.dart';
 import '../../engine/state/engine_telemetry.dart';
+import '../diagnostics/log_panel_controller.dart';
+import '../diagnostics/log_panel_toggle.dart';
 import 'midi_activity_dot.dart';
 import 'panic_button.dart';
 import 'status_chip.dart';
@@ -22,6 +24,7 @@ class BottomStatus extends StatelessWidget {
   BottomStatus({
     required PhiEngine engine,
     required this.session,
+    this.logPanel,
     VoidCallback? onPanic,
     super.key,
   }) : telemetry = engine.telemetry,
@@ -36,6 +39,7 @@ class BottomStatus extends StatelessWidget {
     required this.telemetry,
     required this.midiActivity,
     required this.session,
+    this.logPanel,
     this.onPanic = _noPanic,
     super.key,
   });
@@ -43,6 +47,11 @@ class BottomStatus extends StatelessWidget {
   final Stream<EngineTelemetry> telemetry;
   final Stream<void> midiActivity;
   final SessionState session;
+
+  /// The log-panel controller backing the status-bar log toggle + error badge
+  /// (design `docs/design/diagnostics.md` §4, §5). `null` in the bare widget
+  /// tests that don't exercise the log; the toggle is then omitted.
+  final LogPanelController? logPanel;
 
   /// The panic action the status-bar button runs (issue #264) — the shell wires
   /// this to `PhiEngine.panic`.
@@ -78,6 +87,11 @@ class BottomStatus extends StatelessWidget {
               StatusChip(label: 'LAT', value: formatLatency(t.latencyMs)),
               StatusChip(label: 'DROPS', value: '${t.missedCallbacks}'),
               MidiActivityDot(activity: midiActivity),
+              if (logPanel != null) ...[
+                const SizedBox(width: PhiSpacing.s3),
+                LogPanelToggle(controller: logPanel!),
+              ],
+              const SizedBox(width: PhiSpacing.s3),
             ],
           );
         },
