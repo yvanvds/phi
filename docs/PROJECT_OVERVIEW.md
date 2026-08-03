@@ -146,9 +146,9 @@ main + app          (orchestration)
     `withPinnedProject`). Pins float above recents in the File menu (mirrored via the
     controller's new `pinnedProjects` notifier), so a pin/remove shows there at once.
   - **DIAGNOSTICS** (`diagnostics_settings_section.dart`): read-only rows — libYSE
-    version, resolved `YSE_DLL_PATH`, active device + host, drop counter — with a
-    copy button that writes a paste-ready block. Fed by `PhiEngine.engineVersion` /
-    `engineLibraryPath` / `missedCallbacks` (new `YseGateway` getters).
+    version, resolved `YSE_DLL_PATH`, active device + host, audio-stall counter —
+    with a copy button that writes a paste-ready block. Fed by
+    `PhiEngine.engineVersion` / `engineLibraryPath` / `audioStalls`.
 
   Covered by unit (`AppSettings`/`MidiSettings` copy-withs, `EngineMidiController`
   output-port-by-name re-resolution), widget (each section's apply/persist + the
@@ -2128,7 +2128,7 @@ main + app          (orchestration)
   `DiagnosticsBundle` (`lib/domain/log/`) renders one paste-ready, **stable-ordered**
   block from already-resolved primitives — app + libYSE versions, the resolved
   `YSE_DLL_PATH`, the active device + live audio state (rate/buffer/latency/layout),
-  the dropped-callback count, the open project path, and the last 200 log lines
+  the audio-stall counters, the open project path, and the last 200 log lines
   (reusing `LogTranscript`) — so two reports taken days apart diff cleanly; nothing
   is redacted (single-user, local machine). A shell `DiagnosticsReport`
   (`lib/shell/diagnostics/`) is the single seam that gathers those facts off the
@@ -2149,6 +2149,28 @@ main + app          (orchestration)
   rows), and an end-to-end `diagnostics_bundle` integration test (the `Copy Diagnostics`
   command writes the bundle to the clipboard; an injected crash report surfaces the
   linking notice + log entry).
+- **What `DROPS` actually counts** (issue #350) — the chip used to render the
+  engine's `missedCallbacks` raw, which is neither cumulative nor a tally of
+  callbacks that missed a deadline: `system::update` bumps it on every control
+  tick that saw **zero** audio callbacks and clears it on the next one that saw
+  any, so it is a *device-stall gauge*. Phi drives that tick every 16 ms — faster
+  than the callback period at buffers of ~768 frames and up — so a perfectly
+  healthy device pushed it to `1` about once a second and the chip flickered.
+  A pure-Dart `AudioStallTracker` (`lib/engine/state/`) now interprets it: a run
+  only counts once it covers **twice the device's callback period**
+  (`ceil(2 · bufferSize / sampleRate / tick)`, floored at 3 ticks so plain timer
+  jitter at small buffers can't trip it), and it counts **stall events** — latched
+  on the `quiet → stalled` edge — cumulatively over the session, mirroring the
+  engine's own `Demo22_MissedCallbacks` harness (transitions + peak). The gateway
+  getter is renamed `deviceStallTicks` with the real semantics documented,
+  `EngineTelemetry` carries `audioStalls` / `deviceStallTicks` / `peakStallTicks`,
+  and `PhiEngine` exposes the same three (the tracker resets on every `start`, so
+  the count is session-scoped). Covered by `AudioStallTracker` unit tests
+  (threshold derivation per buffer/rate/tick, isolated blips ignored, a sustained
+  run counted once, recovery re-arming, device swap re-deriving), `PhiEngine`
+  telemetry tests, a `BottomStatus` widget test, and an end-to-end
+  `drops_indicator` integration test (the real app: an idle flicker leaves the chip
+  at `0`, a genuine stall counts once and stays once).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

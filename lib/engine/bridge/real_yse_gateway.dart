@@ -65,7 +65,7 @@ class RealYseGateway implements YseGateway {
   double get cpuLoad => _system.cpuLoad;
 
   @override
-  int get missedCallbacks => _system.missedCallbacks;
+  int get deviceStallTicks => _system.missedCallbacks;
 
   @override
   set audioTest(bool on) => _system.audioTest = on;

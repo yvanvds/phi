@@ -26,7 +26,8 @@ class DiagnosticsBundle {
     required this.bufferSize,
     required this.outputLatencyMs,
     required this.layout,
-    required this.droppedCallbacks,
+    required this.audioStalls,
+    required this.peakStallTicks,
     required this.projectPath,
     required this.log,
     this.logLineLimit = defaultLogLineLimit,
@@ -59,8 +60,13 @@ class DiagnosticsBundle {
   /// The speaker layout the device was opened with (e.g. `stereo`, `5.1`).
   final String layout;
 
-  /// The dropped-callback counter — the engine's under-run tally.
-  final int droppedCallbacks;
+  /// How many times the audio device went silent long enough to count as a
+  /// stall this session — the drop counter as `DROPS` shows it (issue #350).
+  final int audioStalls;
+
+  /// The worst run of consecutive engine control ticks with no audio callback
+  /// seen this session — how deep the worst stall got, in ticks.
+  final int peakStallTicks;
 
   /// The open project's `.phi` folder, or `null` for an unsaved / no project.
   final String? projectPath;
@@ -93,7 +99,8 @@ class DiagnosticsBundle {
         'YSE_DLL_PATH: $libraryPath\n'
         'Active device: $device\n'
         'Active state: $_audioState\n'
-        'Dropped callbacks: $droppedCallbacks\n'
+        'Audio stalls: $audioStalls (worst run $peakStallTicks control ticks '
+        'with no callback)\n'
         'Open project: ${projectPath ?? '(no project open)'}\n'
         'Log (last ${tail.length} lines):\n'
         '$transcript';

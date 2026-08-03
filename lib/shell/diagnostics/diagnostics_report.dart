@@ -25,7 +25,7 @@ class DiagnosticsReport {
   });
 
   /// The engine façade — the only path above the bridge to version, resolved
-  /// path, active device, live audio state, and the drop counter.
+  /// path, active device, live audio state, and the audio-stall counters.
   final PhiEngine engine;
 
   /// The shared unified log the report tails.
@@ -57,7 +57,8 @@ class DiagnosticsReport {
       bufferSize: audio.bufferSize,
       outputLatencyMs: audio.outputLatencyMs,
       layout: settings.layout.wireName,
-      droppedCallbacks: engine.missedCallbacks,
+      audioStalls: engine.audioStalls,
+      peakStallTicks: engine.peakStallTicks,
       projectPath: projectPath?.call(),
       log: log.entries,
     ).render();

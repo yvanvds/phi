@@ -82,7 +82,8 @@ command; `Ctrl+J`-style shortcut via the command registry):
 ## 7. Out of scope
 
 - **Engine watchdog / auto-restart** — auto-reconnect covers devices;
-  `missedCallbacks` is visible; anything more is speculative.
+  the audio-stall count is visible (the interpreted `DROPS` metric of
+  issue #350, not the engine's raw gauge); anything more is speculative.
 - **Python `print()` capture** — the embedded interpreter's stdout is
   not captured (yse spec's deferred concern); a future yse enhancement
   if scripting practice demands it.

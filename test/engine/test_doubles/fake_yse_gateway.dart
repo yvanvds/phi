@@ -24,7 +24,11 @@ class FakeYseGateway implements YseGateway {
   String engineVersionValue = 'fake-yse 0.0.0';
   String? libraryPathValue = r'C:\fake\yse\bin';
   double cpuLoadValue = 0;
-  int missedCallbacksValue = 0;
+
+  /// The engine's device-stall gauge: consecutive control ticks with no audio
+  /// callback. Drive it to model a healthy device (a transient `1`) or a real
+  /// stall (a sustained run) — see `AudioStallTracker`.
+  int deviceStallTicksValue = 0;
   double activeSampleRateValue = 0;
   int activeBufferSizeValue = 0;
   int activeOutputLatencyValue = 0;
@@ -186,7 +190,7 @@ class FakeYseGateway implements YseGateway {
   double get cpuLoad => cpuLoadValue;
 
   @override
-  int get missedCallbacks => missedCallbacksValue;
+  int get deviceStallTicks => deviceStallTicksValue;
 
   @override
   set audioTest(bool on) {

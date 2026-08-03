@@ -8,6 +8,7 @@ import 'package:phi/engine/state/engine_telemetry.dart';
 import 'package:phi/shell/bottom_status/bottom_status.dart';
 import 'package:phi/shell/bottom_status/midi_activity_dot.dart';
 import 'package:phi/shell/bottom_status/panic_button.dart';
+import 'package:phi/shell/bottom_status/status_chip.dart';
 
 import '../../engine/test_doubles/fake_yse_gateway.dart';
 
@@ -79,7 +80,11 @@ void main() {
       telemetry.add(
         const EngineTelemetry(
           cpuLoad: 0.14,
-          missedCallbacks: 2,
+          audioStalls: 2,
+          // The raw device-stall gauge is *not* what DROPS shows (issue #350):
+          // a healthy device sits at 1 here, and the chip must ignore it.
+          deviceStallTicks: 1,
+          peakStallTicks: 9,
           masterPeak: 0,
           sampleRate: 48000,
           bufferSize: 128,
@@ -95,7 +100,40 @@ void main() {
       expect(find.text('LAT'), findsOneWidget);
       expect(find.text('5.3 ms'), findsOneWidget);
       expect(find.text('DROPS'), findsOneWidget);
+      // The latched stall-event count, not the raw gauge (1) or its peak (9).
       expect(find.text('2'), findsOneWidget);
+      expect(find.text('9'), findsNothing);
+    });
+
+    testWidgets('DROPS stays at 0 while the raw stall gauge flickers', (
+      tester,
+    ) async {
+      // The issue-#350 regression: at a 16 ms control tick a healthy device
+      // reads `1` on the engine's gauge roughly once a second. The chip is fed
+      // the interpreted count, so it must never move for those.
+      await pump(tester);
+      for (final gauge in [0, 1, 0, 1, 1, 0]) {
+        telemetry.add(
+          EngineTelemetry(
+            cpuLoad: 0.1,
+            audioStalls: 0,
+            deviceStallTicks: gauge,
+            peakStallTicks: 1,
+            masterPeak: 0,
+            sampleRate: 48000,
+            bufferSize: 1024,
+            latencyMs: 21.3,
+          ),
+        );
+        await tester.pump();
+        expect(
+          find.descendant(
+            of: find.byType(StatusChip),
+            matching: find.text('0'),
+          ),
+          findsOneWidget,
+        );
+      }
     });
 
     testWidgets('shows em-dash placeholders before a device is open', (

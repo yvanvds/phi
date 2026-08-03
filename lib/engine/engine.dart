@@ -66,6 +66,7 @@ import 'bridge/scene_renderer.dart';
 import 'bridge/state_current_mirror.dart';
 import 'bridge/synth_gateway.dart';
 import 'bridge/yse_gateway.dart';
+import 'state/audio_stall_tracker.dart';
 import 'state/audition_voice_control_port.dart';
 import 'state/clip_registry_publisher.dart';
 import 'state/domain_tempo_control_port.dart';
@@ -194,6 +195,20 @@ class PhiEngine {
   final BusTap _busTap;
   final EngineLogSource _engineLogSource;
   final Duration _telemetryInterval;
+
+  /// The period Phi drives the engine's control tick (`system::update`) at.
+  ///
+  /// Shared deliberately with [_stallTracker]: the engine's device-stall gauge
+  /// counts in these ticks, so the threshold that decides what a real stall is
+  /// can only be derived if the two agree (issue #350).
+  static const Duration engineUpdateInterval = Duration(milliseconds: 16);
+
+  /// Interprets the engine's raw device-stall gauge into the session drop count
+  /// [audioStalls] reports (issue #350). Reset on every [start], so the count is
+  /// scoped to the running session.
+  final AudioStallTracker _stallTracker = AudioStallTracker(
+    updateInterval: engineUpdateInterval,
+  );
 
   /// The live-coding **control plane** (issue #334): decodes `phi.ctl.*` frames
   /// off the engine's [tapBus] seam and routes each to its owning controller —
@@ -1142,7 +1157,12 @@ class PhiEngine {
         onNotice: (notice) => _lastPatchNotice.value = notice,
       );
     }
-    _gateway.startUpdateTimer();
+    // Explicit rather than defaulted: the stall tracker derives its threshold
+    // from this exact period, so the two must not drift (issue #350).
+    _gateway.startUpdateTimer(engineUpdateInterval);
+    // The drop count is scoped to the running session — a stop → start begins
+    // from zero rather than carrying the previous device's stalls forward.
+    _stallTracker.reset();
     _sceneRenderer?.init();
     // Note: `mountAsSound` is *not* called here. The patcher is empty at
     // start, and `Sound.fromPatcher` on an empty patcher crashes the audio
@@ -1689,9 +1709,25 @@ class PhiEngine {
   /// a read-only diagnostics fact.
   String? get engineLibraryPath => _gateway.libraryPath;
 
-  /// The count of audio callbacks that failed to complete on time — the
-  /// diagnostics "drop counter". `0` before [start].
-  int get missedCallbacks => _started ? _gateway.missedCallbacks : 0;
+  /// The diagnostics **drop counter**: how many times this session the audio
+  /// device actually went silent long enough to count as a stall (issue #350).
+  ///
+  /// Cumulative and latched — a stall that persists counts once, not once per
+  /// telemetry tick. `0` before [start], and reset by every [start], so it
+  /// measures the running session rather than the process. See
+  /// [AudioStallTracker] for why the engine's raw gauge can't be shown directly.
+  int get audioStalls => _started ? _stallTracker.stalls : 0;
+
+  /// The engine's raw device-stall gauge as of the last telemetry tick — the
+  /// number of *consecutive* control ticks that saw no audio callback. Resets
+  /// itself whenever a callback lands, so a healthy device reads `0` or `1`
+  /// here. Diagnostics detail behind [audioStalls]; `0` before [start].
+  int get deviceStallTicks => _started ? _stallTracker.ticks : 0;
+
+  /// The worst [deviceStallTicks] seen this session — the "how bad did it get"
+  /// companion to [audioStalls] carried in the diagnostics bundle. `0` before
+  /// [start].
+  int get peakStallTicks => _started ? _stallTracker.peakTicks : 0;
 
   /// Set the master-channel volume. Clamped to `[0.0, 1.0]`. No-op before
   /// [start]. When master mute is engaged the *effective* gateway volume stays
@@ -2692,6 +2728,16 @@ class PhiEngine {
     final latencyMs = sampleRate > 0
         ? (_gateway.activeOutputLatency / sampleRate) * 1000
         : 0.0;
+    final bufferSize = _gateway.activeBufferSize;
+    // Fold the engine's raw device-stall gauge through the tracker rather than
+    // publishing it (issue #350): at a 16 ms control tick a healthy device reads
+    // `1` routinely, so only a run long enough to outlast the device's callback
+    // period counts, and it counts once.
+    _stallTracker.sample(
+      deviceStallTicks: _gateway.deviceStallTicks,
+      sampleRate: sampleRate,
+      bufferSize: bufferSize,
+    );
     final masterPeak = _gateway.masterPeak;
     _masterChannel.applyPeak(masterPeak);
     // The master strip shows one meter bar per speaker output (design §6): read
@@ -2709,10 +2755,12 @@ class PhiEngine {
     _telemetry.add(
       EngineTelemetry(
         cpuLoad: _gateway.cpuLoad,
-        missedCallbacks: _gateway.missedCallbacks,
+        audioStalls: _stallTracker.stalls,
+        deviceStallTicks: _stallTracker.ticks,
+        peakStallTicks: _stallTracker.peakTicks,
         masterPeak: masterPeak,
         sampleRate: sampleRate,
-        bufferSize: _gateway.activeBufferSize,
+        bufferSize: bufferSize,
         latencyMs: latencyMs,
       ),
     );

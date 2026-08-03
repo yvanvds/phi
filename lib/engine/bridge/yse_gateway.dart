@@ -70,8 +70,16 @@ abstract interface class YseGateway {
   /// CPU load of the audio thread as a fraction of the callback budget.
   double get cpuLoad;
 
-  /// Number of audio callbacks that failed to complete on time.
-  int get missedCallbacks;
+  /// The engine's **device-stall gauge**: how many *consecutive* engine control
+  /// ticks (the [startUpdateTimer] period) saw no audio callback at all.
+  ///
+  /// Despite the engine spelling it `missedCallbacks`, this is neither
+  /// cumulative nor a count of callbacks that missed their deadline — it resets
+  /// to `0` on the next control tick that sees a callback, and it is what the
+  /// engine's own auto-reconnect watches. At a control tick faster than the
+  /// device's callback period a *healthy* device reads `1` here routinely, so
+  /// never surface it raw: interpret it with `AudioStallTracker` (issue #350).
+  int get deviceStallTicks;
 
   /// Toggle the engine's built-in audio test signal.
   set audioTest(bool on);
