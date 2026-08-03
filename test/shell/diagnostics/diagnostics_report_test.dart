@@ -32,8 +32,13 @@ void main() {
       ..devices = const [_alpha]
       ..engineVersionValue = 'yse-test 9.9.1'
       ..libraryPathValue = r'C:\engine\yse\bin'
-      ..missedCallbacksValue = 7;
-    engine = PhiEngine(gateway, telemetryInterval: const Duration(days: 1));
+      // A sustained stall: well past the 3-tick floor for Alpha's 256 frames
+      // @ 48 kHz, so the first telemetry tick latches one stall event.
+      ..deviceStallTicksValue = 7;
+    engine = PhiEngine(
+      gateway,
+      telemetryInterval: const Duration(milliseconds: 5),
+    );
     engine.start(
       audioSettings: const AudioSettings(
         outputHost: 'WASAPI',
@@ -59,30 +64,43 @@ void main() {
     ),
   );
 
-  test('composes the full bundle from the live engine, log, and project', () {
-    seed('audio device opened', source: LogSource.engine);
-    seed('project saved');
+  test(
+    'composes the full bundle from the live engine, log, and project',
+    () async {
+      seed('audio device opened', source: LogSource.engine);
+      seed('project saved');
+      // The stall counters accumulate on the telemetry tick, so let one land
+      // before composing (issue #350).
+      await engine.telemetry.first.timeout(const Duration(seconds: 1));
 
-    final report = DiagnosticsReport(
-      engine: engine,
-      log: log,
-      projectPath: () => r'C:\projects\set.phi',
-      appVersion: '0.1.0',
-    ).compose();
+      final report = DiagnosticsReport(
+        engine: engine,
+        log: log,
+        projectPath: () => r'C:\projects\set.phi',
+        appVersion: '0.1.0',
+      ).compose();
 
-    expect(report, contains('Phi diagnostics'));
-    expect(report, contains('App version: 0.1.0'));
-    expect(report, contains('libYSE version: yse-test 9.9.1'));
-    expect(report, contains(r'YSE_DLL_PATH: C:\engine\yse\bin'));
-    expect(report, contains('Active device: Alpha · WASAPI'));
-    // Live audio read-back: rate/buffer/latency/layout off activeAudioState.
-    expect(report, contains('48000 Hz · 256 frames'));
-    expect(report, contains('stereo'));
-    expect(report, contains('Dropped callbacks: 7'));
-    expect(report, contains(r'Open project: C:\projects\set.phi'));
-    expect(report, contains('audio device opened'));
-    expect(report, contains('project saved'));
-  });
+      expect(report, contains('Phi diagnostics'));
+      expect(report, contains('App version: 0.1.0'));
+      expect(report, contains('libYSE version: yse-test 9.9.1'));
+      expect(report, contains(r'YSE_DLL_PATH: C:\engine\yse\bin'));
+      expect(report, contains('Active device: Alpha · WASAPI'));
+      // Live audio read-back: rate/buffer/latency/layout off activeAudioState.
+      expect(report, contains('48000 Hz · 256 frames'));
+      expect(report, contains('stereo'));
+      // One latched stall event, with the raw gauge's worst run beside it — not
+      // the raw gauge itself (issue #350).
+      expect(
+        report,
+        contains(
+          'Audio stalls: 1 (worst run 7 control ticks with no callback)',
+        ),
+      );
+      expect(report, contains(r'Open project: C:\projects\set.phi'));
+      expect(report, contains('audio device opened'));
+      expect(report, contains('project saved'));
+    },
+  );
 
   test('an unset library path reads as the bundled-library note', () {
     gateway.libraryPathValue = null;

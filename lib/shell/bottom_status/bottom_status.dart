@@ -102,7 +102,10 @@ class BottomStatus extends StatelessWidget {
                 value: formatBuffer(t.bufferSize, t.sampleRate),
               ),
               StatusChip(label: 'LAT', value: formatLatency(t.latencyMs)),
-              StatusChip(label: 'DROPS', value: '${t.missedCallbacks}'),
+              // The cumulative *stall event* count, not the engine's raw
+              // device-stall gauge — showing the gauge made this flicker to `1`
+              // once a second on a healthy device (issue #350).
+              StatusChip(label: 'DROPS', value: '${t.audioStalls}'),
               if (audioHealth != null) ...[
                 const SizedBox(width: PhiSpacing.s2),
                 AudioDeviceChip(health: audioHealth!, onTap: onAudioSettings),

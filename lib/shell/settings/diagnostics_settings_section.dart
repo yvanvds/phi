@@ -16,7 +16,7 @@ import '../../engine/state/engine_telemetry.dart';
 ///
 /// The rows read live engine facts, **not** stored settings — the libYSE
 /// version, the resolved `YSE_DLL_PATH`, the device actually open, and the
-/// dropped-callback counter (which ticks with telemetry). The copy button yields
+/// audio-stall counter (which ticks with telemetry). The copy button yields
 /// a paste-ready plain-text block.
 ///
 /// When the shell supplies [report] (production, via `DiagnosticsReport`), the
@@ -58,7 +58,7 @@ class DiagnosticsSettingsSection extends StatelessWidget {
       'libYSE version: ${engine.engineVersion}\n'
       'YSE_DLL_PATH: $_libraryPath\n'
       'Active device: $_activeDevice\n'
-      'Dropped callbacks: $drops';
+      'Audio stalls: $drops';
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +67,9 @@ class DiagnosticsSettingsSection extends StatelessWidget {
     return StreamBuilder<EngineTelemetry>(
       stream: engine.telemetry,
       builder: (context, _) {
-        final drops = engine.missedCallbacks;
+        // The latched session stall count, not the engine's transient gauge
+        // (issue #350).
+        final drops = engine.audioStalls;
         return SingleChildScrollView(
           padding: const EdgeInsets.all(PhiSpacing.s5),
           child: Column(
@@ -76,7 +78,7 @@ class DiagnosticsSettingsSection extends StatelessWidget {
               _row('libYSE version', engine.engineVersion),
               _row('YSE_DLL_PATH', _libraryPath),
               _row('active device', _activeDevice),
-              _row('dropped callbacks', '$drops'),
+              _row('audio stalls', '$drops'),
               const SizedBox(height: PhiSpacing.s5),
               Align(
                 alignment: Alignment.centerLeft,

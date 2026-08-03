@@ -32,7 +32,8 @@ void main() {
     bufferSize: bufferSize,
     outputLatencyMs: outputLatencyMs,
     layout: layout,
-    droppedCallbacks: 3,
+    audioStalls: 3,
+    peakStallTicks: 12,
     projectPath: projectPath,
     log: log,
     logLineLimit: logLineLimit,
@@ -54,7 +55,10 @@ void main() {
         'Active state: 48000 Hz · 512 frames · 10.7 ms latency · stereo',
       ),
     );
-    expect(report, contains('Dropped callbacks: 3'));
+    expect(
+      report,
+      contains('Audio stalls: 3 (worst run 12 control ticks with no callback)'),
+    );
     expect(report, contains(r'Open project: C:\projects\set.phi'));
     expect(report, contains('Log (last 1 lines):'));
     expect(report, contains('device opened'));
@@ -71,7 +75,7 @@ void main() {
     expect(lines[3], startsWith('YSE_DLL_PATH:'));
     expect(lines[4], startsWith('Active device:'));
     expect(lines[5], startsWith('Active state:'));
-    expect(lines[6], startsWith('Dropped callbacks:'));
+    expect(lines[6], startsWith('Audio stalls:'));
     expect(lines[7], startsWith('Open project:'));
     expect(lines[8], startsWith('Log (last'));
 

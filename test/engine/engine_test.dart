@@ -129,7 +129,7 @@ void main() {
 
     test('telemetry stream emits gateway snapshots while running', () async {
       gateway.cpuLoadValue = 0.42;
-      gateway.missedCallbacksValue = 3;
+      gateway.deviceStallTicksValue = 3;
       gateway.masterPeakValue = 0.6;
       gateway.activeSampleRateValue = 48000;
       gateway.activeBufferSizeValue = 128;
@@ -141,7 +141,7 @@ void main() {
       );
 
       expect(first.cpuLoad, closeTo(0.42, 1e-9));
-      expect(first.missedCallbacks, 3);
+      expect(first.deviceStallTicks, 3);
       expect(first.masterPeak, closeTo(0.6, 1e-9));
       expect(first.sampleRate, closeTo(48000, 1e-9));
       expect(first.bufferSize, 128);
@@ -161,6 +161,74 @@ void main() {
       expect(first.latencyMs, 0);
       expect(first.sampleRate, 0);
       expect(first.bufferSize, 0);
+    });
+
+    // ── Stall interpretation (issue #350) ────────────────────────────────────
+    // The engine's raw gauge counts consecutive control ticks that saw no audio
+    // callback, so a healthy device at a 16 ms tick reads `1` routinely. The
+    // engine must publish the *interpreted* drop count, never the gauge.
+
+    test('drives the control tick at the interval the threshold assumes', () {
+      engine.start();
+
+      expect(
+        gateway.calls,
+        contains(
+          'startUpdateTimer:${PhiEngine.engineUpdateInterval.inMilliseconds}',
+        ),
+      );
+    });
+
+    test('a flickering stall gauge never registers a drop', () async {
+      gateway.activeSampleRateValue = 48000;
+      gateway.activeBufferSizeValue = 1024;
+      gateway.deviceStallTicksValue = 1; // the idle flicker
+      engine.start();
+
+      final samples = await engine.telemetry
+          .take(4)
+          .toList()
+          .timeout(const Duration(seconds: 2));
+
+      expect(samples.map((t) => t.audioStalls), everyElement(0));
+      // The raw gauge is still carried for diagnostics.
+      expect(samples.last.deviceStallTicks, 1);
+      expect(samples.last.peakStallTicks, 1);
+    });
+
+    test('a sustained stall registers exactly one drop', () async {
+      gateway.activeSampleRateValue = 48000;
+      gateway.activeBufferSizeValue = 1024;
+      gateway.deviceStallTicksValue = 12; // well past the 3-tick threshold
+      engine.start();
+
+      final samples = await engine.telemetry
+          .take(4)
+          .toList()
+          .timeout(const Duration(seconds: 2));
+
+      // Latched on the leading edge: counted once, not once per tick.
+      expect(samples.map((t) => t.audioStalls), everyElement(1));
+      expect(samples.last.peakStallTicks, 12);
+      expect(engine.audioStalls, 1);
+    });
+
+    test('the drop count is scoped to the running session', () async {
+      gateway.activeSampleRateValue = 48000;
+      gateway.activeBufferSizeValue = 1024;
+      gateway.deviceStallTicksValue = 12;
+      engine.start();
+      await engine.telemetry.first.timeout(const Duration(seconds: 1));
+      expect(engine.audioStalls, 1);
+
+      engine.stop();
+      expect(engine.audioStalls, 0); // nothing to report while stopped
+
+      gateway.deviceStallTicksValue = 0;
+      engine.start();
+      await engine.telemetry.first.timeout(const Duration(seconds: 1));
+      expect(engine.audioStalls, 0);
+      expect(engine.peakStallTicks, 0);
     });
 
     test('midiActivity stream forwards gateway ticks', () async {
