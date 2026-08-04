@@ -135,6 +135,18 @@ live-code control).
   while one of them holds focus — so Backspace edits text there instead
   of deleting the selection, while `Delete` on a focused canvas still
   removes selected nodes.
+- **Bodies follow the engine, not just their own pushes.** A value
+  arriving over a *cable* moves the native object and tells Dart
+  nothing, so a body that only re-read after its own push went stale the
+  moment the graph did anything by itself. While the patcher is the
+  visible tab, a 30 Hz poll re-reads `guiValue` for the nodes whose
+  registered body displays one (`NodeDescriptor.readsGuiValue`) and wakes
+  only the ones whose value changed. The poll is gated three ways —
+  offstage surface, no open patch, no live bodies — so an idle patcher
+  costs nothing, and a body the user is holding (a thumb mid-drag, a
+  focused number field) keeps what the hand is doing. Polling is v1
+  because yse reports on demand only; a per-object dirty flag from
+  `dart-yse` would swap in behind `refreshGuiValues`.
 - **Params dialog** (double-click a non-GUI node): one field per
   documented creation parameter (name, doc, default, range from
   `PatcherParam`), applying via `setParams` — the same

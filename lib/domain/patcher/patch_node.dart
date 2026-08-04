@@ -46,6 +46,7 @@ class PatchNode extends ChangeNotifier {
   List<PatchPort> _inputs;
   List<PatchPort> _outputs;
   bool _armed = false;
+  int _guiRevision = 0;
 
   /// Top-left position in canvas-local coordinates.
   Offset get position => _position;
@@ -61,6 +62,15 @@ class PatchNode extends ChangeNotifier {
 
   /// Whether the node draws its voiced glow border. Display-only.
   bool get armed => _armed;
+
+  /// Counts the times the engine has reported a **different** display value
+  /// (`guiValue`) for this object — bumped by [markGuiValueChanged].
+  ///
+  /// A node notifies for several reasons (it moved, it was re-shaped, its
+  /// params changed); a live GUI body caches the revision it last reconciled
+  /// against so it can tell *this* one from the rest and re-read the engine
+  /// only when there is genuinely a new value to read (issue #357).
+  int get guiRevision => _guiRevision;
 
   /// Move the node to [position]. Idempotent — does not notify if
   /// the position is unchanged.
@@ -106,4 +116,18 @@ class PatchNode extends ChangeNotifier {
   /// canvas listens per node. Raised by `PatcherController.setNodeParams`, which
   /// every params-dialog apply and its undo/redo run through.
   void markParamsChanged() => notifyListeners();
+
+  /// Announce that the engine now reports a **different** `guiValue` for this
+  /// object, so the body that displays it repaints (issue #357).
+  ///
+  /// The value itself lives on the native object; the node only carries the
+  /// signal, exactly as [markParamsChanged] does — the canvas listens per node,
+  /// and a body re-reads through `PatcherController.guiValueOf`. Raised by
+  /// `PatcherController.refreshGuiValues`, the gated poll the patcher surface
+  /// runs while it is on screen, which is what makes a value arriving over a
+  /// *cable* visible at all: nothing else on the Dart side ever hears about it.
+  void markGuiValueChanged() {
+    _guiRevision++;
+    notifyListeners();
+  }
 }

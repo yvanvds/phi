@@ -15,6 +15,7 @@ import '../surface.dart';
 import 'library/patch_entity_strip.dart';
 import 'palette/patcher_palette.dart';
 import 'params/patch_params_dialog.dart';
+import 'patch_gui_poller.dart';
 import 'patcher_canvas.dart';
 import 'patcher_node_types.dart';
 import 'placement/patch_placement_bar.dart';
@@ -30,16 +31,25 @@ enum _NodeAction { editParams, duplicate, delete }
 /// in [PhiEngine.start] and torn down in `stop`. Before start the surface
 /// renders a low-key placeholder.
 class PatcherSurface extends Surface {
-  const PatcherSurface({required this.engine, super.key});
+  const PatcherSurface({required this.engine, this.active = true, super.key});
 
   final PhiEngine engine;
+
+  /// Whether this surface is the visible tab of its pane. The shell keeps
+  /// background tabs mounted (so their state survives a switch), so a surface
+  /// cannot work its own visibility out — the shell hands it down, exactly as
+  /// it does for the Scene renderer. Here it gates the live-value refresh
+  /// ([PatchGuiPoller], issue #357): a patcher nobody is looking at polls
+  /// nothing. Defaults to true, which is what a surface mounted on its own —
+  /// in a widget test, or any host with no tab stack — always is.
+  final bool active;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       color: PhiColors.bg0,
       child: engine.patcherOrNull != null
-          ? _PatcherViewport(engine: engine)
+          ? _PatcherViewport(engine: engine, active: active)
           : const _Offline(),
     );
   }
@@ -50,9 +60,12 @@ class PatcherSurface extends Surface {
 /// Kept separate so the seed runs once on first mount, not on every
 /// Flutter rebuild of the surrounding chrome.
 class _PatcherViewport extends StatefulWidget {
-  const _PatcherViewport({required this.engine});
+  const _PatcherViewport({required this.engine, required this.active});
 
   final PhiEngine engine;
+
+  /// Passed through to the [PatchGuiPoller] — see [PatcherSurface.active].
+  final bool active;
 
   @override
   State<_PatcherViewport> createState() => _PatcherViewportState();
@@ -249,15 +262,22 @@ class _PatcherViewportState extends State<_PatcherViewport> {
                   Expanded(
                     child: editor == null
                         ? const _NoPatchOpen()
-                        : PatcherCanvas(
-                            // Re-key on the open address so switching patches
-                            // rebuilds the canvas against the new editor.
-                            key: ValueKey(library.openAddress),
+                        // The live-value refresh is scoped to an open patch:
+                        // with none, there is nothing to poll and no poller
+                        // (issue #357).
+                        : PatchGuiPoller(
                             controller: editor,
-                            onCreateObject: _createObject,
-                            onNodeTap: _selectNode,
-                            onNodeDoubleTap: _editParams,
-                            onNodeContextMenu: _onNodeContextMenu,
+                            active: widget.active,
+                            child: PatcherCanvas(
+                              // Re-key on the open address so switching patches
+                              // rebuilds the canvas against the new editor.
+                              key: ValueKey(library.openAddress),
+                              controller: editor,
+                              onCreateObject: _createObject,
+                              onNodeTap: _selectNode,
+                              onNodeDoubleTap: _editParams,
+                              onNodeContextMenu: _onNodeContextMenu,
+                            ),
                           ),
                   ),
                 ],

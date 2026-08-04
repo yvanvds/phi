@@ -6,6 +6,7 @@ import '../../../design/tokens/phi_radii.dart';
 import '../../../design/tokens/phi_type.dart';
 import '../../../domain/patcher/patch_node.dart';
 import '../../../engine/state/patcher_controller.dart';
+import 'gui_value_link.dart';
 
 /// Body for the `.i` (int) and `.f` (float) number nodes — an editable readout
 /// that pushes its value into the object's hot inlet via
@@ -15,7 +16,12 @@ import '../../../engine/state/patcher_controller.dart';
 ///
 /// The display is the engine's `guiValue`, re-read after each push, so a number
 /// box shows the authoritative value rather than a Dart-side echo — the same
-/// value a cable into its inlet would set.
+/// value a cable into its inlet would set. A [GuiValueLink] keeps it that way
+/// between pushes too: a value arriving over a cable re-renders the box on its
+/// own (issue #357), which is the whole point of a number box downstream of
+/// anything. A box that **holds focus** is left alone — someone is typing in
+/// it, and dropping the poll's value into a half-typed edit is the one thing a
+/// refresh must never do.
 ///
 /// Editing follows Max (issue #353): clicking the readout takes focus and
 /// selects the whole value, so typing replaces it; **Enter** commits and pushes;
@@ -42,9 +48,8 @@ class NumberNodeBody extends StatefulWidget {
 }
 
 class _NumberNodeBodyState extends State<NumberNodeBody> {
-  late final TextEditingController _text = TextEditingController(
-    text: _display(),
-  );
+  late final GuiValueLink _gui;
+  late final TextEditingController _text;
   final FocusNode _focus = FocusNode(debugLabel: 'number-node-field');
 
   /// Whether the user has typed since the last commit. Focus-loss commits only
@@ -55,7 +60,19 @@ class _NumberNodeBodyState extends State<NumberNodeBody> {
   @override
   void initState() {
     super.initState();
+    _gui = GuiValueLink(
+      node: widget.node,
+      controller: widget.controller,
+      onInbound: _follow,
+    );
+    _text = TextEditingController(text: _display());
     _focus.addListener(_onFocusChange);
+  }
+
+  @override
+  void didUpdateWidget(NumberNodeBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _gui.rebind(widget.node);
   }
 
   @override
@@ -63,9 +80,19 @@ class _NumberNodeBodyState extends State<NumberNodeBody> {
     // Detach first: disposing a focused node unfocuses it, and the listener
     // would otherwise commit into a half-torn-down widget.
     _focus.removeListener(_onFocusChange);
+    _gui.dispose();
     _text.dispose();
     _focus.dispose();
     super.dispose();
+  }
+
+  /// The engine reported a new value. A focused box is mid-edit and keeps what
+  /// its owner typed; anything else re-renders, so a cable-driven number lands
+  /// on the canvas without a click.
+  void _follow(String raw) {
+    if (_focus.hasFocus) return;
+    if (_text.text == _formatted(raw)) return;
+    setState(_showLiveValue);
   }
 
   void _onFocusChange() {
@@ -76,9 +103,12 @@ class _NumberNodeBodyState extends State<NumberNodeBody> {
     }
   }
 
-  /// The formatted `guiValue`, or `0` before any value has been set.
-  String _display() {
-    final gui = widget.controller.guiValueOf(widget.node.id);
+  /// The formatted live `guiValue`, or `0` before any value has been set.
+  String _display() => _formatted(_gui.value);
+
+  /// How a raw `guiValue` reads in the field. An unparseable value passes
+  /// through untouched rather than being turned into a number it isn't.
+  String _formatted(String gui) {
     final d = double.tryParse(gui);
     if (d == null) return gui.isEmpty ? '0' : gui;
     return _format(d);
