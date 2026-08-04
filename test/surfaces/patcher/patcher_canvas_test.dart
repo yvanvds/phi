@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,7 @@ import 'package:phi/engine/state/node_type_registry.dart';
 import 'package:phi/engine/state/patcher_controller.dart';
 import 'package:phi/surfaces/patcher/nodes/number_node_body.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
+import 'package:phi/surfaces/patcher/patcher_ghost_cable.dart';
 import 'package:phi/surfaces/patcher/patcher_node_view.dart';
 import 'package:yse/yse.dart';
 
@@ -591,5 +593,193 @@ void main() {
 
     await ctrl(tester, LogicalKeyboardKey.keyY);
     expect(controller.graph.nodes, hasLength(2));
+  });
+
+  // ─── cancelled gestures leave nothing behind (issue #355) ────────────────
+  //
+  // A pointer can be torn away mid-gesture — the window loses capture, a dialog
+  // opens over the press, a system drag claims the pointer — and then the
+  // pointer-up the gesture was waiting for never arrives. Each case below drives
+  // a real `PointerCancelEvent` into a gesture in flight and asserts that both
+  // the visible artifact and the state behind it are gone, *and* that the canvas
+  // still works straight afterwards.
+
+  group('cancelled gestures', () {
+    testWidgets('a cancelled marquee leaves no rectangle and no selection', (
+      tester,
+    ) async {
+      final a = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester);
+
+      final tl = canvasTL(tester);
+      final g = await tester.startGesture(tl + const Offset(60, 80));
+      await tester.pump();
+      await g.moveTo(tl + const Offset(260, 320));
+      await tester.pump();
+      // The rubber band is up and covers the node.
+      expect(find.byKey(PatcherCanvas.marqueeKey), findsOneWidget);
+
+      await g.cancel();
+      await tester.pump();
+
+      // The grey rectangle is gone — it is not left painted over the scene —
+      // and an abandoned marquee selects nothing.
+      expect(find.byKey(PatcherCanvas.marqueeKey), findsNothing);
+      expect(controller.graph.selectedNodes, isEmpty);
+
+      // The canvas is immediately usable: a fresh marquee still selects.
+      final again = await tester.startGesture(tl + const Offset(60, 80));
+      await tester.pump();
+      await again.moveTo(tl + const Offset(260, 320));
+      await tester.pump();
+      await again.up();
+      await tester.pump();
+      expect(controller.graph.selectedNodes, {a.id});
+    });
+
+    testWidgets('a cancelled cable drag drops the ghost and frees the canvas', (
+      tester,
+    ) async {
+      final slider = controller.addNode(
+        desc: desc(Obj.gSlider),
+        position: const Offset(100, 120),
+      );
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(300, 120),
+      );
+      await pumpCanvas(tester);
+
+      final g = await tester.startGesture(
+        portGlobal(tester, slider, PatchPortSide.output, 0),
+      );
+      await tester.pump();
+      await g.moveTo(canvasTL(tester) + const Offset(240, 150));
+      await tester.pump();
+      expect(controller.graph.dragSourcePort, isNotNull);
+      expect(find.byType(PatcherGhostCable), findsOneWidget);
+
+      await g.cancel();
+      await tester.pump();
+
+      // No stuck ghost glued to the cursor, no half-made cable.
+      expect(controller.graph.dragSourcePort, isNull);
+      expect(find.byType(PatcherGhostCable), findsNothing);
+      expect(controller.graph.cables, isEmpty);
+
+      // And the canvas is not inert: while a source port is stuck every press
+      // is swallowed, so this drag would have done nothing at all.
+      final drag = await tester.startGesture(nodeCenter(tester, sine));
+      await tester.pump();
+      await drag.moveBy(const Offset(30, 20));
+      await tester.pump();
+      await drag.up();
+      await tester.pump();
+      expect(sine.position, const Offset(330, 140));
+    });
+
+    testWidgets('a cancelled node drag puts the node back and journals '
+        'nothing', (tester) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester);
+      final drawnAtStart = frameTopLeft(tester);
+
+      final g = await tester.startGesture(nodeCenter(tester, sine));
+      await tester.pump();
+      await g.moveBy(const Offset(60, 40));
+      await tester.pump();
+      expect(sine.position, const Offset(180, 160)); // the live preview
+
+      await g.cancel();
+      await tester.pump();
+
+      // The gesture never happened: the node is back where the press found it,
+      // on screen as well as in the model, and no half-move reached the stack.
+      expect(sine.position, const Offset(120, 120));
+      expect(frameTopLeft(tester), drawnAtStart);
+      expect(controller.undoScope.canUndo, isFalse);
+
+      // A real drag right after still commits — no drag origins leaked.
+      final again = await tester.startGesture(nodeCenter(tester, sine));
+      await tester.pump();
+      await again.moveBy(const Offset(20, 10));
+      await tester.pump();
+      await again.up();
+      await tester.pump();
+      expect(sine.position, const Offset(140, 130));
+      expect(controller.undoScope.canUndo, isTrue);
+    });
+
+    testWidgets('a cancelled press is never half of a double-click', (
+      tester,
+    ) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      PatchNode? doubleClicked;
+      await pumpCanvas(tester, onNodeDoubleTap: (n) => doubleClicked = n);
+
+      final at = nodeCenter(tester, sine);
+      await tester.tapAt(at);
+      await tester.pump();
+
+      // The user starts a second press on the node and it is torn away.
+      final g = await tester.startGesture(at);
+      await tester.pump();
+      await g.cancel();
+      await tester.pump();
+
+      // The next click opens a *new* pairing rather than completing the one the
+      // cancelled gesture interrupted — otherwise the params dialog opens off a
+      // gesture the user abandoned.
+      await tester.tapAt(at);
+      await tester.pump();
+      expect(doubleClicked, isNull);
+
+      // Two clean clicks still pair, so the reset did not break double-click.
+      await tester.tapAt(at);
+      await tester.pump();
+      expect(doubleClicked?.id, sine.id);
+    });
+
+    testWidgets('a cancelled middle-drag pan does not swallow the next '
+        'gesture', (tester) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester);
+
+      final tl = canvasTL(tester);
+      final pan = await tester.startGesture(
+        tl + const Offset(400, 400),
+        kind: PointerDeviceKind.mouse,
+        buttons: kMiddleMouseButton,
+      );
+      await tester.pump();
+      await pan.moveBy(const Offset(-20, -10));
+      await tester.pump();
+      expect(controller.transform.value.getTranslation().x, -20);
+
+      await pan.cancel();
+      await tester.pump();
+
+      // With `_panning` stuck the release below is read as the end of a pan and
+      // the whole gesture is discarded — no marquee, no selection.
+      final g = await tester.startGesture(tl + const Offset(40, 60));
+      await tester.pump();
+      await g.moveTo(tl + const Offset(240, 300));
+      await tester.pump();
+      await g.up();
+      await tester.pump();
+      expect(controller.graph.selectedNodes, {sine.id});
+    });
   });
 }

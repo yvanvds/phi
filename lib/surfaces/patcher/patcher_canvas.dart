@@ -36,6 +36,11 @@ import 'patcher_node_view.dart';
 /// the pointer directly and measuring scene-space deltas from the press point
 /// keeps the node glued to the cursor at any zoom.
 ///
+/// The flip side of owning the raw stream is owning its cancellation: a gesture
+/// whose pointer is torn away never gets its pointer-up, so every transient it
+/// armed is dropped wholesale in `_resetGesture` (issue #355). New gesture
+/// state belongs there as well as where it is set.
+///
 /// Canvas interactions (design `docs/design/patcher.md` §6):
 /// - **Body drag** moves the node (and the rest of the selection) as one
 ///   journaled step.
@@ -80,6 +85,10 @@ class PatcherCanvas extends StatefulWidget {
 
   /// Key on the transient reject banner shown when a cable drop is incompatible.
   static const Key rejectKey = Key('PatcherCanvas.reject');
+
+  /// Key on the rubber-band selection rectangle — present only while a marquee
+  /// is actually being dragged, so its absence is assertable (issue #355).
+  static const Key marqueeKey = Key('PatcherCanvas.marquee');
 
   @override
   State<PatcherCanvas> createState() => _PatcherCanvasState();
@@ -276,6 +285,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
           ),
         if (_marquee != null)
           Positioned.fromRect(
+            key: PatcherCanvas.marqueeKey,
             rect: _marquee!,
             child: const IgnorePointer(child: _MarqueeBox()),
           ),
@@ -484,20 +494,47 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     }
   }
 
-  /// A pointer torn away mid-gesture (window focus loss, a system drag taking
-  /// over) must not leave a node stuck to the cursor: commit what moved and
-  /// drop every press state.
-  void _onPointerCancel(PointerCancelEvent event) {
-    _panning = false;
-    _pressOnInteractiveBody = false;
-    _pressNode = null;
-    if (_draggingNode) {
+  /// A pointer torn away mid-gesture never delivers the pointer-up the gesture
+  /// was waiting for — the window loses capture, a dialog opens over the press,
+  /// a system drag or another recogniser claims the pointer. Everything the
+  /// gesture armed is dropped here, so nothing survives it (issue #355).
+  void _onPointerCancel(PointerCancelEvent event) => _resetGesture();
+
+  /// Drop **every** transient this canvas and its controller accumulate during
+  /// a gesture, returning both to the idle state.
+  ///
+  /// Deliberately one path rather than a clear beside each gesture's own end:
+  /// a field that a new gesture adds but a cancel forgets is invisible until it
+  /// sticks — a marquee rectangle left painted over the scene, a ghost cable
+  /// glued to the cursor, `graph.dragSourcePort` still set so *every* later
+  /// press is swallowed, `_panning` still true so the next release is read as
+  /// the end of a pan. Add new gesture state here as well as where it is set.
+  void _resetGesture() {
+    // A cancelled drag is not an edit: the nodes go back where the press found
+    // them and nothing is journaled. Unconditional — the point of this path is
+    // that it clears drag origins however they got there.
+    _controller.abortNodeDrag();
+    // Drop the in-flight cable and its ghost. A stuck source port is the worst
+    // of these: `_onPointerDown` bails out while one is set, so the canvas goes
+    // inert until a click happens to clear it.
+    _controller.endCableDrag();
+    setState(() {
+      _panning = false;
+      _pressOnInteractiveBody = false;
+      _pressNode = null;
+      _nodePressScene = Offset.zero;
+      _nodeDragScene = Offset.zero;
       _draggingNode = false;
-      _controller.endNodeDrag();
-    }
-    _pressScene = null;
-    _movedSincePress = false;
-    if (_marquee != null) setState(() => _marquee = null);
+      // A press the user never completed is never half of a double-click — and
+      // it invalidates the press before it, exactly as a moved press does.
+      _lastTapNode = null;
+      _lastTapAt = Duration.zero;
+      _pressScene = null;
+      _marqueeAnchor = null;
+      _marqueeAdditive = false;
+      _movedSincePress = false;
+      _marquee = null;
+    });
   }
 
   /// Selection side of a movement-free press on a node. Focus was already taken

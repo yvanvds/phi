@@ -179,6 +179,66 @@ void main() {
     );
   });
 
+  // ─── aborted body drag (issue #355) ──────────────────────────────────────
+
+  group('abort body drag', () {
+    test(
+      'abortNodeDrag restores the pre-drag position and journals nothing',
+      () {
+        final n = addSine(const Offset(40, 60));
+
+        controller.beginNodeDrag(n.id);
+        controller.dragSelectedBy(const Offset(10, 5));
+        expect(n.position, const Offset(50, 65)); // the live preview moved
+        controller.abortNodeDrag();
+
+        // The gesture never happened: the node is back, the stack is untouched.
+        expect(n.position, const Offset(40, 60));
+        expect(controller.undoScope.canUndo, isFalse);
+      },
+    );
+
+    test('abortNodeDrag restores every node of a multi-node drag', () {
+      final a = addSine(const Offset(0, 0));
+      final b = addSine(const Offset(100, 0));
+      controller.selectNodes({a.id, b.id});
+
+      controller.beginNodeDrag(a.id);
+      controller.dragSelectedBy(const Offset(30, 20));
+      controller.abortNodeDrag();
+
+      expect(a.position, const Offset(0, 0));
+      expect(b.position, const Offset(100, 0));
+      expect(controller.undoScope.canUndo, isFalse);
+    });
+
+    test('a drag after an aborted one commits normally', () {
+      final n = addSine(const Offset(40, 60));
+
+      controller.beginNodeDrag(n.id);
+      controller.dragSelectedBy(const Offset(90, 90));
+      controller.abortNodeDrag();
+
+      // No origins leaked from the abandoned gesture: the next drag journals
+      // its own move only, and undo lands on the *aborted* gesture's start.
+      controller.beginNodeDrag(n.id);
+      controller.dragSelectedBy(const Offset(10, 5));
+      controller.endNodeDrag();
+
+      expect(n.position, const Offset(50, 65));
+      controller.undo();
+      expect(n.position, const Offset(40, 60));
+      expect(controller.undoScope.canUndo, isFalse);
+    });
+
+    test('abortNodeDrag with no drag in flight is a no-op', () {
+      final n = addSine(const Offset(40, 60));
+      controller.abortNodeDrag();
+      expect(n.position, const Offset(40, 60));
+      expect(controller.undoScope.canUndo, isFalse);
+    });
+  });
+
   group('cable delete', () {
     test('deleting a selected cable removes it and undoes it', () {
       final slider = addSlider();
