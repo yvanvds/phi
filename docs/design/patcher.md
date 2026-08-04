@@ -124,6 +124,17 @@ live-code control).
   canvas; `Delete` removes selected nodes with their cables;
   `Ctrl+D` duplicates selection (objects + intra-selection cables,
   offset a grid step).
+- **Arrow keys nudge** the selection one grid cell, `Shift+arrow` a
+  major one. A held arrow moves on every auto-repeat but journals once,
+  on release, so `Ctrl+Z` walks back the whole burst rather than one
+  repeat of it — and, like every canvas shortcut, it stays quiet while a
+  number box or the inline create box holds the keyboard.
+- **Grid snap is optional,** off by default, toggled from the placement
+  bar: with it on, a node **drop** (the release of a drag or of a nudge)
+  quantises onto the 16px lattice the backdrop paints. The anchor node
+  lands on the cell and the rest of the selection shifts by that same
+  offset, so a snapped group keeps its arrangement. Only the drop is
+  disciplined — the node stays glued to the pointer while it moves.
 - **Cursor and hover** teach the hit zones: a move cursor over
   draggable node chrome, a crosshair plus a ring over a port, a pointer
   over a cable, a grab hand where a cable would detach. Resolved from

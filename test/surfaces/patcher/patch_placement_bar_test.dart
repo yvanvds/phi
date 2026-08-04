@@ -42,7 +42,11 @@ void main() {
     registry.dispose();
   });
 
-  Future<void> pumpBar(WidgetTester tester, {bool open = true}) async {
+  Future<void> pumpBar(
+    WidgetTester tester, {
+    bool open = true,
+    ValueChanged<bool>? onSnapChanged,
+  }) async {
     controller = PatchLibraryController(
       registry: registry,
       patches: reconciler,
@@ -52,9 +56,23 @@ void main() {
       ],
     );
     if (open) controller.open(patch('src'));
+    var snap = false;
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: PatchPlacementBar(controller: controller)),
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) => PatchPlacementBar(
+              controller: controller,
+              snapToGrid: snap,
+              onSnapChanged: onSnapChanged == null
+                  ? null
+                  : (on) {
+                      onSnapChanged(on);
+                      setState(() => snap = on);
+                    },
+            ),
+          ),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -104,6 +122,44 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.isRunning(patch('src')), isFalse);
     expect(gateway.calls, contains('unmountSource:$id'));
+  });
+
+  // ─── canvas grid-snap toggle (issue #368) ────────────────────────────────
+
+  testWidgets('the snap toggle reports each flip and reflects the new state', (
+    tester,
+  ) async {
+    registry.createEntity(patch('src'), payload: PatchPayload.empty.toJson());
+    final reported = <bool>[];
+    await pumpBar(tester, onSnapChanged: reported.add);
+
+    Color snapColor() => tester
+        .widget<Icon>(
+          find.descendant(
+            of: find.byKey(PatchPlacementBar.snapKey),
+            matching: find.byType(Icon),
+          ),
+        )
+        .color!;
+    final off = snapColor();
+
+    await tester.tap(find.byKey(PatchPlacementBar.snapKey));
+    await tester.pumpAndSettle();
+    expect(reported, [true]);
+    // Lit, so "is snapping on?" is answerable without dragging something.
+    expect(snapColor(), isNot(off));
+
+    await tester.tap(find.byKey(PatchPlacementBar.snapKey));
+    await tester.pumpAndSettle();
+    expect(reported, [true, false]);
+    expect(snapColor(), off);
+  });
+
+  testWidgets('no snap toggle when nobody is listening for it', (tester) async {
+    registry.createEntity(patch('src'), payload: PatchPayload.empty.toJson());
+    await pumpBar(tester);
+
+    expect(find.byKey(PatchPlacementBar.snapKey), findsNothing);
   });
 
   testWidgets('an unplaced source cannot be started', (tester) async {

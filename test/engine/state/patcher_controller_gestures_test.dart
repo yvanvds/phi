@@ -179,6 +179,108 @@ void main() {
     );
   });
 
+  // ─── grid snap on drop (issue #368) ──────────────────────────────────────
+
+  group('snap on drop', () {
+    test('an unsnapped drop lands exactly where the pointer left it', () {
+      final n = addSine(const Offset(40, 60));
+      controller.beginNodeDrag(n.id);
+      controller.dragSelectedBy(const Offset(7, 3));
+      controller.endNodeDrag();
+      expect(n.position, const Offset(47, 63));
+    });
+
+    test('a snapped drop quantises to the 16px grid, and undo restores the '
+        'off-grid origin', () {
+      final n = addSine(const Offset(40, 60));
+      controller.beginNodeDrag(n.id);
+      controller.dragSelectedBy(const Offset(7, 3));
+      controller.endNodeDrag(snapToGrid: true);
+
+      // (47, 63) → the nearest cell of the 16px lattice.
+      expect(n.position, const Offset(48, 64));
+
+      // The snapped destination is what was journaled: undo goes back to where
+      // the drag started, off-grid and all, and redo lands on the grid again.
+      controller.undo();
+      expect(n.position, const Offset(40, 60));
+      controller.redo();
+      expect(n.position, const Offset(48, 64));
+    });
+
+    test('a snapped multi-node drop shifts the whole selection by one offset, '
+        'keeping its arrangement', () {
+      final a = addSine(const Offset(40, 60));
+      final b = addSine(const Offset(133, 60));
+      controller.selectNodes({a.id, b.id});
+
+      controller.beginNodeDrag(a.id);
+      controller.dragSelectedBy(const Offset(7, 3));
+      controller.endNodeDrag(snapToGrid: true);
+
+      // The anchor (the node under the press) lands on the grid; the other
+      // moves by the same offset, so the gap between them is untouched.
+      expect(a.position, const Offset(48, 64));
+      expect(b.position, const Offset(141, 64));
+      expect(b.position - a.position, const Offset(93, 0));
+    });
+
+    test('a snap that cancels the drag out still lands the node on the grid, '
+        'journaling nothing', () {
+      final n = addSine(const Offset(48, 64));
+      controller.beginNodeDrag(n.id);
+      controller.dragSelectedBy(const Offset(3, 2));
+      controller.endNodeDrag(snapToGrid: true);
+
+      // Net zero after snapping — the node is back on its cell and no step was
+      // pushed, but it must not be left on the half-pixel the preview drew.
+      expect(n.position, const Offset(48, 64));
+      expect(controller.undoScope.canUndo, isFalse);
+    });
+  });
+
+  // ─── keyboard nudge machinery (issue #368) ───────────────────────────────
+
+  group('selection move', () {
+    test('beginSelectionMove captures the selection with no node under a '
+        'pointer, and one commit journals the whole run', () {
+      final a = addSine(const Offset(40, 60));
+      final b = addSine(const Offset(100, 60));
+      controller.selectNodes({a.id, b.id});
+
+      controller.beginSelectionMove();
+      expect(controller.isMovingNodes, isTrue);
+      controller.dragSelectedBy(const Offset(16, 0));
+      controller.dragSelectedBy(const Offset(16, 0));
+      controller.endNodeDrag();
+
+      expect(a.position, const Offset(72, 60));
+      expect(b.position, const Offset(132, 60));
+
+      // One step for the whole run, not one per move.
+      controller.undo();
+      expect(a.position, const Offset(40, 60));
+      expect(b.position, const Offset(100, 60));
+      expect(controller.undoScope.canUndo, isFalse);
+    });
+
+    test(
+      'beginSelectionMove with nothing selected moves and journals nothing',
+      () {
+        final n = addSine(const Offset(40, 60));
+        controller.clearSelection();
+
+        controller.beginSelectionMove();
+        expect(controller.isMovingNodes, isFalse);
+        controller.dragSelectedBy(const Offset(16, 0));
+        controller.endNodeDrag();
+
+        expect(n.position, const Offset(40, 60));
+        expect(controller.undoScope.canUndo, isFalse);
+      },
+    );
+  });
+
   // ─── aborted body drag (issue #355) ──────────────────────────────────────
 
   group('abort body drag', () {

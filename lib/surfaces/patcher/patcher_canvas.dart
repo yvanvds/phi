@@ -54,6 +54,10 @@ import 'patcher_node_view.dart';
 /// - **Selection** — click a node, shift-click to extend, drag over empty
 ///   canvas to marquee. `Delete` removes the selection (nodes with their
 ///   cables, or the selected cable); `Ctrl+D` duplicates; `Ctrl+Z/Y` undo/redo.
+/// - **Arrow keys nudge** the selected nodes by one grid cell, `Shift` by a
+///   major cell (issue #368). A held arrow moves live on every repeat but
+///   journals **once**, on release, so `Ctrl+Z` undoes the burst rather than
+///   one repeat of it.
 /// - **Right-click a node** opens its context menu — the same verbs, named, for
 ///   anyone who does not already know the shortcuts (issue #356).
 /// - **Cursor + hover** teach the hit zones the canvas would otherwise keep to
@@ -76,6 +80,7 @@ class PatcherCanvas extends StatefulWidget {
   const PatcherCanvas({
     required this.controller,
     this.objectTypes = const [],
+    this.snapToGrid = false,
     this.onCreateObject,
     this.onNodeTap,
     this.onNodeDoubleTap,
@@ -84,6 +89,12 @@ class PatcherCanvas extends StatefulWidget {
   });
 
   final PatcherController controller;
+
+  /// Whether a node **drop** — the release of a body drag, or the release of an
+  /// arrow-key nudge — lands the moved set on the canvas's minor grid (issue
+  /// #368). Off by default: the patcher free-places, and the discipline is
+  /// something the user turns on from the placement bar.
+  final bool snapToGrid;
 
   /// The engine's object catalogue, for the inline object box's completion.
   /// Empty disables inline creation — a double-click on empty canvas then does
@@ -185,6 +196,16 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   // Middle-mouse pan.
   bool _panning = false;
 
+  // Keyboard nudge (issue #368). A held arrow delivers a `KeyDownEvent` and
+  // then a stream of `KeyRepeatEvent`s: every one of them moves the selection
+  // live, but the move is journaled only when the key comes back **up**, so a
+  // burst is one undo step instead of one per repeat — which is what would make
+  // `Ctrl+Z` useless on a canvas nudged into place.
+  //
+  // True exactly while such a burst is open, i.e. while the controller is
+  // holding drag origins that no release has committed yet.
+  bool _nudging = false;
+
   // Double-tap tracking (raw pointer timing, so single-tap select stays
   // instant — a nested GestureDetector.onDoubleTap would delay it). Only a
   // *movement-free* press is recorded, and both presses of the pair must be
@@ -215,10 +236,26 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   PatcherController get _controller => widget.controller;
 
   @override
+  void initState() {
+    super.initState();
+    // A nudge burst is ended by the arrow's key-up — which never arrives if the
+    // keyboard leaves mid-burst (a dialog opens over the canvas, the pane is
+    // switched). Committing on focus loss is what keeps that move on the undo
+    // stack instead of stranding it as an unjournaled edit.
+    _focus.addListener(_onFocusChanged);
+  }
+
+  @override
   void dispose() {
     _rejectTimer?.cancel();
-    _focus.dispose();
+    _focus
+      ..removeListener(_onFocusChanged)
+      ..dispose();
     super.dispose();
+  }
+
+  void _onFocusChanged() {
+    if (!_focus.hasFocus) _commitNudge();
   }
 
   @override
@@ -421,10 +458,18 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // Without this guard Backspace would delete the selected nodes instead of a
     // character, and the box could never be typed into (issue #353).
     if (!_focus.hasPrimaryFocus) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    // The release of an arrow closes the nudge burst it opened, journaling the
+    // whole run as one move (issue #368). Read before the down/repeat filter
+    // below, which is the only key event this canvas otherwise cares about.
+    if (event is KeyUpEvent) {
+      if (_nudgeStep(key) == null) return KeyEventResult.ignored;
+      _commitNudge();
+      return KeyEventResult.handled;
+    }
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    final key = event.logicalKey;
     if (HardwareKeyboard.instance.isControlPressed) {
       switch (key) {
         case LogicalKeyboardKey.keyZ:
@@ -442,12 +487,15 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
           return KeyEventResult.ignored;
       }
     }
+    final step = _nudgeStep(key);
+    if (step != null) return _nudge(step);
     switch (key) {
       case LogicalKeyboardKey.delete:
       case LogicalKeyboardKey.backspace:
         _controller.deleteSelection();
         return KeyEventResult.handled;
       case LogicalKeyboardKey.escape:
+        _commitNudge();
         _controller.clearSelection();
         return KeyEventResult.handled;
       default:
@@ -455,9 +503,69 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     }
   }
 
+  /// The scene-space move an arrow [key] asks for, or null for anything else.
+  ///
+  /// One grid cell, or a major cell with `Shift` — the same lattice the grid
+  /// backdrop paints, so a nudged node stays on the dots it started on. Arrows
+  /// are read as **logical** keys, which is what keeps this working on a layout
+  /// that is not QWERTY: unlike a letter, an arrow means the same thing on
+  /// every keyboard, and asking for the physical key would be asking about a
+  /// position rather than the key the user actually pressed.
+  Offset? _nudgeStep(LogicalKeyboardKey key) {
+    final d = HardwareKeyboard.instance.isShiftPressed
+        ? PatchCanvasConstants.gridMajor
+        : PatchCanvasConstants.gridCell;
+    switch (key) {
+      case LogicalKeyboardKey.arrowLeft:
+        return Offset(-d, 0);
+      case LogicalKeyboardKey.arrowRight:
+        return Offset(d, 0);
+      case LogicalKeyboardKey.arrowUp:
+        return Offset(0, -d);
+      case LogicalKeyboardKey.arrowDown:
+        return Offset(0, d);
+      default:
+        return null;
+    }
+  }
+
+  /// Move the selected nodes by [step], opening a burst on the first press and
+  /// adding to it on every repeat (issue #368).
+  ///
+  /// Deliberately the *same* machinery a body drag uses — origins captured
+  /// once, live preview per event, one [MovePatchNodesCommand] at the end — so
+  /// a nudge and a drag are the same edit as far as the journal, the engine's
+  /// GUI properties and the grid snap are concerned.
+  ///
+  /// Nothing selected means nothing to move, and the arrow is left unhandled so
+  /// it can go on to mean something else somewhere else.
+  KeyEventResult _nudge(Offset step) {
+    if (_controller.graph.selectedNodes.isEmpty) return KeyEventResult.ignored;
+    if (!_nudging) {
+      _nudging = true;
+      _controller.beginSelectionMove();
+    }
+    _controller.dragSelectedBy(step);
+    return KeyEventResult.handled;
+  }
+
+  /// Close an open nudge burst, journaling the whole run as one move. A no-op
+  /// when no burst is open, so it is safe to call from every path that ends one
+  /// — the key-up, a press that starts another gesture, and losing the keyboard.
+  void _commitNudge() {
+    if (!_nudging) return;
+    _nudging = false;
+    _controller.endNodeDrag(snapToGrid: widget.snapToGrid);
+  }
+
   // ─── pointer ──────────────────────────────────────────────────────────
 
   void _onPointerDown(PointerDownEvent event) {
+    // A press is a new gesture, so whatever the keyboard was still holding is
+    // finished here: a nudge burst left open would otherwise have its origins
+    // overwritten by the drag this press is about to start, and its move would
+    // never reach the journal (issue #368).
+    _commitNudge();
     _pressOnInteractiveBody = false;
     if (_inlineCreateAt != null) {
       // A press inside the open inline object box belongs to its field — the
@@ -767,7 +875,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       // A press that moved is never half of a double-click — and it invalidates
       // the press before it, so click-select → drag → click can't pair either.
       _invalidatePendingTap();
-      _controller.endNodeDrag();
+      _controller.endNodeDrag(snapToGrid: widget.snapToGrid);
       return;
     }
     final node = _controller.graph.nodeById(id);
@@ -840,6 +948,13 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     _controller.endCableDrag();
     setState(() {
       _panning = false;
+      // An open nudge burst is dropped with everything else: `abortNodeDrag`
+      // above has already put its nodes back, so leaving the flag set would
+      // have the next arrow key add to origins that no longer exist. In
+      // practice unreachable — a press commits the burst before any gesture
+      // that could be cancelled starts — but this path exists precisely so no
+      // transient depends on being reached the way it was expected to (#355).
+      _nudging = false;
       _pressOnInteractiveBody = false;
       _pressCable = null;
       _pressCableAnchor = null;

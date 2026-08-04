@@ -86,6 +86,12 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   /// (issue #356). Null for a palette tap, which documents a type.
   PatchNodeId? _selectedNodeId;
 
+  /// Whether the canvas quantises a node drop to the grid (issue #368). A view
+  /// preference of the surface, not of the patch: it belongs to how this user
+  /// is arranging things right now, so it lives here beside the reference-panel
+  /// selection rather than in the payload or the engine.
+  bool _snapToGrid = false;
+
   @override
   void initState() {
     super.initState();
@@ -271,7 +277,11 @@ class _PatcherViewportState extends State<_PatcherViewport> {
             Expanded(
               child: Column(
                 children: [
-                  PatchPlacementBar(controller: library),
+                  PatchPlacementBar(
+                    controller: library,
+                    snapToGrid: _snapToGrid,
+                    onSnapChanged: (on) => setState(() => _snapToGrid = on),
+                  ),
                   Expanded(
                     child: editor == null
                         ? const _NoPatchOpen()
@@ -287,6 +297,7 @@ class _PatcherViewportState extends State<_PatcherViewport> {
                               key: ValueKey(library.openAddress),
                               controller: editor,
                               objectTypes: _objectTypes,
+                              snapToGrid: _snapToGrid,
                               onCreateObject: _createObject,
                               onNodeTap: _selectNode,
                               onNodeDoubleTap: _editParams,

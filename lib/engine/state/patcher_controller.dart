@@ -108,6 +108,13 @@ class PatcherController {
   /// journal one move command for the whole gesture.
   final Map<PatchNodeId, Offset> _dragStart = {};
 
+  /// The node a move is measured from — the one under the press for a body
+  /// drag, the first of the selection for a keyboard nudge. Grid snapping
+  /// (issue #368) quantises *this* node and shifts the rest by the same offset,
+  /// so a snapped selection keeps its internal arrangement instead of
+  /// collapsing every node onto its own nearest cell.
+  PatchNodeId? _dragAnchor;
+
   /// The cable a re-route gesture detached, held while its free end follows the
   /// pointer (issue #359). Null whenever no re-route is in flight.
   PatchCable? _reroutingCable;
@@ -574,14 +581,37 @@ class PatcherController {
   /// becomes the sole selection; the whole selection then drags together.
   void beginNodeDrag(PatchNodeId primary) {
     if (!graph.isNodeSelected(primary)) graph.selectNodes({primary});
+    beginSelectionMove(anchor: primary);
+  }
+
+  /// Capture the current selection's origins so [dragSelectedBy] can preview a
+  /// move and [endNodeDrag] can journal it as one step.
+  ///
+  /// The pointer enters through [beginNodeDrag], which adds the "the node under
+  /// the press joins the selection" rule on top; the **keyboard nudge** (issue
+  /// #368) enters here, because an arrow key has no node under it — it moves
+  /// whatever is already selected, and calling this repeatedly during one
+  /// keypress burst would throw away the origins the burst is measured from, so
+  /// the canvas calls it once per burst.
+  ///
+  /// A no-op with nothing selected: a move of no nodes has no origins to keep,
+  /// and leaving [_dragStart] empty is exactly what makes [endNodeDrag] journal
+  /// nothing.
+  void beginSelectionMove({PatchNodeId? anchor}) {
+    final ids = graph.selectedNodes;
+    _dragAnchor = anchor ?? (ids.isEmpty ? null : ids.first);
     _dragStart
       ..clear()
       ..addEntries(
-        graph.selectedNodes.map(
+        ids.map(
           (id) => MapEntry(id, graph.nodeById(id)?.position ?? Offset.zero),
         ),
       );
   }
+
+  /// Whether a move (drag or nudge) is currently in flight — the canvas reads
+  /// it to tell a nudge burst that is still open from one already committed.
+  bool get isMovingNodes => _dragStart.isNotEmpty;
 
   /// Preview the in-flight drag by shifting every dragged node live — no
   /// gateway write, no command; the release commits one [MovePatchNodesCommand].
@@ -605,25 +635,64 @@ class PatcherController {
     if (_dragStart.isEmpty) return;
     _dragStart.forEach((id, start) => graph.nodeById(id)?.moveTo(start));
     _dragStart.clear();
+    _dragAnchor = null;
   }
 
   /// Commit the body drag: journal one move for the whole selection (nothing
   /// when the net movement is zero).
-  void endNodeDrag() {
+  ///
+  /// With [snapToGrid] the drop quantises to the canvas's minor grid (issue
+  /// #368) — the anchor node lands on the nearest
+  /// [PatchCanvasConstants.gridCell] and everything dragged with it shifts by
+  /// that same offset. Snapping happens **here** rather than during the drag so
+  /// the node stays glued to the pointer while it is moving, and only the drop
+  /// is disciplined; and it lands in the journaled destination, so undo and
+  /// redo walk the snapped positions instead of re-snapping on replay.
+  void endNodeDrag({bool snapToGrid = false}) {
     if (_dragStart.isEmpty) return;
+    final adjust = snapToGrid ? _snapAdjustment() : Offset.zero;
     final from = <PatchNodeId, Offset>{};
     final to = <PatchNodeId, Offset>{};
     var moved = false;
     _dragStart.forEach((id, start) {
       final n = graph.nodeById(id);
       if (n == null) return;
+      final end = n.position + adjust;
       from[id] = start;
-      to[id] = n.position;
-      if (n.position != start) moved = true;
+      to[id] = end;
+      if (end != start) moved = true;
     });
     _dragStart.clear();
-    if (!moved) return;
+    _dragAnchor = null;
+    if (!moved) {
+      // Nothing to journal — but a snap that cancelled the gesture out (a short
+      // drag off an on-grid node, quantised straight back) still has to put the
+      // live nodes on the position the drop decided, not on the one the preview
+      // last drew them at.
+      if (adjust != Offset.zero) from.forEach(placeNode);
+      return;
+    }
     undoScope.run(MovePatchNodesCommand(this, from: from, to: to));
+  }
+
+  /// How far the whole moved set has to shift for the anchor node to sit on the
+  /// grid. Zero when the anchor is gone (deleted mid-gesture) — a move that
+  /// cannot be measured is better left where the pointer put it.
+  Offset _snapAdjustment() {
+    final id = _dragAnchor ?? _dragStart.keys.first;
+    final anchor = graph.nodeById(id);
+    if (anchor == null) return Offset.zero;
+    return _snap(anchor.position) - anchor.position;
+  }
+
+  /// The nearest minor-grid point to [p] — the same 16px lattice the grid
+  /// backdrop paints and the state-machine canvas snaps to.
+  static Offset _snap(Offset p) {
+    const step = PatchCanvasConstants.gridCell;
+    return Offset(
+      (p.dx / step).roundToDouble() * step,
+      (p.dy / step).roundToDouble() * step,
+    );
   }
 
   /// Author a cable from the canvas (design §6). Returns false — leaving the
