@@ -2299,6 +2299,38 @@ main + app          (orchestration)
   it opens holding the keyboard, Escape / click-away, Ctrl+Z), and an end-to-end
   `patcher_inline_create` integration test that makes an object by keyboard
   alone, corrects a typo in place, and undoes the result.
+- **Patcher canvas interaction polish** (issue #359, patcher epic #217, design
+  `docs/design/patcher.md` §6–7): the three gaps that made the canvas feel
+  unlearnable next to Max, all riding the existing raw-pointer pipeline rather
+  than new recognisers. (1) **Cursors and hover** — one `MouseRegion` over the
+  whole viewport, fed by the *same* scene-space hit-tests the presses use, so
+  what the cursor promises and what a press does cannot drift: move over
+  draggable node chrome, crosshair plus a hover ring over a port (8px dots that
+  previously advertised nothing), pointer over a cable, grab where one would
+  detach. Committed only when the resolved target *changes*, so a pointer
+  crossing empty canvas rebuilds nothing. (2) **Cables from either end** — a
+  press on an inlet drags backwards and the compatible **outlets** light up;
+  a press just off a port along an existing cable arms a **re-route**, detaching
+  once the pointer clears the click slop (so a click near an endpoint still
+  selects the cable). Every outcome is one journaled step: a new
+  `RerouteCableCommand` (`lib/engine/state/patcher_commands/`) for a drop on
+  another port, a plain cable delete for a drop on nothing, and nothing at all
+  for a refusal or a cancel — `abortCableReroute` joins the `_resetGesture` path
+  from #355 so a torn-away pointer can never make a cable vanish. (3) **Number
+  scrub** — a vertical drag on a `.i`/`.f` readout carries its value (Shift
+  scrubs finer, re-anchoring on the gear change so nothing jumps), read from a
+  raw `Listener` so a press that never travels is still the field's click-to-edit
+  from #353; the poll from #357 declines to clobber a value under the pointer,
+  and the field gives up drag-to-select-text (which reports
+  `SelectionChangedCause.drag` and would ask for the keyboard back on every
+  scrub). Covered by canvas widget tests (cursor per zone via the mouse tracker,
+  hover ring appearing and leaving, backwards connect + reject, re-route with a
+  single undo, drop-on-nothing delete, click-near-end still selects, port dot
+  still starts a new cable, cancelled re-route restores), number-body widget
+  tests (coarse/fine/int steps, click still takes the caret, scrub leaves edit
+  mode, a value arriving mid-scrub is declined), and an end-to-end
+  `patcher_canvas_polish` integration test through the real app. Deferred to
+  focused follow-ups: keyboard nudge, space-hold panning, and grid snap on drop.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

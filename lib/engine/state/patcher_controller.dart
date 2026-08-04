@@ -23,6 +23,7 @@ import 'patcher_commands/delete_cable_command.dart';
 import 'patcher_commands/delete_patch_nodes_command.dart';
 import 'patcher_commands/duplicate_patch_selection_command.dart';
 import 'patcher_commands/move_patch_nodes_command.dart';
+import 'patcher_commands/reroute_cable_command.dart';
 import 'patcher_commands/set_patch_params_command.dart';
 
 /// Engine-side mediator between user gestures and the native patcher.
@@ -106,6 +107,10 @@ class PatcherController {
   /// Origin positions captured at the start of a body drag, so the release can
   /// journal one move command for the whole gesture.
   final Map<PatchNodeId, Offset> _dragStart = {};
+
+  /// The cable a re-route gesture detached, held while its free end follows the
+  /// pointer (issue #359). Null whenever no re-route is in flight.
+  PatchCable? _reroutingCable;
 
   Map<String, PatchObjectDescriptor>? _catalogueCache;
   Map<String, PatchObjectDescriptor> get _catalogue =>
@@ -630,6 +635,72 @@ class PatcherController {
     if (cable == null) return false;
     undoScope.run(ConnectCableCommand(this, cable));
     return true;
+  }
+
+  // ─── cable re-routing (issue #359) ───────────────────────────────────
+
+  /// The cable currently detached by a re-route gesture, or null. The canvas
+  /// reads it to tell a *re-route* release apart from a plain connect.
+  PatchCable? get reroutingCable => _reroutingCable;
+
+  /// Detach [cable] and start dragging the end that is **not** [anchor], so the
+  /// free end follows the pointer while [anchor] stays put.
+  ///
+  /// Unjournaled on purpose: a detach is only half a gesture. The release
+  /// decides what actually happened — [rerouteViaGesture] for a drop on a port,
+  /// [dropReroutedCable] for a drop on nothing, [abortCableReroute] for a
+  /// gesture that never finished — and journals *that*, once.
+  void beginCableReroute(PatchCable cable, {required PatchPortId anchor}) {
+    abortCableReroute();
+    _reroutingCable = cable;
+    removeCablePrimitive(cable);
+    graph.beginCableDrag(anchor);
+  }
+
+  /// Put a detached cable back exactly as it was and forget the gesture.
+  ///
+  /// The cancel path ([PatcherCanvas]'s `_resetGesture`): a pointer torn away
+  /// mid-re-route never delivers its release, and a cable that quietly vanished
+  /// because the window lost capture is the worst possible outcome. Safe to
+  /// call with no re-route in flight.
+  void abortCableReroute() {
+    final cable = _reroutingCable;
+    _reroutingCable = null;
+    if (cable != null) addCablePrimitive(cable);
+  }
+
+  /// Commit a re-route onto [source] → [target] as one journaled step. Returns
+  /// false — leaving the cable where it was — when the drop is incompatible, so
+  /// the canvas can reject it visibly.
+  ///
+  /// The detached cable is restored *first*, so the command runs against the
+  /// graph the gesture started from: `apply`/`revert` then describe the whole
+  /// re-route on their own, and an undo of anything below it sees a consistent
+  /// patch rather than one mid-gesture.
+  bool rerouteViaGesture(PatchPortId source, PatchPortId target) {
+    final old = _reroutingCable;
+    _reroutingCable = null;
+    if (old == null) return false;
+    addCablePrimitive(old);
+    // Dropped back on the port it came from: nothing changed, so nothing is
+    // journaled — and the duplicate check below would otherwise call the
+    // cable's own home incompatible.
+    if (source == old.source && target == old.target) return true;
+    if (!canConnect(source, target)) return false;
+    final next = _cableFor(source, target);
+    if (next == null) return false;
+    undoScope.run(RerouteCableCommand(this, from: old, to: next));
+    return true;
+  }
+
+  /// Drop a detached cable for good — the drag was released over empty canvas.
+  /// Journaled as a plain delete, so `Ctrl+Z` re-wires it.
+  void dropReroutedCable() {
+    final cable = _reroutingCable;
+    _reroutingCable = null;
+    if (cable == null) return;
+    addCablePrimitive(cable);
+    undoScope.run(DeleteCableCommand(this, cable));
   }
 
   /// Delete the current selection: the selected cable, or the selected nodes

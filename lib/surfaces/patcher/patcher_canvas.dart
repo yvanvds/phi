@@ -45,14 +45,22 @@ import 'patcher_node_view.dart';
 /// Canvas interactions (design `docs/design/patcher.md` §6):
 /// - **Body drag** moves the node (and the rest of the selection) as one
 ///   journaled step.
-/// - **Cables** drag from an outlet; the ghost colours by the outlet's
-///   `OutType`, compatible inlets light up, incompatible drops reject visibly.
-///   Click a cable to select it.
+/// - **Cables** drag from *either* end — an outlet forwards or an inlet
+///   backwards (issue #359); the ghost colours by the anchored port's type,
+///   compatible ports on the opposite side light up, incompatible drops reject
+///   visibly. Click a cable to select it; grab one near an endpoint and drag to
+///   detach and re-route it, or drop it on nothing to delete it. Every outcome
+///   is one journaled step.
 /// - **Selection** — click a node, shift-click to extend, drag over empty
 ///   canvas to marquee. `Delete` removes the selection (nodes with their
 ///   cables, or the selected cable); `Ctrl+D` duplicates; `Ctrl+Z/Y` undo/redo.
 /// - **Right-click a node** opens its context menu — the same verbs, named, for
 ///   anyone who does not already know the shortcuts (issue #356).
+/// - **Cursor + hover** teach the hit zones the canvas would otherwise keep to
+///   itself (issue #359): a move cursor over draggable node chrome, a crosshair
+///   plus a ring over a port, a pointer over a cable. The whole viewport is one
+///   [MouseRegion] fed by the same scene-space hit-tests the presses use, so
+///   what the cursor promises and what a press does can never drift apart.
 ///
 /// Panning is a middle-mouse drag (the [InteractiveViewer]'s own pan is off so
 /// a left-drag over empty canvas is free to marquee); scroll/pinch still zooms.
@@ -123,6 +131,10 @@ class PatcherCanvas extends StatefulWidget {
   /// Key on the inline object box — present only while one is open (issue #358).
   static const Key inlineCreateKey = Key('PatcherCanvas.inlineCreate');
 
+  /// Key on the ring drawn around the port under the pointer — present only
+  /// while one is actually hovered, so its absence is assertable (issue #359).
+  static const Key portHoverKey = Key('PatcherCanvas.portHover');
+
   @override
   State<PatcherCanvas> createState() => _PatcherCanvasState();
 }
@@ -154,6 +166,21 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   // body (a `.i`/`.f` number field) has just taken focus for its caret and must
   // keep it (issue #353).
   bool _pressOnInteractiveBody = false;
+
+  // Cable-endpoint grab (issue #359). Armed by a press near one end of an
+  // existing cable and only *detached* once the pointer clears `_clickSlop`, so
+  // a press that never moves is still the click that selects the cable.
+  // `_pressCableAnchor` is the end that stays put — the far end from the grab.
+  PatchCable? _pressCable;
+  PatchPortId? _pressCableAnchor;
+  Offset _pressCableScene = Offset.zero;
+
+  // Hover affordance (issue #359). Recomputed from the same scene-space
+  // hit-tests the presses use, but only committed when it actually *changes* —
+  // sweeping the pointer across empty canvas must not rebuild the scene at the
+  // pointer's report rate.
+  MouseCursor _hoverCursor = SystemMouseCursors.basic;
+  PatchPortId? _hoverPort;
 
   // Middle-mouse pan.
   bool _panning = false;
@@ -199,57 +226,66 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     final viewport = Focus(
       focusNode: _focus,
       onKeyEvent: _onKey,
-      child: Listener(
-        // Opaque so empty scene areas (grid, gaps between nodes) still deliver
-        // pointer events for marquee, panning and click-to-clear.
-        behavior: HitTestBehavior.opaque,
-        onPointerDown: _onPointerDown,
-        onPointerMove: _onPointerMove,
-        onPointerUp: _onPointerUp,
-        onPointerCancel: _onPointerCancel,
-        onPointerSignal: _onPointerSignal,
-        onPointerHover: (e) => _updateCursor(e.localPosition),
-        child: Stack(
-          children: [
-            // The scene is a plain transform host, not an InteractiveViewer:
-            // the viewer's own scale recogniser would swallow node body-drags
-            // and cable drags, so pan/zoom are driven directly instead —
-            // middle-drag pans, the wheel zooms, a left-drag over empty canvas
-            // marquees.
-            Positioned.fill(
-              child: ClipRect(
-                child: ListenableBuilder(
-                  listenable: Listenable.merge([
-                    _controller.transform,
-                    _controller.graph,
-                  ]),
-                  builder: (context, _) => Transform(
-                    transform: _controller.transform.value,
-                    child: OverflowBox(
-                      alignment: Alignment.topLeft,
-                      minWidth: 0,
-                      maxWidth: double.infinity,
-                      minHeight: 0,
-                      maxHeight: double.infinity,
-                      child: SizedBox(
-                        width: PatchCanvasConstants.canvasSize,
-                        height: PatchCanvasConstants.canvasSize,
-                        child: _buildScene(),
+      // One region for the whole viewport rather than a cursor per node: the
+      // things worth pointing at (ports, cables, the draggable part of a node)
+      // are hit-tested in *scene* space by this canvas alone, and a widget-level
+      // cursor could only ever guess at them (issue #359). A body that owns its
+      // own gestures still sets its own cursor — it sits deeper, so it wins.
+      child: MouseRegion(
+        cursor: _hoverCursor,
+        onExit: (_) => _setHover(SystemMouseCursors.basic, null),
+        child: Listener(
+          // Opaque so empty scene areas (grid, gaps between nodes) still deliver
+          // pointer events for marquee, panning and click-to-clear.
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: _onPointerDown,
+          onPointerMove: _onPointerMove,
+          onPointerUp: _onPointerUp,
+          onPointerCancel: _onPointerCancel,
+          onPointerSignal: _onPointerSignal,
+          onPointerHover: _onPointerHover,
+          child: Stack(
+            children: [
+              // The scene is a plain transform host, not an InteractiveViewer:
+              // the viewer's own scale recogniser would swallow node body-drags
+              // and cable drags, so pan/zoom are driven directly instead —
+              // middle-drag pans, the wheel zooms, a left-drag over empty canvas
+              // marquees.
+              Positioned.fill(
+                child: ClipRect(
+                  child: ListenableBuilder(
+                    listenable: Listenable.merge([
+                      _controller.transform,
+                      _controller.graph,
+                    ]),
+                    builder: (context, _) => Transform(
+                      transform: _controller.transform.value,
+                      child: OverflowBox(
+                        alignment: Alignment.topLeft,
+                        minWidth: 0,
+                        maxWidth: double.infinity,
+                        minHeight: 0,
+                        maxHeight: double.infinity,
+                        child: SizedBox(
+                          width: PatchCanvasConstants.canvasSize,
+                          height: PatchCanvasConstants.canvasSize,
+                          child: _buildScene(),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-            if (_reject != null)
-              Positioned(
-                key: PatcherCanvas.rejectKey,
-                top: 10,
-                left: 0,
-                right: 0,
-                child: Center(child: _RejectBanner(message: _reject!)),
-              ),
-          ],
+              if (_reject != null)
+                Positioned(
+                  key: PatcherCanvas.rejectKey,
+                  top: 10,
+                  left: 0,
+                  right: 0,
+                  child: Center(child: _RejectBanner(message: _reject!)),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -265,10 +301,9 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
 
   Widget _buildScene() {
     final graph = _controller.graph;
-    final positions = <PatchPortId, Offset>{};
+    final positions = _portPositions;
     final voiceForSource = <PatchPortId, int>{};
     for (final n in graph.nodes) {
-      positions.addAll(portPositionsFor(n));
       for (var i = 0; i < n.outputs.length; i++) {
         voiceForSource[PatchPortId(
               nodeId: n.id,
@@ -279,9 +314,10 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       }
     }
     final dragSource = graph.dragSourcePort;
-    final compatibleInlets = dragSource == null
+    final compatiblePorts = dragSource == null
         ? const <PatchPortId>[]
-        : _compatibleInlets(dragSource);
+        : _compatiblePorts(dragSource);
+    final hoverCentre = dragSource == null ? positions[_hoverPort] : null;
 
     return Stack(
       clipBehavior: Clip.none,
@@ -310,23 +346,36 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
               selected: graph.isNodeSelected(n.id),
             ),
           ),
-        for (final portId in compatibleInlets)
+        // The port under the pointer, ringed so the (otherwise invisible) hit
+        // zone is learnable. Suppressed mid-drag, where the compatible-port
+        // highlight below is saying something more useful (issue #359).
+        if (hoverCentre != null)
+          Positioned(
+            key: PatcherCanvas.portHoverKey,
+            left: hoverCentre.dx - _hoverRadius,
+            top: hoverCentre.dy - _hoverRadius,
+            width: _hoverRadius * 2,
+            height: _hoverRadius * 2,
+            child: const IgnorePointer(child: _PortHoverRing()),
+          ),
+        for (final portId in compatiblePorts)
           if (positions[portId] != null)
             Positioned(
               left: positions[portId]!.dx - _highlightRadius,
               top: positions[portId]!.dy - _highlightRadius,
               width: _highlightRadius * 2,
               height: _highlightRadius * 2,
-              child: const IgnorePointer(child: _InletHighlight()),
+              child: const IgnorePointer(child: _PortHighlight()),
             ),
         if (dragSource != null)
           Positioned.fill(
             child: PatcherGhostCable(
               source: positions[dragSource] ?? Offset.zero,
               cursor: _cursor,
-              color: patchOutletColor(_controller.outletTypeOf(dragSource)),
-              glow: patchOutletGlow(_controller.outletTypeOf(dragSource)),
-              kind: _kindForSource(dragSource),
+              color: patchOutletColor(_ghostTypeFor(dragSource)),
+              glow: patchOutletGlow(_ghostTypeFor(dragSource)),
+              kind: _kindForAnchor(dragSource),
+              backwards: dragSource.side == PatchPortSide.input,
             ),
           ),
         if (_marquee != null)
@@ -356,6 +405,11 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   }
 
   static const double _highlightRadius = 9;
+
+  /// Radius of the hover ring — a shade tighter than [_highlightRadius] so a
+  /// port that is both hovered *and* compatible reads as two rings, not one
+  /// thick one.
+  static const double _hoverRadius = 8;
 
   // ─── keyboard ─────────────────────────────────────────────────────────
 
@@ -431,14 +485,26 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     }
 
     final scene = _toScene(event.localPosition);
-    // An outlet press starts a cable drag. Checked first so a port just past a
-    // node's edge wins over the node itself; its press radius is tight enough
-    // (portPressRadius) that the zone never reaches the header or the bulk of
-    // the body, which stay node-drag territory.
-    final port = _outputPortAt(scene);
+    // A press on a **port of either side** starts a cable drag: from an outlet
+    // forwards, from an inlet backwards, Max-style (issue #359). Checked first
+    // so a port just past a node's edge wins over the node itself; the press
+    // radius is tight enough (portPressRadius) that the zone never reaches the
+    // header or the bulk of the body, which stay node-drag territory.
+    final port = _portPressAt(scene);
     if (port != null) {
       setState(() => _cursor = scene);
+      _setHover(SystemMouseCursors.precise, null);
       _controller.beginCableDrag(port);
+      return;
+    }
+    // Just off a port, along an existing cable: arm a re-route of that cable.
+    // Only *armed* here — the detach waits for the pointer to clear the click
+    // slop, so a click near an endpoint still selects the cable it is on.
+    final grab = _cableEndAt(scene);
+    if (grab != null) {
+      _pressCable = grab.cable;
+      _pressCableAnchor = grab.anchor;
+      _pressCableScene = scene;
       return;
     }
     final node = _nodeAt(scene);
@@ -471,7 +537,11 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       _panBy(event.delta);
       return;
     }
-    _updateCursor(event.localPosition);
+    _trackGhost(event.localPosition);
+    if (_pressCable != null) {
+      _moveCableGrab(_toScene(event.localPosition));
+      return;
+    }
     if (_pressNode != null) {
       _moveNodeDrag(_toScene(event.localPosition));
       return;
@@ -482,6 +552,21 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     if (!_movedSincePress && (scene - press).distance < _clickSlop) return;
     _movedSincePress = true;
     setState(() => _marquee = Rect.fromPoints(_marqueeAnchor!, scene));
+  }
+
+  /// Detach the grabbed cable (on the first move past [_clickSlop]) and then
+  /// carry its free end with the pointer (issue #359).
+  ///
+  /// The slop is what keeps a *click* near an endpoint from being destructive:
+  /// until it is cleared the cable is still wired, and the release reads as the
+  /// click that selects it.
+  void _moveCableGrab(Offset scene) {
+    if (_controller.reroutingCable == null) {
+      if ((scene - _pressCableScene).distance < _clickSlop) return;
+      _controller.beginCableReroute(_pressCable!, anchor: _pressCableAnchor!);
+      _setHover(SystemMouseCursors.precise, null);
+    }
+    setState(() => _cursor = scene);
   }
 
   /// Start (on the first move past [_clickSlop]) and then advance the node
@@ -518,15 +603,24 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     }
     final scene = _toScene(event.localPosition);
 
-    // Finish an in-flight cable drag.
-    final source = _controller.graph.dragSourcePort;
-    if (source != null) {
+    // A cable-end press that never cleared the slop is not a re-route: it is
+    // the click that selects the cable it landed on (issue #359).
+    final grabbed = _pressCable;
+    _pressCable = null;
+    _pressCableAnchor = null;
+    if (grabbed != null && _controller.reroutingCable == null) {
       _invalidatePendingTap();
-      final target = _inputPortAt(scene);
-      if (target != null && !_controller.connectViaGesture(source, target)) {
-        _flashReject();
-      }
-      _controller.endCableDrag();
+      _controller.selectCable(grabbed);
+      return;
+    }
+
+    // Finish an in-flight cable drag — a fresh one from either end, or the
+    // free end of a cable detached for re-routing.
+    final anchor = _controller.graph.dragSourcePort;
+    if (anchor != null) {
+      _invalidatePendingTap();
+      _finishCableDrag(anchor, scene);
+      _applyHover(event.localPosition);
       return;
     }
 
@@ -562,6 +656,38 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     }
     _controller.clearSelection();
     _pairEmptyTap(event.localPosition, press, event.timeStamp);
+  }
+
+  /// Release of a cable drag anchored at [anchor] (issue #359).
+  ///
+  /// One path for all four outcomes, because they differ only in what is
+  /// journaled: a *fresh* drag connects or rejects, a *re-route* moves the
+  /// cable it detached, deletes it when the drop found no port, or is refused
+  /// and leaves it where it was. Whichever end is anchored, the connect is
+  /// always expressed outlet → inlet, so nothing downstream has to know the
+  /// gesture ran backwards.
+  void _finishCableDrag(PatchPortId anchor, Offset scene) {
+    final backwards = anchor.side == PatchPortSide.input;
+    final other = _portAt(
+      scene,
+      backwards ? PatchPortSide.output : PatchPortSide.input,
+      PatchCanvasConstants.portHitRadius,
+    );
+    final rerouting = _controller.reroutingCable != null;
+    if (other == null) {
+      // Dropped on nothing. A cable that was never made simply isn't; a
+      // detached one is thrown away for good — journaled, so Ctrl+Z re-wires it.
+      if (rerouting) _controller.dropReroutedCable();
+      _controller.endCableDrag();
+      return;
+    }
+    final source = backwards ? other : anchor;
+    final target = backwards ? anchor : other;
+    final connected = rerouting
+        ? _controller.rerouteViaGesture(source, target)
+        : _controller.connectViaGesture(source, target);
+    if (!connected) _flashReject();
+    _controller.endCableDrag();
   }
 
   /// The empty-canvas half of the double-click pairing (issue #358): a second
@@ -704,6 +830,10 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // them and nothing is journaled. Unconditional — the point of this path is
     // that it clears drag origins however they got there.
     _controller.abortNodeDrag();
+    // A cancelled re-route puts its cable back. Ordered before the drag is
+    // dropped because a cable that quietly vanished — the window lost capture
+    // mid-gesture — is the worst thing this path could leave behind (#359).
+    _controller.abortCableReroute();
     // Drop the in-flight cable and its ghost. A stuck source port is the worst
     // of these: `_onPointerDown` bails out while one is set, so the canvas goes
     // inert until a click happens to clear it.
@@ -711,6 +841,11 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     setState(() {
       _panning = false;
       _pressOnInteractiveBody = false;
+      _pressCable = null;
+      _pressCableAnchor = null;
+      _pressCableScene = Offset.zero;
+      _hoverCursor = SystemMouseCursors.basic;
+      _hoverPort = null;
       _pressNode = null;
       _nodePressScene = Offset.zero;
       _nodeDragScene = Offset.zero;
@@ -742,9 +877,73 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     widget.onNodeTap?.call(node);
   }
 
-  void _updateCursor(Offset local) {
+  /// Keep the ghost cable's head on the pointer. Only meaningful while a cable
+  /// drag is in flight, and deliberately silent otherwise — this runs on every
+  /// pointer move, and the scene must not rebuild for a pointer that is merely
+  /// passing through.
+  void _trackGhost(Offset local) {
     if (_controller.graph.dragSourcePort == null) return;
     setState(() => _cursor = _toScene(local));
+  }
+
+  // ─── hover affordances (issue #359) ─────────────────────────────────────
+
+  void _onPointerHover(PointerHoverEvent event) {
+    _trackGhost(event.localPosition);
+    _applyHover(event.localPosition);
+  }
+
+  /// Work out what the pointer is over and say so — a cursor, and a ring on a
+  /// hovered port.
+  ///
+  /// Resolved against the *same* hit-tests [_onPointerDown] uses and in the
+  /// same order, so the cursor is a truthful preview of what a press would do
+  /// rather than a second, drifting opinion about where things are.
+  void _applyHover(Offset local) {
+    if (_controller.graph.dragSourcePort != null) {
+      // Mid-drag the pointer means one thing only: where this cable will land.
+      _setHover(SystemMouseCursors.precise, null);
+      return;
+    }
+    final scene = _toScene(local);
+    final port = _portPressAt(scene);
+    if (port != null) {
+      _setHover(SystemMouseCursors.precise, port);
+      return;
+    }
+    if (_cableEndAt(scene) != null) {
+      _setHover(SystemMouseCursors.grab, null);
+      return;
+    }
+    final node = _nodeAt(scene);
+    if (node != null) {
+      // A body that runs its own gestures is not draggable from here, and sets
+      // whatever cursor it wants from deeper in the tree.
+      _setHover(
+        _onInteractiveBody(node, scene)
+            ? SystemMouseCursors.basic
+            : SystemMouseCursors.move,
+        null,
+      );
+      return;
+    }
+    _setHover(
+      _cableAt(scene) != null
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
+      null,
+    );
+  }
+
+  /// Commit a hover result, rebuilding **only** when it actually changed. The
+  /// guard is the whole economy of the feature: a pointer crossing empty canvas
+  /// reports dozens of times a second and must cost nothing.
+  void _setHover(MouseCursor cursor, PatchPortId? port) {
+    if (cursor == _hoverCursor && port == _hoverPort) return;
+    setState(() {
+      _hoverCursor = cursor;
+      _hoverPort = port;
+    });
   }
 
   // ─── selection helpers ──────────────────────────────────────────────────
@@ -765,16 +964,25 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     );
   }
 
-  List<PatchPortId> _compatibleInlets(PatchPortId source) {
+  /// The ports a drop would be accepted on, for a drag anchored at [anchor].
+  ///
+  /// A forward drag (from an outlet) lights up compatible **inlets**; a
+  /// backwards one (from an inlet, issue #359) lights up compatible
+  /// **outlets**. Either way the question asked is the same
+  /// [PatcherController.canConnect] the release will ask, so a highlighted port
+  /// can never reject the drop it invited.
+  List<PatchPortId> _compatiblePorts(PatchPortId anchor) {
+    final backwards = anchor.side == PatchPortSide.input;
+    final side = backwards ? PatchPortSide.output : PatchPortSide.input;
     final out = <PatchPortId>[];
     for (final n in _controller.graph.nodes) {
-      for (var i = 0; i < n.inputs.length; i++) {
-        final id = PatchPortId(
-          nodeId: n.id,
-          side: PatchPortSide.input,
-          index: i,
-        );
-        if (_controller.canConnect(source, id)) out.add(id);
+      final count = backwards ? n.outputs.length : n.inputs.length;
+      for (var i = 0; i < count; i++) {
+        final id = PatchPortId(nodeId: n.id, side: side, index: i);
+        final ok = backwards
+            ? _controller.canConnect(id, anchor)
+            : _controller.canConnect(anchor, id);
+        if (ok) out.add(id);
       }
     }
     return out;
@@ -816,40 +1024,80 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     ).contains(scene);
   }
 
-  /// The inlet under a cable **drop** — generous, since a missed drop throws
-  /// the whole gesture away.
-  PatchPortId? _inputPortAt(Offset scene) =>
-      _portAt(scene, PatchPortSide.input, PatchCanvasConstants.portHitRadius);
+  /// Every port centre in the scene, rebuilt only when the graph reports a
+  /// change.
+  ///
+  /// Hit-testing used to run on presses alone; hover (issue #359) runs it on
+  /// every pointer report, and rebuilding a map per node per event is exactly
+  /// the churn a 120 Hz pointer turns into garbage. `graph.version` bumps on
+  /// node moves too — the graph re-broadcasts them — so the cache can never
+  /// hand out a stale position.
+  int _positionsVersion = -1;
+  Map<PatchPortId, Offset> _positionsCache = const {};
+  Map<PatchPortId, Offset> get _portPositions {
+    final graph = _controller.graph;
+    if (graph.version != _positionsVersion) {
+      final out = <PatchPortId, Offset>{};
+      for (final n in graph.nodes) {
+        out.addAll(portPositionsFor(n));
+      }
+      _positionsCache = out;
+      _positionsVersion = graph.version;
+    }
+    return _positionsCache;
+  }
 
-  /// The outlet under a **press**. Tight, so a press on the header or the body
-  /// reaches the node underneath instead of starting a stray cable (issue #352).
-  PatchPortId? _outputPortAt(Offset scene) => _portAt(
-    scene,
-    PatchPortSide.output,
-    PatchCanvasConstants.portPressRadius,
-  );
+  /// The port under a **press**, either side. Tight, so a press on the header
+  /// or the body reaches the node underneath instead of starting a stray cable
+  /// (issue #352); both sides, so a cable can be started backwards from an
+  /// inlet (issue #359).
+  PatchPortId? _portPressAt(Offset scene) =>
+      _portAt(scene, null, PatchCanvasConstants.portPressRadius);
 
-  PatchPortId? _portAt(Offset scene, PatchPortSide side, double hitR) {
-    for (final n in _controller.graph.nodes) {
-      final positions = portPositionsFor(n);
-      final count = side == PatchPortSide.input
-          ? n.inputs.length
-          : n.outputs.length;
-      for (var i = 0; i < count; i++) {
-        final id = PatchPortId(nodeId: n.id, side: side, index: i);
-        final pos = positions[id];
-        if (pos == null) continue;
-        if ((pos - scene).distance <= hitR) return id;
+  /// The nearest port to [scene] within [hitR], restricted to [side] when one
+  /// is given. Nearest rather than first-found: two nodes may overlap, and the
+  /// dot the user is actually pointing at is the one that should answer.
+  PatchPortId? _portAt(Offset scene, PatchPortSide? side, double hitR) {
+    PatchPortId? best;
+    var bestDistance = hitR;
+    for (final entry in _portPositions.entries) {
+      if (side != null && entry.key.side != side) continue;
+      final d = (entry.value - scene).distance;
+      if (d <= bestDistance) {
+        bestDistance = d;
+        best = entry.key;
       }
     }
-    return null;
+    return best;
+  }
+
+  /// The cable whose **endpoint** a press at [scene] landed beside, paired with
+  /// the end that would stay put (issue #359).
+  ///
+  /// Two conditions, both necessary: the press is on the wire
+  /// ([PatchCanvasConstants.cableHitThreshold]) *and* within
+  /// [PatchCanvasConstants.cableGrabRadius] of one of its ends. A press further
+  /// along the cable is therefore still the click that selects it, and the dot
+  /// itself has already been claimed by [_portPressAt] for starting a new one.
+  _CableGrab? _cableEndAt(Offset scene) {
+    final cable = _cableAt(scene);
+    if (cable == null) return null;
+    final positions = _portPositions;
+    final a = positions[cable.source];
+    final b = positions[cable.target];
+    if (a == null || b == null) return null;
+    final atSource = (a - scene).distance;
+    final atTarget = (b - scene).distance;
+    const reach = PatchCanvasConstants.cableGrabRadius;
+    if (atSource > reach && atTarget > reach) return null;
+    // Grabbing the outlet end anchors the inlet, and the other way round.
+    return atSource <= atTarget
+        ? _CableGrab(cable: cable, anchor: cable.target)
+        : _CableGrab(cable: cable, anchor: cable.source);
   }
 
   PatchCable? _cableAt(Offset scene) {
-    final positions = <PatchPortId, Offset>{};
-    for (final n in _controller.graph.nodes) {
-      positions.addAll(portPositionsFor(n));
-    }
+    final positions = _portPositions;
     PatchCable? best;
     var bestDistance = PatchCanvasConstants.cableHitThreshold;
     for (final c in _controller.graph.cables) {
@@ -865,12 +1113,32 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     return best;
   }
 
-  PatchPortKind _kindForSource(PatchPortId portId) {
-    final node = _controller.graph.nodeById(portId.nodeId);
-    if (node == null || portId.index >= node.outputs.length) {
-      return PatchPortKind.control;
+  /// Audio or control, for the port a drag is anchored at — the ghost is solid
+  /// for one and dashed for the other. Reads whichever side [anchor] is on, so
+  /// a backwards drag is drawn as truthfully as a forward one (issue #359).
+  PatchPortKind _kindForAnchor(PatchPortId anchor) {
+    final node = _controller.graph.nodeById(anchor.nodeId);
+    if (node == null) return PatchPortKind.control;
+    final ports = anchor.side == PatchPortSide.output
+        ? node.outputs
+        : node.inputs;
+    if (anchor.index >= ports.length) return PatchPortKind.control;
+    return ports[anchor.index].kind;
+  }
+
+  /// The data type the in-flight ghost is coloured by.
+  ///
+  /// A forward drag knows its outlet's `OutType` exactly. A backwards one
+  /// (issue #359) has only the inlet it started from and no outlet yet, so it
+  /// colours by what that inlet *accepts* — audio if it takes a buffer, control
+  /// otherwise — which is the same distinction the finished cable will show.
+  PatchOutletType _ghostTypeFor(PatchPortId anchor) {
+    if (anchor.side == PatchPortSide.output) {
+      return _controller.outletTypeOf(anchor);
     }
-    return node.outputs[portId.index].kind;
+    return _controller.inletAcceptsOf(anchor).contains(PatchInletAccept.buffer)
+        ? PatchOutletType.buffer
+        : PatchOutletType.float;
   }
 
   // ─── transforms ──────────────────────────────────────────────────────────
@@ -923,9 +1191,21 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   }
 }
 
-/// A ring drawn on a compatible inlet while a cable is being dragged.
-class _InletHighlight extends StatelessWidget {
-  const _InletHighlight();
+/// A cable caught near one of its endpoints, with the end that stays put.
+class _CableGrab {
+  const _CableGrab({required this.cable, required this.anchor});
+
+  final PatchCable cable;
+
+  /// The endpoint the gesture leaves alone — the far end from the grab, and the
+  /// port the ghost cable hangs off while the free end follows the pointer.
+  final PatchPortId anchor;
+}
+
+/// A ring drawn on a compatible port while a cable is being dragged — inlets
+/// for a forward drag, outlets for a backwards one (issue #359).
+class _PortHighlight extends StatelessWidget {
+  const _PortHighlight();
 
   @override
   Widget build(BuildContext context) {
@@ -934,6 +1214,27 @@ class _InletHighlight extends StatelessWidget {
         shape: BoxShape.circle,
         border: Border.all(color: PhiColors.fg0, width: 1.5),
         boxShadow: const [BoxShadow(color: PhiColors.line2, blurRadius: 8)],
+      ),
+    );
+  }
+}
+
+/// A quiet ring on the port under the pointer (issue #359).
+///
+/// Deliberately dimmer than [_PortHighlight]: this one only says "there is a
+/// target here", while that one says "let go and it will connect".
+class _PortHoverRing extends StatelessWidget {
+  const _PortHoverRing();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: PhiColors.fg1.withValues(alpha: 0.7),
+          width: 1,
+        ),
       ),
     );
   }

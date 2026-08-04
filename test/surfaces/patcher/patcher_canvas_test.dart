@@ -1,8 +1,10 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/widgets/patcher/patch_cable_geometry.dart';
+import 'package:phi/design/widgets/patcher/patch_canvas_constants.dart';
 import 'package:phi/design/widgets/patcher/patch_node_frame.dart';
 import 'package:phi/design/widgets/patcher/patch_port_dot.dart';
 import 'package:phi/domain/patcher/patch_args.dart';
@@ -102,6 +104,41 @@ void main() {
     await tester.pump();
     await g.up();
     await tester.pump();
+  }
+
+  /// A parked mouse pointer, so hover-driven affordances can be driven the way
+  /// a real one drives them (issue #359).
+  Future<TestGesture> mouse(WidgetTester tester) async {
+    final g = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await g.addPointer(location: Offset.zero);
+    addTearDown(() => g.removePointer());
+    await tester.pump();
+    return g;
+  }
+
+  /// The cursor the tracker actually resolved. Read from the tracker rather
+  /// than from a widget lookup: the canvas answers for the whole viewport out
+  /// of one region, in scene space, so only the tracker knows what landed under
+  /// the pointer. Device `1` is what `flutter_test` gives a mouse.
+  MouseCursor? activeCursor() =>
+      RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1);
+
+  /// A point that is **on** the cable between [a] and [b] and inside the grab
+  /// band around one of its ends — past the port's own press radius, short of
+  /// [PatchCanvasConstants.cableGrabRadius]. Searched rather than guessed so
+  /// the test keeps meaning what it says if either radius is retuned.
+  Offset grabPoint(Offset a, Offset b, {required bool atSource}) {
+    final end = atSource ? a : b;
+    for (var i = 1; i < 60; i++) {
+      final t = atSource ? i / 60 : 1 - i / 60;
+      final p = PatchCableGeometry.pointAt(a, b, t);
+      final d = (p - end).distance;
+      if (d > PatchCanvasConstants.portPressRadius + 2 &&
+          d < PatchCanvasConstants.cableGrabRadius - 2) {
+        return p;
+      }
+    }
+    fail('no point on the cable falls inside the grab band');
   }
 
   /// Where the node's chrome actually sits on screen — the model position is
@@ -834,6 +871,43 @@ void main() {
       expect(controller.graph.selectedNodes, {a.id});
     });
 
+    testWidgets('a cancelled re-route puts the cable back and journals '
+        'nothing', (tester) async {
+      final slider = controller.addNode(
+        desc: desc(Obj.gSlider),
+        position: const Offset(100, 120),
+      );
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(300, 120),
+      );
+      controller.connect(out(slider, 0), inp(sine, 0));
+      await pumpCanvas(tester);
+
+      final a = portPositionsFor(slider)[out(slider, 0)]!;
+      final b = portPositionsFor(sine)[inp(sine, 0)]!;
+      final g = await tester.startGesture(
+        canvasTL(tester) + grabPoint(a, b, atSource: false),
+      );
+      await tester.pump();
+      await g.moveTo(canvasTL(tester) + const Offset(240, 320));
+      await tester.pump();
+      // The cable really is off — this is the state a torn-away pointer would
+      // otherwise strand.
+      expect(controller.graph.cables, isEmpty);
+      expect(controller.reroutingCable, isNotNull);
+
+      await g.cancel();
+      await tester.pump();
+
+      expect(controller.graph.cables, hasLength(1));
+      expect(gateway.cables, hasLength(1));
+      expect(controller.reroutingCable, isNull);
+      expect(controller.graph.dragSourcePort, isNull);
+      // A gesture nobody finished is not an edit.
+      expect(controller.undoScope.canUndo, isFalse);
+    });
+
     testWidgets('a cancelled cable drag drops the ghost and frees the canvas', (
       tester,
     ) async {
@@ -1272,6 +1346,311 @@ void main() {
       await doubleClickAt(tester, canvasTL(tester) + const Offset(300, 200));
 
       expect(box(), findsNothing);
+    });
+  });
+
+  // ─── cursors + hover affordances (issue #359) ───────────────────────────
+  // The canvas's hit zones were invisible: 8px port dots with nothing to say
+  // they were ports, and node chrome that gave no sign it could be dragged.
+
+  group('cursor and hover affordances', () {
+    testWidgets('a hovered port is ringed and takes the crosshair', (
+      tester,
+    ) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester);
+      expect(find.byKey(PatcherCanvas.portHoverKey), findsNothing);
+
+      final g = await mouse(tester);
+      await g.moveTo(portGlobal(tester, sine, PatchPortSide.input, 0));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(PatcherCanvas.portHoverKey), findsOneWidget);
+      expect(activeCursor(), SystemMouseCursors.precise);
+
+      // ...and both go away again when the pointer moves off.
+      await g.moveTo(canvasTL(tester) + const Offset(620, 460));
+      await tester.pumpAndSettle();
+      expect(find.byKey(PatcherCanvas.portHoverKey), findsNothing);
+      expect(activeCursor(), SystemMouseCursors.basic);
+    });
+
+    testWidgets('node chrome takes the move cursor; a live body does not', (
+      tester,
+    ) async {
+      NodeTypeRegistry.instance.register(
+        desc(Obj.gSlider, interactiveBody: true),
+      );
+      final slider = controller.addNode(
+        desc: desc(Obj.gSlider, interactiveBody: true),
+        position: const Offset(200, 200),
+      );
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(400, 200),
+      );
+      await pumpCanvas(tester);
+      final g = await mouse(tester);
+
+      // A plain node is draggable anywhere on it.
+      await g.moveTo(nodeCenter(tester, sine));
+      await tester.pumpAndSettle();
+      expect(activeCursor(), SystemMouseCursors.move);
+
+      // A live body belongs to the widget inside it, which is dragged by its
+      // header — so the body says nothing and the header says move.
+      await g.moveTo(nodeCenter(tester, slider));
+      await tester.pumpAndSettle();
+      expect(activeCursor(), SystemMouseCursors.basic);
+
+      await g.moveTo(
+        canvasTL(tester) +
+            slider.position +
+            Offset(
+              slider.size.width / 2,
+              PatchCanvasConstants.headerHeight / 2,
+            ),
+      );
+      await tester.pumpAndSettle();
+      expect(activeCursor(), SystemMouseCursors.move);
+    });
+
+    testWidgets('a cable takes the pointer cursor, and the grab cursor near '
+        'its ends', (tester) async {
+      final slider = controller.addNode(
+        desc: desc(Obj.gSlider),
+        position: const Offset(100, 120),
+      );
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(320, 120),
+      );
+      controller.connect(out(slider, 0), inp(sine, 0));
+      await pumpCanvas(tester);
+
+      final a = portPositionsFor(slider)[out(slider, 0)]!;
+      final b = portPositionsFor(sine)[inp(sine, 0)]!;
+      final g = await mouse(tester);
+
+      await g.moveTo(canvasTL(tester) + PatchCableGeometry.pointAt(a, b, 0.5));
+      await tester.pumpAndSettle();
+      expect(activeCursor(), SystemMouseCursors.click);
+
+      // Near an end the same wire offers something else: a grab, because that
+      // is where it detaches.
+      await g.moveTo(canvasTL(tester) + grabPoint(a, b, atSource: false));
+      await tester.pumpAndSettle();
+      expect(activeCursor(), SystemMouseCursors.grab);
+    });
+  });
+
+  // ─── cable ergonomics (issue #359) ──────────────────────────────────────
+
+  group('cables from either end', () {
+    testWidgets('a cable dragged backwards from an inlet connects; undo '
+        'disconnects', (tester) async {
+      final slider = controller.addNode(
+        desc: desc(Obj.gSlider),
+        position: const Offset(100, 120),
+      );
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(320, 120),
+      );
+      await pumpCanvas(tester);
+
+      // Press the *inlet* and drag back to the outlet — the Max habit.
+      final g = await tester.startGesture(
+        portGlobal(tester, sine, PatchPortSide.input, 0),
+      );
+      await tester.pump();
+      expect(controller.graph.dragSourcePort, inp(sine, 0));
+      expect(find.byType(PatcherGhostCable), findsOneWidget);
+
+      await g.moveTo(portGlobal(tester, slider, PatchPortSide.output, 0));
+      await tester.pump();
+      await g.up();
+      await tester.pump();
+
+      // Stored the one way round a cable is ever stored, whichever end it was
+      // dragged from.
+      expect(controller.graph.cables, hasLength(1));
+      expect(controller.graph.cables.single.source, out(slider, 0));
+      expect(controller.graph.cables.single.target, inp(sine, 0));
+      expect(gateway.cables, hasLength(1));
+
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(controller.graph.cables, isEmpty);
+    });
+
+    testWidgets('a backwards drag onto an incompatible outlet is rejected', (
+      tester,
+    ) async {
+      final slider = controller.addNode(
+        desc: desc(Obj.gSlider),
+        position: const Offset(100, 120),
+      );
+      final dac = controller.addNode(
+        desc: desc(Obj.dDac),
+        position: const Offset(320, 120),
+      );
+      await pumpCanvas(tester);
+
+      final g = await tester.startGesture(
+        portGlobal(tester, dac, PatchPortSide.input, 0),
+      );
+      await tester.pump();
+      await g.moveTo(portGlobal(tester, slider, PatchPortSide.output, 0));
+      await tester.pump();
+      await g.up();
+      await tester.pump();
+
+      // Same verdict as the forward drag reaches: float → DSP inlet is refused.
+      expect(controller.graph.cables, isEmpty);
+      expect(find.byKey(PatcherCanvas.rejectKey), findsOneWidget);
+    });
+
+    testWidgets('grabbing a cable near its inlet re-routes it in one journaled '
+        'step', (tester) async {
+      final slider = controller.addNode(
+        desc: desc(Obj.gSlider),
+        position: const Offset(100, 120),
+      );
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(320, 120),
+      );
+      final other = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(320, 300),
+      );
+      controller.connect(out(slider, 0), inp(sine, 0));
+      await pumpCanvas(tester);
+
+      final a = portPositionsFor(slider)[out(slider, 0)]!;
+      final b = portPositionsFor(sine)[inp(sine, 0)]!;
+      final g = await tester.startGesture(
+        canvasTL(tester) + grabPoint(a, b, atSource: false),
+      );
+      await tester.pump();
+      await g.moveTo(portGlobal(tester, other, PatchPortSide.input, 0));
+      await tester.pump();
+
+      // Detached: the wire is off while it is being carried, and hangs off the
+      // end that stayed put.
+      expect(controller.graph.cables, isEmpty);
+      expect(controller.graph.dragSourcePort, out(slider, 0));
+
+      await g.up();
+      await tester.pump();
+
+      expect(controller.graph.cables, hasLength(1));
+      expect(controller.graph.cables.single.target, inp(other, 0));
+      expect(gateway.cables, hasLength(1));
+
+      // One step, not two: a single undo restores the original wire whole.
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(controller.graph.cables, hasLength(1));
+      expect(controller.graph.cables.single.target, inp(sine, 0));
+      expect(controller.undoScope.canUndo, isFalse);
+    });
+
+    testWidgets('a re-route dropped on nothing deletes the cable, journaled', (
+      tester,
+    ) async {
+      final slider = controller.addNode(
+        desc: desc(Obj.gSlider),
+        position: const Offset(100, 120),
+      );
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(320, 120),
+      );
+      controller.connect(out(slider, 0), inp(sine, 0));
+      await pumpCanvas(tester);
+
+      final a = portPositionsFor(slider)[out(slider, 0)]!;
+      final b = portPositionsFor(sine)[inp(sine, 0)]!;
+      final g = await tester.startGesture(
+        canvasTL(tester) + grabPoint(a, b, atSource: true),
+      );
+      await tester.pump();
+      // Grabbed at the outlet end, so the inlet is what stays anchored.
+      await g.moveTo(canvasTL(tester) + const Offset(600, 420));
+      await tester.pump();
+      expect(controller.graph.dragSourcePort, inp(sine, 0));
+
+      await g.up();
+      await tester.pump();
+
+      expect(controller.graph.cables, isEmpty);
+      expect(gateway.cables, isEmpty);
+
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(controller.graph.cables, hasLength(1));
+      expect(gateway.cables, hasLength(1));
+    });
+
+    testWidgets('a click near a cable end selects it and leaves it wired', (
+      tester,
+    ) async {
+      final slider = controller.addNode(
+        desc: desc(Obj.gSlider),
+        position: const Offset(100, 120),
+      );
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(320, 120),
+      );
+      controller.connect(out(slider, 0), inp(sine, 0));
+      await pumpCanvas(tester);
+
+      final a = portPositionsFor(slider)[out(slider, 0)]!;
+      final b = portPositionsFor(sine)[inp(sine, 0)]!;
+      await tester.tapAt(canvasTL(tester) + grabPoint(a, b, atSource: false));
+      await tester.pump();
+
+      // A press that never travelled is a click, not a detach — the wire is
+      // still there, and it is what Delete would now act on.
+      expect(controller.graph.cables, hasLength(1));
+      expect(controller.graph.selectedCable, isNotNull);
+      expect(controller.reroutingCable, isNull);
+      expect(controller.undoScope.canUndo, isFalse);
+    });
+
+    testWidgets('a press on the port dot itself still starts a new cable, not '
+        'a re-route', (tester) async {
+      final slider = controller.addNode(
+        desc: desc(Obj.gSlider),
+        position: const Offset(100, 120),
+      );
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(320, 120),
+      );
+      final other = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(320, 300),
+      );
+      controller.connect(out(slider, 0), inp(sine, 0));
+      await pumpCanvas(tester);
+
+      final g = await tester.startGesture(
+        portGlobal(tester, slider, PatchPortSide.output, 0),
+      );
+      await tester.pump();
+      await g.moveTo(portGlobal(tester, other, PatchPortSide.input, 0));
+      await tester.pump();
+      // The existing cable is untouched: pressing the dot means "another one".
+      expect(controller.graph.cables, hasLength(1));
+      expect(controller.reroutingCable, isNull);
+
+      await g.up();
+      await tester.pump();
+      expect(controller.graph.cables, hasLength(2));
     });
   });
 }
