@@ -17,6 +17,7 @@ import '../../domain/patcher/patch_port.dart';
 import '../../domain/patcher/patch_port_id.dart';
 import '../../domain/patcher/patch_port_kind.dart';
 import '../../engine/bridge/patch_object_descriptor.dart';
+import '../../engine/state/node_type_registry.dart';
 import '../../engine/state/patcher_controller.dart';
 import 'patch_cable_colors.dart';
 import 'patcher_cable_layer.dart';
@@ -26,6 +27,14 @@ import 'patcher_node_view.dart';
 /// The pan/zoom canvas itself. Hosts the grid backdrop, the cable layer,
 /// every [PatchNode]'s widget, and the in-flight ghost cable. Tracks the
 /// cursor's scene position so the ghost cable can follow it.
+///
+/// Every scene gesture — marquee, cable drag, node drag, select and
+/// double-click — is driven from this one raw [Listener] rather than from
+/// recognisers on the nodes themselves. A `GestureDetector.onPan` only accepts
+/// after ~18px of movement and then *discards* that distance, so a dragged node
+/// lagged the pointer and short drags did nothing at all (issue #352); reading
+/// the pointer directly and measuring scene-space deltas from the press point
+/// keeps the node glued to the cursor at any zoom.
 ///
 /// Canvas interactions (design `docs/design/patcher.md` §6):
 /// - **Body drag** moves the node (and the rest of the selection) as one
@@ -88,11 +97,23 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   bool _movedSincePress = false;
   Rect? _marquee;
 
+  // Node press / drag state, all in scene coordinates. `_nodePressScene` is
+  // where the press landed (the slop reference); `_nodeDragScene` is the last
+  // point already applied, so the delta fed to the controller covers the slop
+  // distance too — the node never falls behind the pointer.
+  PatchNodeId? _pressNode;
+  Offset _nodePressScene = Offset.zero;
+  Offset _nodeDragScene = Offset.zero;
+  bool _draggingNode = false;
+
   // Middle-mouse pan.
   bool _panning = false;
 
   // Double-tap tracking (raw pointer timing, so single-tap select stays
-  // instant — a nested GestureDetector.onDoubleTap would delay it).
+  // instant — a nested GestureDetector.onDoubleTap would delay it). Only a
+  // *movement-free* press is recorded, and both presses of the pair must be
+  // movement-free, so click-to-select followed by a drag is never mistaken
+  // for a double-click (issue #352).
   PatchNodeId? _lastTapNode;
   Duration _lastTapAt = Duration.zero;
 
@@ -123,6 +144,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
         onPointerDown: _onPointerDown,
         onPointerMove: _onPointerMove,
         onPointerUp: _onPointerUp,
+        onPointerCancel: _onPointerCancel,
         onPointerSignal: _onPointerSignal,
         onPointerHover: (e) => _updateCursor(e.localPosition),
         child: Stack(
@@ -223,7 +245,6 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
             child: PatcherNodeView(
               node: n,
               controller: _controller,
-              onTap: () => _onNodeTap(n),
               selected: graph.isNodeSelected(n.id),
             ),
           ),
@@ -305,26 +326,27 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
 
     final scene = _toScene(event.localPosition);
     // An outlet press starts a cable drag. Checked first so a port just past a
-    // node's edge wins over the node itself.
+    // node's edge wins over the node itself; its press radius is tight enough
+    // (portPressRadius) that the zone never reaches the header or the bulk of
+    // the body, which stay node-drag territory.
     final port = _outputPortAt(scene);
     if (port != null) {
       setState(() => _cursor = scene);
       _controller.beginCableDrag(port);
       return;
     }
-    // Presses that land on a node belong to the node's own gesture detector —
-    // never a marquee. A second quick press on the same node is a double-click:
-    // fire the params-dialog hook (selection still runs via the node's own tap).
     final node = _nodeAt(scene);
     if (node != null) {
-      final now = event.timeStamp;
-      if (_lastTapNode == node.id && now - _lastTapAt <= kDoubleTapTimeout) {
-        _lastTapNode = null;
-        widget.onNodeDoubleTap?.call(node);
-      } else {
-        _lastTapNode = node.id;
-        _lastTapAt = now;
-      }
+      // A live GUI body owns its own gestures and sits deeper in the tree:
+      // leave the press to it entirely, so operating a control neither drags
+      // nor re-selects its node. Such nodes are dragged by the header.
+      if (_onInteractiveBody(node, scene)) return;
+      // Arm a node drag-or-click. The drag itself only starts once the pointer
+      // clears `_clickSlop`, so a plain click still selects.
+      _pressNode = node.id;
+      _nodePressScene = scene;
+      _nodeDragScene = scene;
+      _draggingNode = false;
       _pressScene = null;
       return;
     }
@@ -341,12 +363,31 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       return;
     }
     _updateCursor(event.localPosition);
+    if (_pressNode != null) {
+      _moveNodeDrag(_toScene(event.localPosition));
+      return;
+    }
     final press = _pressScene;
     if (press == null) return;
     final scene = _toScene(event.localPosition);
     if (!_movedSincePress && (scene - press).distance < _clickSlop) return;
     _movedSincePress = true;
     setState(() => _marquee = Rect.fromPoints(_marqueeAnchor!, scene));
+  }
+
+  /// Start (on the first move past [_clickSlop]) and then advance the node
+  /// drag. Deltas are measured in **scene** space against the last applied
+  /// point — which starts at the press point — so the slop distance is carried
+  /// into the first step instead of being discarded, and the zoom scale is
+  /// already divided out. The node therefore sits under the pointer at any zoom.
+  void _moveNodeDrag(Offset scene) {
+    if (!_draggingNode) {
+      if ((scene - _nodePressScene).distance < _clickSlop) return;
+      _draggingNode = true;
+      _controller.beginNodeDrag(_pressNode!);
+    }
+    _controller.dragSelectedBy(scene - _nodeDragScene);
+    _nodeDragScene = scene;
   }
 
   void _onPointerUp(PointerUpEvent event) {
@@ -371,6 +412,11 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       return;
     }
 
+    if (_pressNode != null) {
+      _endNodePress(event.timeStamp);
+      return;
+    }
+
     final press = _pressScene;
     _pressScene = null;
     if (press == null) return;
@@ -387,6 +433,47 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     } else {
       _controller.clearSelection();
     }
+  }
+
+  /// Release over a node: commit the drag, or — when the press never cleared
+  /// the slop — treat it as the tap that selects, and pair it with a previous
+  /// movement-free press to detect a double-click.
+  void _endNodePress(Duration at) {
+    final id = _pressNode!;
+    _pressNode = null;
+    if (_draggingNode) {
+      _draggingNode = false;
+      // A press that moved is never half of a double-click — and it invalidates
+      // the press before it, so click-select → drag → click can't pair either.
+      _lastTapNode = null;
+      _controller.endNodeDrag();
+      return;
+    }
+    final node = _controller.graph.nodeById(id);
+    if (node == null) return;
+    _onNodeTap(node);
+    if (_lastTapNode == id && at - _lastTapAt <= kDoubleTapTimeout) {
+      _lastTapNode = null;
+      widget.onNodeDoubleTap?.call(node);
+    } else {
+      _lastTapNode = id;
+      _lastTapAt = at;
+    }
+  }
+
+  /// A pointer torn away mid-gesture (window focus loss, a system drag taking
+  /// over) must not leave a node stuck to the cursor: commit what moved and
+  /// drop every press state.
+  void _onPointerCancel(PointerCancelEvent event) {
+    _panning = false;
+    _pressNode = null;
+    if (_draggingNode) {
+      _draggingNode = false;
+      _controller.endNodeDrag();
+    }
+    _pressScene = null;
+    _movedSincePress = false;
+    if (_marquee != null) setState(() => _marquee = null);
   }
 
   void _onNodeTap(PatchNode node) {
@@ -438,8 +525,10 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
 
   // ─── hit-testing (scene coordinates) ─────────────────────────────────────
 
+  /// The node under [scene], topmost first: nodes paint in graph order, so a
+  /// press on an overlap belongs to the last one drawn — the one the user sees.
   PatchNode? _nodeAt(Offset scene) {
-    for (final n in _controller.graph.nodes) {
+    for (final n in _controller.graph.nodes.toList().reversed) {
       final r = Rect.fromLTWH(
         n.position.dx,
         n.position.dy,
@@ -451,14 +540,35 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     return null;
   }
 
+  /// Whether [scene] lands on a node body that runs its own gestures (fader,
+  /// number field, message box). Measured against the node's exact body rect —
+  /// [_nodeAt]'s halo and the header stay draggable.
+  bool _onInteractiveBody(PatchNode node, Offset scene) {
+    if (NodeTypeRegistry.instance.find(node.type)?.interactiveBody != true) {
+      return false;
+    }
+    return Rect.fromLTWH(
+      node.position.dx,
+      node.position.dy + PatchCanvasConstants.headerHeight,
+      node.size.width,
+      node.size.height - PatchCanvasConstants.headerHeight,
+    ).contains(scene);
+  }
+
+  /// The inlet under a cable **drop** — generous, since a missed drop throws
+  /// the whole gesture away.
   PatchPortId? _inputPortAt(Offset scene) =>
-      _portAt(scene, PatchPortSide.input);
+      _portAt(scene, PatchPortSide.input, PatchCanvasConstants.portHitRadius);
 
-  PatchPortId? _outputPortAt(Offset scene) =>
-      _portAt(scene, PatchPortSide.output);
+  /// The outlet under a **press**. Tight, so a press on the header or the body
+  /// reaches the node underneath instead of starting a stray cable (issue #352).
+  PatchPortId? _outputPortAt(Offset scene) => _portAt(
+    scene,
+    PatchPortSide.output,
+    PatchCanvasConstants.portPressRadius,
+  );
 
-  PatchPortId? _portAt(Offset scene, PatchPortSide side) {
-    const hitR = PatchCanvasConstants.portHitRadius;
+  PatchPortId? _portAt(Offset scene, PatchPortSide side, double hitR) {
     for (final n in _controller.graph.nodes) {
       final positions = portPositionsFor(n);
       final count = side == PatchPortSide.input

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/widgets/patcher/patch_cable_geometry.dart';
+import 'package:phi/design/widgets/patcher/patch_node_frame.dart';
 import 'package:phi/domain/patcher/patch_node.dart';
 import 'package:phi/domain/patcher/patch_port.dart';
 import 'package:phi/domain/patcher/patch_port_id.dart';
@@ -16,15 +17,25 @@ import '../../engine/test_doubles/fake_patcher_gateway.dart';
 /// Drives the reworked patcher canvas (issue #222): body drag, typed cables,
 /// marquee + shift-click, cable/node delete, duplicate — each with undo/redo,
 /// exercised through real pointer + keyboard gestures.
+///
+/// Node dragging is driven from the canvas's raw pointer pipeline (issue #352),
+/// so the drag cases below assert *exact* positions — on screen as well as in
+/// the model — rather than "it moved somewhat": nothing may be swallowed by a
+/// recogniser's slop, and nothing may lag behind the pointer at any zoom.
 void main() {
-  NodeDescriptor desc(String type) => NodeDescriptor(
+  NodeDescriptor desc(
+    String type, {
+    Widget? body,
+    bool interactiveBody = false,
+  }) => NodeDescriptor(
     type: type,
     title: type,
     defaultSize: const Size(80, 60),
     defaultArgs: '',
     inputs: const [],
     outputs: const [],
-    buildBody: (ctx, node, controller) => const SizedBox.shrink(),
+    buildBody: (ctx, node, controller) => body ?? const SizedBox.shrink(),
+    interactiveBody: interactiveBody,
   );
 
   late FakePatcherGateway gateway;
@@ -41,14 +52,28 @@ void main() {
     NodeTypeRegistry.instance.clear();
   });
 
-  Future<void> pumpCanvas(WidgetTester tester) async {
+  Future<void> pumpCanvas(
+    WidgetTester tester, {
+    void Function(PatchNode node)? onNodeDoubleTap,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: PatcherCanvas(controller: controller)),
+        home: Scaffold(
+          body: PatcherCanvas(
+            controller: controller,
+            onNodeDoubleTap: onNodeDoubleTap,
+          ),
+        ),
       ),
     );
     await tester.pump();
   }
+
+  /// Where the node's chrome actually sits on screen — the model position is
+  /// only half the story, since the canvas lays each node out from its own
+  /// build.
+  Offset frameTopLeft(WidgetTester tester) =>
+      tester.getTopLeft(find.byType(PatchNodeFrame));
 
   Offset canvasTL(WidgetTester tester) =>
       tester.getTopLeft(find.byType(PatcherCanvas));
@@ -91,29 +116,190 @@ void main() {
     );
     await pumpCanvas(tester);
     const start = Offset(120, 120);
+    final drawnAtStart = frameTopLeft(tester);
 
-    // A stepped drag: the first move clears the touch slop (starts the drag),
-    // subsequent moves shift the node down-right.
+    // A stepped drag. Every pixel of it lands on the node: the first step's
+    // slop distance is carried into the move instead of being discarded.
     final g = await tester.startGesture(nodeCenter(tester, sine));
     await tester.pump();
     await g.moveBy(const Offset(30, 0));
     await tester.pump();
     await g.moveBy(const Offset(30, 25));
     await tester.pump();
+
+    // Mid-gesture the node is already drawn under the pointer, not lagging it.
+    expect(frameTopLeft(tester), drawnAtStart + const Offset(60, 25));
+
     await g.up();
     await tester.pump();
 
-    final moved = sine.position;
-    expect(moved.dx, greaterThan(start.dx));
-    expect(moved.dy, greaterThan(start.dy));
+    final moved = start + const Offset(60, 25);
+    expect(sine.position, moved);
 
     // The drag focused the canvas, so Ctrl+Z reaches its undo scope; undo/redo
-    // restore and re-apply the move exactly.
+    // restore and re-apply the move exactly — on screen too.
     await ctrl(tester, LogicalKeyboardKey.keyZ);
     expect(sine.position, start);
+    expect(frameTopLeft(tester), drawnAtStart);
 
     await ctrl(tester, LogicalKeyboardKey.keyY);
     expect(sine.position, moved);
+    expect(frameTopLeft(tester), drawnAtStart + const Offset(60, 25));
+  });
+
+  testWidgets('a drag shorter than the gesture-arena touch slop still moves '
+      'the node, one-to-one', (tester) async {
+    final sine = controller.addNode(
+      desc: desc(Obj.dSine),
+      position: const Offset(120, 120),
+    );
+    await pumpCanvas(tester);
+    final drawnAtStart = frameTopLeft(tester);
+
+    // 6px — past the canvas's own 4px click slop but well under `kTouchSlop`
+    // (~18px), which a pan recogniser would have needed before accepting.
+    final g = await tester.startGesture(nodeCenter(tester, sine));
+    await tester.pump();
+    await g.moveBy(const Offset(6, 6));
+    await tester.pump();
+    await g.up();
+    await tester.pump();
+
+    expect(sine.position, const Offset(126, 126));
+    expect(frameTopLeft(tester), drawnAtStart + const Offset(6, 6));
+  });
+
+  testWidgets('the node stays under the pointer while zoomed in', (
+    tester,
+  ) async {
+    final sine = controller.addNode(
+      desc: desc(Obj.dSine),
+      position: const Offset(120, 120),
+    );
+    await pumpCanvas(tester);
+    controller.transform.value = Matrix4.identity()..scaleByDouble(2, 2, 1, 1);
+    await tester.pump();
+    final drawnAtStart = frameTopLeft(tester);
+
+    // At 2× the node's header centre — scene (160, 131) — is twice as far from
+    // the canvas origin, and a 40px pointer move is a 20px move in the scene.
+    final g = await tester.startGesture(
+      canvasTL(tester) + const Offset(320, 262),
+    );
+    await tester.pump();
+    await g.moveBy(const Offset(40, 20));
+    await tester.pump();
+    await g.up();
+    await tester.pump();
+
+    expect(sine.position, const Offset(140, 130));
+    // On screen the node followed the pointer exactly, not half of it.
+    expect(frameTopLeft(tester), drawnAtStart + const Offset(40, 20));
+  });
+
+  testWidgets('click-to-select then drag moves the node and never reports a '
+      'double-click', (tester) async {
+    final sine = controller.addNode(
+      desc: desc(Obj.dSine),
+      position: const Offset(120, 120),
+    );
+    PatchNode? doubleClicked;
+    await pumpCanvas(tester, onNodeDoubleTap: (n) => doubleClicked = n);
+
+    await tester.tapAt(nodeCenter(tester, sine));
+    await tester.pump();
+    expect(controller.graph.selectedNodes, {sine.id});
+
+    // The very next press starts a drag — a press that moves is not a click,
+    // so it can never be the second half of a double-click.
+    final g = await tester.startGesture(nodeCenter(tester, sine));
+    await tester.pump();
+    await g.moveBy(const Offset(24, 18));
+    await tester.pump();
+    await g.up();
+    await tester.pump();
+
+    expect(doubleClicked, isNull);
+    expect(sine.position, const Offset(144, 138));
+  });
+
+  testWidgets('two movement-free clicks on a node report a double-click', (
+    tester,
+  ) async {
+    final sine = controller.addNode(
+      desc: desc(Obj.dSine),
+      position: const Offset(120, 120),
+    );
+    PatchNode? doubleClicked;
+    await pumpCanvas(tester, onNodeDoubleTap: (n) => doubleClicked = n);
+
+    final at = nodeCenter(tester, sine);
+    await tester.tapAt(at);
+    await tester.pump();
+    await tester.tapAt(at);
+    await tester.pump();
+
+    expect(doubleClicked?.id, sine.id);
+  });
+
+  testWidgets('a press beside an outlet but inside the node drags the node, '
+      'not a cable', (tester) async {
+    final sine = controller.addNode(
+      desc: desc(Obj.dSine),
+      position: const Offset(120, 120),
+    );
+    await pumpCanvas(tester);
+
+    // Scene (198, 145): inside the node, 13px from its outlet centre at
+    // (200, 158) — inside the generous drop radius, outside the press radius.
+    final g = await tester.startGesture(
+      canvasTL(tester) + const Offset(198, 145),
+    );
+    await tester.pump();
+    await g.moveBy(const Offset(25, 0));
+    await tester.pump();
+    await g.up();
+    await tester.pump();
+
+    expect(sine.position, const Offset(145, 120));
+    expect(controller.graph.cables, isEmpty);
+  });
+
+  testWidgets('a press on a live GUI body operates the body, never the node', (
+    tester,
+  ) async {
+    var bodyDragged = false;
+    // The canvas renders bodies — and decides what owns a press — from the
+    // registry, so this descriptor has to be registered, not just passed in.
+    final live = desc(
+      Obj.gSlider,
+      interactiveBody: true,
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanStart: (_) => bodyDragged = true,
+        child: const SizedBox.expand(),
+      ),
+    );
+    NodeTypeRegistry.instance.register(live);
+    final slider = controller.addNode(
+      desc: live,
+      position: const Offset(120, 120),
+    );
+    await pumpCanvas(tester);
+
+    // Scene (150, 160) sits in the body, below the 22px header.
+    final g = await tester.startGesture(
+      canvasTL(tester) + const Offset(150, 160),
+    );
+    await tester.pump();
+    await g.moveBy(const Offset(30, 20));
+    await tester.pump();
+    await g.up();
+    await tester.pump();
+
+    expect(bodyDragged, isTrue);
+    expect(slider.position, const Offset(120, 120));
+    expect(controller.graph.selectedNodes, isEmpty);
   });
 
   testWidgets('a compatible cable drop connects; undo disconnects', (

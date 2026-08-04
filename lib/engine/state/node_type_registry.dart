@@ -37,6 +37,7 @@ class NodeDescriptor {
     required this.inputs,
     required this.outputs,
     required this.buildBody,
+    this.interactiveBody = false,
   });
 
   /// One of the `Obj.*` string constants from `package:yse`.
@@ -58,6 +59,12 @@ class NodeDescriptor {
 
   /// Builds the body widget shown below the node header.
   final NodeBodyBuilder buildBody;
+
+  /// Whether the body owns its own pointer gestures — a fader, a number
+  /// field, a clickable message box. The canvas leaves presses inside such a
+  /// body to the widget, so operating a control never drags (or re-selects)
+  /// its node; those nodes are dragged by their header (issue #352).
+  final bool interactiveBody;
 }
 
 /// Global singleton mapping `Obj.*` strings to their [NodeDescriptor].

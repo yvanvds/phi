@@ -48,6 +48,7 @@ void registerBuiltInPatcherNodes() {
       outputs: const [PortSpec(kind: PatchPortKind.control)],
       buildBody: (ctx, node, controller) =>
           SliderNodeBody(node: node, controller: controller),
+      interactiveBody: true,
     ),
   );
 
@@ -80,6 +81,7 @@ void registerBuiltInPatcherNodes() {
       outputs: const [PortSpec(kind: PatchPortKind.control)],
       buildBody: (ctx, node, controller) =>
           ToggleNodeBody(node: node, controller: controller),
+      interactiveBody: true,
     ),
   );
 
@@ -93,6 +95,7 @@ void registerBuiltInPatcherNodes() {
       outputs: const [PortSpec(kind: PatchPortKind.control)],
       buildBody: (ctx, node, controller) =>
           ButtonNodeBody(node: node, controller: controller),
+      interactiveBody: true,
     ),
   );
 
@@ -106,6 +109,7 @@ void registerBuiltInPatcherNodes() {
       outputs: const [PortSpec(kind: PatchPortKind.control)],
       buildBody: (ctx, node, controller) =>
           NumberNodeBody(node: node, controller: controller),
+      interactiveBody: true,
     ),
   );
 
@@ -119,6 +123,7 @@ void registerBuiltInPatcherNodes() {
       outputs: const [PortSpec(kind: PatchPortKind.control)],
       buildBody: (ctx, node, controller) =>
           NumberNodeBody(node: node, controller: controller, integer: true),
+      interactiveBody: true,
     ),
   );
 
@@ -132,6 +137,7 @@ void registerBuiltInPatcherNodes() {
       outputs: const [PortSpec(kind: PatchPortKind.control)],
       buildBody: (ctx, node, controller) =>
           MessageNodeBody(node: node, controller: controller),
+      interactiveBody: true,
     ),
   );
 }
