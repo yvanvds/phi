@@ -55,6 +55,14 @@ void main() {
     (controller.registry.entityAt(patchAddress)!.payload! as Map).cast(),
   );
 
+  /// The `objects` entries of a flushed dump. The engine dump is **structured
+  /// and re-parseable** — a list of `{id, type, args, …}` maps, not a summary
+  /// count — so a reload can rebuild the graph from it (issue #365).
+  List<Map<String, Object?>> objectsOf(PatchPayload payload) => [
+    for (final raw in payload.dump['objects']! as List)
+      (raw as Map).cast<String, Object?>(),
+  ];
+
   testWidgets('an edited patch round-trips a save/reload, placement intact', (
     tester,
   ) async {
@@ -123,8 +131,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller1.isDirty.value, isFalse);
 
-    // The save flushed the live dump into the entity (dump-to-payload on save).
-    expect(patchOf(controller1).dump['objects'], 1);
+    // The save flushed the live dump into the entity (dump-to-payload on save):
+    // the one object the performer added, described well enough to rebuild from.
+    final flushed = objectsOf(patchOf(controller1));
+    expect(flushed, hasLength(1));
+    expect(flushed.single['type'], Obj.dSine);
 
     // --- Launch 2: reopen, expect the edited patch restored ------------------
     final gateway2 = FakeYseGateway();
@@ -168,9 +179,20 @@ void main() {
     // The restored entity carries the edited dump and its placement — the engine
     // re-materialised the *edited* patch from the reloaded payload.
     final restored = patchOf(controller2);
-    expect(restored.dump['objects'], 1);
+    final restoredObjects = objectsOf(restored);
+    expect(restoredObjects, hasLength(1));
+    expect(restoredObjects.single['type'], Obj.dSine);
     expect(restored.placement, reverb);
     expect(engine2.patches.isOpen(patchAddress), isTrue);
+
+    // …and the second launch's *native* instance was rebuilt from that dump —
+    // the structured form round-trips through `parseJson`, so the edited object
+    // is live in the engine, not merely stored in the payload.
+    final instanceId2 = engine2.patches.instanceIdOf(patchAddress);
+    expect(instanceId2, isNotNull);
+    final rebuilt = patcher2.instances[instanceId2]!.nodes;
+    expect(rebuilt, hasLength(1));
+    expect(rebuilt.values.single.type, Obj.dSine);
 
     await engine2.dispose();
     await gateway2.dispose();
