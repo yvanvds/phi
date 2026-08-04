@@ -71,6 +71,27 @@ void main() {
     expect(controller.argsOf(node.id), '880');
   });
 
+  test('setNodeParams wakes the node so a body rendering its args repaints', () {
+    // Issue #354: the `~sine` readout is rebuilt by the node's own listener, so
+    // apply *and* undo/redo have to raise it — otherwise the canvas keeps
+    // showing the previous frequency.
+    final node = controller.addObject(
+      desc: gateway.objectTypes().firstWhere((d) => d.type == Obj.dSine),
+      position: Offset.zero,
+    );
+    var notified = 0;
+    node.addListener(() => notified++);
+
+    controller.applyParams(node.id, '880');
+    expect(notified, 1);
+
+    controller.undo();
+    expect(notified, 2);
+
+    controller.redo();
+    expect(notified, 3);
+  });
+
   test('applyParams with unchanged args records nothing', () {
     final node = controller.addObject(
       desc: gateway.objectTypes().firstWhere((d) => d.type == Obj.dSine),

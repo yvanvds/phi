@@ -10,7 +10,8 @@ import 'patch_port.dart';
 /// Owns the mutable canvas-side state for one native patcher object:
 /// position (live during drags) and the armed flag (display-only glow).
 /// Listeners are notified on these changes only — graph-level changes
-/// (creation, deletion, cables) fire on [PatchGraph] instead.
+/// (creation, deletion, cables) fire on [PatchGraph] instead — plus the
+/// [markParamsChanged] signal for state the node does *not* own.
 class PatchNode extends ChangeNotifier {
   PatchNode({
     required this.id,
@@ -68,4 +69,13 @@ class PatchNode extends ChangeNotifier {
     _armed = value;
     notifyListeners();
   }
+
+  /// Announce that the object's creation arguments changed, so a body that
+  /// renders them repaints (issue #354).
+  ///
+  /// The argument string itself lives on the controller, which owns the native
+  /// handle it was written to — the node only carries the *signal*, because the
+  /// canvas listens per node. Raised by `PatcherController.setNodeParams`, which
+  /// every params-dialog apply and its undo/redo run through.
+  void markParamsChanged() => notifyListeners();
 }

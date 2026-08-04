@@ -612,11 +612,17 @@ class PatcherController {
   /// persisting it to the native object via `setParams`. Primitive called by
   /// [SetPatchParamsCommand]; author through [applyParams] so the change is
   /// undoable.
+  ///
+  /// Wakes the node afterwards ([PatchNode.markParamsChanged]) so a body that
+  /// renders its arguments — the `~sine` freq readout — repaints. Both the
+  /// dialog's apply and its undo/redo come through here, so all three follow
+  /// (issue #354).
   void setNodeParams(PatchNodeId id, String args) {
     final native = _nativeByNode[id];
     if (native == null) return;
     _gateway.setParams(instanceId, native, args);
     _argsByNode[id] = args;
+    graph.nodeById(id)?.markParamsChanged();
   }
 
   /// Wire [cable] into the native patcher and the Dart mirror.

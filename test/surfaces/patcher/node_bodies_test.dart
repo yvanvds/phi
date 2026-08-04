@@ -9,8 +9,11 @@ import 'package:phi/engine/state/patcher_controller.dart';
 import 'package:phi/surfaces/patcher/nodes/button_node_body.dart';
 import 'package:phi/surfaces/patcher/nodes/message_node_body.dart';
 import 'package:phi/surfaces/patcher/nodes/number_node_body.dart';
+import 'package:phi/surfaces/patcher/nodes/sine_node_body.dart';
 import 'package:phi/surfaces/patcher/nodes/slider_node_body.dart';
 import 'package:phi/surfaces/patcher/nodes/toggle_node_body.dart';
+import 'package:phi/surfaces/patcher/patcher_node_types.dart';
+import 'package:phi/surfaces/patcher/patcher_node_view.dart';
 import 'package:yse/yse.dart';
 
 import '../../engine/test_doubles/fake_patcher_gateway.dart';
@@ -228,5 +231,69 @@ void main() {
       tester.widget<TextField>(find.byType(TextField)).controller!.text,
       '5',
     );
+  });
+
+  // ─── the ~sine readout (issue #354) ─────────────────────────────────────
+  // The body used to print a hardcoded '440' whatever the object was set to.
+
+  testWidgets('sine body shows the node creation frequency, not a hardcoded '
+      '440', (tester) async {
+    final node = addNode(Obj.dSine, args: '660');
+    await pumpBody(tester, SineNodeBody(node: node, controller: controller));
+
+    expect(find.text('660'), findsOneWidget);
+    expect(find.text('440'), findsNothing);
+  });
+
+  testWidgets('sine body prefers the engine live guiValue over its args', (
+    tester,
+  ) async {
+    final node = addNode(Obj.dSine, args: '440');
+    // What a cable into the freq inlet leaves behind on the native object.
+    gateway.nodes.values.single.guiValue = '523.25';
+    await pumpBody(tester, SineNodeBody(node: node, controller: controller));
+
+    expect(find.text('523.25'), findsOneWidget);
+    expect(find.text('440'), findsNothing);
+  });
+
+  testWidgets('sine body shows a placeholder when no frequency is known', (
+    tester,
+  ) async {
+    final node = addNode(Obj.dSine);
+    await pumpBody(tester, SineNodeBody(node: node, controller: controller));
+
+    // A dash, not an invented number.
+    expect(find.text('—'), findsOneWidget);
+  });
+
+  testWidgets('the rendered sine node follows a params apply and its undo', (
+    tester,
+  ) async {
+    // Through the real composition: PatcherNodeView listens to the node, and
+    // setNodeParams (apply, undo and redo alike) wakes it.
+    registerBuiltInPatcherNodes();
+    final node = addNode(Obj.dSine, args: '440');
+    await pumpBody(tester, PatcherNodeView(node: node, controller: controller));
+
+    Finder readout(String value) => find.descendant(
+      of: find.byType(SineNodeBody),
+      matching: find.text(value),
+    );
+
+    expect(readout('440'), findsOneWidget);
+
+    controller.applyParams(node.id, '660');
+    await tester.pump();
+    expect(readout('660'), findsOneWidget);
+    expect(readout('440'), findsNothing);
+
+    controller.undo();
+    await tester.pump();
+    expect(readout('440'), findsOneWidget);
+
+    controller.redo();
+    await tester.pump();
+    expect(readout('660'), findsOneWidget);
   });
 }
