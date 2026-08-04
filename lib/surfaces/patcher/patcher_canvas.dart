@@ -106,6 +106,13 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   Offset _nodeDragScene = Offset.zero;
   bool _draggingNode = false;
 
+  // Whether the press currently in flight landed on a body that runs its own
+  // gestures. Such a press belongs to the widget underneath, so the canvas
+  // neither drags the node nor claims keyboard focus on release — an editable
+  // body (a `.i`/`.f` number field) has just taken focus for its caret and must
+  // keep it (issue #353).
+  bool _pressOnInteractiveBody = false;
+
   // Middle-mouse pan.
   bool _panning = false;
 
@@ -281,6 +288,13 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   // ─── keyboard ─────────────────────────────────────────────────────────
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    // The canvas shortcuts belong to the canvas alone. This [Focus] is an
+    // *ancestor* of every node body's focus node, so a key pressed while a
+    // `.i`/`.f` number field is being edited arrives here first — ahead of
+    // Flutter's own `DefaultTextEditingShortcuts`, which sit above the surface.
+    // Without this guard Backspace would delete the selected nodes instead of a
+    // character, and the box could never be typed into (issue #353).
+    if (!_focus.hasPrimaryFocus) return KeyEventResult.ignored;
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
@@ -318,6 +332,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   // ─── pointer ──────────────────────────────────────────────────────────
 
   void _onPointerDown(PointerDownEvent event) {
+    _pressOnInteractiveBody = false;
     if (event.buttons == kMiddleMouseButton) {
       _panning = true;
       return;
@@ -340,7 +355,10 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       // A live GUI body owns its own gestures and sits deeper in the tree:
       // leave the press to it entirely, so operating a control neither drags
       // nor re-selects its node. Such nodes are dragged by the header.
-      if (_onInteractiveBody(node, scene)) return;
+      if (_onInteractiveBody(node, scene)) {
+        _pressOnInteractiveBody = true;
+        return;
+      }
       // Arm a node drag-or-click. The drag itself only starts once the pointer
       // clears `_clickSlop`, so a plain click still selects.
       _pressNode = node.id;
@@ -394,7 +412,12 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // Take keyboard focus on release — *after* the enclosing pane's own
     // pointer-down focus grab, so the canvas keeps focus for Delete / Ctrl+D /
     // Ctrl+Z once a gesture completes (mirrors the piano roll's focus-on-gesture).
-    _focus.requestFocus();
+    // Never on a press that landed on a self-driven body: the `.i`/`.f` field
+    // underneath has just taken focus to place its caret, and taking it back
+    // here is precisely what made number boxes uneditable (issue #353).
+    final onBody = _pressOnInteractiveBody;
+    _pressOnInteractiveBody = false;
+    if (!onBody) _focus.requestFocus();
     if (_panning) {
       _panning = false;
       return;
@@ -466,6 +489,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   /// drop every press state.
   void _onPointerCancel(PointerCancelEvent event) {
     _panning = false;
+    _pressOnInteractiveBody = false;
     _pressNode = null;
     if (_draggingNode) {
       _draggingNode = false;
@@ -476,8 +500,10 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     if (_marquee != null) setState(() => _marquee = null);
   }
 
+  /// Selection side of a movement-free press on a node. Focus was already taken
+  /// by [_onPointerUp] — the one place that decides whether this gesture may
+  /// claim it at all.
   void _onNodeTap(PatchNode node) {
-    _focus.requestFocus();
     _controller.selectNode(
       node.id,
       additive: HardwareKeyboard.instance.isShiftPressed,
@@ -543,6 +569,10 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   /// Whether [scene] lands on a node body that runs its own gestures (fader,
   /// number field, message box). Measured against the node's exact body rect —
   /// [_nodeAt]'s halo and the header stay draggable.
+  ///
+  /// The single notion of "the widget owns this press": it decides both that no
+  /// node drag starts here (issue #352) and that the canvas leaves keyboard
+  /// focus alone on release (issue #353).
   bool _onInteractiveBody(PatchNode node, Offset scene) {
     if (NodeTypeRegistry.instance.find(node.type)?.interactiveBody != true) {
       return false;

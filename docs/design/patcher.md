@@ -128,6 +128,13 @@ live-code control).
   toggle, button, number (`.i`/`.f`), message — operable directly on
   the canvas (`sendFloat`/`sendBang` through the gateway, display via
   `guiValue`). The existing slider body generalises.
+- **Editable bodies own the keyboard too.** Clicking a number box takes
+  focus and selects the value (Max behaviour): Enter commits and pushes,
+  moving focus away commits, Escape reverts to the live `guiValue`. The
+  canvas never grabs focus back from such a press and never claims a key
+  while one of them holds focus — so Backspace edits text there instead
+  of deleting the selection, while `Delete` on a focused canvas still
+  removes selected nodes.
 - **Params dialog** (double-click a non-GUI node): one field per
   documented creation parameter (name, doc, default, range from
   `PatcherParam`), applying via `setParams` — the same

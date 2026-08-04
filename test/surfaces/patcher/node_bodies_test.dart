@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/widgets/fader/phi_fader.dart';
 import 'package:phi/design/widgets/toggle/phi_toggle.dart';
@@ -156,6 +157,76 @@ void main() {
     expect(
       tester.widget<TextField>(find.byType(TextField)).controller!.text,
       '7',
+    );
+  });
+
+  // ─── editing behaviour (issue #353) ─────────────────────────────────────
+
+  testWidgets('number body selects its whole value when it takes focus, so '
+      'typing replaces it', (tester) async {
+    final node = addNode(Obj.gFloat);
+    gateway.nodes.values.single.guiValue = '12';
+    await pumpBody(tester, NumberNodeBody(node: node, controller: controller));
+
+    final field = find.byType(TextField);
+    await tester.tap(field);
+    await tester.pump();
+
+    final controllerOfField = tester.widget<TextField>(field).controller!;
+    expect(controllerOfField.selection.textInside('12'), '12');
+  });
+
+  testWidgets('number body commits what was typed when it loses focus', (
+    tester,
+  ) async {
+    final node = addNode(Obj.gFloat);
+    await pumpBody(tester, NumberNodeBody(node: node, controller: controller));
+
+    await tester.enterText(find.byType(TextField), '3.5');
+    await tester.pump();
+    // No Enter — just walk away, the way clicking elsewhere on the canvas does.
+    tester.widget<TextField>(find.byType(TextField)).focusNode!.unfocus();
+    await tester.pump();
+
+    expect(gateway.calls, contains('sendFloat:${handle()}:0:3.500'));
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '3.5',
+    );
+  });
+
+  testWidgets('number body losing focus untouched pushes nothing', (
+    tester,
+  ) async {
+    final node = addNode(Obj.gFloat);
+    gateway.nodes.values.single.guiValue = '9';
+    await pumpBody(tester, NumberNodeBody(node: node, controller: controller));
+
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    tester.widget<TextField>(find.byType(TextField)).focusNode!.unfocus();
+    await tester.pump();
+
+    // Clicking through a number box must never re-send its own value.
+    expect(gateway.calls.where((c) => c.startsWith('sendFloat')), isEmpty);
+  });
+
+  testWidgets('Escape throws the edit away and restores the live guiValue', (
+    tester,
+  ) async {
+    final node = addNode(Obj.gFloat);
+    gateway.nodes.values.single.guiValue = '5';
+    await pumpBody(tester, NumberNodeBody(node: node, controller: controller));
+
+    await tester.enterText(find.byType(TextField), '999');
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+
+    expect(gateway.calls.where((c) => c.startsWith('sendFloat')), isEmpty);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '5',
     );
   });
 }
