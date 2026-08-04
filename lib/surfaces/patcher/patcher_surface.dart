@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:yse/yse.dart';
 
 import '../../design/tokens/phi_colors.dart';
@@ -19,6 +19,10 @@ import 'patcher_canvas.dart';
 import 'patcher_node_types.dart';
 import 'placement/patch_placement_bar.dart';
 import 'reference/patch_reference_panel.dart';
+
+/// A verb on the node context menu (issue #356). Every one of them already has
+/// a keyboard route; the menu is what makes them discoverable without one.
+enum _NodeAction { editParams, duplicate, delete }
 
 /// Patcher surface — pan/zoom canvas of nodes and cables.
 ///
@@ -63,6 +67,12 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   /// node tap), or null for the empty state.
   PatchObjectDescriptor? _selected;
 
+  /// The canvas node the reference panel is documenting, when the reference
+  /// came from a node rather than a palette entry — the panel then shows that
+  /// node's *current* argument values beside each documented parameter
+  /// (issue #356). Null for a palette tap, which documents a type.
+  PatchNodeId? _selectedNodeId;
+
   @override
   void initState() {
     super.initState();
@@ -71,29 +81,105 @@ class _PatcherViewportState extends State<_PatcherViewport> {
     _objectTypes = widget.engine.patcher.objectTypes();
   }
 
-  void _select(PatchObjectDescriptor desc) => setState(() => _selected = desc);
+  void _select(PatchObjectDescriptor desc) => setState(() {
+    _selected = desc;
+    // A palette entry documents a type — there is no instance to read values
+    // from, so any previously-selected node's values are dropped.
+    _selectedNodeId = null;
+  });
 
   void _selectNode(PatchNode node) {
     final desc = _descriptorForType(node.type);
-    if (desc != null) setState(() => _selected = desc);
+    if (desc == null) return;
+    setState(() {
+      _selected = desc;
+      _selectedNodeId = node.id;
+    });
   }
 
   void _createObject(PatchObjectDescriptor desc, Offset position) {
     widget.engine.patcher.addObject(desc: desc, position: position);
   }
 
-  /// Double-click on a non-GUI node opens the metadata params dialog (design
-  /// §7). GUI objects are operated through their live bodies, so they are left
-  /// to their body; nodes with no documented parameters have nothing to edit.
+  /// Double-click (or the context menu's `edit parameters…`) on a node with
+  /// documented parameters opens the metadata params dialog (design §7). GUI
+  /// objects are operated through their live bodies, so they are left to their
+  /// body; nodes with no documented parameters have nothing to edit.
   void _editParams(PatchNode node) {
     final desc = _descriptorForType(node.type);
-    if (desc == null || desc.category == PatchObjectCategory.gui) return;
-    if (desc.params.isEmpty) return;
+    if (desc == null || !_hasEditableParams(desc)) return;
     showPatchParamsDialog(
       context,
       controller: widget.engine.patcher,
       node: node,
       descriptor: desc,
+    );
+  }
+
+  /// Whether [desc] is a type the params dialog has anything to offer for —
+  /// the one rule behind both the double-click and the context menu's
+  /// `edit parameters…` entry, so the menu can never offer a dialog that
+  /// [_editParams] would silently decline to open.
+  static bool _hasEditableParams(PatchObjectDescriptor desc) =>
+      desc.category != PatchObjectCategory.gui && desc.params.isNotEmpty;
+
+  /// Right-click on a node: the standard affordances, named (issue #356).
+  ///
+  /// The canvas has already pointed the selection at [node] — either alone, or
+  /// as one member of a multi-selection it was already part of — so `duplicate`
+  /// and `delete` act on exactly what the pointer named. They are the same
+  /// controller verbs `Ctrl+D` and `Delete` reach, journaled the same way; the
+  /// menu only makes them findable without the shortcut.
+  ///
+  /// The editor is resolved *after* the menu closes, since the open patch can
+  /// change while it is up.
+  Future<void> _onNodeContextMenu(PatchNode node, Offset global) async {
+    final desc = _descriptorForType(node.type);
+    final action = await _showNodeMenu(
+      global,
+      editable: desc != null && _hasEditableParams(desc),
+    );
+    if (action == null || !mounted) return;
+    final controller = widget.engine.patcherOrNull;
+    if (controller == null) return;
+    switch (action) {
+      case _NodeAction.editParams:
+        _editParams(node);
+      case _NodeAction.duplicate:
+        controller.duplicateSelection();
+      case _NodeAction.delete:
+        controller.deleteSelection();
+    }
+  }
+
+  /// The node context menu, anchored at the global pointer position — same
+  /// styling as the state canvas's menus so the two surfaces feel of a piece.
+  /// `edit parameters…` is offered only when the type has parameters to edit.
+  Future<_NodeAction?> _showNodeMenu(Offset global, {required bool editable}) {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    return showMenu<_NodeAction>(
+      context: context,
+      position: RelativeRect.fromRect(
+        Rect.fromPoints(global, global),
+        Offset.zero & overlay.size,
+      ),
+      color: PhiColors.bg2,
+      items: [
+        if (editable) _menuItem('edit parameters…', _NodeAction.editParams),
+        _menuItem('duplicate · ctrl+d', _NodeAction.duplicate),
+        _menuItem('delete · del', _NodeAction.delete),
+      ],
+    );
+  }
+
+  PopupMenuItem<_NodeAction> _menuItem(String label, _NodeAction action) {
+    return PopupMenuItem<_NodeAction>(
+      value: action,
+      height: 32,
+      child: Text(
+        label,
+        style: PhiType.monoS().copyWith(fontSize: 11, color: PhiColors.fg0),
+      ),
     );
   }
 
@@ -171,13 +257,45 @@ class _PatcherViewportState extends State<_PatcherViewport> {
                             onCreateObject: _createObject,
                             onNodeTap: _selectNode,
                             onNodeDoubleTap: _editParams,
+                            onNodeContextMenu: _onNodeContextMenu,
                           ),
                   ),
                 ],
               ),
             ),
-            PatchReferencePanel(descriptor: _selected),
+            _reference(editor),
           ],
+        );
+      },
+    );
+  }
+
+  /// The reference panel, fed the selected node's **live** arguments when the
+  /// reference came from the canvas (issue #356).
+  ///
+  /// Bound to the graph rather than read once: a params apply and its undo/redo
+  /// wake the node, the graph re-broadcasts that, and the panel's values follow
+  /// the edit without the user having to re-select anything.
+  ///
+  /// Values are shown only while the remembered node is still there **and still
+  /// of the documented type**. Node ids are native handles, unique only inside
+  /// their own patcher, so after switching patches the id could otherwise
+  /// resolve to an unrelated object and print its arguments against the wrong
+  /// parameter list. Failing that check leaves the type documentation standing
+  /// on its own, which is exactly what a palette tap shows.
+  Widget _reference(PatcherController? editor) {
+    final id = _selectedNodeId;
+    if (editor == null || id == null) {
+      return PatchReferencePanel(descriptor: _selected);
+    }
+    return ListenableBuilder(
+      listenable: editor.graph,
+      builder: (context, _) {
+        final node = editor.graph.nodeById(id);
+        final documented = node != null && node.type == _selected?.type;
+        return PatchReferencePanel(
+          descriptor: _selected,
+          args: documented ? editor.argsOf(id) : null,
         );
       },
     );

@@ -14,6 +14,7 @@ import '../../domain/project/undo_scope.dart';
 import '../bridge/patch_object_descriptor.dart';
 import '../bridge/patch_pin_compatibility.dart';
 import '../bridge/patcher_gateway.dart';
+import '../bridge/patcher_node_snapshot.dart';
 import 'node_type_registry.dart';
 import 'patch_node_spec.dart';
 import 'patcher_commands/connect_cable_command.dart';
@@ -178,27 +179,36 @@ class PatcherController {
       voice: voice,
       position: position,
       size: size ?? _sizeForPorts(snapshot.inputs, snapshot.outputs),
-      inputs: [
-        for (var i = 0; i < snapshot.inputs; i++)
-          PatchPort(
-            index: i,
-            side: PatchPortSide.input,
-            kind: snapshot.inputKinds[i],
-            voice: voice,
-          ),
-      ],
-      outputs: [
-        for (var i = 0; i < snapshot.outputs; i++)
-          PatchPort(
-            index: i,
-            side: PatchPortSide.output,
-            kind: snapshot.outputKinds[i],
-            voice: voice,
-          ),
-      ],
+      inputs: _portsFrom(snapshot, PatchPortSide.input, voice),
+      outputs: _portsFrom(snapshot, PatchPortSide.output, voice),
     );
     graph.addNode(node);
     return node;
+  }
+
+  /// Reify one side of a gateway [snapshot] into [PatchPort]s for a node of
+  /// [voice]. The single place a snapshot becomes ports, so node creation,
+  /// mirror rebuild and the post-`setParams` re-inspect can never disagree
+  /// about what the engine just reported. An absent kind (a snapshot whose
+  /// kinds list is shorter than its count) falls back to `control` rather than
+  /// throwing — the mirror degrades, it does not crash.
+  static List<PatchPort> _portsFrom(
+    PatcherNodeSnapshot snapshot,
+    PatchPortSide side,
+    int voice,
+  ) {
+    final isInput = side == PatchPortSide.input;
+    final count = isInput ? snapshot.inputs : snapshot.outputs;
+    final kinds = isInput ? snapshot.inputKinds : snapshot.outputKinds;
+    return [
+      for (var i = 0; i < count; i++)
+        PatchPort(
+          index: i,
+          side: side,
+          kind: i < kinds.length ? kinds[i] : PatchPortKind.control,
+          voice: voice,
+        ),
+    ];
   }
 
   /// The documented creation-argument string for [desc] — its params' default
@@ -262,24 +272,8 @@ class PatcherController {
           position: obj.position ?? Offset.zero,
           size:
               bodied?.defaultSize ?? _sizeForPorts(ports.inputs, ports.outputs),
-          inputs: [
-            for (var i = 0; i < ports.inputs; i++)
-              PatchPort(
-                index: i,
-                side: PatchPortSide.input,
-                kind: ports.inputKinds[i],
-                voice: 1,
-              ),
-          ],
-          outputs: [
-            for (var i = 0; i < ports.outputs; i++)
-              PatchPort(
-                index: i,
-                side: PatchPortSide.output,
-                kind: ports.outputKinds[i],
-                voice: 1,
-              ),
-          ],
+          inputs: _portsFrom(ports, PatchPortSide.input, 1),
+          outputs: _portsFrom(ports, PatchPortSide.output, 1),
         ),
       );
     }
@@ -613,16 +607,86 @@ class PatcherController {
   /// [SetPatchParamsCommand]; author through [applyParams] so the change is
   /// undoable.
   ///
-  /// Wakes the node afterwards ([PatchNode.markParamsChanged]) so a body that
-  /// renders its arguments — the `~sine` freq readout — repaints. Both the
+  /// Re-inspects the object afterwards and reshapes the node when the new
+  /// arguments changed its port count ([_resyncPorts], issue #356), then wakes
+  /// it ([PatchNode.markParamsChanged]) so a body that renders its arguments —
+  /// the default args body, the `~sine` freq readout — repaints. Both the
   /// dialog's apply and its undo/redo come through here, so all three follow
   /// (issue #354).
-  void setNodeParams(PatchNodeId id, String args) {
+  ///
+  /// Returns the cables that had to be dropped because the reconfigured object
+  /// no longer has the port they hung off; [SetPatchParamsCommand] re-wires them
+  /// on undo, so a param edit that cost a connection is undone whole.
+  List<PatchCable> setNodeParams(PatchNodeId id, String args) {
     final native = _nativeByNode[id];
-    if (native == null) return;
+    if (native == null) return const [];
     _gateway.setParams(instanceId, native, args);
     _argsByNode[id] = args;
+    final dropped = _resyncPorts(id, native);
     graph.nodeById(id)?.markParamsChanged();
+    return dropped;
+  }
+
+  /// Re-read [id]'s port topology from the native object and reshape the node
+  /// when it no longer matches the mirror (issue #356).
+  ///
+  /// An object's inlet/outlet count follows its creation arguments, so a
+  /// `setParams` can reshape the very object the canvas is drawing. Without
+  /// this the mirror goes stale the moment the params dialog is applied: port
+  /// dots drawn where the object has none, cables wired to outlets that no
+  /// longer exist, drag-time compatibility answered against a shape the engine
+  /// forgot.
+  ///
+  /// Cables hanging off a port the object lost are dropped from the native
+  /// patcher *and* the mirror, and returned so the caller can restore them.
+  /// Returns an empty list when the topology is unchanged — the common case,
+  /// and the only one for the objects whose arity is fixed.
+  List<PatchCable> _resyncPorts(PatchNodeId id, int native) {
+    final node = graph.nodeById(id);
+    if (node == null) return const [];
+    final snapshot = _gateway.inspect(instanceId, native);
+    final inputs = _portsFrom(snapshot, PatchPortSide.input, node.voice);
+    final outputs = _portsFrom(snapshot, PatchPortSide.output, node.voice);
+    if (_samePorts(node.inputs, inputs) && _samePorts(node.outputs, outputs)) {
+      return const [];
+    }
+    final dropped = graph.cables
+        .where(
+          (c) =>
+              (c.target.nodeId == id && c.target.index >= inputs.length) ||
+              (c.source.nodeId == id && c.source.index >= outputs.length),
+        )
+        .toList();
+    for (final cable in dropped) {
+      removeCablePrimitive(cable);
+    }
+    node.reshapePorts(
+      inputs: inputs,
+      outputs: outputs,
+      size: _sizeSeating(node, inputs.length, outputs.length),
+    );
+    return dropped;
+  }
+
+  /// Whether two port lists describe the same topology — same count, same
+  /// audio/control kinds in the same order. Index/side/voice are derived from
+  /// the position, so they add nothing to compare.
+  static bool _samePorts(List<PatchPort> a, List<PatchPort> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].kind != b[i].kind) return false;
+    }
+    return true;
+  }
+
+  /// [node]'s box, grown when a new port count needs more height than the
+  /// current one seats. Never shrinks: a hand-authored body's tuned size stays
+  /// its own, and a box does not jump around as ports come and go.
+  Size _sizeSeating(PatchNode node, int inputs, int outputs) {
+    final needed = _sizeForPorts(inputs, outputs).height;
+    return node.size.height >= needed
+        ? node.size
+        : Size(node.size.width, needed);
   }
 
   /// Wire [cable] into the native patcher and the Dart mirror.

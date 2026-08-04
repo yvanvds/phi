@@ -2186,6 +2186,40 @@ main + app          (orchestration)
   telemetry tests, a `BottomStatus` widget test, and an end-to-end
   `drops_indicator` integration test (the real app: an idle flicker leaves the chip
   at `0`, a genuine stall counts once and stays once).
+- **Object parameters on the node body + discoverable editing** (issue #356,
+  patcher epic) — an object's arguments were invisible: a drag-created engine
+  object rendered an **empty** body, and the only way to see or change its params
+  was knowing to double-click. Four legs. (1) A **default args body**
+  (`lib/surfaces/patcher/nodes/patch_args_body.dart`) — every node with no
+  hand-authored GUI body now prints `type args` the way a Max object box does
+  (`~sine 440`, `.metro 250`), read from `argsOf` on each build so it follows an
+  apply and its undo/redo through the existing `markParamsChanged` wake-up.
+  (2) The **reference panel shows current values**: with a canvas node selected
+  the surface passes its live argument string to `PatchReferencePanel`, which
+  renders `= <value>` beside each documented `PatchParamDescriptor` (positional,
+  split by the shared `splitPatchArgs` in `lib/domain/patcher/patch_args.dart`,
+  also used by the dialog); the panel is bound to the graph, so selection alone
+  answers "what is this set to" and keeps answering it across an edit. A param
+  the node carries no argument for shows no value rather than claiming the
+  documented default. (3) A **node context menu** — `edit parameters…` (gated to
+  the same non-GUI/has-params rule the double-click uses) · duplicate · delete,
+  styled like the state canvas's menus. The secondary button is read from the
+  canvas's own raw `Listener` (a `GestureDetector` there would re-enter the arena
+  issue #352 emptied): it selects the node it landed on unless that node is
+  already inside a multi-selection, and never counts towards a double-click.
+  (4) **Port topology follows the arguments** — an object's arity is decided by
+  its creation args, so `setNodeParams` now re-`inspect`s the native object and
+  `PatchNode.reshapePorts` swaps in the new ports (growing the box to seat them);
+  cables left hanging off a removed port are dropped from the mirror *and* the
+  native patcher, returned to `SetPatchParamsCommand`, and re-wired on undo, so
+  the edit round-trips without costing a connection. Covered by controller unit
+  tests (grow / shrink-with-cable-drop-and-undo / unchanged-topology no-op),
+  widget tests (the args body's render + refresh + hand-authored-body precedence,
+  the panel's current values, right-click selection semantics, the canvas
+  redrawing port dots after a reshape, the menu reaching the dialog and
+  duplicating/deleting), and an end-to-end `patcher_node_params` integration test
+  (drop `.metro` → body reads `.metro 250` → right-click → `edit parameters…` →
+  apply 500 → body *and* panel follow → Ctrl+Z/Y round-trip both).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

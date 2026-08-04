@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../design/tokens/phi_colors.dart';
 import '../../../design/tokens/phi_spacing.dart';
 import '../../../design/tokens/phi_type.dart';
+import '../../../domain/patcher/patch_args.dart';
 import '../../../domain/patcher/patch_node.dart';
 import '../../../engine/bridge/patch_object_descriptor.dart';
 import '../../../engine/state/patcher_controller.dart';
@@ -63,7 +64,7 @@ class _PatchParamsDialogState extends State<PatchParamsDialog> {
   @override
   void initState() {
     super.initState();
-    final parts = _splitArgs(widget.controller.argsOf(widget.node.id));
+    final parts = splitPatchArgs(widget.controller.argsOf(widget.node.id));
     _controllers = [
       for (var i = 0; i < widget.descriptor.params.length; i++)
         TextEditingController(
@@ -80,12 +81,6 @@ class _PatchParamsDialogState extends State<PatchParamsDialog> {
       c.dispose();
     }
     super.dispose();
-  }
-
-  /// Positional creation arguments, split on runs of whitespace.
-  static List<String> _splitArgs(String args) {
-    final trimmed = args.trim();
-    return trimmed.isEmpty ? const [] : trimmed.split(RegExp(r'\s+'));
   }
 
   void _apply() {

@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../../../design/tokens/phi_colors.dart';
 import '../../../design/tokens/phi_spacing.dart';
 import '../../../design/tokens/phi_type.dart';
+import '../../../domain/patcher/patch_args.dart';
 import '../../../engine/bridge/patch_object_descriptor.dart';
 
 /// The patcher's **reference panel** (design `docs/design/patcher.md` §5): the
@@ -11,17 +12,30 @@ import '../../../engine/bridge/patch_object_descriptor.dart';
 /// per-outlet docs (data type + range), and creation parameters (default +
 /// range). Every string rendered is the engine's metadata; there is no hardcoded
 /// catalogue, so an object the engine adds documents itself for free.
+///
+/// When the reference comes from a **canvas node** rather than a palette entry,
+/// [args] carries that node's current creation arguments and each documented
+/// parameter is shown with the value it actually holds, so selecting a node
+/// answers "what is this set to" without opening a dialog (issue #356).
 class PatchReferencePanel extends StatelessWidget {
-  const PatchReferencePanel({required this.descriptor, super.key});
+  const PatchReferencePanel({required this.descriptor, this.args, super.key});
 
   /// The object type to document, or null for the empty state.
   final PatchObjectDescriptor? descriptor;
+
+  /// The selected canvas node's current creation-argument string, positionally
+  /// aligned with [PatchObjectDescriptor.params]. Null when the reference
+  /// documents a *type* (a palette tap), which has no values of its own.
+  final String? args;
 
   /// Fixed pane width — the right column of the patcher layout.
   static const double width = 260;
 
   /// Key on the empty-state hint (nothing selected).
   static const Key emptyKey = Key('PatchReferencePanel.empty');
+
+  /// Key on one parameter's current-value readout.
+  static Key valueKey(String param) => Key('PatchReferencePanel.value.$param');
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +46,7 @@ class PatchReferencePanel extends StatelessWidget {
         color: PhiColors.bg1,
         border: Border(left: BorderSide(color: PhiColors.line1)),
       ),
-      child: d == null ? const _Empty() : _Reference(descriptor: d),
+      child: d == null ? const _Empty() : _Reference(descriptor: d, args: args),
     );
   }
 }
@@ -54,14 +68,19 @@ class _Empty extends StatelessWidget {
 }
 
 class _Reference extends StatelessWidget {
-  const _Reference({required this.descriptor});
+  const _Reference({required this.descriptor, this.args});
 
   final PatchObjectDescriptor descriptor;
+  final String? args;
 
   @override
   Widget build(BuildContext context) {
     final d = descriptor;
     final accent = d.isDsp ? PhiColors.cool : PhiColors.fg0;
+    // Positional, exactly as `setParams` reads them, so the nth value lines up
+    // with the nth documented parameter. A palette tap documents a type and
+    // supplies none.
+    final values = args == null ? const <String>[] : splitPatchArgs(args!);
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: PhiSpacing.s2),
       children: [
@@ -133,13 +152,20 @@ class _Reference extends StatelessWidget {
           _Section(
             title: 'params',
             children: [
-              for (final p in d.params)
+              for (var i = 0; i < d.params.length; i++)
                 _PortEntry(
-                  lead: p.name,
-                  doc: p.doc,
+                  lead: d.params[i].name,
+                  doc: d.params[i].doc,
+                  // The value this node actually holds. Omitted rather than
+                  // guessed when the node carries fewer arguments than the type
+                  // documents — the `default` below already says what the engine
+                  // fell back to.
+                  value: i < values.length ? values[i] : null,
+                  valueKey: PatchReferencePanel.valueKey(d.params[i].name),
                   meta: [
-                    'default ${p.defaultValue}',
-                    if (p.range.isNotEmpty) 'range ${p.range}',
+                    'default ${d.params[i].defaultValue}',
+                    if (d.params[i].range.isNotEmpty)
+                      'range ${d.params[i].range}',
                   ],
                 ),
             ],
@@ -214,15 +240,28 @@ class _Section extends StatelessWidget {
 }
 
 /// One documented port or parameter: a lead line, its doc, and a dim meta line.
+///
+/// A parameter also carries [value] — what the selected node is *currently* set
+/// to — right-aligned on the lead row, so the answer sits beside the question
+/// instead of buried in the dim metadata (issue #356). Ports never have one.
 class _PortEntry extends StatelessWidget {
-  const _PortEntry({required this.lead, required this.doc, required this.meta});
+  const _PortEntry({
+    required this.lead,
+    required this.doc,
+    required this.meta,
+    this.value,
+    this.valueKey,
+  });
 
   final String lead;
   final String doc;
   final List<String> meta;
+  final String? value;
+  final Key? valueKey;
 
   @override
   Widget build(BuildContext context) {
+    final current = value;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         PhiSpacing.s3,
@@ -233,7 +272,22 @@ class _PortEntry extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(lead, style: PhiType.monoS().copyWith(color: PhiColors.fg0)),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  lead,
+                  style: PhiType.monoS().copyWith(color: PhiColors.fg0),
+                ),
+              ),
+              if (current != null)
+                Text(
+                  '= $current',
+                  key: valueKey,
+                  style: PhiType.monoS().copyWith(color: PhiColors.voice1),
+                ),
+            ],
+          ),
           if (doc.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: PhiSpacing.s0),

@@ -50,6 +50,8 @@ import 'patcher_node_view.dart';
 /// - **Selection** — click a node, shift-click to extend, drag over empty
 ///   canvas to marquee. `Delete` removes the selection (nodes with their
 ///   cables, or the selected cable); `Ctrl+D` duplicates; `Ctrl+Z/Y` undo/redo.
+/// - **Right-click a node** opens its context menu — the same verbs, named, for
+///   anyone who does not already know the shortcuts (issue #356).
 ///
 /// Panning is a middle-mouse drag (the [InteractiveViewer]'s own pan is off so
 /// a left-drag over empty canvas is free to marquee); scroll/pinch still zooms.
@@ -64,6 +66,7 @@ class PatcherCanvas extends StatefulWidget {
     this.onCreateObject,
     this.onNodeTap,
     this.onNodeDoubleTap,
+    this.onNodeContextMenu,
     super.key,
   });
 
@@ -82,6 +85,16 @@ class PatcherCanvas extends StatefulWidget {
   /// for a non-GUI node (design §7). Detected from raw pointer timing so it
   /// never adds a disambiguation delay to the node's own single-tap select.
   final void Function(PatchNode node)? onNodeDoubleTap;
+
+  /// Called on a **right-click** over a node, with the node and the global
+  /// pointer position — the surface opens the node's context menu there
+  /// (`edit parameters…` / duplicate / delete, issue #356). Null disables it.
+  ///
+  /// The secondary button is read from this canvas's own [Listener] rather than
+  /// from a `GestureDetector.onSecondaryTapDown` on the node: a recogniser here
+  /// would sit in the arena against the primary-button gestures the canvas
+  /// already owns, which is exactly the competition issue #352 removed.
+  final void Function(PatchNode node, Offset globalPosition)? onNodeContextMenu;
 
   /// Key on the transient reject banner shown when a cable drop is incompatible.
   static const Key rejectKey = Key('PatcherCanvas.reject');
@@ -349,6 +362,11 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     }
     if (_controller.graph.dragSourcePort != null) return;
 
+    if (event.buttons == kSecondaryMouseButton) {
+      _onSecondaryPress(event.position, _toScene(event.localPosition));
+      return;
+    }
+
     final scene = _toScene(event.localPosition);
     // An outlet press starts a cable drag. Checked first so a port just past a
     // node's edge wins over the node itself; its press radius is tight enough
@@ -492,6 +510,33 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       _lastTapNode = id;
       _lastTapAt = at;
     }
+  }
+
+  /// A right-click over a node: make it the thing the menu's verbs act on, then
+  /// hand it to the surface to open the menu at [global] (issue #356).
+  ///
+  /// A right-click on a node that is *not* in the current selection selects it
+  /// alone, so `duplicate` / `delete` can never act on something the user isn't
+  /// pointing at; a right-click *inside* a multi-selection leaves that selection
+  /// intact, so the menu operates on the whole group. Either way the reference
+  /// panel follows, exactly as a left-click's would. A press on empty canvas
+  /// opens nothing — the canvas has no verbs of its own yet.
+  void _onSecondaryPress(Offset global, Offset scene) {
+    final open = widget.onNodeContextMenu;
+    if (open == null) return;
+    final node = _nodeAt(scene);
+    if (node == null) return;
+    _focus.requestFocus();
+    // A right-click is its own gesture, so it invalidates any pending left-click
+    // pairing exactly as a moved press does — otherwise the click before it and
+    // the click after it pair up and the params dialog opens off a double-click
+    // the user never made.
+    _lastTapNode = null;
+    if (!_controller.graph.isNodeSelected(node.id)) {
+      _controller.selectNode(node.id);
+    }
+    widget.onNodeTap?.call(node);
+    open(node, global);
   }
 
   /// A pointer torn away mid-gesture never delivers the pointer-up the gesture

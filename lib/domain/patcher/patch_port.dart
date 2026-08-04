@@ -2,9 +2,11 @@ import 'patch_port_kind.dart';
 
 /// One inlet or outlet on a [PatchNode].
 ///
-/// Immutable — port topology is fixed once a node is created, since the
-/// native patcher object's inlet/outlet count is decided at construction.
-/// To reshape, delete and recreate the node.
+/// Immutable: a port is never edited in place. The node's *topology* can still
+/// change — the native object's inlet/outlet count follows its creation
+/// arguments, so `PatcherController.setNodeParams` re-inspects the object and
+/// hands the node a whole new set of ports via `PatchNode.reshapePorts`
+/// (issue #356).
 enum PatchPortSide { input, output }
 
 class PatchPort {

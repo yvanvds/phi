@@ -4,9 +4,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/widgets/patcher/patch_cable_geometry.dart';
 import 'package:phi/design/widgets/patcher/patch_node_frame.dart';
+import 'package:phi/design/widgets/patcher/patch_port_dot.dart';
+import 'package:phi/domain/patcher/patch_args.dart';
 import 'package:phi/domain/patcher/patch_node.dart';
 import 'package:phi/domain/patcher/patch_port.dart';
 import 'package:phi/domain/patcher/patch_port_id.dart';
+import 'package:phi/domain/patcher/patch_port_kind.dart';
+import 'package:phi/engine/bridge/patcher_node_snapshot.dart';
 import 'package:phi/engine/state/node_type_registry.dart';
 import 'package:phi/engine/state/patcher_controller.dart';
 import 'package:phi/surfaces/patcher/nodes/number_node_body.dart';
@@ -58,17 +62,34 @@ void main() {
   Future<void> pumpCanvas(
     WidgetTester tester, {
     void Function(PatchNode node)? onNodeDoubleTap,
+    void Function(PatchNode node)? onNodeTap,
+    void Function(PatchNode node, Offset globalPosition)? onNodeContextMenu,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: PatcherCanvas(
             controller: controller,
+            onNodeTap: onNodeTap,
             onNodeDoubleTap: onNodeDoubleTap,
+            onNodeContextMenu: onNodeContextMenu,
           ),
         ),
       ),
     );
+    await tester.pump();
+  }
+
+  /// A right-click at [at] — the raw secondary-button press the canvas reads
+  /// out of its own pointer stream.
+  Future<void> rightClickAt(WidgetTester tester, Offset at) async {
+    final g = await tester.startGesture(
+      at,
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
+    await tester.pump();
+    await g.up();
     await tester.pump();
   }
 
@@ -593,6 +614,168 @@ void main() {
 
     await ctrl(tester, LogicalKeyboardKey.keyY);
     expect(controller.graph.nodes, hasLength(2));
+  });
+
+  // ─── right-click opens the node context menu (issue #356) ────────────────
+  //
+  // The secondary button is read from the canvas's own raw pointer pipeline, so
+  // these cases also prove it does not disturb the primary-button gestures that
+  // pipeline already owns.
+
+  group('right-click', () {
+    testWidgets('reports the node under the pointer and selects it', (
+      tester,
+    ) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      PatchNode? menuFor;
+      Offset? menuAt;
+      await pumpCanvas(
+        tester,
+        onNodeContextMenu: (n, at) {
+          menuFor = n;
+          menuAt = at;
+        },
+      );
+
+      final at = nodeCenter(tester, sine);
+      await rightClickAt(tester, at);
+
+      expect(menuFor?.id, sine.id);
+      expect(menuAt, at);
+      // The verbs on the menu act on the selection, so the click has to have
+      // made its node the selection first.
+      expect(controller.graph.selectedNodes, {sine.id});
+    });
+
+    testWidgets('inside a multi-selection keeps the whole selection', (
+      tester,
+    ) async {
+      final a = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      final b = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 240),
+      );
+      await pumpCanvas(tester, onNodeContextMenu: (_, _) {});
+      controller.selectNodes({a.id, b.id});
+      await tester.pump();
+
+      await rightClickAt(tester, nodeCenter(tester, b));
+
+      // `delete` from here removes both — right-clicking one member of a group
+      // must not silently shrink the group first.
+      expect(controller.graph.selectedNodes, {a.id, b.id});
+    });
+
+    testWidgets('outside the selection re-points it at the clicked node', (
+      tester,
+    ) async {
+      final a = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      final b = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 240),
+      );
+      await pumpCanvas(tester, onNodeContextMenu: (_, _) {});
+      controller.selectNodes({a.id});
+      await tester.pump();
+
+      await rightClickAt(tester, nodeCenter(tester, b));
+
+      expect(controller.graph.selectedNodes, {b.id});
+    });
+
+    testWidgets('on empty canvas opens nothing and leaves the selection', (
+      tester,
+    ) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      var opened = 0;
+      await pumpCanvas(tester, onNodeContextMenu: (_, _) => opened++);
+      controller.selectNodes({sine.id});
+      await tester.pump();
+
+      await rightClickAt(tester, canvasTL(tester) + const Offset(600, 500));
+
+      expect(opened, 0);
+      expect(controller.graph.selectedNodes, {sine.id});
+    });
+
+    testWidgets('never counts towards a double-click or moves the node', (
+      tester,
+    ) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      PatchNode? doubleClicked;
+      await pumpCanvas(
+        tester,
+        onNodeDoubleTap: (n) => doubleClicked = n,
+        onNodeContextMenu: (_, _) {},
+      );
+
+      final at = nodeCenter(tester, sine);
+      await tester.tapAt(at);
+      await tester.pump();
+      await rightClickAt(tester, at);
+      await tester.tapAt(at);
+      await tester.pump();
+
+      // A right-click is its own gesture: it neither completes the pending
+      // left-click pairing nor drags the node it landed on.
+      expect(doubleClicked, isNull);
+      expect(sine.position, const Offset(120, 120));
+    });
+  });
+
+  // ─── a params change reshapes the drawn node (issue #356) ────────────────
+
+  testWidgets('a params change that adds an outlet draws the new port', (
+    tester,
+  ) async {
+    // Outlets follow the argument count, the way a `.select`-style object's do.
+    gateway.topologyResolver = (type, args) {
+      if (type != '.fan') return null;
+      final outlets = splitPatchArgs(args).length;
+      return PatcherNodeSnapshot(
+        inputs: 0,
+        outputs: outlets,
+        inputKinds: const [],
+        outputKinds: [for (var i = 0; i < outlets; i++) PatchPortKind.control],
+      );
+    };
+    final fan = controller.addNode(
+      desc: NodeDescriptor(
+        type: '.fan',
+        title: '.fan',
+        defaultSize: const Size(120, 64),
+        defaultArgs: '1 2',
+        inputs: const [],
+        outputs: const [],
+        buildBody: (ctx, node, controller) => const SizedBox.shrink(),
+      ),
+      position: const Offset(120, 120),
+    );
+    await pumpCanvas(tester);
+    expect(find.byType(PatchPortDot), findsNWidgets(2));
+
+    controller.applyParams(fan.id, '1 2 3');
+    await tester.pump();
+
+    // The canvas draws what the engine now has, not what it had when the node
+    // was created.
+    expect(fan.outputs, hasLength(3));
+    expect(find.byType(PatchPortDot), findsNWidgets(3));
   });
 
   // ─── cancelled gestures leave nothing behind (issue #355) ────────────────

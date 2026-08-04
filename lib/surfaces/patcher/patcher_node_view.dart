@@ -8,6 +8,7 @@ import '../../domain/patcher/patch_port.dart';
 import '../../domain/patcher/patch_port_id.dart';
 import '../../engine/state/node_type_registry.dart';
 import '../../engine/state/patcher_controller.dart';
+import 'nodes/patch_args_body.dart';
 
 /// Binds one [PatchNode] to a [PatchNodeFrame] plus the registered body
 /// builder (design §6, "click anywhere on a node and move it").
@@ -39,10 +40,12 @@ class PatcherNodeView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // A hand-authored descriptor supplies the live GUI body for the seeded
-    // demo nodes; a drag-created engine object has none yet (a later epic
-    // issue), so its body is empty. Either way the header shows the node's own
-    // title and the frame renders — no type is ever an error placeholder.
+    // A hand-authored descriptor supplies the live GUI body for the types that
+    // have one; every other engine object falls back to [PatchArgsBody], which
+    // prints what the object actually is — `~sine 440` — instead of the empty
+    // box a drag-created node used to render (issue #356). Either way the
+    // header shows the node's own title and the frame renders — no type is ever
+    // an error placeholder.
     final desc = NodeTypeRegistry.instance.find(node.type);
     return ListenableBuilder(
       listenable: node,
@@ -82,7 +85,7 @@ class PatcherNodeView extends StatelessWidget {
                 padding: const EdgeInsets.all(8),
                 child:
                     desc?.buildBody(context, node, controller) ??
-                    const SizedBox.shrink(),
+                    PatchArgsBody(node: node, controller: controller),
               ),
             ),
           ],

@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/widgets/fader/phi_fader.dart';
@@ -5,6 +6,7 @@ import 'package:phi/design/widgets/patcher/patch_node_frame.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/engine/state/node_type_registry.dart';
 import 'package:phi/surfaces/patcher/palette/patcher_palette.dart';
+import 'package:phi/surfaces/patcher/params/patch_params_dialog.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
 import 'package:phi/surfaces/patcher/patcher_surface.dart';
 import 'package:phi/surfaces/patcher/reference/patch_reference_panel.dart';
@@ -188,6 +190,138 @@ void main() {
       // The reference now documents the tapped node's engine metadata.
       expect(find.byKey(PatchReferencePanel.emptyKey), findsNothing);
       expect(find.text('audio output'), findsOneWidget);
+    });
+
+    // ─── node context menu + live param values (issue #356) ───────────────
+
+    /// Drop a palette entry of [type] on the canvas centre and return its
+    /// header finder — the dropped node's header shows its raw type id, which
+    /// the friendly-titled seeded nodes never do, so it names exactly this one.
+    Future<Finder> dropOnCanvas(WidgetTester tester, String type) async {
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(PatcherPalette.entryKey(type))),
+      );
+      await tester.pump();
+      await gesture.moveTo(tester.getCenter(find.byType(PatcherCanvas)));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      return find.text(type.toUpperCase());
+    }
+
+    Future<void> rightClick(WidgetTester tester, Finder target) async {
+      final g = await tester.startGesture(
+        tester.getCenter(target),
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryMouseButton,
+      );
+      await tester.pump();
+      await g.up();
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('right-clicking a node opens the verbs, and edit parameters '
+        'reaches the dialog', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: PatcherSurface(engine: engine)),
+        ),
+      );
+      await tester.pump();
+
+      final sine = await dropOnCanvas(tester, Obj.dSine);
+      await rightClick(tester, sine);
+
+      expect(find.text('edit parameters…'), findsOneWidget);
+      expect(find.text('duplicate · ctrl+d'), findsOneWidget);
+      expect(find.text('delete · del'), findsOneWidget);
+
+      await tester.tap(find.text('edit parameters…'));
+      await tester.pumpAndSettle();
+
+      // The same dialog double-click opens — the menu is a second door, not a
+      // second implementation.
+      expect(find.byType(PatchParamsDialog), findsOneWidget);
+      expect(
+        find.byKey(PatchParamsDialog.fieldKey('frequency')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a GUI object is offered no parameters to edit', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: PatcherSurface(engine: engine)),
+        ),
+      );
+      await tester.pump();
+
+      // `.slider` is operated through its live body and documents no params, so
+      // offering a dialog would open one with nothing in it.
+      final slider = await dropOnCanvas(tester, Obj.gSlider);
+      await rightClick(tester, slider);
+
+      expect(find.text('edit parameters…'), findsNothing);
+      expect(find.text('duplicate · ctrl+d'), findsOneWidget);
+    });
+
+    testWidgets('the menu duplicates and deletes the node it was opened on', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: PatcherSurface(engine: engine)),
+        ),
+      );
+      await tester.pump();
+
+      final controller = engine.patcher;
+      final sine = await dropOnCanvas(tester, Obj.dSine);
+      final afterDrop = controller.graph.nodes.length;
+
+      await rightClick(tester, sine);
+      await tester.tap(find.text('duplicate · ctrl+d'));
+      await tester.pumpAndSettle();
+      expect(controller.graph.nodes, hasLength(afterDrop + 1));
+
+      // The copy became the selection, so `delete` from its menu takes it back.
+      await rightClick(tester, find.text(Obj.dSine.toUpperCase()).first);
+      await tester.tap(find.text('delete · del'));
+      await tester.pumpAndSettle();
+      expect(controller.graph.nodes, hasLength(afterDrop));
+    });
+
+    testWidgets('selecting a node shows its current arg values, which follow '
+        'an edit and its undo', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: PatcherSurface(engine: engine)),
+        ),
+      );
+      await tester.pump();
+
+      final controller = engine.patcher;
+      final sine = await dropOnCanvas(tester, Obj.dSine);
+      await tester.tap(sine);
+      await tester.pump();
+
+      // Selection alone answers "what is this set to".
+      final value = find.byKey(PatchReferencePanel.valueKey('frequency'));
+      expect(value, findsOneWidget);
+      expect(find.text('= 440'), findsOneWidget);
+
+      final node = controller.graph.nodes.firstWhere(
+        (n) => n.title == Obj.dSine,
+      );
+      controller.applyParams(node.id, '660');
+      await tester.pump();
+      expect(find.text('= 660'), findsOneWidget);
+
+      controller.undo();
+      await tester.pump();
+      expect(find.text('= 440'), findsOneWidget);
     });
   });
 }
