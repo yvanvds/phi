@@ -28,9 +28,18 @@ abstract final class PatchCanvasConstants {
   /// the node's edge.
   static const double portDotRadius = portDotSize / 2;
 
-  /// Pixel radius around a port treated as a hit target when dropping a
-  /// drag-to-create cable.
+  /// Pixel radius around a port treated as a hit target when **dropping** a
+  /// drag-to-create cable. Deliberately generous — a missed drop costs the
+  /// user the whole gesture.
   static const double portHitRadius = 16;
+
+  /// Pixel radius around an outlet treated as a hit target when **pressing**
+  /// to start a cable. Tighter than [portHitRadius] so the zone never reaches
+  /// beyond the port dot's own neighbourhood: the first port centre sits
+  /// [firstPortOffset] below the header, so a header press can never be
+  /// mistaken for a cable start, and a body press keeps dragging the node
+  /// (issue #352).
+  static const double portPressRadius = 8;
 
   /// Bezier control-point x-distance from each cable endpoint. Matches
   /// the design preview's `cx1 = a.x + 60` constant.

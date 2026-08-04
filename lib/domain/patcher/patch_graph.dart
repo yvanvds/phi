@@ -10,8 +10,12 @@ import 'patch_port_id.dart';
 /// future selection).
 ///
 /// Notifies on graph-level changes — add/remove node, add/remove cable,
-/// drag-state toggles. Per-node mutable state (position, armed) fires
-/// on the [PatchNode] itself, matching the [MixerChannel] split.
+/// drag-state toggles. Per-node mutable state (position, armed) fires on the
+/// [PatchNode] itself, matching the [MixerChannel] split, **and is re-broadcast
+/// here**: the canvas lays every node out from its own build (a `Positioned`
+/// per node) and paints cables from a port-position map, so a node that moved
+/// without waking the graph would keep its old screen slot until something
+/// else happened to rebuild — the drag lag in issue #352.
 ///
 /// [version] bumps on every notify so the cable painter's
 /// `shouldRepaint` can do a cheap int comparison.
@@ -49,13 +53,17 @@ class PatchGraph extends ChangeNotifier {
   PatchNode? nodeById(PatchNodeId id) => _nodes[id];
 
   void addNode(PatchNode node) {
+    _nodes.remove(node.id)?.removeListener(_bumpAndNotify);
     _nodes[node.id] = node;
+    node.addListener(_bumpAndNotify);
     _bumpAndNotify();
   }
 
   /// Remove a node and any cables touching it.
   void removeNode(PatchNodeId id) {
-    if (_nodes.remove(id) == null) return;
+    final removed = _nodes.remove(id);
+    if (removed == null) return;
+    removed.removeListener(_bumpAndNotify);
     _cables.removeWhere((c) => c.source.nodeId == id || c.target.nodeId == id);
     if (_selectedNodes.contains(id)) {
       _selectedNodes = _selectedNodes.where((n) => n != id).toSet();
@@ -130,5 +138,14 @@ class PatchGraph extends ChangeNotifier {
   void _bumpAndNotify() {
     _version++;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    for (final node in _nodes.values) {
+      node.removeListener(_bumpAndNotify);
+    }
+    _nodes.clear();
+    super.dispose();
   }
 }

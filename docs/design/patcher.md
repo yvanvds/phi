@@ -106,7 +106,11 @@ live-code control).
 
 - **Node dragging is body dragging** — click anywhere on a node and
   move it (killing the select-an-outlet-first misfeature); positions
-  write through to GUI properties as today.
+  write through to GUI properties as today. The node stays under the
+  pointer at any zoom: the canvas drives the drag from raw pointer
+  positions in scene space, so nothing is swallowed by a gesture
+  recogniser's slop. A live GUI body (fader, number field, message box)
+  owns its own presses — drag those nodes by the header.
 - **Cables:** drag from an outlet port to an inlet port; the ghost
   cable colors by the outlet's `OutType` and inlets light up only when
   compatible (`accepts` mask + `isDspInput`); dropping on an

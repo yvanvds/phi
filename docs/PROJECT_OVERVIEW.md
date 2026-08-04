@@ -1769,7 +1769,18 @@ main + app          (orchestration)
   `docs/design/patcher.md` §6) — the canvas rework that makes the surface editable.
   **Body dragging** replaces the old select-an-outlet-first move: a drag anywhere on
   a node moves it (and the rest of the selection) live, committing one
-  `MovePatchNodesCommand` on release. **Typed cables:** a drag from an outlet colours
+  `MovePatchNodesCommand` on release. Since issue #352 the drag — like select,
+  double-click and the marquee — is driven from the canvas's own raw `Listener`
+  rather than recognisers on the nodes: a `GestureDetector.onPan` only accepts after
+  ~18px and then discards that distance, so the node lagged the pointer and short
+  drags did nothing. The canvas measures **scene-space** deltas from the press point
+  (so the zoom scale is already divided out), starts the drag at its own 4px click
+  slop, and only counts *movement-free* presses towards a double-click. Nodes whose
+  descriptor sets `interactiveBody` (fader, number field, message box) keep their
+  own gestures — the canvas ignores presses inside their body, so they are dragged
+  by the header. `PatchGraph` re-broadcasts each `PatchNode`'s own notifications, so
+  a move (drag preview, undo, redo) actually repaints the canvas and its cables.
+  **Typed cables:** a drag from an outlet colours
   the ghost by the outlet's `OutType` (`patchOutletColor`, `lib/surfaces/patcher/`),
   compatible inlets light up, and an incompatible drop is refused with a visible
   reject banner — compatibility is a pure `patchPinsCompatible`
@@ -1793,8 +1804,12 @@ main + app          (orchestration)
   Covered by unit tests (compat, graph selection, and every gesture command's
   apply/undo/redo incl. logical-id stability across a delete), canvas widget tests
   (body drag, compatible/incompatible cable drops, cable delete, marquee + shift-click,
-  delete-with-cables, duplicate — each with undo/redo), and an end-to-end
-  `patcher_canvas` integration test (drag · delete-with-cables · duplicate, all undo).
+  delete-with-cables, duplicate — each with undo/redo, plus the #352 drag regressions:
+  1:1 tracking on screen under the touch slop and while zoomed, select-then-drag,
+  a press beside an outlet, and a GUI body keeping its own press), and an end-to-end
+  `patcher_canvas` integration test (drag · delete-with-cables · duplicate, all undo,
+  with the dragged node's rendered header asserted to travel exactly as far as the
+  pointer).
 - **Patcher node internals** (issue #223, patcher epic, design
   `docs/design/patcher.md` §7, §10 decision 3) — **live GUI bodies** + a
   **metadata params dialog**. The gateway grows two calls consumed FFI-free by the
