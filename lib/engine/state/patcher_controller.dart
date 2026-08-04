@@ -510,6 +510,21 @@ class PatcherController {
     }
   }
 
+  /// Abandon an in-flight body drag: put every dragged node back where the
+  /// press found it and journal **nothing**.
+  ///
+  /// [endNodeDrag]'s counterpart for a gesture that never gets its release — a
+  /// cancelled pointer (the window loses capture, a system drag takes over).
+  /// Such a gesture is not an edit the user made, so committing the half-move
+  /// it happened to reach would both leave the nodes somewhere nobody chose and
+  /// put a step on the undo stack that never happened (issue #355). Safe to
+  /// call with no drag in flight.
+  void abortNodeDrag() {
+    if (_dragStart.isEmpty) return;
+    _dragStart.forEach((id, start) => graph.nodeById(id)?.moveTo(start));
+    _dragStart.clear();
+  }
+
   /// Commit the body drag: journal one move for the whole selection (nothing
   /// when the net movement is zero).
   void endNodeDrag() {
