@@ -2331,6 +2331,32 @@ main + app          (orchestration)
   mode, a value arriving mid-scrub is declined), and an end-to-end
   `patcher_canvas_polish` integration test through the real app. Deferred to
   focused follow-ups: keyboard nudge, space-hold panning, and grid snap on drop.
+- **Patcher keyboard nudge + optional grid snap on drop** (issue #368, split out
+  of #359, patcher epic #217, design `docs/design/patcher.md` §6): the two
+  grid-discipline conveniences left over, sharing one piece of machinery — the
+  body drag's own capture / preview / commit cycle. **Nudge:** arrow keys move
+  the selection one `PatchCanvasConstants.gridCell`, `Shift+arrow` one
+  `gridMajor`, riding the canvas's existing `Focus.onKeyEvent` (so the guard
+  from #353 keeps it quiet while a `.i`/`.f` box or the inline create box holds
+  the keyboard) and read as **logical** arrows, which mean the same thing on a
+  non-QWERTY layout. A held arrow arrives as a burst of `KeyRepeatEvent`s: each
+  one previews live, but the *release* journals — one `MovePatchNodesCommand`
+  per burst, not per repeat, which is what keeps `Ctrl+Z` usable. The burst is
+  also closed by a pointer press (which would otherwise overwrite the origins it
+  is measured from) and by losing focus, and its flag joins the `_resetGesture`
+  path from #355. **Snap:** `PatcherController.endNodeDrag({snapToGrid})`
+  quantises the *drop* — the anchor node onto the 16px lattice and the rest of
+  the selection by that same offset, so a group keeps its arrangement; the
+  snapped position is what is journaled and what reaches the gateway, so undo /
+  redo replay it rather than re-snapping. Off by default, toggled from a new
+  `PatchPlacementBar` control, with the flag held by the surface (a view
+  preference, like the piano roll's snap picker — not persisted). Covered by
+  controller tests (snap on a single node / a selection / a drag that snaps back
+  to nothing, `beginSelectionMove` with and without a selection), canvas widget
+  tests (single press, held burst = one undo step, Shift step, whole selection,
+  silent while a number field is focused, silent with nothing selected, press
+  mid-burst commits, snap on drop and on nudge), a placement-bar test, and an
+  end-to-end `patcher_nudge_snap` integration test through the real app.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

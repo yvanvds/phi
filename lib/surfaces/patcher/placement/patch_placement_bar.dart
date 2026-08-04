@@ -18,13 +18,31 @@ import '../../../engine/state/patch_library_controller.dart';
 /// - A **start / stop** toggle mounts / unmounts the source. Placement persists;
 ///   running state does not (a loaded project starts silent), so the toggle
 ///   always reads *stopped* on open. It is disabled while the patch is unplaced.
+/// - A **snap-to-grid** toggle for the canvas below (issue #368) — the one
+///   canvas preference that needs somewhere to live, and this strip is the
+///   patcher's only chrome, exactly as the piano roll's snap picker sits in its
+///   header. A view preference, so it is held by the surface and lost on
+///   restart rather than written into the patch.
 ///
 /// A thin, [ChangeNotifier]-bound view of the [PatchLibraryController]. Renders a
 /// low-key hint when no patch is open.
 class PatchPlacementBar extends StatelessWidget {
-  const PatchPlacementBar({required this.controller, super.key});
+  const PatchPlacementBar({
+    required this.controller,
+    this.snapToGrid = false,
+    this.onSnapChanged,
+    super.key,
+  });
 
   final PatchLibraryController controller;
+
+  /// Whether the canvas quantises a node drop to the grid. Reflected by the
+  /// [snapKey] toggle, which is hidden entirely when [onSnapChanged] is null —
+  /// a control nobody is listening to would be a lie.
+  final bool snapToGrid;
+
+  /// Called with the requested new value when the snap toggle is tapped.
+  final ValueChanged<bool>? onSnapChanged;
 
   /// Key on the bus-placement select.
   static const Key placeSelectKey = Key('PatchPlacementBar.place');
@@ -34,6 +52,9 @@ class PatchPlacementBar extends StatelessWidget {
 
   /// Key on the clear-placement (`×`) button, present only while placed.
   static const Key unplaceKey = Key('PatchPlacementBar.unplace');
+
+  /// Key on the canvas grid-snap toggle (issue #368).
+  static const Key snapKey = Key('PatchPlacementBar.snap');
 
   static const double height = 40;
 
@@ -111,7 +132,47 @@ class PatchPlacementBar extends StatelessWidget {
           enabled: placement != null,
           onTap: () => running ? controller.stop(open) : controller.start(open),
         ),
+        if (onSnapChanged != null) ...[
+          const SizedBox(width: PhiSpacing.s2),
+          _SnapButton(on: snapToGrid, onTap: () => onSnapChanged!(!snapToGrid)),
+        ],
       ],
+    );
+  }
+}
+
+/// The canvas grid-snap toggle (issue #368) — lit while a node drop quantises
+/// to the grid.
+class _SnapButton extends StatelessWidget {
+  const _SnapButton({required this.on, required this.onTap});
+
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = on ? PhiColors.voice1 : PhiColors.fg2;
+    return Tooltip(
+      message: on ? 'grid snap on' : 'grid snap off',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          key: PatchPlacementBar.snapKey,
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.grid_4x4, size: 16, color: fg),
+              const SizedBox(width: PhiSpacing.s0),
+              Text(
+                'snap'.toUpperCase(),
+                style: PhiType.caption().copyWith(color: fg),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

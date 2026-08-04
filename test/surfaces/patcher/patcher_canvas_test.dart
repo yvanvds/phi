@@ -66,6 +66,7 @@ void main() {
   Future<void> pumpCanvas(
     WidgetTester tester, {
     List<PatchObjectDescriptor> objectTypes = const [],
+    bool snapToGrid = false,
     void Function(
       PatchObjectDescriptor desc,
       Offset canvasPosition, {
@@ -82,6 +83,7 @@ void main() {
           body: PatcherCanvas(
             controller: controller,
             objectTypes: objectTypes,
+            snapToGrid: snapToGrid,
             onCreateObject: onCreateObject,
             onNodeTap: onNodeTap,
             onNodeDoubleTap: onNodeDoubleTap,
@@ -662,6 +664,277 @@ void main() {
 
     await ctrl(tester, LogicalKeyboardKey.keyY);
     expect(controller.graph.nodes, hasLength(2));
+  });
+
+  // ─── keyboard nudge + grid snap on drop (issue #368) ─────────────────────
+  //
+  // Both ride the machinery a body drag already uses, so what these cases are
+  // really about is the *boundaries*: where a burst of repeats begins and ends
+  // (one undo step, not one per repeat), and where a drop is quantised.
+
+  group('keyboard nudge', () {
+    /// A whole arrow keypress — down, [repeats] auto-repeats while it is held,
+    /// then up. The release is what closes the burst and journals it.
+    Future<void> arrow(
+      WidgetTester tester,
+      LogicalKeyboardKey key, {
+      int repeats = 0,
+      bool shift = false,
+    }) async {
+      if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyDownEvent(key);
+      await tester.pump();
+      for (var i = 0; i < repeats; i++) {
+        await tester.sendKeyRepeatEvent(key);
+        await tester.pump();
+      }
+      await tester.sendKeyUpEvent(key);
+      if (shift) await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+    }
+
+    /// Select [node] by clicking it — which is also how the canvas comes to
+    /// hold the keyboard, so every nudge below starts the way a real one does.
+    Future<void> selectByClick(WidgetTester tester, PatchNode node) async {
+      await tester.tapAt(nodeCenter(tester, node));
+      await tester.pump();
+      expect(controller.graph.selectedNodes, {node.id});
+    }
+
+    testWidgets('an arrow moves the selection one grid cell, on screen too', (
+      tester,
+    ) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester);
+      final drawnAtStart = frameTopLeft(tester);
+      await selectByClick(tester, sine);
+
+      await arrow(tester, LogicalKeyboardKey.arrowRight);
+      expect(sine.position, const Offset(136, 120));
+      expect(frameTopLeft(tester), drawnAtStart + const Offset(16, 0));
+
+      await arrow(tester, LogicalKeyboardKey.arrowDown);
+      expect(sine.position, const Offset(136, 136));
+
+      // Two presses, two steps: a press is a burst of its own.
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(sine.position, const Offset(136, 120));
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(sine.position, const Offset(120, 120));
+      expect(frameTopLeft(tester), drawnAtStart);
+    });
+
+    testWidgets('a held arrow moves on every repeat but undoes as one step', (
+      tester,
+    ) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester);
+      await selectByClick(tester, sine);
+
+      await arrow(tester, LogicalKeyboardKey.arrowRight, repeats: 3);
+
+      // Four events — the press and three repeats — each moved a cell.
+      expect(sine.position, const Offset(184, 120));
+
+      // …and the whole burst comes back on one Ctrl+Z, which is the point:
+      // one command per repeat would make undo useless on a nudged canvas.
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(sine.position, const Offset(120, 120));
+      expect(controller.undoScope.canUndo, isFalse);
+
+      await ctrl(tester, LogicalKeyboardKey.keyY);
+      expect(sine.position, const Offset(184, 120));
+    });
+
+    testWidgets('Shift+arrow moves a major cell', (tester) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester);
+      await selectByClick(tester, sine);
+
+      await arrow(tester, LogicalKeyboardKey.arrowDown, shift: true);
+      expect(sine.position, const Offset(120, 184));
+
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(sine.position, const Offset(120, 120));
+    });
+
+    testWidgets('the whole selection nudges together', (tester) async {
+      final a = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      final b = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(320, 120),
+      );
+      await pumpCanvas(tester);
+      controller.selectNodes({a.id, b.id});
+      // Focus the canvas without disturbing the selection a marquee-style
+      // multi-select left behind.
+      await tester.tapAt(nodeCenter(tester, a));
+      await tester.pump();
+      controller.selectNodes({a.id, b.id});
+      await tester.pump();
+
+      await arrow(tester, LogicalKeyboardKey.arrowLeft);
+      expect(a.position, const Offset(104, 120));
+      expect(b.position, const Offset(304, 120));
+
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(a.position, const Offset(120, 120));
+      expect(b.position, const Offset(320, 120));
+    });
+
+    testWidgets('an arrow while a number field is focused edits the field, '
+        'never the canvas selection', (tester) async {
+      controller.addNode(desc: numberDesc(), position: const Offset(120, 120));
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(320, 120),
+      );
+      await pumpCanvas(tester);
+
+      await tester.tapAt(nodeCenter(tester, sine));
+      await tester.pump();
+      expect(controller.graph.selectedNodes, {sine.id});
+
+      // The caret goes into the `.f` box; the canvas no longer holds the
+      // keyboard, so its arrow shortcut must stay out of the way (issue #353).
+      await tester.enterText(find.byType(TextField), '12');
+      await tester.pump();
+      expect(fieldFocus(tester).hasPrimaryFocus, isTrue);
+
+      await arrow(tester, LogicalKeyboardKey.arrowLeft, repeats: 2);
+
+      expect(sine.position, const Offset(320, 120));
+      expect(controller.undoScope.canUndo, isFalse);
+      expect(controller.graph.selectedNodes, {sine.id});
+    });
+
+    testWidgets('an arrow with nothing selected moves nothing', (tester) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester);
+
+      // Click empty canvas: focus without a selection.
+      await tester.tapAt(canvasTL(tester) + const Offset(600, 500));
+      await tester.pump();
+      expect(controller.graph.selectedNodes, isEmpty);
+
+      await arrow(tester, LogicalKeyboardKey.arrowRight);
+      expect(sine.position, const Offset(120, 120));
+      expect(controller.undoScope.canUndo, isFalse);
+    });
+
+    testWidgets('a press mid-burst commits the pending nudge', (tester) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester);
+      await selectByClick(tester, sine);
+
+      // Arrow down and *held* — no release, so the burst is still open.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(sine.position, const Offset(136, 120));
+      expect(controller.undoScope.canUndo, isFalse);
+
+      // A press starts a new gesture, which would otherwise overwrite the
+      // origins the burst is measured from and lose the move for good.
+      await tester.tapAt(canvasTL(tester) + const Offset(600, 500));
+      await tester.pump();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+
+      expect(sine.position, const Offset(136, 120));
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(sine.position, const Offset(120, 120));
+    });
+  });
+
+  group('grid snap on drop', () {
+    testWidgets('off by default: a drop lands where the pointer left it', (
+      tester,
+    ) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(40, 60),
+      );
+      await pumpCanvas(tester);
+
+      final g = await tester.startGesture(nodeCenter(tester, sine));
+      await tester.pump();
+      await g.moveBy(const Offset(7, 3));
+      await tester.pump();
+      await g.up();
+      await tester.pump();
+
+      expect(sine.position, const Offset(47, 63));
+    });
+
+    testWidgets('on: a drop quantises to the grid, on screen too, and undo '
+        'restores the off-grid origin', (tester) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(40, 60),
+      );
+      await pumpCanvas(tester, snapToGrid: true);
+      final drawnAtStart = frameTopLeft(tester);
+
+      final g = await tester.startGesture(nodeCenter(tester, sine));
+      await tester.pump();
+      await g.moveBy(const Offset(7, 3));
+      await tester.pump();
+      // Mid-drag the node is still glued to the pointer: only the *drop* is
+      // disciplined, so dragging never feels like it is fighting the grid.
+      expect(frameTopLeft(tester), drawnAtStart + const Offset(7, 3));
+
+      await g.up();
+      await tester.pump();
+
+      expect(sine.position, const Offset(48, 64));
+      expect(frameTopLeft(tester), drawnAtStart + const Offset(8, 4));
+
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(sine.position, const Offset(40, 60));
+      expect(frameTopLeft(tester), drawnAtStart);
+    });
+
+    testWidgets('on: a nudge lands on the grid as well', (tester) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(44, 60),
+      );
+      await pumpCanvas(tester, snapToGrid: true);
+
+      await tester.tapAt(nodeCenter(tester, sine));
+      await tester.pump();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      // Live, the nudge is a plain grid step off wherever the node was.
+      expect(sine.position, const Offset(60, 60));
+
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      // The release is the drop, so it snaps — and the whole thing is one step.
+      expect(sine.position, const Offset(64, 64));
+
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(sine.position, const Offset(44, 60));
+    });
   });
 
   // ─── right-click opens the node context menu (issue #356) ────────────────
