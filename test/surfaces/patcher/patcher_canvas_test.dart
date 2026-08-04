@@ -8,6 +8,7 @@ import 'package:phi/domain/patcher/patch_port.dart';
 import 'package:phi/domain/patcher/patch_port_id.dart';
 import 'package:phi/engine/state/node_type_registry.dart';
 import 'package:phi/engine/state/patcher_controller.dart';
+import 'package:phi/surfaces/patcher/nodes/number_node_body.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
 import 'package:phi/surfaces/patcher/patcher_node_view.dart';
 import 'package:yse/yse.dart';
@@ -300,6 +301,120 @@ void main() {
     expect(bodyDragged, isTrue);
     expect(slider.position, const Offset(120, 120));
     expect(controller.graph.selectedNodes, isEmpty);
+  });
+
+  // ─── editable bodies keep focus and keys (issue #353) ───────────────────
+
+  /// A real `.f` number node, registered as well as returned: the canvas reads
+  /// both the body and the "this body owns the press" flag from the registry.
+  NodeDescriptor numberDesc() {
+    final d = NodeDescriptor(
+      type: Obj.gFloat,
+      title: Obj.gFloat,
+      defaultSize: const Size(110, 70),
+      defaultArgs: '',
+      inputs: const [],
+      outputs: const [],
+      buildBody: (ctx, node, controller) =>
+          NumberNodeBody(node: node, controller: controller),
+      interactiveBody: true,
+    );
+    NodeTypeRegistry.instance.register(d);
+    return d;
+  }
+
+  FocusNode fieldFocus(WidgetTester tester) =>
+      tester.widget<TextField>(find.byType(TextField)).focusNode!;
+
+  testWidgets('a click on a number readout focuses its field, and a press '
+      'elsewhere inside the box does not take it back', (tester) async {
+    final number = controller.addNode(
+      desc: numberDesc(),
+      position: const Offset(120, 120),
+    );
+    await pumpCanvas(tester);
+
+    await tester.tapAt(tester.getCenter(find.byType(TextField)));
+    await tester.pump();
+    await tester.pump();
+
+    expect(fieldFocus(tester).hasPrimaryFocus, isTrue);
+    // The press belonged to the body: no selection, no move.
+    expect(controller.graph.selectedNodes, isEmpty);
+    expect(number.position, const Offset(120, 120));
+
+    // Scene (126, 146): inside the node's body rect (which starts 22px down,
+    // below the header) but in the padding beside the readout, so no widget
+    // claims it. The canvas must still keep its hands off the caret.
+    await tester.tapAt(canvasTL(tester) + const Offset(126, 146));
+    await tester.pump();
+    await tester.pump();
+
+    expect(fieldFocus(tester).hasPrimaryFocus, isTrue);
+  });
+
+  testWidgets('Backspace while a number field is focused edits the text, '
+      'never the canvas selection', (tester) async {
+    controller.addNode(desc: numberDesc(), position: const Offset(120, 120));
+    final sine = controller.addNode(
+      desc: desc(Obj.dSine),
+      position: const Offset(320, 120),
+    );
+    await pumpCanvas(tester);
+
+    // Select the sine — the canvas holds focus and Delete would remove it.
+    await tester.tapAt(nodeCenter(tester, sine));
+    await tester.pump();
+    expect(controller.graph.selectedNodes, {sine.id});
+
+    // Now edit the number box and rub out a digit.
+    await tester.enterText(find.byType(TextField), '12');
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pump();
+
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '1',
+    );
+    // The selection survived untouched: the key belonged to the field.
+    expect(controller.graph.nodes, hasLength(2));
+    expect(controller.graph.selectedNodes, {sine.id});
+
+    // And once the canvas has focus again, Delete still removes the selection.
+    await tester.tapAt(canvasTL(tester) + const Offset(600, 500));
+    await tester.pump();
+    await tester.tapAt(nodeCenter(tester, sine));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+    await tester.pump();
+    expect(controller.graph.nodes, hasLength(1));
+  });
+
+  testWidgets('a press on the number node header still selects and drags it', (
+    tester,
+  ) async {
+    final number = controller.addNode(
+      desc: numberDesc(),
+      position: const Offset(120, 120),
+    );
+    await pumpCanvas(tester);
+
+    // Scene (170, 131): the middle of the 22px header.
+    final g = await tester.startGesture(
+      canvasTL(tester) + const Offset(170, 131),
+    );
+    await tester.pump();
+    await g.moveBy(const Offset(30, 20));
+    await tester.pump();
+    await g.up();
+    await tester.pump();
+
+    expect(number.position, const Offset(150, 140));
+
+    await tester.tapAt(canvasTL(tester) + const Offset(200, 161));
+    await tester.pump();
+    expect(controller.graph.selectedNodes, {number.id});
   });
 
   testWidgets('a compatible cable drop connects; undo disconnects', (
