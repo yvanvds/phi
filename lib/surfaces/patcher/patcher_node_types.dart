@@ -31,6 +31,9 @@ void registerBuiltInPatcherNodes() {
       outputs: const [PortSpec(kind: PatchPortKind.audio)],
       buildBody: (ctx, node, controller) =>
           SineNodeBody(node: node, controller: controller),
+      // Its freq readout is the object's live `guiValue`, so a cable into the
+      // freq inlet has to reach the display (issue #357).
+      readsGuiValue: true,
     ),
   );
 
@@ -49,6 +52,7 @@ void registerBuiltInPatcherNodes() {
       buildBody: (ctx, node, controller) =>
           SliderNodeBody(node: node, controller: controller),
       interactiveBody: true,
+      readsGuiValue: true,
     ),
   );
 
@@ -82,6 +86,7 @@ void registerBuiltInPatcherNodes() {
       buildBody: (ctx, node, controller) =>
           ToggleNodeBody(node: node, controller: controller),
       interactiveBody: true,
+      readsGuiValue: true,
     ),
   );
 
@@ -110,6 +115,7 @@ void registerBuiltInPatcherNodes() {
       buildBody: (ctx, node, controller) =>
           NumberNodeBody(node: node, controller: controller),
       interactiveBody: true,
+      readsGuiValue: true,
     ),
   );
 
@@ -124,6 +130,7 @@ void registerBuiltInPatcherNodes() {
       buildBody: (ctx, node, controller) =>
           NumberNodeBody(node: node, controller: controller, integer: true),
       interactiveBody: true,
+      readsGuiValue: true,
     ),
   );
 

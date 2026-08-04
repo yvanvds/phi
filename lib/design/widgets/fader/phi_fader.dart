@@ -14,6 +14,7 @@ class PhiFader extends StatelessWidget {
   const PhiFader({
     required this.value,
     required this.onChanged,
+    this.onChangeEnd,
     this.readout,
     this.label,
     this.height = 160,
@@ -27,6 +28,16 @@ class PhiFader extends StatelessWidget {
 
   /// Emitted on tap and drag with the new value in `[0.0, 1.0]`.
   final ValueChanged<double> onChanged;
+
+  /// Emitted when the gesture that was driving [onChanged] finishes — the
+  /// release of a tap or a drag, and the cancellation of either.
+  ///
+  /// Optional, and purely a *hand off*: it carries no value, because everything
+  /// it could report has already been reported through [onChanged]. It exists
+  /// for owners whose value can also change from elsewhere and who therefore
+  /// need to know when the thumb is theirs again — the patcher's slider body
+  /// stops following the engine while the user has hold of it (issue #357).
+  final VoidCallback? onChangeEnd;
 
   /// Optional readout shown above the track (e.g. `"-12.4"`, `"0.62"`).
   final String? readout;
@@ -76,8 +87,15 @@ class PhiFader extends StatelessWidget {
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapDown: (d) => onChanged(_toValue(d.localPosition.dy)),
+          // A tap that turns into a drag cancels first, so both recognisers
+          // report their own end and the owner is never left thinking a
+          // finished gesture is still in flight.
+          onTapUp: (_) => onChangeEnd?.call(),
+          onTapCancel: () => onChangeEnd?.call(),
           onVerticalDragStart: (d) => onChanged(_toValue(d.localPosition.dy)),
           onVerticalDragUpdate: (d) => onChanged(_toValue(d.localPosition.dy)),
+          onVerticalDragEnd: (_) => onChangeEnd?.call(),
+          onVerticalDragCancel: () => onChangeEnd?.call(),
           child: SizedBox(
             width: _trackWidth + _thumbOverhang * 2,
             height: height,

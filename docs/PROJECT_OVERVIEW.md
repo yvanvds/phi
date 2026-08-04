@@ -2220,6 +2220,43 @@ main + app          (orchestration)
   duplicating/deleting), and an end-to-end `patcher_node_params` integration test
   (drop `.metro` → body reads `.metro 250` → right-click → `edit parameters…` →
   apply 500 → body *and* panel follow → Ctrl+Z/Y round-trip both).
+- **GUI bodies follow the engine** (issue #357, patcher epic) — the live bodies
+  only ever re-read `guiValue` *after their own push*, so a value arriving over
+  a **cable** moved the native object and repainted nothing: the seeded
+  `slider → ~sine` patch is exactly that shape, and driving it from a script or
+  a second editor left the canvas showing stale numbers. The Dart side gets no
+  change notification from yse, so the fix is a **gated poll**.
+  `PatcherController.refreshGuiValues` re-reads the display value of every node
+  whose registered body renders one and raises the new
+  `PatchNode.markGuiValueChanged` — the same per-node notify path
+  `markParamsChanged` uses — for the ones whose value actually changed, so an
+  idle patch does no repaint work however long the poll runs. A new
+  `NodeDescriptor.readsGuiValue` marks the pollable set (`.slider` · `.t` ·
+  `.i`/`.f` · `~sine`); it is deliberately *not* `interactiveBody`, whose set
+  only overlaps — `~sine` displays a value but owns no gesture, `.b` and `.m`
+  own gestures but display nothing that can change from underneath. A new
+  `PatchGuiPoller` (`lib/surfaces/patcher/`) wraps the canvas and runs the ask at
+  30 Hz behind three gates: the surface is the **visible tab** (the shell now
+  hands `active` down to `PatcherSurface`, the milder cousin of the Scene
+  renderer's park — Patcher stays mounted offstage so its canvas state survives),
+  a patch is **open**, and the patch **holds a pollable node** (re-checked on
+  every graph change, so the timer starts with the first live body dropped and
+  stops with the last one deleted). Bodies subscribe through a shared
+  `GuiValueLink` (`lib/surfaces/patcher/nodes/`) that filters the node's other
+  notifications by `guiRevision`, and each decides what to do while the user has
+  hold of it: a slider ignores inbound values from the first `onChanged` to the
+  new `PhiFader.onChangeEnd` and re-reads once on release, a focused number box
+  keeps what is being typed. Covered by controller unit tests (a cable-driven
+  value wakes exactly the node it landed on, an unchanged value wakes nothing,
+  non-pollable and unregistered types are never read, the gate follows the
+  graph), widget tests for the bodies (thumb / toggle / number box / rendered
+  `~sine` all follow; a held thumb and a half-typed field are not clobbered),
+  `PatchGuiPoller` gate tests (counting the asks: offstage polls nothing, the
+  poll starts and stops with the tab and with the first/last live body, an
+  unmounted poller leaves no timer), and an end-to-end
+  `patcher_live_value_refresh` integration test (drive the seeded objects from
+  the gateway → the canvas follows → park the Patcher behind Mix → it goes quiet
+  → bring it back → it catches up).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

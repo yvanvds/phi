@@ -92,6 +92,12 @@ class PatcherController {
   /// so a delete's undo (and a duplicate) recreate the object identically.
   final Map<PatchNodeId, String> _argsByNode = {};
 
+  /// Logical node id → the `guiValue` [refreshGuiValues] last read for it, so
+  /// the poll wakes a node only when the engine reports something *new*. A node
+  /// absent from the map counts as the empty display a fresh object has, so a
+  /// value that arrived before the first poll still registers as a change.
+  final Map<PatchNodeId, String> _guiValueByNode = {};
+
   /// Falls below zero to mint collision-free logical ids when a native handle
   /// value is already in use (only possible if the native side reuses handles).
   int _syntheticFloor = -1;
@@ -255,6 +261,7 @@ class PatcherController {
     }
     _nativeByNode.clear();
     _argsByNode.clear();
+    _guiValueByNode.clear();
 
     final snapshot = _gateway.enumerate(instanceId);
     for (final obj in snapshot.objects) {
@@ -405,6 +412,50 @@ class PatcherController {
   /// what the params dialog seeds its fields from and what
   /// [SetPatchParamsCommand] captures for undo.
   String argsOf(PatchNodeId id) => _argsByNode[id] ?? '';
+
+  // ─── live display refresh (issue #357) ───────────────────────────────
+
+  /// Whether this patch holds any node whose body renders the engine's
+  /// `guiValue` ([NodeDescriptor.readsGuiValue]) — the gate the surface's
+  /// refresh runs on, so a patch of plain objects schedules no polling at all.
+  bool get hasGuiValueNodes => graph.nodes.any(_readsGuiValue);
+
+  /// Re-read the engine's display value for every node whose body renders one
+  /// and wake the ones whose value **changed**. Returns how many were woken.
+  ///
+  /// The Dart side never hears about a value that arrives over a *cable*: the
+  /// native object updates and nothing on the canvas knows, so a body that only
+  /// re-read after its own push showed a stale number the moment the graph did
+  /// anything by itself (issue #357). This closes that loop by asking — driven
+  /// by the surface's `PatchGuiPoller` while the patcher is on screen, and by
+  /// nothing at all while it is not.
+  ///
+  /// Two economies keep an idle patch free: only [_readsGuiValue] nodes are
+  /// read, and only a value different from the last one seen raises
+  /// [PatchNode.markGuiValueChanged]. A patch nobody is driving therefore
+  /// repaints nothing, however long the poll runs.
+  ///
+  /// If the gateway ever grows a cheaper change signal (a per-object dirty flag
+  /// from `dart-yse`), it swaps in behind this one method — the surface, the
+  /// nodes and the bodies stay as they are.
+  int refreshGuiValues() {
+    var woken = 0;
+    for (final node in graph.nodes) {
+      if (!_readsGuiValue(node)) continue;
+      final value = guiValueOf(node.id);
+      final previous = _guiValueByNode[node.id] ?? '';
+      _guiValueByNode[node.id] = value;
+      if (previous == value) continue;
+      node.markGuiValueChanged();
+      woken++;
+    }
+    return woken;
+  }
+
+  /// Whether [node]'s registered body displays a `guiValue`. An unregistered
+  /// type renders its creation arguments instead, so it is never polled.
+  static bool _readsGuiValue(PatchNode node) =>
+      NodeTypeRegistry.instance.find(node.type)?.readsGuiValue ?? false;
 
   // ─── typed-pin queries (drag-time compatibility) ─────────────────────
 
@@ -758,6 +809,7 @@ class PatcherController {
     graph.removeNode(id);
     _nativeByNode.remove(id);
     _argsByNode.remove(id);
+    _guiValueByNode.remove(id);
   }
 
   /// Recreate a previously-deleted node under its **same** logical [id] from

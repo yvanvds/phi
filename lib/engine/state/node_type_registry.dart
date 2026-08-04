@@ -38,6 +38,7 @@ class NodeDescriptor {
     required this.outputs,
     required this.buildBody,
     this.interactiveBody = false,
+    this.readsGuiValue = false,
   });
 
   /// One of the `Obj.*` string constants from `package:yse`.
@@ -65,6 +66,19 @@ class NodeDescriptor {
   /// body to the widget, so operating a control never drags (or re-selects)
   /// its node; those nodes are dragged by their header (issue #352).
   final bool interactiveBody;
+
+  /// Whether the body **displays the engine's `guiValue`** — a fader readout, a
+  /// number box, a toggle's on/off, the `~sine` freq line. Only these nodes are
+  /// polled by the surface's gated refresh, so an idle patch of plain objects
+  /// costs nothing (issue #357).
+  ///
+  /// Deliberately **not** [interactiveBody]: the two sets only overlap. `~sine`
+  /// displays a `guiValue` but owns no gesture, while `.b` (a momentary bang)
+  /// and `.m` (which renders its creation args) own gestures but have no
+  /// display value to re-read. Polling by "is it interactive" would therefore
+  /// both miss the very node the cable-driven bug was reported against and burn
+  /// reads on two bodies that can never change from underneath.
+  final bool readsGuiValue;
 }
 
 /// Global singleton mapping `Obj.*` strings to their [NodeDescriptor].

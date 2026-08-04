@@ -929,11 +929,19 @@ class _WorkstationState extends State<Workstation> {
   /// context idle when Scene is a background tab or closed. Re-parenting an
   /// *active* Scene between panes is the one interaction verified by hand (the
   /// GL path is not CI-testable); the fork's `M3AppEngine` keeps the engine warm.
+  ///
+  /// Patcher takes the milder version of the same treatment: it stays mounted
+  /// offstage (its canvas state, selection and pan/zoom are worth keeping) but
+  /// is *told* whether it is showing, so its live-value poll parks itself while
+  /// nobody is looking at it (issue #357).
   Widget _surfaceContent(String surfaceId, {required bool active}) {
     final id = _surfaceIdOf(surfaceId);
     if (id == null) return const SizedBox.shrink();
     if (id == SurfaceId.scene && !active) return const SizedBox.shrink();
-    return KeyedSubtree(key: _surfaceKeys[id], child: _surfaceFor(id));
+    return KeyedSubtree(
+      key: _surfaceKeys[id],
+      child: _surfaceFor(id, active: active),
+    );
   }
 
   /// The [SurfaceId] whose [SurfaceId.name] is [surfaceId], or null when the id
@@ -945,7 +953,9 @@ class _WorkstationState extends State<Workstation> {
     return null;
   }
 
-  Widget _surfaceFor(SurfaceId id) {
+  /// The widget for one surface. [active] is whether it is the visible tab of
+  /// its pane — only the surfaces that park work while offstage read it.
+  Widget _surfaceFor(SurfaceId id, {required bool active}) {
     switch (id) {
       case SurfaceId.scene:
         return SceneSurface(engine: widget.engine);
@@ -959,7 +969,7 @@ class _WorkstationState extends State<Workstation> {
           bankReader: _fmBankReader,
         );
       case SurfaceId.patcher:
-        return PatcherSurface(engine: widget.engine);
+        return PatcherSurface(engine: widget.engine, active: active);
       case SurfaceId.code:
         return CodeSurface(
           engine: widget.engine,
