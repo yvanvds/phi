@@ -2257,6 +2257,48 @@ main + app          (orchestration)
   `patcher_live_value_refresh` integration test (drive the seeded objects from
   the gateway → the canvas follows → park the Patcher behind Mix → it goes quiet
   → bring it back → it catches up).
+- **Inline object creation** (issue #358, patcher epic) — dragging from the
+  palette was the only way to make an object, which mid-performance means
+  menu-diving. The Max speed path now sits beside it: **double-click empty
+  canvas → an object box appears there → type the name (+ args) → Enter**. The
+  double-click reuses the canvas's own raw-pointer pairing (issue #352) rather
+  than putting a recogniser back into the arena that issue emptied; an
+  empty-canvas pair has no node identity to match on, so it pairs by proximity
+  (`kDoubleTapSlop`, measured in **viewport** pixels — the only space whose
+  meaning survives a zoom) and is invalidated by anything that is not half of a
+  click: a marquee, a pan, a cable drag, a cable click, a cancelled press.
+  `PatchInlineObjectBox` (`lib/surfaces/patcher/create/`) completes against
+  `PatcherController.objectTypes()` — the palette's own source — matching the
+  type id, the id *without* its `~`/`.` prefix (so `sine` reaches `~sine`) and
+  the one-line description, prefix hits ranked ahead of substring ones; arrows
+  move the highlight, Tab inserts it, and Enter instantiates the typed name when
+  it is already an exact id, the highlight when it isn't. Everything after the
+  first token is the creation-arg string, checked by a new pure
+  `PatchCreationArgs` (`lib/engine/bridge/`) against the type's documented
+  `PatchParamDescriptor`s *before* anything is minted — the engine crashes on
+  arguments an object never declared (`.slider`) and is silently misconfigured by
+  an out-of-range one — with the untyped tail resolved from the documented
+  defaults so arguments stay positional. A refusal keeps the box open with the
+  reason under it, so a typo costs a keystroke rather than the gesture; Escape
+  (or a press elsewhere) dismisses and leaves the canvas untouched. Keys are
+  owned by the box, between its field and the canvas, so they beat both the
+  canvas shortcuts (which since issue #353 bail without primary focus) and
+  Flutter's text-editing and traversal defaults — and the box takes the keyboard
+  **explicitly** on open, since the canvas grabs focus on the very release that
+  opens it and an `autofocus` is skipped whenever its scope already has a focused
+  child. Creation also became **undoable**: it was the one canvas verb still off
+  the stack, which a gesture that mints objects a keystroke at a time makes
+  impossible to live with. A new `CreatePatchObjectCommand`
+  (`lib/engine/state/patcher_commands/`) journals it — `addObject` stays the
+  direct primitive, `createObject` is the authoring gesture both the palette drop
+  and the box now come through, and a redo restores the object under its **same
+  logical id** so cables and lower undo commands that named it stay valid.
+  Covered by `PatchCreationArgs` unit tests, controller create/undo/redo tests,
+  box widget tests (completion, keys, refusals, one Enter = one object), canvas
+  widget tests (which clicks pair and which never do, where the box lands, that
+  it opens holding the keyboard, Escape / click-away, Ctrl+Z), and an end-to-end
+  `patcher_inline_create` integration test that makes an object by keyboard
+  alone, corrects a typo in place, and undoes the result.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

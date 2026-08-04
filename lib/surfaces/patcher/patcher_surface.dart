@@ -110,8 +110,21 @@ class _PatcherViewportState extends State<_PatcherViewport> {
     });
   }
 
-  void _createObject(PatchObjectDescriptor desc, Offset position) {
-    widget.engine.patcher.addObject(desc: desc, position: position);
+  /// Create [desc] at [position] — the one creation path both canvas gestures
+  /// come through: a palette entry dropped on the canvas (design §5) and the
+  /// inline object box's Enter (issue #358). [args] is the box's checked
+  /// argument string; null means the type's documented defaults, which is what
+  /// a drop wants. Journaled either way, so `Ctrl+Z` un-creates.
+  void _createObject(
+    PatchObjectDescriptor desc,
+    Offset position, {
+    String? args,
+  }) {
+    widget.engine.patcher.createObject(
+      desc: desc,
+      position: position,
+      args: args,
+    );
   }
 
   /// Double-click (or the context menu's `edit parameters…`) on a node with
@@ -273,6 +286,7 @@ class _PatcherViewportState extends State<_PatcherViewport> {
                               // rebuilds the canvas against the new editor.
                               key: ValueKey(library.openAddress),
                               controller: editor,
+                              objectTypes: _objectTypes,
                               onCreateObject: _createObject,
                               onNodeTap: _selectNode,
                               onNodeDoubleTap: _editParams,
