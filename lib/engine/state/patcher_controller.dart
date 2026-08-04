@@ -18,6 +18,7 @@ import '../bridge/patcher_node_snapshot.dart';
 import 'node_type_registry.dart';
 import 'patch_node_spec.dart';
 import 'patcher_commands/connect_cable_command.dart';
+import 'patcher_commands/create_patch_object_command.dart';
 import 'patcher_commands/delete_cable_command.dart';
 import 'patcher_commands/delete_patch_nodes_command.dart';
 import 'patcher_commands/duplicate_patch_selection_command.dart';
@@ -138,28 +139,59 @@ class PatcherController {
   /// is already filtered out there (design §10 decision 2).
   List<PatchObjectDescriptor> objectTypes() => _gateway.objectTypes();
 
-  /// Create a node straight from a palette [desc] at [position] — the
-  /// **drag-to-create** gesture (design §5).
+  /// Create a node straight from a catalogue [desc] at [position].
   ///
   /// Unlike [addNode] (which takes a hand-authored [NodeDescriptor] for the
   /// seeded demo bodies), this creates *any* engine object from its palette
-  /// metadata: it seeds the native object with the descriptor's documented
-  /// default args and sizes the node to fit (reusing a hand-authored body's
-  /// tuned size when the type has one). The header shows the object's `type` id.
+  /// metadata: it seeds the native object with [args] — the descriptor's
+  /// documented defaults when none are given — and sizes the node to fit
+  /// (reusing a hand-authored body's tuned size when the type has one). The
+  /// header shows the object's `type` id.
+  ///
+  /// Direct (non-undoable): the **primitive** both authoring gestures create
+  /// through. Author through [createObject] so the creation lands on the undo
+  /// stack like every other canvas verb.
   PatchNode addObject({
     required PatchObjectDescriptor desc,
     required Offset position,
+    String? args,
     int voice = 1,
   }) {
     final bodied = NodeTypeRegistry.instance.find(desc.type);
     return _create(
       type: desc.type,
-      args: _defaultArgsFor(desc),
+      args: args ?? _defaultArgsFor(desc),
       title: desc.type,
       voice: voice,
       position: position,
       size: bodied?.defaultSize, // null → sized to fit the reified ports
     );
+  }
+
+  /// Create a catalogue object at [position] as one journaled step — the
+  /// authoring gesture behind both the palette **drag-to-create** (design §5)
+  /// and the inline object box's Enter (issue #358). Returns the new node's
+  /// logical id.
+  ///
+  /// [args] is the creation-argument string to mint the object with, already
+  /// checked against the type's documented parameters (`PatchCreationArgs`);
+  /// null falls back to those documented defaults, which is what a palette drop
+  /// wants. The new node becomes the selection.
+  PatchNodeId? createObject({
+    required PatchObjectDescriptor desc,
+    required Offset position,
+    String? args,
+    int voice = 1,
+  }) {
+    final command = CreatePatchObjectCommand(
+      this,
+      desc: desc,
+      args: args ?? _defaultArgsFor(desc),
+      position: position,
+      voice: voice,
+    );
+    undoScope.run(command);
+    return command.createdId;
   }
 
   /// Shared node creation: mint the native object, key it to a fresh logical

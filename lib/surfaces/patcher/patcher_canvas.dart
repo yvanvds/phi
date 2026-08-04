@@ -19,6 +19,7 @@ import '../../domain/patcher/patch_port_kind.dart';
 import '../../engine/bridge/patch_object_descriptor.dart';
 import '../../engine/state/node_type_registry.dart';
 import '../../engine/state/patcher_controller.dart';
+import 'create/patch_inline_object_box.dart';
 import 'patch_cable_colors.dart';
 import 'patcher_cable_layer.dart';
 import 'patcher_ghost_cable.dart';
@@ -59,10 +60,14 @@ import 'patcher_node_view.dart';
 /// When [onCreateObject] is supplied the whole viewport is a drop target for a
 /// palette entry: a dropped [PatchObjectDescriptor] resolves to the scene point
 /// under the pointer and is reported back so the surface can create the object
-/// there (design §5, drag-to-create).
+/// there (design §5, drag-to-create). Supply [objectTypes] as well and a
+/// **double-click on empty canvas** opens the inline object box at that scene
+/// point — the same callback, with the arguments typed into the box (issue
+/// #358).
 class PatcherCanvas extends StatefulWidget {
   const PatcherCanvas({
     required this.controller,
+    this.objectTypes = const [],
     this.onCreateObject,
     this.onNodeTap,
     this.onNodeDoubleTap,
@@ -72,9 +77,21 @@ class PatcherCanvas extends StatefulWidget {
 
   final PatcherController controller;
 
-  /// Called with a dropped palette entry and the scene point it landed on.
-  /// Null disables drop-to-create.
-  final void Function(PatchObjectDescriptor desc, Offset canvasPosition)?
+  /// The engine's object catalogue, for the inline object box's completion.
+  /// Empty disables inline creation — a double-click on empty canvas then does
+  /// nothing, since there is nothing to complete against.
+  final List<PatchObjectDescriptor> objectTypes;
+
+  /// Called with a catalogue entry and the scene point to create it at — a
+  /// palette entry dropped on the canvas, or the object the inline box's Enter
+  /// resolved. `args` is the checked creation-argument string from the box;
+  /// null (the drop path) means "the type's documented defaults". Null disables
+  /// both create gestures.
+  final void Function(
+    PatchObjectDescriptor desc,
+    Offset canvasPosition, {
+    String? args,
+  })?
   onCreateObject;
 
   /// Called when a node is tapped — drives the reference panel. Selection is
@@ -102,6 +119,9 @@ class PatcherCanvas extends StatefulWidget {
   /// Key on the rubber-band selection rectangle — present only while a marquee
   /// is actually being dragged, so its absence is assertable (issue #355).
   static const Key marqueeKey = Key('PatcherCanvas.marquee');
+
+  /// Key on the inline object box — present only while one is open (issue #358).
+  static const Key inlineCreateKey = Key('PatcherCanvas.inlineCreate');
 
   @override
   State<PatcherCanvas> createState() => _PatcherCanvasState();
@@ -143,8 +163,21 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   // *movement-free* press is recorded, and both presses of the pair must be
   // movement-free, so click-to-select followed by a drag is never mistaken
   // for a double-click (issue #352).
+  //
+  // The same pairing serves *empty* canvas, where it opens the inline object
+  // box (issue #358). A node pair matches by identity; an empty-canvas pair has
+  // no identity to match, so it matches by proximity instead and remembers
+  // where the first click landed, in **viewport** pixels — the space
+  // `kDoubleTapSlop` is expressed in, and the only one whose meaning survives a
+  // zoom.
   PatchNodeId? _lastTapNode;
+  bool _lastTapOnEmpty = false;
+  Offset _lastTapLocal = Offset.zero;
   Duration _lastTapAt = Duration.zero;
+
+  // Scene point of the open inline object box, or null when none is open.
+  Offset? _inlineCreateAt;
+  final GlobalKey _inlineBoxKey = GlobalKey();
 
   // Transient reject cue for an incompatible cable drop.
   String? _reject;
@@ -302,6 +335,22 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
             rect: _marquee!,
             child: const IgnorePointer(child: _MarqueeBox()),
           ),
+        // The box lives *in the scene*, at the point that was double-clicked,
+        // so it sits where the object it is about to make will — and pans and
+        // zooms with everything else rather than floating over it. Last child,
+        // so its completion list covers the nodes it overlaps.
+        if (_inlineCreateAt != null)
+          Positioned(
+            key: PatcherCanvas.inlineCreateKey,
+            left: _inlineCreateAt!.dx,
+            top: _inlineCreateAt!.dy,
+            child: PatchInlineObjectBox(
+              key: _inlineBoxKey,
+              objectTypes: widget.objectTypes,
+              onCreate: _createInline,
+              onDismiss: _closeInlineCreate,
+            ),
+          ),
       ],
     );
   }
@@ -356,6 +405,20 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
 
   void _onPointerDown(PointerDownEvent event) {
     _pressOnInteractiveBody = false;
+    if (_inlineCreateAt != null) {
+      // A press inside the open inline object box belongs to its field — the
+      // same rule an editable node body gets (issue #353): the canvas starts no
+      // gesture here and does not take the keyboard back on release, so the
+      // caret lands where it was clicked.
+      if (_pressInsideInlineBox(event.position)) {
+        _pressOnInteractiveBody = true;
+        return;
+      }
+      // A press anywhere else abandons the box, exactly as Escape does — the
+      // canvas is left untouched — and the press itself goes on to do whatever
+      // it would have done.
+      _closeInlineCreate();
+    }
     if (event.buttons == kMiddleMouseButton) {
       _panning = true;
       return;
@@ -447,6 +510,9 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     _pressOnInteractiveBody = false;
     if (!onBody) _focus.requestFocus();
     if (_panning) {
+      // A pan is a gesture in its own right, and it moves the scene under the
+      // cursor — so the click before it can no longer be half of anything.
+      _invalidatePendingTap();
       _panning = false;
       return;
     }
@@ -455,6 +521,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // Finish an in-flight cable drag.
     final source = _controller.graph.dragSourcePort;
     if (source != null) {
+      _invalidatePendingTap();
       final target = _inputPortAt(scene);
       if (target != null && !_controller.connectViaGesture(source, target)) {
         _flashReject();
@@ -472,18 +539,95 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     _pressScene = null;
     if (press == null) return;
 
-    if (_movedSincePress && _marquee != null) {
-      _applyMarquee(_marquee!, additive: _marqueeAdditive);
-      setState(() => _marquee = null);
+    if (_movedSincePress) {
+      // A press that moved is a marquee, not a click — and, exactly as on a
+      // node (issue #352), it invalidates the press before it, so
+      // click → marquee → click can never pair into a create.
+      _invalidatePendingTap();
+      if (_marquee != null) {
+        _applyMarquee(_marquee!, additive: _marqueeAdditive);
+        setState(() => _marquee = null);
+      }
       return;
     }
-    // A click on empty canvas: pick a cable, or clear the selection.
+    // A click on empty canvas: pick a cable, or clear the selection — and pair
+    // two movement-free clicks on the *grid* into the inline object box.
     final cable = _cableAt(press);
     if (cable != null) {
+      // A cable is a thing, not empty canvas: clicking one is its own gesture
+      // and never half of a create.
+      _invalidatePendingTap();
       _controller.selectCable(cable);
-    } else {
-      _controller.clearSelection();
+      return;
     }
+    _controller.clearSelection();
+    _pairEmptyTap(event.localPosition, press, event.timeStamp);
+  }
+
+  /// The empty-canvas half of the double-click pairing (issue #358): a second
+  /// movement-free click near the first, inside the platform's double-tap
+  /// window, opens the inline object box at that scene point.
+  ///
+  /// Deliberately the *same* mechanism as the node pairing above rather than a
+  /// second one: a `GestureDetector.onDoubleTap` here would sit in the arena
+  /// against the marquee and the node drags this canvas already owns, which is
+  /// exactly the competition issue #352 removed.
+  void _pairEmptyTap(Offset local, Offset scene, Duration at) {
+    final paired =
+        _lastTapOnEmpty &&
+        at - _lastTapAt <= kDoubleTapTimeout &&
+        (local - _lastTapLocal).distance <= kDoubleTapSlop;
+    _invalidatePendingTap();
+    if (paired) {
+      _openInlineCreate(scene);
+      return;
+    }
+    _lastTapOnEmpty = true;
+    _lastTapLocal = local;
+    _lastTapAt = at;
+  }
+
+  /// Forget the press that was waiting to become the first half of a
+  /// double-click — because it was completed, or because something happened
+  /// that is not half of anything (a drag, a right-click, a cancel).
+  void _invalidatePendingTap() {
+    _lastTapNode = null;
+    _lastTapOnEmpty = false;
+    _lastTapLocal = Offset.zero;
+    _lastTapAt = Duration.zero;
+  }
+
+  // ─── inline object creation (issue #358) ──────────────────────────────
+
+  void _openInlineCreate(Offset scene) {
+    if (widget.objectTypes.isEmpty || widget.onCreateObject == null) return;
+    setState(() => _inlineCreateAt = scene);
+  }
+
+  /// Take the box down and hand the keyboard back to the canvas, so `Ctrl+Z`
+  /// reaches the undo scope straight away — the object just typed is undone
+  /// without a click in between, which is the whole point of a keyboard path.
+  void _closeInlineCreate() {
+    setState(() => _inlineCreateAt = null);
+    _focus.requestFocus();
+  }
+
+  /// The box resolved a type and its arguments passed the check: report it at
+  /// the scene point the box was opened on, then close.
+  void _createInline(PatchObjectDescriptor desc, String args) {
+    final at = _inlineCreateAt;
+    if (at != null) widget.onCreateObject?.call(desc, at, args: args);
+    _closeInlineCreate();
+  }
+
+  /// Whether a press at [global] landed inside the open box's own rectangle.
+  /// Measured against the rendered box rather than a guessed rect: the box
+  /// grows and shrinks with its completion list, so nothing else knows its size.
+  bool _pressInsideInlineBox(Offset global) {
+    final render =
+        _inlineBoxKey.currentContext?.findRenderObject() as RenderBox?;
+    if (render == null || !render.hasSize) return false;
+    return (Offset.zero & render.size).contains(render.globalToLocal(global));
   }
 
   /// Release over a node: commit the drag, or — when the press never cleared
@@ -496,15 +640,16 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       _draggingNode = false;
       // A press that moved is never half of a double-click — and it invalidates
       // the press before it, so click-select → drag → click can't pair either.
-      _lastTapNode = null;
+      _invalidatePendingTap();
       _controller.endNodeDrag();
       return;
     }
     final node = _controller.graph.nodeById(id);
     if (node == null) return;
     _onNodeTap(node);
-    if (_lastTapNode == id && at - _lastTapAt <= kDoubleTapTimeout) {
-      _lastTapNode = null;
+    final paired = _lastTapNode == id && at - _lastTapAt <= kDoubleTapTimeout;
+    _invalidatePendingTap();
+    if (paired) {
       widget.onNodeDoubleTap?.call(node);
     } else {
       _lastTapNode = id;
@@ -531,7 +676,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // pairing exactly as a moved press does — otherwise the click before it and
     // the click after it pair up and the params dialog opens off a double-click
     // the user never made.
-    _lastTapNode = null;
+    _invalidatePendingTap();
     if (!_controller.graph.isNodeSelected(node.id)) {
       _controller.selectNode(node.id);
     }
@@ -572,8 +717,12 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       _draggingNode = false;
       // A press the user never completed is never half of a double-click — and
       // it invalidates the press before it, exactly as a moved press does.
-      _lastTapNode = null;
-      _lastTapAt = Duration.zero;
+      //
+      // An *open* inline object box is deliberately not dropped here: it is the
+      // result of a completed gesture, not part of one in flight — the same
+      // standing the params dialog a node double-click opened has — and a
+      // cancelled press must not throw away a name half typed into it.
+      _invalidatePendingTap();
       _pressScene = null;
       _marqueeAnchor = null;
       _marqueeAdditive = false;

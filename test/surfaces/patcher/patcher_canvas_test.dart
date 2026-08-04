@@ -10,9 +10,11 @@ import 'package:phi/domain/patcher/patch_node.dart';
 import 'package:phi/domain/patcher/patch_port.dart';
 import 'package:phi/domain/patcher/patch_port_id.dart';
 import 'package:phi/domain/patcher/patch_port_kind.dart';
+import 'package:phi/engine/bridge/patch_object_descriptor.dart';
 import 'package:phi/engine/bridge/patcher_node_snapshot.dart';
 import 'package:phi/engine/state/node_type_registry.dart';
 import 'package:phi/engine/state/patcher_controller.dart';
+import 'package:phi/surfaces/patcher/create/patch_inline_object_box.dart';
 import 'package:phi/surfaces/patcher/nodes/number_node_body.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
 import 'package:phi/surfaces/patcher/patcher_ghost_cable.dart';
@@ -61,6 +63,13 @@ void main() {
 
   Future<void> pumpCanvas(
     WidgetTester tester, {
+    List<PatchObjectDescriptor> objectTypes = const [],
+    void Function(
+      PatchObjectDescriptor desc,
+      Offset canvasPosition, {
+      String? args,
+    })?
+    onCreateObject,
     void Function(PatchNode node)? onNodeDoubleTap,
     void Function(PatchNode node)? onNodeTap,
     void Function(PatchNode node, Offset globalPosition)? onNodeContextMenu,
@@ -70,6 +79,8 @@ void main() {
         home: Scaffold(
           body: PatcherCanvas(
             controller: controller,
+            objectTypes: objectTypes,
+            onCreateObject: onCreateObject,
             onNodeTap: onNodeTap,
             onNodeDoubleTap: onNodeDoubleTap,
             onNodeContextMenu: onNodeContextMenu,
@@ -963,6 +974,304 @@ void main() {
       await g.up();
       await tester.pump();
       expect(controller.graph.selectedNodes, {sine.id});
+    });
+  });
+
+  // ─── inline object creation (issue #358) ─────────────────────────────────
+  //
+  // The Max speed path: double-click empty canvas → an object box appears there
+  // → type a name (+ args) → Enter. These drive the *canvas* half — which
+  // clicks pair into a box, where the box lands, and that a create round-trips
+  // onto the undo stack without the hand leaving the keyboard. The box's own
+  // keys, completion and refusals are covered in
+  // `patch_inline_object_box_test.dart`.
+
+  group('inline object creation', () {
+    /// The catalogue the palette renders — the box completes against the same
+    /// source, so the two gestures can never disagree about what exists.
+    List<PatchObjectDescriptor> catalogue() => gateway.objectTypes();
+
+    Finder box() => find.byKey(PatcherCanvas.inlineCreateKey);
+    Finder field() => find.byKey(PatchInlineObjectBox.fieldKey);
+
+    /// Two movement-free clicks at the same point — the pairing the canvas
+    /// reads out of its own pointer stream, no recogniser involved.
+    Future<void> doubleClickAt(WidgetTester tester, Offset at) async {
+      await tester.tapAt(at);
+      await tester.pump();
+      await tester.tapAt(at);
+      await tester.pump();
+    }
+
+    Future<void> type(WidgetTester tester, String text) async {
+      await tester.enterText(field(), text);
+      await tester.pump();
+    }
+
+    testWidgets('two movement-free clicks on empty canvas open the box, at the '
+        'point they landed on', (tester) async {
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (_, _, {args}) {},
+      );
+
+      await doubleClickAt(tester, canvasTL(tester) + const Offset(300, 200));
+
+      expect(box(), findsOneWidget);
+      // It sits *in the scene* where the click did, so the object shows up
+      // where it was asked for rather than at some anchored corner.
+      expect(
+        tester.getTopLeft(find.byType(PatchInlineObjectBox)),
+        canvasTL(tester) + const Offset(300, 200),
+      );
+    });
+
+    testWidgets('the box opens holding the keyboard, so the name is typed '
+        'straight away', (tester) async {
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (_, _, {args}) {},
+      );
+
+      await doubleClickAt(tester, canvasTL(tester) + const Offset(300, 200));
+      await tester.pump();
+
+      // The canvas takes focus on the very release that opens the box, so the
+      // box has to take it back — an `autofocus` is skipped when the scope
+      // already has a focused descendant, and the box would then come up with
+      // the canvas still holding the keys: the first letters of the name would
+      // run canvas shortcuts (`d` duplicates the selection) instead of typing.
+      expect(
+        tester.widget<TextField>(field()).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+    });
+
+    testWidgets('one click opens nothing', (tester) async {
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (_, _, {args}) {},
+      );
+
+      await tester.tapAt(canvasTL(tester) + const Offset(300, 200));
+      await tester.pump();
+
+      expect(box(), findsNothing);
+    });
+
+    testWidgets('two clicks far apart are two clicks, not a double-click', (
+      tester,
+    ) async {
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (_, _, {args}) {},
+      );
+      final tl = canvasTL(tester);
+
+      await tester.tapAt(tl + const Offset(300, 200));
+      await tester.pump();
+      // Past `kDoubleTapSlop` (100px): clicking two different places is two
+      // deselects, not a request to make an object.
+      await tester.tapAt(tl + const Offset(300, 340));
+      await tester.pump();
+
+      expect(box(), findsNothing);
+    });
+
+    testWidgets('a marquee between two clicks never pairs into a box', (
+      tester,
+    ) async {
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (_, _, {args}) {},
+      );
+      final tl = canvasTL(tester);
+
+      await tester.tapAt(tl + const Offset(300, 200));
+      await tester.pump();
+      final g = await tester.startGesture(tl + const Offset(300, 200));
+      await tester.pump();
+      await g.moveTo(tl + const Offset(380, 280));
+      await tester.pump();
+      await g.up();
+      await tester.pump();
+      await tester.tapAt(tl + const Offset(300, 200));
+      await tester.pump();
+
+      // A press that moved is a marquee, and it invalidates the click before it
+      // (the `_resetGesture` discipline of issue #355) — so click → drag →
+      // click can never sneak a box open mid-selection.
+      expect(box(), findsNothing);
+    });
+
+    testWidgets('a double-click on a node is still the node double-click', (
+      tester,
+    ) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      PatchNode? doubleClicked;
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (_, _, {args}) {},
+        onNodeDoubleTap: (n) => doubleClicked = n,
+      );
+
+      await doubleClickAt(tester, nodeCenter(tester, sine));
+
+      // Empty canvas makes objects, a node opens its parameters: one pairing
+      // mechanism, two destinations, never both at once.
+      expect(doubleClicked?.id, sine.id);
+      expect(box(), findsNothing);
+    });
+
+    testWidgets('a press inside the box belongs to its field, not the canvas', (
+      tester,
+    ) async {
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (_, _, {args}) {},
+      );
+      await doubleClickAt(tester, canvasTL(tester) + const Offset(300, 200));
+
+      await tester.tapAt(tester.getCenter(field()));
+      await tester.pump();
+      await tester.pump();
+
+      // The canvas neither dismisses the box nor takes the keyboard back on
+      // release — the caret stays where it was clicked (issue #353's rule).
+      expect(box(), findsOneWidget);
+      expect(
+        tester.widget<TextField>(field()).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+    });
+
+    testWidgets('type a name and arguments, Enter creates it there — and '
+        'Ctrl+Z takes it back', (tester) async {
+      PatchObjectDescriptor? made;
+      Offset? madeAt;
+      String? madeArgs;
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (d, at, {args}) {
+          made = d;
+          madeAt = at;
+          madeArgs = args;
+          // What the surface does with the report — journaled, so the gesture
+          // is undoable like every other canvas verb.
+          controller.createObject(desc: d, position: at, args: args);
+        },
+      );
+
+      await doubleClickAt(tester, canvasTL(tester) + const Offset(300, 200));
+      await type(tester, 'sine 220');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      // The acceptance gesture: `~sine` was never typed in full, and the `220`
+      // arrived as its creation argument.
+      expect(made?.type, Obj.dSine);
+      expect(madeAt, const Offset(300, 200));
+      expect(madeArgs, '220');
+      expect(box(), findsNothing);
+      expect(controller.graph.nodes, hasLength(1));
+      expect(controller.graph.nodes.single.position, const Offset(300, 200));
+      expect(controller.argsOf(controller.graph.nodes.single.id), '220');
+
+      // Focus came back to the canvas with the box, so the undo is one
+      // keystroke away — the whole point of a path the hands never leave.
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(controller.graph.nodes, isEmpty);
+    });
+
+    testWidgets('Escape dismisses and leaves the canvas untouched', (
+      tester,
+    ) async {
+      var creates = 0;
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (_, _, {args}) => creates++,
+      );
+      await doubleClickAt(tester, canvasTL(tester) + const Offset(300, 200));
+      await type(tester, 'sine 220');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+
+      expect(box(), findsNothing);
+      expect(creates, 0);
+      expect(controller.graph.nodes, isEmpty);
+      // Not even an empty step on the stack: an abandoned gesture is no gesture.
+      expect(controller.undoScope.canUndo, isFalse);
+    });
+
+    testWidgets('an unknown name keeps the box open for correction', (
+      tester,
+    ) async {
+      var creates = 0;
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (_, _, {args}) => creates++,
+      );
+      await doubleClickAt(tester, canvasTL(tester) + const Offset(300, 200));
+      await type(tester, 'zzzz');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      expect(creates, 0);
+      expect(box(), findsOneWidget);
+      expect(find.byKey(PatchInlineObjectBox.rejectKey), findsOneWidget);
+
+      // A typo costs a keystroke, not the gesture: fix it in place and go.
+      await type(tester, 'sine');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(creates, 1);
+      expect(box(), findsNothing);
+    });
+
+    testWidgets('a press elsewhere on the canvas abandons the box', (
+      tester,
+    ) async {
+      var creates = 0;
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (_, _, {args}) => creates++,
+      );
+      final tl = canvasTL(tester);
+      await doubleClickAt(tester, tl + const Offset(300, 200));
+      expect(box(), findsOneWidget);
+
+      await tester.tapAt(tl + const Offset(650, 480));
+      await tester.pump();
+
+      // Clicking away is Escape by another route — nothing made, nothing left
+      // stranded on the canvas.
+      expect(box(), findsNothing);
+      expect(creates, 0);
+    });
+
+    testWidgets('without a catalogue there is nothing to complete, so nothing '
+        'opens', (tester) async {
+      await pumpCanvas(tester, onCreateObject: (_, _, {args}) {});
+
+      await doubleClickAt(tester, canvasTL(tester) + const Offset(300, 200));
+
+      expect(box(), findsNothing);
     });
   });
 }
