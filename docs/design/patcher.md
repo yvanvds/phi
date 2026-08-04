@@ -135,6 +135,16 @@ live-code control).
   lands on the cell and the rest of the selection shifts by that same
   offset, so a snapped group keeps its arrangement. Only the drop is
   disciplined — the node stays glued to the pointer while it moves.
+- **Navigating the view:** pan by middle-drag, or by **holding `Space`**
+  and left-dragging — the habit every canvas app shares, and the one
+  that needs no third button. While space is down the cursor is a grab
+  hand and a press pans wherever it lands; letting go mid-drag ends the
+  pan then and there rather than stranding it, and so does losing the
+  keyboard. The wheel zooms about the pointer. **`Ctrl+0` frames the
+  patch** — fits every node into the viewport, never magnifying past
+  1:1, and reduces to the identity view on an empty canvas. Read from
+  the key's *position* rather than its glyph, so it survives a shifted
+  digit row on AZERTY.
 - **Cursor and hover** teach the hit zones: a move cursor over
   draggable node chrome, a crosshair plus a ring over a port, a pointer
   over a cable, a grab hand where a cable would detach. Resolved from
