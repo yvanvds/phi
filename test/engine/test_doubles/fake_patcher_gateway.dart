@@ -33,6 +33,14 @@ class FakePatcherGateway implements PatcherGateway {
   /// stub e.g. an exotic node with custom inlet/outlet counts.
   final Map<String, PatcherNodeSnapshot> topologyOverrides = {};
 
+  /// Resolve an object's topology from its type **and its current arguments** —
+  /// models the engine objects whose arity follows their creation arguments
+  /// (a `.select 1 2 3` grows an outlet per argument), so a test can drive a
+  /// [setParams] that reshapes the very object the canvas is drawing
+  /// (issue #356). Returning null falls through to [topologyOverrides] and then
+  /// the built-in defaults.
+  PatcherNodeSnapshot? Function(String type, String args)? topologyResolver;
+
   /// Override the metadata catalogue [objectTypes] filters. When null the
   /// built-in [_defaultCatalogue] is used. The `patcher` type is always
   /// filtered out regardless (design §10 decision 2).
@@ -164,7 +172,10 @@ class FakePatcherGateway implements PatcherGateway {
 
   @override
   PatcherNodeSnapshot inspect(int instanceId, int handleId) {
-    final type = _inst(instanceId).nodes[handleId]?.type ?? '';
+    final node = _inst(instanceId).nodes[handleId];
+    final type = node?.type ?? '';
+    final resolved = topologyResolver?.call(type, node?.args ?? '');
+    if (resolved != null) return resolved;
     final override = topologyOverrides[type];
     if (override != null) return override;
     return _defaultTopologyFor(type);
@@ -402,6 +413,12 @@ class FakePatcherGateway implements PatcherGateway {
       outputKinds: [],
     );
   }
+
+  /// The built-in catalogue, exposed so a test that needs one *extra* type can
+  /// extend it (`objectTypesCatalogue = [...defaultCatalogue, mine]`) instead
+  /// of restating every entry.
+  static List<PatchObjectDescriptor> get defaultCatalogue =>
+      List.unmodifiable(_defaultCatalogue);
 
   /// A small representative catalogue, including a `patcher` entry so tests
   /// can assert [objectTypes] filters it out.

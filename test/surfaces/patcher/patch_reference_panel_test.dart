@@ -39,11 +39,14 @@ void main() {
 
   Future<void> pumpPanel(
     WidgetTester tester,
-    PatchObjectDescriptor? descriptor,
-  ) async {
+    PatchObjectDescriptor? descriptor, {
+    String? args,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: PatchReferencePanel(descriptor: descriptor)),
+        home: Scaffold(
+          body: PatchReferencePanel(descriptor: descriptor, args: args),
+        ),
       ),
     );
   }
@@ -101,5 +104,107 @@ void main() {
     expect(find.text('INLETS'), findsNothing);
     expect(find.text('OUTLETS'), findsNothing);
     expect(find.text('PARAMS'), findsNothing);
+  });
+
+  // ─── the selected node's current values (issue #356) ─────────────────────
+  //
+  // Documenting the *type* only ever answered "what can this be set to". With a
+  // canvas node selected the panel also answers "what is it set to", so
+  // selection alone tells the user where the object stands.
+
+  group('current values', () {
+    testWidgets('a palette tap documents the type and shows no values', (
+      tester,
+    ) async {
+      await pumpPanel(tester, sine);
+
+      expect(find.textContaining('default 440'), findsOneWidget);
+      expect(
+        find.byKey(PatchReferencePanel.valueKey('frequency')),
+        findsNothing,
+      );
+    });
+
+    testWidgets("a selected node's arguments are shown against each param", (
+      tester,
+    ) async {
+      await pumpPanel(tester, sine, args: '660');
+
+      expect(
+        find.byKey(PatchReferencePanel.valueKey('frequency')),
+        findsOneWidget,
+      );
+      expect(find.text('= 660'), findsOneWidget);
+      // The documentation is still there — the value joins it, it does not
+      // replace it.
+      expect(find.textContaining('default 440'), findsOneWidget);
+    });
+
+    testWidgets('values line up positionally with the documented params', (
+      tester,
+    ) async {
+      const two = PatchObjectDescriptor(
+        type: '.line',
+        description: 'ramp',
+        category: PatchObjectCategory.math,
+        isDsp: false,
+        inlets: [],
+        outlets: [],
+        params: [
+          PatchParamDescriptor(
+            name: 'target',
+            doc: '',
+            defaultValue: '0',
+            range: '',
+          ),
+          PatchParamDescriptor(
+            name: 'time',
+            doc: '',
+            defaultValue: '100',
+            range: '',
+          ),
+        ],
+      );
+      await pumpPanel(tester, two, args: '1  250');
+
+      expect(find.text('= 1'), findsOneWidget);
+      expect(find.text('= 250'), findsOneWidget);
+    });
+
+    testWidgets('a param the node carries no argument for shows no value', (
+      tester,
+    ) async {
+      const two = PatchObjectDescriptor(
+        type: '.line',
+        description: 'ramp',
+        category: PatchObjectCategory.math,
+        isDsp: false,
+        inlets: [],
+        outlets: [],
+        params: [
+          PatchParamDescriptor(
+            name: 'target',
+            doc: '',
+            defaultValue: '0',
+            range: '',
+          ),
+          PatchParamDescriptor(
+            name: 'time',
+            doc: '',
+            defaultValue: '100',
+            range: '',
+          ),
+        ],
+      );
+      // Only the first parameter was supplied — the second is not invented from
+      // the documented default, which would claim a value the node never set.
+      await pumpPanel(tester, two, args: '1');
+
+      expect(
+        find.byKey(PatchReferencePanel.valueKey('target')),
+        findsOneWidget,
+      );
+      expect(find.byKey(PatchReferencePanel.valueKey('time')), findsNothing);
+    });
   });
 }

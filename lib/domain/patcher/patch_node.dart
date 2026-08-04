@@ -8,7 +8,8 @@ import 'patch_port.dart';
 /// One placeable, draggable object on the patcher canvas.
 ///
 /// Owns the mutable canvas-side state for one native patcher object:
-/// position (live during drags) and the armed flag (display-only glow).
+/// position (live during drags), the armed flag (display-only glow), and the
+/// port topology, which a params change can reshape ([reshapePorts]).
 /// Listeners are notified on these changes only — graph-level changes
 /// (creation, deletion, cables) fire on [PatchGraph] instead — plus the
 /// [markParamsChanged] signal for state the node does *not* own.
@@ -19,10 +20,13 @@ class PatchNode extends ChangeNotifier {
     required this.title,
     required this.voice,
     required Offset position,
-    required this.size,
-    required this.inputs,
-    required this.outputs,
-  }) : _position = position;
+    required Size size,
+    required List<PatchPort> inputs,
+    required List<PatchPort> outputs,
+  }) : _position = position,
+       _size = size,
+       _inputs = inputs,
+       _outputs = outputs;
 
   /// Stable id mirroring the native `PHandle.id`.
   final PatchNodeId id;
@@ -37,20 +41,23 @@ class PatchNode extends ChangeNotifier {
   /// Voice swatch index in `[1, 6]`.
   final int voice;
 
-  /// On-canvas size in logical pixels.
-  final Size size;
-
-  /// Inlet topology, ordered by [PatchPort.index].
-  final List<PatchPort> inputs;
-
-  /// Outlet topology, ordered by [PatchPort.index].
-  final List<PatchPort> outputs;
-
   Offset _position;
+  Size _size;
+  List<PatchPort> _inputs;
+  List<PatchPort> _outputs;
   bool _armed = false;
 
   /// Top-left position in canvas-local coordinates.
   Offset get position => _position;
+
+  /// On-canvas size in logical pixels.
+  Size get size => _size;
+
+  /// Inlet topology, ordered by [PatchPort.index].
+  List<PatchPort> get inputs => _inputs;
+
+  /// Outlet topology, ordered by [PatchPort.index].
+  List<PatchPort> get outputs => _outputs;
 
   /// Whether the node draws its voiced glow border. Display-only.
   bool get armed => _armed;
@@ -67,6 +74,27 @@ class PatchNode extends ChangeNotifier {
   void setArmed(bool value) {
     if (_armed == value) return;
     _armed = value;
+    notifyListeners();
+  }
+
+  /// Re-shape the node to a new port topology (and the box that seats it) —
+  /// what the controller applies after re-inspecting a native object whose
+  /// creation arguments changed its inlet/outlet count (issue #356).
+  ///
+  /// The native side decides how many ports an object has from its arguments,
+  /// so a `setParams` can reshape the very object the canvas is drawing. Only
+  /// the controller calls this, and only with a topology it just read back from
+  /// the engine — the mirror never invents ports. Notifies, so the canvas
+  /// re-lays-out the node and repaints its cables against the new port
+  /// positions.
+  void reshapePorts({
+    required List<PatchPort> inputs,
+    required List<PatchPort> outputs,
+    required Size size,
+  }) {
+    _inputs = inputs;
+    _outputs = outputs;
+    _size = size;
     notifyListeners();
   }
 

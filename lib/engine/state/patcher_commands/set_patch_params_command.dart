@@ -1,3 +1,4 @@
+import '../../../domain/patcher/patch_cable.dart';
 import '../../../domain/patcher/patch_node_id.dart';
 import '../../../domain/project/entity_address.dart';
 import '../../../domain/project/project_command.dart';
@@ -11,6 +12,12 @@ import '../patcher_controller.dart';
 /// [apply] captures the node's prior argument string before setting the new one
 /// (once, on the first apply, so an undo→redo does not drift); [revert] restores
 /// it — so a param edit round-trips exactly under Ctrl+Z/Y.
+///
+/// Arguments can also change how many ports the object *has*, and a shrink
+/// leaves cables with nowhere to land. Those are dropped by the controller and
+/// captured here, so [revert] — which brings the ports back with the old
+/// arguments — can wire them again and the whole edit undoes without costing
+/// the patch a connection (issue #356).
 class SetPatchParamsCommand implements ProjectCommand {
   SetPatchParamsCommand(this.controller, this.id, this.args);
 
@@ -25,6 +32,10 @@ class SetPatchParamsCommand implements ProjectCommand {
   String? _old;
   bool _captured = false;
 
+  /// Cables the last [apply] had to drop because the new arguments removed the
+  /// port they hung off. Empty for the overwhelmingly common fixed-arity case.
+  List<PatchCable> _dropped = const [];
+
   @override
   String get label => 'set params';
 
@@ -37,11 +48,19 @@ class SetPatchParamsCommand implements ProjectCommand {
       _old = controller.argsOf(id);
       _captured = true;
     }
-    controller.setNodeParams(id, args);
+    _dropped = controller.setNodeParams(id, args);
   }
 
   @override
-  void revert() => controller.setNodeParams(id, _old ?? '');
+  void revert() {
+    // Restoring the old arguments restores the old ports, so the cables the
+    // apply had to drop have somewhere to land again.
+    controller.setNodeParams(id, _old ?? '');
+    for (final cable in _dropped) {
+      controller.addCablePrimitive(cable);
+    }
+    _dropped = const [];
+  }
 
   @override
   Map<String, Object?> toJson() => {'type': 'patch_set_params', 'args': args};
