@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -60,14 +61,20 @@ import 'patcher_node_view.dart';
 ///   one repeat of it.
 /// - **Right-click a node** opens its context menu — the same verbs, named, for
 ///   anyone who does not already know the shortcuts (issue #356).
+/// - **View navigation** — middle-drag or `Space`-hold + left-drag pans, the
+///   wheel zooms about the pointer, `Ctrl+0` frames the whole patch (#369).
 /// - **Cursor + hover** teach the hit zones the canvas would otherwise keep to
 ///   itself (issue #359): a move cursor over draggable node chrome, a crosshair
 ///   plus a ring over a port, a pointer over a cable. The whole viewport is one
 ///   [MouseRegion] fed by the same scene-space hit-tests the presses use, so
 ///   what the cursor promises and what a press does can never drift apart.
 ///
-/// Panning is a middle-mouse drag (the [InteractiveViewer]'s own pan is off so
-/// a left-drag over empty canvas is free to marquee); scroll/pinch still zooms.
+/// Panning is a middle-mouse drag, or **hold `Space` and left-drag** for the
+/// mice that have no third button (issue #369) — the [InteractiveViewer]'s own
+/// pan is off so a plain left-drag over empty canvas is free to marquee;
+/// scroll/pinch still zooms. **`Ctrl+0` frames the patch**: it fits every node
+/// into the viewport (never magnifying past 1:1) and centres them, which on an
+/// empty canvas is simply the identity view.
 ///
 /// When [onCreateObject] is supplied the whole viewport is a drop target for a
 /// palette entry: a dropped [PatchObjectDescriptor] resolves to the scene point
@@ -193,8 +200,24 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   MouseCursor _hoverCursor = SystemMouseCursors.basic;
   PatchPortId? _hoverPort;
 
-  // Middle-mouse pan.
+  // Middle-mouse pan — and, since issue #369, the space-hold pan too: both end
+  // up here, because from the pointer's side they are the same gesture.
   bool _panning = false;
+
+  // Space-hold pan (issue #369). `_spaceHeld` records that the space key went
+  // down *on this canvas*, i.e. while it held the keyboard itself; whether the
+  // key is still down is asked of `HardwareKeyboard` instead — see
+  // `_spaceStillHeld`, which is what every read goes through. `_spacePan` says
+  // the pan currently in flight is the one space armed, so a space release can
+  // end that pan without touching a middle-drag that happens to be running.
+  bool _spaceHeld = false;
+  bool _spacePan = false;
+
+  // Where the pointer last hovered, in viewport pixels — the point the cursor
+  // is re-resolved against when something other than a pointer move changes
+  // what the canvas would do there (space taken or released). Null until a
+  // mouse has actually been over the viewport.
+  Offset? _hoverLocal;
 
   // Keyboard nudge (issue #368). A held arrow delivers a `KeyDownEvent` and
   // then a stream of `KeyRepeatEvent`s: every one of them moves the selection
@@ -233,6 +256,15 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
 
   static const double _clickSlop = 4;
 
+  /// Zoom range the view is held inside, however it got there — the wheel, a
+  /// pinch, or the `Ctrl+0` fit.
+  static const double _minScale = 0.25;
+  static const double _maxScale = 4;
+
+  /// Scene-space breathing room left around the graph by the `Ctrl+0` fit, so
+  /// the outermost nodes do not end up flush against the viewport edge.
+  static const double _fitPadding = 40;
+
   PatcherController get _controller => widget.controller;
 
   @override
@@ -241,7 +273,8 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // A nudge burst is ended by the arrow's key-up — which never arrives if the
     // keyboard leaves mid-burst (a dialog opens over the canvas, the pane is
     // switched). Committing on focus loss is what keeps that move on the undo
-    // stack instead of stranding it as an unjournaled edit.
+    // stack instead of stranding it as an unjournaled edit; the same listener
+    // disarms a held space for the same reason (issue #369).
     _focus.addListener(_onFocusChanged);
   }
 
@@ -463,6 +496,13 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // whole run as one move (issue #368). Read before the down/repeat filter
     // below, which is the only key event this canvas otherwise cares about.
     if (event is KeyUpEvent) {
+      // Letting go of space disarms the pan and ends one already in flight
+      // (issue #369) — a pan the pointer is still dragging must not outlive the
+      // key that armed it.
+      if (key == LogicalKeyboardKey.space) {
+        _releaseSpace();
+        return KeyEventResult.handled;
+      }
       if (_nudgeStep(key) == null) return KeyEventResult.ignored;
       _commitNudge();
       return KeyEventResult.handled;
@@ -471,6 +511,18 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       return KeyEventResult.ignored;
     }
     if (HardwareKeyboard.instance.isControlPressed) {
+      // `Ctrl+0` frames the patch (issue #369). Matched before the switch
+      // because it is read off the **physical** key as well as the logical one:
+      // on an AZERTY keyboard the digit row is shifted, so the key in the `0`
+      // position reports `à` unshifted and `0` only with Shift — and requiring
+      // either glyph would make the shortcut unreachable on half the layouts
+      // this is used on. Digit *positions* are common to QWERTY, AZERTY and
+      // QWERTZ, which is exactly why the physical key is the honest question
+      // here (letters, where positions differ, stay logical — see `_nudgeStep`).
+      if (_isResetViewKey(event)) {
+        _resetView();
+        return KeyEventResult.handled;
+      }
       switch (key) {
         case LogicalKeyboardKey.keyZ:
           HardwareKeyboard.instance.isShiftPressed
@@ -486,6 +538,14 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
         default:
           return KeyEventResult.ignored;
       }
+    }
+    // Holding space arms the pan (issue #369) — the habit every canvas app
+    // shares, and the one that does not need a three-button mouse. Repeats are
+    // idempotent: the key is a *mode*, not an action. Handled either way so the
+    // space never reaches anything above as a keypress of its own.
+    if (key == LogicalKeyboardKey.space) {
+      _armSpace();
+      return KeyEventResult.handled;
     }
     final step = _nudgeStep(key);
     if (step != null) return _nudge(step);
@@ -558,6 +618,146 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     _controller.endNodeDrag(snapToGrid: widget.snapToGrid);
   }
 
+  // ─── space-hold pan + reset view (issue #369) ─────────────────────────
+
+  /// Arm the space pan and say so with the cursor. A no-op once armed, so the
+  /// auto-repeat stream a held key produces costs nothing.
+  void _armSpace() {
+    if (_spaceHeld) return;
+    _spaceHeld = true;
+    _showSpaceCursor();
+  }
+
+  /// Disarm the space pan on the canvas's own key-up, ending one already in
+  /// flight.
+  void _releaseSpace() {
+    if (!_spaceHeld) return;
+    _spaceHeld = false;
+    _endSpacePan();
+    _restoreCursor();
+  }
+
+  /// Whether the space pan is armed **right now**.
+  ///
+  /// Two things have to hold. This canvas must have seen the space go down
+  /// while it held the keyboard itself, so a space typed into a `.i`/`.f` box
+  /// or the inline create box is never a pan (issue #353's rule). And the key
+  /// must still be down.
+  ///
+  /// That second half is read from [HardwareKeyboard] rather than trusted to a
+  /// key-up arriving here, because in the real shell it often does not: the
+  /// enclosing pane grabs the keyboard on *every* pointer-down, so the release
+  /// of a space held through a drag lands there and not on this node. Asking
+  /// the hardware what is down is the one answer no focus change can
+  /// invalidate — and it is what stops a held space from leaving a pan-armed
+  /// canvas behind it, where the next left-drag would pan instead of marquee
+  /// with nothing on screen to explain why.
+  bool _spaceStillHeld() {
+    if (!_spaceHeld) return false;
+    if (HardwareKeyboard.instance.logicalKeysPressed.contains(
+      LogicalKeyboardKey.space,
+    )) {
+      return true;
+    }
+    _spaceHeld = false;
+    return false;
+  }
+
+  /// End a pan that space armed, leaving a middle-drag pan alone. The pointer
+  /// may well still be down: from here the drag moves nothing and its release
+  /// is just a release, which is what keeps a space let go mid-drag from
+  /// stranding a pan.
+  void _endSpacePan() {
+    if (!_spacePan) return;
+    _spacePan = false;
+    _panning = false;
+  }
+
+  /// The pan cursor for the current state — open hand while merely armed,
+  /// closed while actually dragging the scene.
+  void _showSpaceCursor() => _setHover(
+    _spacePan ? SystemMouseCursors.grabbing : SystemMouseCursors.grab,
+    null,
+  );
+
+  /// Re-resolve the cursor for wherever the pointer was last seen, after
+  /// something that is not a pointer move changed the answer. Falls back to the
+  /// plain cursor when no mouse has been over the viewport at all.
+  void _restoreCursor() {
+    final local = _hoverLocal;
+    if (local == null) {
+      _setHover(SystemMouseCursors.basic, null);
+      return;
+    }
+    _applyHover(local);
+  }
+
+  /// Whether [event] is the `Ctrl+0` that frames the patch.
+  ///
+  /// The physical key is authoritative and the logical one is accepted as well,
+  /// so the shortcut answers to the key in the `0` position on every layout
+  /// *and* to whatever a platform reports for a numpad zero.
+  bool _isResetViewKey(KeyEvent event) =>
+      event.physicalKey == PhysicalKeyboardKey.digit0 ||
+      event.physicalKey == PhysicalKeyboardKey.numpad0 ||
+      event.logicalKey == LogicalKeyboardKey.digit0 ||
+      event.logicalKey == LogicalKeyboardKey.numpad0;
+
+  /// Bring the whole patch back into view (`Ctrl+0`, issue #369).
+  ///
+  /// The issue left the choice between "reset to 1:1" and "zoom to fit" open.
+  /// Fit wins, because the failure it rescues is *being lost*: a pan that ran
+  /// off the 4000px canvas leaves nothing on screen, and a reset to the origin
+  /// only helps when the patch happens to live there. Framing everything is the
+  /// one answer that is right from anywhere — and it degrades to exactly the
+  /// identity view when there is nothing to frame, which is the reset.
+  ///
+  /// Never magnifies past 1:1: a two-node patch blown up to fill the viewport
+  /// would be a worse view than the one it replaced.
+  void _resetView() {
+    final bounds = _graphBounds();
+    final viewport = (context.findRenderObject() as RenderBox?)?.size;
+    if (bounds == null || viewport == null || viewport.isEmpty) {
+      _controller.transform.value = Matrix4.identity();
+      return;
+    }
+    final padded = bounds.inflate(_fitPadding);
+    final scale = math
+        .min(
+          1.0,
+          math.min(
+            viewport.width / padded.width,
+            viewport.height / padded.height,
+          ),
+        )
+        .clamp(_minScale, _maxScale)
+        .toDouble();
+    _controller.transform.value = Matrix4.identity()
+      ..translateByDouble(
+        viewport.width / 2 - padded.center.dx * scale,
+        viewport.height / 2 - padded.center.dy * scale,
+        0,
+        1,
+      )
+      ..scaleByDouble(scale, scale, 1, 1);
+  }
+
+  /// The scene-space rectangle every node fits inside, or null when the graph
+  /// is empty.
+  Rect? _graphBounds() {
+    Rect? bounds;
+    for (final n in _controller.graph.nodes) {
+      final r = Rect.fromLTWH(
+        n.position.dx,
+        n.position.dy,
+        n.size.width,
+        n.size.height,
+      );
+      bounds = bounds == null ? r : bounds.expandToInclude(r);
+    }
+    return bounds;
+  }
+
   // ─── pointer ──────────────────────────────────────────────────────────
 
   void _onPointerDown(PointerDownEvent event) {
@@ -583,6 +783,17 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     }
     if (event.buttons == kMiddleMouseButton) {
       _panning = true;
+      return;
+    }
+    // Space held: a left-press pans instead of doing whatever it landed on
+    // (issue #369). Checked ahead of every scene hit-test, because the whole
+    // point of the mode is that it overrides them — a press over a node or a
+    // port has to pan just the same, or the gesture would only work on the
+    // empty patches that least need it.
+    if (_spaceStillHeld() && event.buttons == kPrimaryMouseButton) {
+      _panning = true;
+      _spacePan = true;
+      _showSpaceCursor();
       return;
     }
     if (_controller.graph.dragSourcePort != null) return;
@@ -641,7 +852,19 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   }
 
   void _onPointerMove(PointerMoveEvent event) {
-    if (_panning && event.buttons == kMiddleMouseButton) {
+    // Whichever button armed it — middle, or left with space down (issue #369)
+    // — a pan in flight owns the pointer until its release. The button is not
+    // re-checked: `_panning` is only ever true between the press that armed it
+    // and the release, cancel or space-up that clears it.
+    if (_panning) {
+      // A space pan is only ever as alive as the key that armed it, and the
+      // release may well have landed elsewhere — the pane took the keyboard on
+      // this very press — so it is re-read here rather than waited for.
+      if (_spacePan && !_spaceStillHeld()) {
+        _endSpacePan();
+        _applyHover(event.localPosition);
+        return;
+      }
       _panBy(event.delta);
       return;
     }
@@ -707,6 +930,11 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       // cursor — so the click before it can no longer be half of anything.
       _invalidatePendingTap();
       _panning = false;
+      _spacePan = false;
+      // The scene moved under a stationary pointer, so what it is over is a
+      // different question now than it was at the press.
+      _hoverLocal = event.localPosition;
+      _spaceStillHeld() ? _showSpaceCursor() : _applyHover(event.localPosition);
       return;
     }
     final scene = _toScene(event.localPosition);
@@ -948,6 +1176,12 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     _controller.endCableDrag();
     setState(() {
       _panning = false;
+      // The *pointer* half of a space pan goes with it. `_spaceHeld` is
+      // deliberately left alone: it mirrors a key that is still physically
+      // down, and a cancelled pointer does not lift it — clearing it here would
+      // leave the mode disarmed under a held space, with no key-up left to put
+      // it right. Its own release path (key-up, focus loss) still ends it.
+      _spacePan = false;
       // An open nudge burst is dropped with everything else: `abortNodeDrag`
       // above has already put its nodes back, so leaving the flag set would
       // have the next arrow key add to origins that no longer exist. In
@@ -1015,6 +1249,14 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   /// same order, so the cursor is a truthful preview of what a press would do
   /// rather than a second, drifting opinion about where things are.
   void _applyHover(Offset local) {
+    _hoverLocal = local;
+    // Space held is a mode: it overrides every hit-test below, exactly as the
+    // press does, so the hand the cursor shows is a truthful promise that this
+    // press will pan (issue #369).
+    if (_spaceStillHeld()) {
+      _showSpaceCursor();
+      return;
+    }
     if (_controller.graph.dragSourcePort != null) {
       // Mid-drag the pointer means one thing only: where this cable will land.
       _setHover(SystemMouseCursors.precise, null);
@@ -1288,7 +1530,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     final scene = _toScene(focal);
     final current = _controller.transform.value;
     final scale = current.getMaxScaleOnAxis();
-    final clamped = (scale * factor).clamp(0.25, 4.0);
+    final clamped = (scale * factor).clamp(_minScale, _maxScale);
     final applied = clamped / scale;
     if (applied == 1.0) return;
     _controller.transform.value = current.clone()

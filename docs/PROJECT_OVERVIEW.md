@@ -2357,6 +2357,31 @@ main + app          (orchestration)
   silent while a number field is focused, silent with nothing selected, press
   mid-burst commits, snap on drop and on nudge), a placement-bar test, and an
   end-to-end `patcher_nudge_snap` integration test through the real app.
+- **Patcher view navigation — space-hold pan + `Ctrl+0` frame** (issue #369,
+  split out of #359, patcher epic #217, design `docs/design/patcher.md` §6):
+  the last of the canvas conveniences, both riding the existing raw-pointer
+  pipeline rather than adding a `GestureDetector` (#352). **Space-hold pan:**
+  holding space arms a mode in which a left-press pans instead of hitting the
+  scene, joining the middle-drag at the same `_panBy`; the cursor turns
+  `grab` / `grabbing` through the one viewport `MouseRegion` from #359. The
+  mode is armed only by a space this canvas received while it held the keyboard
+  (so the #353 guard keeps it quiet under a `.i`/`.f` box or the inline create
+  box) but *disarmed* by asking `HardwareKeyboard` whether the key is still
+  down — because `WorkstationPane` grabs the keyboard on every pointer-down, so
+  the release of a space held through a drag never arrives as a key event at
+  all. That read is what stops a pan outliving its key, mid-drag or after. Its
+  pointer half joins the `_resetGesture` path from #355. **`Ctrl+0` frames the
+  patch:** fits the union of the node rects (plus padding) into the real
+  viewport, never magnifying past 1:1, and reduces to the identity view on an
+  empty canvas — chosen over a plain reset because the failure it rescues is
+  being lost, which a reset only fixes when the patch happens to live at the
+  origin. Matched on the **physical** digit-0 key as well as the logical one,
+  since AZERTY's digit row is shifted. Covered by canvas widget tests (pan,
+  pan over a node, plain drag still marquees, release mid-drag, release whose
+  key-up went elsewhere, silent under a focused number field, cursor states,
+  cancelled pan, fit at 1:1 / zoomed out / empty / silent under a number field)
+  and an end-to-end `patcher_view_navigation` integration test through the real
+  app. Follow-up filed: #373, the zoom clamp reading `getMaxScaleOnAxis`.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

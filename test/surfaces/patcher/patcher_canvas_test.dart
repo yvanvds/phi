@@ -1926,4 +1926,444 @@ void main() {
       expect(controller.graph.cables, hasLength(2));
     });
   });
+
+  // ─── view navigation: space-hold pan + Ctrl+0 (issue #369) ───────────────
+  //
+  // Both are *modes over* the gesture pipeline rather than gestures of their
+  // own, so what these cases are really about is the seams: that arming the
+  // mode does not cost the canvas its plain left-drag, that the mode cannot
+  // outlive the key or the focus that armed it, and that the frame lands
+  // somewhere defensible.
+
+  group('space-hold pan', () {
+    /// Give the canvas the keyboard the way a user does — a click on empty
+    /// canvas, which is the only path that takes focus.
+    Future<void> focusCanvas(WidgetTester tester) async {
+      await tester.tapAt(canvasTL(tester) + const Offset(600, 500));
+      await tester.pump();
+    }
+
+    Future<void> spaceDown(WidgetTester tester) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+    }
+
+    Future<void> spaceUp(WidgetTester tester) async {
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+    }
+
+    double panX() => controller.transform.value.getTranslation().x;
+    double panY() => controller.transform.value.getTranslation().y;
+
+    testWidgets('space held, a left-drag pans the view', (tester) async {
+      controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester);
+      await focusCanvas(tester);
+
+      await spaceDown(tester);
+      final tl = canvasTL(tester);
+      final g = await tester.startGesture(tl + const Offset(400, 400));
+      await tester.pump();
+      await g.moveBy(const Offset(-20, -10));
+      await tester.pump();
+
+      expect(panX(), -20);
+      expect(panY(), -10);
+      // A pan is not a selection gesture: nothing was marqueed on the way.
+      expect(find.byKey(PatcherCanvas.marqueeKey), findsNothing);
+      expect(controller.graph.selectedNodes, isEmpty);
+
+      await g.up();
+      await tester.pump();
+      await spaceUp(tester);
+      expect(panX(), -20);
+    });
+
+    testWidgets('space held, a press over a node pans instead of dragging it', (
+      tester,
+    ) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester);
+      await focusCanvas(tester);
+      await spaceDown(tester);
+
+      final g = await tester.startGesture(nodeCenter(tester, sine));
+      await tester.pump();
+      await g.moveBy(const Offset(30, 20));
+      await tester.pump();
+      await g.up();
+      await tester.pump();
+
+      // The node stayed put in the model — the scene moved under it instead.
+      expect(sine.position, const Offset(120, 120));
+      expect(controller.undoScope.canUndo, isFalse);
+      expect(panX(), 30);
+      expect(panY(), 20);
+    });
+
+    testWidgets('without space a left-drag still marquees', (tester) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester);
+      await focusCanvas(tester);
+
+      final tl = canvasTL(tester);
+      final g = await tester.startGesture(tl + const Offset(40, 60));
+      await tester.pump();
+      await g.moveTo(tl + const Offset(240, 300));
+      await tester.pump();
+      expect(find.byKey(PatcherCanvas.marqueeKey), findsOneWidget);
+      await g.up();
+      await tester.pump();
+
+      expect(controller.graph.selectedNodes, {sine.id});
+      expect(panX(), 0);
+      expect(panY(), 0);
+    });
+
+    testWidgets('releasing space mid-drag ends the pan there and then, and '
+        'strands nothing', (tester) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester);
+      await focusCanvas(tester);
+      await spaceDown(tester);
+
+      final tl = canvasTL(tester);
+      final g = await tester.startGesture(tl + const Offset(400, 400));
+      await tester.pump();
+      await g.moveBy(const Offset(-20, -10));
+      await tester.pump();
+      expect(panX(), -20);
+
+      // Space goes up while the pointer is still down.
+      await spaceUp(tester);
+      await g.moveBy(const Offset(-50, -50));
+      await tester.pump();
+      // The pan stopped with the key: the rest of the drag moves nothing.
+      expect(panX(), -20);
+      expect(panY(), -10);
+
+      await g.up();
+      await tester.pump();
+      // …and the release of an abandoned pan is not a click either: it neither
+      // marquees nor clears anything.
+      expect(find.byKey(PatcherCanvas.marqueeKey), findsNothing);
+
+      // Nothing was left armed: the very next left-drag marquees again.
+      controller.transform.value = Matrix4.identity();
+      await tester.pump();
+      final g2 = await tester.startGesture(tl + const Offset(40, 60));
+      await tester.pump();
+      await g2.moveTo(tl + const Offset(240, 300));
+      await tester.pump();
+      await g2.up();
+      await tester.pump();
+      expect(controller.graph.selectedNodes, {sine.id});
+      expect(panX(), 0);
+    });
+
+    testWidgets('space while a number field holds the keyboard never pans', (
+      tester,
+    ) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(320, 120),
+      );
+      controller.addNode(desc: numberDesc(), position: const Offset(120, 120));
+      await pumpCanvas(tester);
+
+      await tester.tapAt(tester.getCenter(find.byType(TextField)));
+      await tester.pump();
+      await tester.pump();
+      expect(fieldFocus(tester).hasPrimaryFocus, isTrue);
+
+      // The space belongs to the field being typed into (issue #353), so the
+      // canvas must not quietly arm a pan behind it.
+      await spaceDown(tester);
+      final tl = canvasTL(tester);
+      final g = await tester.startGesture(tl + const Offset(240, 60));
+      await tester.pump();
+      await g.moveTo(tl + const Offset(440, 300));
+      await tester.pump();
+      await g.up();
+      await tester.pump();
+      await spaceUp(tester);
+
+      expect(panX(), 0);
+      expect(panY(), 0);
+      // It marqueed instead, which is what a left-drag on empty canvas means.
+      expect(controller.graph.selectedNodes, {sine.id});
+    });
+
+    testWidgets('a space released while the keyboard is elsewhere leaves '
+        'nothing armed', (tester) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(320, 120),
+      );
+      controller.addNode(desc: numberDesc(), position: const Offset(120, 120));
+      await pumpCanvas(tester);
+      await focusCanvas(tester);
+      await spaceDown(tester);
+
+      // The keyboard moves to the number box while space is still down, so the
+      // key-up lands there and the canvas never sees it. Nothing may survive
+      // that: the mode has to expire with the key, not with the event.
+      await tester.tapAt(tester.getCenter(find.byType(TextField)));
+      await tester.pump();
+      await tester.pump();
+      expect(fieldFocus(tester).hasPrimaryFocus, isTrue);
+      await spaceUp(tester);
+
+      final tl = canvasTL(tester);
+      final g = await tester.startGesture(tl + const Offset(240, 60));
+      await tester.pump();
+      await g.moveTo(tl + const Offset(440, 300));
+      await tester.pump();
+      await g.up();
+      await tester.pump();
+
+      expect(panX(), 0);
+      expect(controller.graph.selectedNodes, {sine.id});
+    });
+
+    testWidgets('a space released mid-drag ends the pan even when its key-up '
+        'went somewhere else', (tester) async {
+      // In the real shell the enclosing pane grabs the keyboard on *every*
+      // pointer-down, so the release of a space held through a drag lands
+      // there and never reaches the canvas at all. A neighbouring focus node
+      // stands in for the pane here.
+      final elsewhere = FocusNode(debugLabel: 'elsewhere');
+      addTearDown(elsewhere.dispose);
+      controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                Focus(focusNode: elsewhere, child: const SizedBox(height: 1)),
+                Expanded(child: PatcherCanvas(controller: controller)),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final tl = canvasTL(tester);
+      await tester.tapAt(tl + const Offset(600, 400));
+      await tester.pump();
+      await spaceDown(tester);
+
+      final g = await tester.startGesture(tl + const Offset(400, 300));
+      await tester.pump();
+      await g.moveBy(const Offset(-20, -10));
+      await tester.pump();
+      expect(panX(), -20);
+
+      // The keyboard moves away, then the key comes up — so no key event ever
+      // tells the canvas the mode is over.
+      elsewhere.requestFocus();
+      await tester.pump();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+
+      await g.moveBy(const Offset(-50, -50));
+      await tester.pump();
+      expect(panX(), -20);
+      expect(panY(), -10);
+
+      await g.up();
+      await tester.pump();
+    });
+
+    testWidgets('the cursor is an open hand while space is held and a closed '
+        'one while panning', (tester) async {
+      await pumpCanvas(tester);
+      final tl = canvasTL(tester);
+      final at = tl + const Offset(400, 400);
+      final m = await mouse(tester);
+
+      await m.moveTo(at);
+      await tester.pumpAndSettle();
+      expect(activeCursor(), SystemMouseCursors.basic);
+
+      // A click is how the canvas comes to hold the keyboard.
+      await m.down(at);
+      await tester.pump();
+      await m.up();
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.space);
+      await tester.pumpAndSettle();
+      expect(activeCursor(), SystemMouseCursors.grab);
+
+      await m.down(at);
+      await tester.pumpAndSettle();
+      expect(activeCursor(), SystemMouseCursors.grabbing);
+
+      await m.moveBy(const Offset(-20, -10));
+      await tester.pumpAndSettle();
+      await m.up();
+      await tester.pumpAndSettle();
+      expect(activeCursor(), SystemMouseCursors.grab);
+
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.space);
+      await tester.pumpAndSettle();
+      expect(activeCursor(), SystemMouseCursors.basic);
+    });
+
+    testWidgets('a cancelled space pan does not swallow the next gesture', (
+      tester,
+    ) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester);
+      await focusCanvas(tester);
+      await spaceDown(tester);
+
+      final tl = canvasTL(tester);
+      final pan = await tester.startGesture(tl + const Offset(400, 400));
+      await tester.pump();
+      await pan.moveBy(const Offset(-20, -10));
+      await tester.pump();
+      await pan.cancel();
+      await tester.pump();
+      await spaceUp(tester);
+
+      controller.transform.value = Matrix4.identity();
+      await tester.pump();
+      final g = await tester.startGesture(tl + const Offset(40, 60));
+      await tester.pump();
+      await g.moveTo(tl + const Offset(240, 300));
+      await tester.pump();
+      await g.up();
+      await tester.pump();
+      expect(controller.graph.selectedNodes, {sine.id});
+    });
+  });
+
+  // ─── Ctrl+0 frames the patch (issue #369) ───────────────────────────────
+
+  group('Ctrl+0 frames the patch', () {
+    /// Where a scene point lands in the viewport under the current view.
+    Offset onScreen(Offset scene) =>
+        MatrixUtils.transformPoint(controller.transform.value, scene);
+
+    /// The view's zoom, read straight off the x axis. Deliberately **not**
+    /// `Matrix4.getMaxScaleOnAxis`, which maxes over all three axes and so
+    /// reports 1.0 for any 2-D matrix zoomed *out* — the untouched z column
+    /// wins — and would quietly pass a fit that never happened.
+    double viewScale() => controller.transform.value.entry(0, 0);
+
+    Future<void> focusCanvas(WidgetTester tester) async {
+      await tester.tapAt(canvasTL(tester) + const Offset(600, 500));
+      await tester.pump();
+    }
+
+    testWidgets('from anywhere, it centres the graph at 1:1', (tester) async {
+      // Bounds (120,120)–(400,360); padded by 40 that is (80,80)–(440,400),
+      // 360×320 inside an 800×600 viewport — so nothing has to shrink.
+      controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(320, 300),
+      );
+      await pumpCanvas(tester);
+      await focusCanvas(tester);
+
+      // Lost: panned far off the patch and zoomed in on nothing.
+      controller.transform.value = Matrix4.identity()
+        ..translateByDouble(-1400, -900, 0, 1)
+        ..scaleByDouble(2, 2, 1, 1);
+      await tester.pump();
+
+      await ctrl(tester, LogicalKeyboardKey.digit0);
+
+      expect(viewScale(), 1.0);
+      // The padded bounds' centre (260, 240) sits at the viewport's (400, 300).
+      expect(controller.transform.value.getTranslation().x, 140);
+      expect(controller.transform.value.getTranslation().y, 60);
+      expect(onScreen(const Offset(260, 240)), const Offset(400, 300));
+    });
+
+    testWidgets('a graph wider than the viewport is zoomed out to fit', (
+      tester,
+    ) async {
+      controller.addNode(desc: desc(Obj.dSine), position: Offset.zero);
+      controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(1500, 1000),
+      );
+      await pumpCanvas(tester);
+      await focusCanvas(tester);
+
+      await ctrl(tester, LogicalKeyboardKey.digit0);
+
+      // Padded bounds are 1660×1140; the width is the binding constraint.
+      expect(viewScale(), closeTo(800 / 1660, 1e-9));
+
+      // Every corner of the graph is on screen, which is the whole claim.
+      for (final corner in [
+        Offset.zero,
+        const Offset(1580, 0),
+        const Offset(0, 1060),
+        const Offset(1580, 1060),
+      ]) {
+        final p = onScreen(corner);
+        expect(p.dx, inInclusiveRange(0, 800));
+        expect(p.dy, inInclusiveRange(0, 600));
+      }
+    });
+
+    testWidgets('on an empty canvas it is the identity view', (tester) async {
+      await pumpCanvas(tester);
+      await focusCanvas(tester);
+      controller.transform.value = Matrix4.identity()
+        ..translateByDouble(-320, 180, 0, 1)
+        ..scaleByDouble(0.5, 0.5, 1, 1);
+      await tester.pump();
+
+      await ctrl(tester, LogicalKeyboardKey.digit0);
+      expect(controller.transform.value, Matrix4.identity());
+    });
+
+    testWidgets('it stays out of the way while a number field has the '
+        'keyboard', (tester) async {
+      controller.addNode(desc: numberDesc(), position: const Offset(120, 120));
+      await pumpCanvas(tester);
+
+      await tester.tapAt(tester.getCenter(find.byType(TextField)));
+      await tester.pump();
+      await tester.pump();
+      expect(fieldFocus(tester).hasPrimaryFocus, isTrue);
+
+      final moved = Matrix4.identity()..translateByDouble(-320, 180, 0, 1);
+      controller.transform.value = moved.clone();
+      await tester.pump();
+
+      await ctrl(tester, LogicalKeyboardKey.digit0);
+      expect(controller.transform.value, moved);
+    });
+  });
 }
