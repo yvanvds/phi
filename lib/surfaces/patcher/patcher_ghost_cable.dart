@@ -3,10 +3,15 @@ import 'package:flutter/widgets.dart';
 import '../../design/widgets/patcher/patch_canvas_constants.dart';
 import '../../domain/patcher/patch_port_kind.dart';
 
-/// In-flight cable drawn while the user drags from an output port toward
-/// a (yet-unknown) target. The head follows the pointer; the tail anchors
-/// at the source port. Coloured by the source outlet's data type ([color]),
-/// dashed when it carries control-rate messages — matching the rendered cable.
+/// In-flight cable drawn while the user drags between a fixed port and a
+/// (yet-unknown) one. The head follows the pointer; the tail anchors at
+/// [source]. Coloured by the anchored port's data type ([color]), dashed when
+/// it carries control-rate messages — matching the rendered cable.
+///
+/// A cable may be dragged from either end (issue #359). [backwards] says the
+/// anchor is an *inlet* and the free end is looking for an outlet, which flips
+/// the cubic's control points so the wire still leaves each end horizontally
+/// outward instead of doubling back on itself.
 class PatcherGhostCable extends StatelessWidget {
   const PatcherGhostCable({
     required this.source,
@@ -14,6 +19,7 @@ class PatcherGhostCable extends StatelessWidget {
     required this.color,
     required this.glow,
     required this.kind,
+    this.backwards = false,
     super.key,
   });
 
@@ -22,6 +28,9 @@ class PatcherGhostCable extends StatelessWidget {
   final Color color;
   final Color glow;
   final PatchPortKind kind;
+
+  /// Whether [source] is the cable's *target* inlet rather than its outlet.
+  final bool backwards;
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +42,7 @@ class PatcherGhostCable extends StatelessWidget {
           color: color,
           glow: glow,
           kind: kind,
+          backwards: backwards,
         ),
         child: const SizedBox.expand(),
       ),
@@ -47,6 +57,7 @@ class _GhostPainter extends CustomPainter {
     required this.color,
     required this.glow,
     required this.kind,
+    required this.backwards,
   });
 
   final Offset source;
@@ -54,10 +65,13 @@ class _GhostPainter extends CustomPainter {
   final Color color;
   final Color glow;
   final PatchPortKind kind;
+  final bool backwards;
 
   @override
   void paint(Canvas canvas, Size size) {
-    const cx = PatchCanvasConstants.cableControlOffset;
+    final cx = backwards
+        ? -PatchCanvasConstants.cableControlOffset
+        : PatchCanvasConstants.cableControlOffset;
     final path = Path()
       ..moveTo(source.dx, source.dy)
       ..cubicTo(
@@ -116,5 +130,8 @@ class _GhostPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _GhostPainter old) =>
-      old.cursor != cursor || old.source != source || old.color != color;
+      old.cursor != cursor ||
+      old.source != source ||
+      old.color != color ||
+      old.backwards != backwards;
 }

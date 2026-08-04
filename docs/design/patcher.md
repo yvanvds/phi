@@ -111,15 +111,24 @@ live-code control).
   positions in scene space, so nothing is swallowed by a gesture
   recogniser's slop. A live GUI body (fader, number field, message box)
   owns its own presses — drag those nodes by the header.
-- **Cables:** drag from an outlet port to an inlet port; the ghost
-  cable colors by the outlet's `OutType` and inlets light up only when
-  compatible (`accepts` mask + `isDspInput`); dropping on an
-  incompatible inlet rejects visibly. Click a cable to select,
-  `Delete` removes it.
+- **Cables:** drag between an outlet and an inlet, from **either end** —
+  forwards from the outlet or backwards from the inlet, Max-style. The
+  ghost cable colors by the anchored port's type and the compatible
+  ports on the opposite side light up (`accepts` mask + `isDspInput`);
+  dropping on an incompatible one rejects visibly. Click a cable to
+  select, `Delete` removes it. Grab an existing cable **near one of its
+  endpoints** and drag to detach and re-route that end — one journaled
+  step, whether it lands on another port or on nothing, which deletes
+  it. A press that never travels stays the click that selects.
 - **Selection:** click node, shift-click extends, marquee over empty
   canvas; `Delete` removes selected nodes with their cables;
   `Ctrl+D` duplicates selection (objects + intra-selection cables,
   offset a grid step).
+- **Cursor and hover** teach the hit zones: a move cursor over
+  draggable node chrome, a crosshair plus a ring over a port, a pointer
+  over a cable, a grab hand where a cable would detach. Resolved from
+  the same scene-space hit-tests the presses use, so the cursor is a
+  preview of what a press would do rather than a second opinion.
 - Undo/redo ride the per-surface command scope, as everywhere.
 
 ## 7. Node internals
@@ -135,6 +144,11 @@ live-code control).
   while one of them holds focus — so Backspace edits text there instead
   of deleting the selection, while `Delete` on a focused canvas still
   removes selected nodes.
+- **A number box also scrubs.** Dragging the readout vertically carries
+  its value with the pointer (held Shift scrubs finer) — the fast way to
+  find a number, where typing stays the exact one. The two share the
+  readout because the scrub reads raw pointers: a press that never
+  travels is left to the field and takes the caret as ever.
 - **Bodies follow the engine, not just their own pushes.** A value
   arriving over a *cable* moves the native object and tells Dart
   nothing, so a body that only re-read after its own push went stale the

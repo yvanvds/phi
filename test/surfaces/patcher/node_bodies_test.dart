@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -429,5 +430,181 @@ void main() {
 
     expect(readout('660'), findsOneWidget);
     expect(readout('440'), findsNothing);
+  });
+
+  // ─── number scrub (issue #359) ──────────────────────────────────────────
+  // Dragging the readout is the fast way to find a value; typing stays the
+  // exact one. Driven with a *mouse*, because that is the pointer the gesture
+  // is for and the one whose slop lets the two live side by side.
+
+  group('number scrub', () {
+    String shown(WidgetTester tester) =>
+        tester.widget<TextField>(find.byType(TextField)).controller!.text;
+
+    /// Press the readout and drag it by [steps], reporting the gesture so a
+    /// test can look at the box mid-drag before releasing.
+    Future<TestGesture> scrub(
+      WidgetTester tester,
+      List<double> steps, {
+      bool release = true,
+    }) async {
+      final g = await tester.startGesture(
+        tester.getCenter(find.byType(TextField)),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      for (final dy in steps) {
+        await g.moveBy(Offset(0, dy));
+        await tester.pump();
+      }
+      if (release) {
+        await g.up();
+        await tester.pump();
+      }
+      return g;
+    }
+
+    testWidgets('dragging a .f readout up raises its value and pushes it', (
+      tester,
+    ) async {
+      final node = addNode(Obj.gFloat);
+      await pumpBody(
+        tester,
+        NumberNodeBody(node: node, controller: controller),
+      );
+
+      // The readout advertises the gesture before anyone tries it.
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).mouseCursor,
+        SystemMouseCursors.resizeUpDown,
+      );
+
+      // The first leg spends the slop — value only moves once the scrub is
+      // under way, so it never jumps out of the gate.
+      await scrub(tester, [-6, -20]);
+
+      expect(gateway.calls, contains('sendFloat:${handle()}:0:20.000'));
+      expect(shown(tester), '20');
+    });
+
+    testWidgets('dragging down lowers it, and Shift scrubs finer', (
+      tester,
+    ) async {
+      final node = addNode(Obj.gFloat);
+      await pumpBody(
+        tester,
+        NumberNodeBody(node: node, controller: controller),
+      );
+
+      await scrub(tester, [6, 15]);
+      expect(shown(tester), '-15');
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await scrub(tester, [-6, -50]);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+
+      // 50 px of fine drag is half a unit, not fifty of them.
+      expect(shown(tester), '-14.5');
+    });
+
+    testWidgets('an int box steps whole numbers', (tester) async {
+      final node = addNode(Obj.gInt);
+      await pumpBody(
+        tester,
+        NumberNodeBody(node: node, controller: controller, integer: true),
+      );
+
+      await scrub(tester, [-6, -7]);
+      expect(gateway.calls, contains('sendFloat:${handle()}:0:7.000'));
+      expect(shown(tester), '7');
+
+      // Fine is one unit per ten pixels — still whole numbers.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await scrub(tester, [-6, -30]);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      expect(shown(tester), '10');
+    });
+
+    testWidgets('a press that never travels is still the click that takes the '
+        'caret', (tester) async {
+      final node = addNode(Obj.gFloat);
+      gateway.nodes.values.single.guiValue = '12';
+      await pumpBody(
+        tester,
+        NumberNodeBody(node: node, controller: controller),
+      );
+
+      final field = find.byType(TextField);
+      await tester.tap(field, kind: PointerDeviceKind.mouse);
+      await tester.pump();
+
+      // Editing (issue #353) is untouched: focus, whole value selected, and
+      // nothing pushed by the click itself.
+      expect(
+        tester.widget<TextField>(field).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+      expect(
+        tester.widget<TextField>(field).controller!.selection.textInside('12'),
+        '12',
+      );
+      expect(gateway.calls.where((c) => c.startsWith('sendFloat')), isEmpty);
+    });
+
+    testWidgets('a scrub takes the box out of edit mode rather than typing '
+        'into it', (tester) async {
+      final node = addNode(Obj.gFloat);
+      await pumpBody(
+        tester,
+        NumberNodeBody(node: node, controller: controller),
+      );
+
+      final field = find.byType(TextField);
+      await tester.tap(field, kind: PointerDeviceKind.mouse);
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(field).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+
+      await scrub(tester, [-6, -10]);
+
+      expect(
+        tester.widget<TextField>(field).focusNode!.hasPrimaryFocus,
+        isFalse,
+      );
+      expect(shown(tester), '10');
+    });
+
+    testWidgets('a value arriving mid-scrub does not clobber the one under the '
+        'pointer', (tester) async {
+      registerBuiltInPatcherNodes();
+      final node = addNode(Obj.gFloat);
+      await pumpBody(
+        tester,
+        NumberNodeBody(node: node, controller: controller),
+      );
+
+      final g = await scrub(tester, [-6, -30], release: false);
+      expect(shown(tester), '30');
+
+      // The graph fires into the object mid-gesture: the poll reports it and
+      // the box, which belongs to the pointer, declines it.
+      driveFromEngine('99');
+      await poll(tester);
+      expect(shown(tester), '30');
+
+      // Carrying on scrubs from where the hand is, not from what arrived.
+      await g.moveBy(const Offset(0, -5));
+      await tester.pump();
+      expect(shown(tester), '35');
+
+      // Release hands the box back to the engine.
+      await g.up();
+      await tester.pump();
+      driveFromEngine('7');
+      await poll(tester);
+      expect(shown(tester), '7');
+    });
   });
 }

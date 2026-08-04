@@ -48,6 +48,13 @@ abstract final class PatchCanvasConstants {
   /// Click-distance threshold for hit-testing a cable, in canvas-local pixels.
   static const double cableHitThreshold = 8;
 
+  /// How near one of a cable's endpoints a press must land to **grab** that end
+  /// and re-route it (issue #359). Larger than [portPressRadius] — which claims
+  /// the dot itself for starting a *new* cable — so the two gestures share the
+  /// same neighbourhood without competing: on the dot starts a cable, just off
+  /// it along the wire detaches the one already there.
+  static const double cableGrabRadius = 28;
+
   /// Number of sample points along a cable's cubic the hit-test walks.
   static const int cableHitSamples = 24;
 }
