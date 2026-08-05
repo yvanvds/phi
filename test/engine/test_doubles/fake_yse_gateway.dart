@@ -11,9 +11,9 @@ import 'package:phi/engine/bridge/yse_gateway.dart';
 /// Records every call against the engine so tests can assert call sequence
 /// without touching `package:yse` or its native library. Fabricates an audio
 /// device list ([devices]) so the settings window is fully drivable without
-/// hardware; [openAudioDevice] reflects the chosen rate / buffer into the
-/// active-state fields, and [unopenableDeviceNames] simulates a device that is
-/// present but refuses to open (the design §5 fallback path).
+/// hardware; [init] and [openAudioDevice] reflect what the engine opened into
+/// the active-state fields, and [unopenableDeviceNames] simulates a device that
+/// is present but refuses to open (the design §5 fallback path).
 class FakeYseGateway implements YseGateway {
   final List<String> calls = [];
   bool initialised = false;
@@ -47,12 +47,34 @@ class FakeYseGateway implements YseGateway {
   void init() {
     calls.add('init');
     initialised = true;
+    // The native `System::init()` brings the platform-default device up with
+    // it — only `initOffline()` comes up device-less. Reflect that here, or a
+    // fake that booted the default device reads back as "no device open" and
+    // every consumer of `activeAudioState()` (the status-bar health monitor,
+    // the latency chips) sees a machine whose audio just fell away.
+    _openPlatformDefault();
   }
 
   @override
   void initOffline() {
     calls.add('initOffline');
     initialised = true;
+  }
+
+  /// Brings the platform default (the first entry of [devices]) up in the live
+  /// state, as `System::init()` does natively. Leaves [openedDevice] alone —
+  /// that records *explicit* [openAudioDevice] calls, which is what the device
+  /// rules (design §5) are asserted through. A machine with no audio hardware
+  /// (or whose default refuses to open) stays device-less.
+  void _openPlatformDefault() {
+    if (devices.isEmpty) return;
+    final target = devices.first;
+    if (unopenableDeviceNames.contains(target.name)) return;
+    activeSampleRateValue = target.sampleRates.isNotEmpty
+        ? target.sampleRates.first
+        : 0;
+    activeBufferSizeValue = target.defaultBufferSize;
+    activeOutputLatencyValue = target.outputLatency;
   }
 
   @override

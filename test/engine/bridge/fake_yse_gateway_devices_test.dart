@@ -30,6 +30,44 @@ void main() {
     });
   });
 
+  // `System::init()` brings the platform default up with it; only
+  // `initOffline()` comes up device-less. A fake that skipped this reported a
+  // booted app as "no device open", which reads downstream as a device that
+  // fell away (issue #398).
+  group('init — the platform default comes up with the engine', () {
+    test('init brings the default device up in the live state', () {
+      gateway.init();
+      expect(gateway.initialised, isTrue);
+      final state = gateway.activeAudioState();
+      expect(state.sampleRate, 44100); // first device, first reported rate
+      expect(state.bufferSize, 256); // its default buffer
+      expect(state.outputLatency, 256);
+    });
+
+    test('init leaves openedDevice alone — that tracks explicit opens', () {
+      gateway.init();
+      expect(gateway.openedDevice, isNull);
+      expect(gateway.calls, ['init']);
+    });
+
+    test('initOffline comes up device-less', () {
+      gateway.initOffline();
+      expect(gateway.activeAudioState().sampleRate, 0);
+    });
+
+    test('init on a machine with no audio hardware opens nothing', () {
+      gateway.devices = const [];
+      gateway.init();
+      expect(gateway.activeAudioState().sampleRate, 0);
+    });
+
+    test('init when the default refuses to open leaves the state empty', () {
+      gateway.unopenableDeviceNames.add('Fake Interface');
+      gateway.init();
+      expect(gateway.activeAudioState().sampleRate, 0);
+    });
+  });
+
   group('openAudioDevice — success', () {
     test('a null descriptor opens the platform default (first device)', () {
       gateway.openAudioDevice(null);

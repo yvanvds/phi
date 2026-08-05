@@ -76,6 +76,10 @@ class BottomStatus extends StatelessWidget {
 
   static void _noPanic() {}
 
+  /// The scrolling readout cluster (chips, health, MIDI, log toggle) — keyed so
+  /// the narrow-window layout tests (issue #400) can measure it.
+  static const Key readoutsKey = Key('BottomStatus.readouts');
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -95,34 +99,59 @@ class BottomStatus extends StatelessWidget {
               _LiveDot(session: session),
               const SizedBox(width: PhiSpacing.s3),
               PanicButton(onPanic: onPanic),
-              const Spacer(),
-              StatusChip(label: 'CPU', value: formatCpu(t.cpuLoad)),
-              StatusChip(
-                label: 'BUF',
-                value: formatBuffer(t.bufferSize, t.sampleRate),
+              // The readouts take whatever is left and scroll inside it rather
+              // than pushing the strip past the window (issue #400): once a
+              // device is open `BUF` / `LAT` carry real values instead of the
+              // `—` placeholder, and the natural width clears a ~768px window.
+              //
+              // `reverse: true` pins them to the right edge — what the `Spacer`
+              // used to do — so a roomy window looks exactly as before while a
+              // narrow one keeps the health chip and log toggle in view and
+              // scrolls the telemetry off to the left.
+              //
+              // Deliberately *not* the `IntrinsicWidth` header pattern of #287
+              // / #299: the strip carries a dozen real-font `Text`s, and each
+              // one's laid-out width can exceed its reported intrinsic width by
+              // a fraction of a pixel. Summed, that under-measures the row by
+              // ~10px and it overflows anyway. A bounded `Expanded` cannot.
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  reverse: true,
+                  child: _buildReadouts(t),
+                ),
               ),
-              StatusChip(label: 'LAT', value: formatLatency(t.latencyMs)),
-              // The cumulative *stall event* count, not the engine's raw
-              // device-stall gauge — showing the gauge made this flicker to `1`
-              // once a second on a healthy device (issue #350).
-              StatusChip(label: 'DROPS', value: '${t.audioStalls}'),
-              if (audioHealth != null) ...[
-                const SizedBox(width: PhiSpacing.s2),
-                AudioDeviceChip(health: audioHealth!, onTap: onAudioSettings),
-                const SizedBox(width: PhiSpacing.s2),
-              ],
-              MidiActivityDot(activity: midiActivity),
-              if (logPanel != null) ...[
-                const SizedBox(width: PhiSpacing.s3),
-                LogPanelToggle(controller: logPanel!),
-              ],
-              const SizedBox(width: PhiSpacing.s3),
             ],
           );
         },
       ),
     );
   }
+
+  Widget _buildReadouts(EngineTelemetry t) => Row(
+    key: readoutsKey,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      StatusChip(label: 'CPU', value: formatCpu(t.cpuLoad)),
+      StatusChip(label: 'BUF', value: formatBuffer(t.bufferSize, t.sampleRate)),
+      StatusChip(label: 'LAT', value: formatLatency(t.latencyMs)),
+      // The cumulative *stall event* count, not the engine's raw
+      // device-stall gauge — showing the gauge made this flicker to `1`
+      // once a second on a healthy device (issue #350).
+      StatusChip(label: 'DROPS', value: '${t.audioStalls}'),
+      if (audioHealth != null) ...[
+        const SizedBox(width: PhiSpacing.s2),
+        AudioDeviceChip(health: audioHealth!, onTap: onAudioSettings),
+        const SizedBox(width: PhiSpacing.s2),
+      ],
+      MidiActivityDot(activity: midiActivity),
+      if (logPanel != null) ...[
+        const SizedBox(width: PhiSpacing.s3),
+        LogPanelToggle(controller: logPanel!),
+      ],
+      const SizedBox(width: PhiSpacing.s3),
+    ],
+  );
 
   @visibleForTesting
   static String formatCpu(double cpuLoad) =>
