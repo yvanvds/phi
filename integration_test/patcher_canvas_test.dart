@@ -2,7 +2,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
-import 'package:phi/design/widgets/patcher/patch_node_frame.dart';
 import 'package:phi/domain/patcher/patch_node.dart';
 import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/engine.dart';
@@ -10,6 +9,7 @@ import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
 import 'package:phi/surfaces/patcher/params/patch_params_dialog.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
+import 'package:phi/surfaces/patcher/patcher_node_view.dart';
 import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
@@ -21,7 +21,7 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 /// cables, and duplicate, each with undo, via real pointer + keyboard gestures.
 ///
 /// Also the end-to-end guard for issue #352: in the composed app a node must
-/// travel exactly as far as the pointer does — measured on the rendered header,
+/// travel exactly as far as the pointer does — measured on the rendered box,
 /// not just in the model — and a click-to-select immediately followed by a drag
 /// must never be read as a double-click and open the params dialog.
 void main() {
@@ -54,7 +54,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // The seed lays down slider → sine → dac (3 nodes, 2 cables).
-      expect(find.byType(PatchNodeFrame), findsNWidgets(3));
+      expect(find.byType(PatcherNodeView), findsNWidgets(3));
       final graph = engine.patcher.graph;
       expect(graph.cables, hasLength(2));
 
@@ -62,12 +62,22 @@ void main() {
       PatchNode nodeOfType(String type) =>
           graph.nodes.firstWhere((n) => n.type == type);
 
-      // ── body drag (from the inert sine header) — moves and undoes ──────────
+      // ── body drag — moves and undoes ──────────────────────────────────────
+      // Aimed at the middle of the box, which since issue #379 is the whole
+      // node: there is no header left to press.
       final sine = nodeOfType(Obj.dSine);
       final sineStart = sine.position;
-      final sineHeader = find.text('osc · sine'.toUpperCase());
-      final drawnAtStart = tester.getTopLeft(sineHeader);
-      final headerCentre = canvasTopLeft + sine.position + const Offset(65, 11);
+      // Named by the node's own id: the palette lists a `~dac` entry too, and
+      // an object box prints exactly the type id the palette does (issue #379).
+      final sineLine = find.byKey(PatcherNodeView.objectLineKey(sine.id));
+      final dacLine = find.byKey(
+        PatcherNodeView.objectLineKey(nodeOfType(Obj.dDac).id),
+      );
+      final drawnAtStart = tester.getTopLeft(sineLine);
+      final headerCentre =
+          canvasTopLeft +
+          sine.position +
+          Offset(sine.size.width / 2, sine.size.height / 2);
       final drag = await tester.startGesture(headerCentre);
       await tester.pump();
       await drag.moveBy(const Offset(40, 0));
@@ -77,16 +87,13 @@ void main() {
       await drag.up();
       await tester.pumpAndSettle();
       // Every pixel of the gesture reached the node — nothing was eaten by a
-      // recogniser's slop — and the header is drawn where the pointer left it.
+      // recogniser's slop — and the box is drawn where the pointer left it.
       expect(sine.position, sineStart + const Offset(80, 30));
-      expect(
-        tester.getTopLeft(sineHeader),
-        drawnAtStart + const Offset(80, 30),
-      );
+      expect(tester.getTopLeft(sineLine), drawnAtStart + const Offset(80, 30));
 
       await ctrl(tester, LogicalKeyboardKey.keyZ);
       expect(sine.position, sineStart);
-      expect(tester.getTopLeft(sineHeader), drawnAtStart);
+      expect(tester.getTopLeft(sineLine), drawnAtStart);
 
       // ── click to select, then drag straight away — the natural sequence that
       //    used to fire a double-click and open the params dialog instead ─────
@@ -103,35 +110,32 @@ void main() {
 
       expect(find.byType(PatchParamsDialog), findsNothing);
       expect(sine.position, sineStart + const Offset(35, 20));
-      expect(
-        tester.getTopLeft(sineHeader),
-        drawnAtStart + const Offset(35, 20),
-      );
+      expect(tester.getTopLeft(sineLine), drawnAtStart + const Offset(35, 20));
 
       await ctrl(tester, LogicalKeyboardKey.keyZ);
       expect(sine.position, sineStart);
 
       // ── duplicate the dac (Ctrl+D) — copy appears, then undoes ─────────────
-      await tester.tap(find.text('out · L/R'.toUpperCase()));
+      await tester.tap(dacLine);
       await tester.pumpAndSettle();
       expect(graph.selectedNodes, {nodeOfType(Obj.dDac).id});
 
       await ctrl(tester, LogicalKeyboardKey.keyD);
-      expect(find.byType(PatchNodeFrame), findsNWidgets(4));
+      expect(find.byType(PatcherNodeView), findsNWidgets(4));
 
       await ctrl(tester, LogicalKeyboardKey.keyZ);
-      expect(find.byType(PatchNodeFrame), findsNWidgets(3));
+      expect(find.byType(PatcherNodeView), findsNWidgets(3));
 
       // ── delete a node with its cable (Delete) — then undo restores both ────
-      await tester.tap(find.text('out · L/R'.toUpperCase()));
+      await tester.tap(dacLine);
       await tester.pumpAndSettle();
       await tester.sendKeyEvent(LogicalKeyboardKey.delete);
       await tester.pumpAndSettle();
-      expect(find.byType(PatchNodeFrame), findsNWidgets(2));
+      expect(find.byType(PatcherNodeView), findsNWidgets(2));
       expect(graph.cables, hasLength(1)); // sine → dac dropped with the node
 
       await ctrl(tester, LogicalKeyboardKey.keyZ);
-      expect(find.byType(PatchNodeFrame), findsNWidgets(3));
+      expect(find.byType(PatcherNodeView), findsNWidgets(3));
       expect(graph.cables, hasLength(2));
 
       session.dispose();

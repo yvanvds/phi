@@ -3,15 +3,22 @@ import 'package:flutter/widgets.dart';
 import '../../design/tokens/phi_colors.dart';
 import '../../design/widgets/patcher/patch_canvas_constants.dart';
 import '../../design/widgets/patcher/patch_node_frame.dart';
+import '../../design/widgets/patcher/patch_object_box.dart';
 import '../../domain/patcher/patch_node.dart';
+import '../../domain/patcher/patch_node_id.dart';
 import '../../domain/patcher/patch_port.dart';
 import '../../domain/patcher/patch_port_id.dart';
 import '../../engine/state/node_type_registry.dart';
 import '../../engine/state/patcher_controller.dart';
-import 'nodes/patch_args_body.dart';
 
-/// Binds one [PatchNode] to a [PatchNodeFrame] plus the registered body
-/// builder (design §6, "click anywhere on a node and move it").
+/// Binds one [PatchNode] to the chrome its kind gets (design §6, "click
+/// anywhere on a node and move it").
+///
+/// Two kinds, and the descriptor decides (design §7, issue #379): a type with a
+/// hand-authored GUI body is a [PatchNodeFrame] around that body, and every
+/// other engine object is a [PatchObjectBox] — one bordered line reading
+/// `~sine 440`, no header, no second colour band. The frame's headers only
+/// survive here because the GUI objects have not lost theirs yet (issue #381).
 ///
 /// **Purely visual** where pointers are concerned: select, double-click and
 /// body-drag are all driven by the canvas's raw pointer pipeline, which sees
@@ -49,20 +56,24 @@ class PatcherNodeView extends StatelessWidget {
   /// that will one day forget.
   final bool bodyLive;
 
+  /// Key on one node's rendered object-box line, so a test can name the text of
+  /// a specific node on a canvas full of them.
+  static Key objectLineKey(PatchNodeId id) => Key('PatchObjectBox.${id.value}');
+
   @override
   Widget build(BuildContext context) {
     // A hand-authored descriptor supplies the live GUI body for the types that
-    // have one; every other engine object falls back to [PatchArgsBody], which
-    // prints what the object actually is — `~sine 440` — instead of the empty
-    // box a drag-created node used to render (issue #356). Either way the
-    // header shows the node's own title and the frame renders — no type is ever
-    // an error placeholder.
-    final desc = NodeTypeRegistry.instance.find(node.type);
+    // have one; every other engine object is an object box printing what it
+    // actually is — `~sine 440` — instead of a header saying it twice over an
+    // empty body (issue #379). No type is ever an error placeholder.
+    final body = NodeTypeRegistry.instance.find(node.type)?.buildBody;
     return ListenableBuilder(
       listenable: node,
       builder: (context, _) {
         final inputXs = _portXs(node.inputs);
         final outputXs = _portXs(node.outputs);
+        final inputVoices = [for (final p in node.inputs) p.voice];
+        final outputVoices = [for (final p in node.outputs) p.voice];
         return Stack(
           clipBehavior: Clip.none,
           children: [
@@ -84,24 +95,34 @@ class PatcherNodeView extends StatelessWidget {
                   ),
                 ),
               ),
-            PatchNodeFrame(
-              title: node.title,
-              voice: node.voice,
-              armed: node.armed,
-              inputPortXs: inputXs,
-              outputPortXs: outputXs,
-              inputVoices: [for (final p in node.inputs) p.voice],
-              outputVoices: [for (final p in node.outputs) p.voice],
-              body: Padding(
-                padding: const EdgeInsets.all(8),
-                child: IgnorePointer(
-                  ignoring: !bodyLive,
-                  child:
-                      desc?.buildBody(context, node, controller) ??
-                      PatchArgsBody(node: node, controller: controller),
+            if (body == null)
+              PatchObjectBox(
+                text: controller.objectLineOf(node.id),
+                textKey: objectLineKey(node.id),
+                voice: node.voice,
+                armed: node.armed,
+                inputPortXs: inputXs,
+                outputPortXs: outputXs,
+                inputVoices: inputVoices,
+                outputVoices: outputVoices,
+              )
+            else
+              PatchNodeFrame(
+                title: node.title,
+                voice: node.voice,
+                armed: node.armed,
+                inputPortXs: inputXs,
+                outputPortXs: outputXs,
+                inputVoices: inputVoices,
+                outputVoices: outputVoices,
+                body: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: IgnorePointer(
+                    ignoring: !bodyLive,
+                    child: body(context, node, controller),
+                  ),
                 ),
               ),
-            ),
           ],
         );
       },

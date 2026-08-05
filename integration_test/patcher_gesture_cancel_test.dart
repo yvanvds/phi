@@ -65,10 +65,15 @@ void main() {
         canvasTL +
         portPositionsFor(n)[PatchPortId(nodeId: n.id, side: side, index: i)]!;
 
-    final sineHeader = find.text('osc · sine'.toUpperCase());
-    final sineHeaderCentre = canvasTL + sine.position + const Offset(65, 11);
+    // The object box is the whole node since issue #379 — its middle is where
+    // a body drag is aimed, there being no header any more.
+    final sineLine = find.text('~sine 440');
+    final sineHeaderCentre =
+        canvasTL +
+        sine.position +
+        Offset(sine.size.width / 2, sine.size.height / 2);
     final sineStart = sine.position;
-    final sineDrawnAtStart = tester.getTopLeft(sineHeader);
+    final sineDrawnAtStart = tester.getTopLeft(sineLine);
 
     // The seed wires its cables with the non-journaled primitive, so the undo
     // stack starts empty — anything on it later came from a gesture.
@@ -102,7 +107,7 @@ void main() {
     await tester.pump();
     // Mid-gesture the node really is being dragged — the preview followed.
     expect(
-      tester.getTopLeft(sineHeader),
+      tester.getTopLeft(sineLine),
       sineDrawnAtStart + const Offset(70, 45),
     );
 
@@ -112,7 +117,7 @@ void main() {
     // The abandoned gesture is undone, not committed: the node is drawn back at
     // its origin and nothing reached the undo stack.
     expect(sine.position, sineStart);
-    expect(tester.getTopLeft(sineHeader), sineDrawnAtStart);
+    expect(tester.getTopLeft(sineLine), sineDrawnAtStart);
     expect(engine.patcher.undoScope.canUndo, isFalse);
 
     // ── a marquee torn away mid-flight ────────────────────────────────────
@@ -146,7 +151,7 @@ void main() {
 
     expect(sine.position, sineStart + const Offset(40, 25));
     expect(
-      tester.getTopLeft(sineHeader),
+      tester.getTopLeft(sineLine),
       sineDrawnAtStart + const Offset(40, 25),
     );
     expect(engine.patcher.undoScope.canUndo, isTrue);

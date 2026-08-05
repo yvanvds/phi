@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../../design/widgets/patcher/patch_canvas_constants.dart';
+import '../../design/widgets/patcher/patch_object_box_metrics.dart';
 import '../../domain/patcher/patch_cable.dart';
 import '../../domain/patcher/patch_graph.dart';
 import '../../domain/patcher/patch_node.dart';
@@ -138,7 +139,7 @@ class PatcherController {
     return _create(
       type: desc.type,
       args: desc.defaultArgs,
-      title: desc.title,
+      title: desc.title ?? desc.type,
       voice: voice,
       position: position,
       size: desc.defaultSize,
@@ -156,9 +157,9 @@ class PatcherController {
   /// Unlike [addNode] (which takes a hand-authored [NodeDescriptor] for the
   /// seeded demo bodies), this creates *any* engine object from its palette
   /// metadata: it seeds the native object with [args] — the descriptor's
-  /// documented defaults when none are given — and sizes the node to fit
-  /// (reusing a hand-authored body's tuned size when the type has one). The
-  /// header shows the object's `type` id.
+  /// documented defaults when none are given — and sizes the node to fit,
+  /// which for a plain engine object means the box its own line of text needs
+  /// (issue #379) and for a hand-authored GUI body its tuned size.
   ///
   /// Direct (non-undoable): the **primitive** both authoring gestures create
   /// through. Author through [createObject] so the creation lands on the undo
@@ -169,14 +170,14 @@ class PatcherController {
     String? args,
     int voice = 1,
   }) {
-    final bodied = NodeTypeRegistry.instance.find(desc.type);
     return _create(
       type: desc.type,
       args: args ?? _defaultArgsFor(desc),
       title: desc.type,
       voice: voice,
       position: position,
-      size: bodied?.defaultSize, // null → sized to fit the reified ports
+      // No size: _create measures the object box, or takes the tuned size a
+      // registered GUI body declares.
     );
   }
 
@@ -228,7 +229,14 @@ class PatcherController {
       title: title,
       voice: voice,
       position: position,
-      size: size ?? _sizeForPorts(snapshot.inputs, snapshot.outputs),
+      size:
+          size ??
+          _sizeFor(
+            type: type,
+            args: args,
+            inputs: snapshot.inputs,
+            outputs: snapshot.outputs,
+          ),
       inputs: _portsFrom(snapshot, PatchPortSide.input, voice),
       outputs: _portsFrom(snapshot, PatchPortSide.output, voice),
     );
@@ -269,21 +277,56 @@ class PatcherController {
       if (p.defaultValue.isNotEmpty) p.defaultValue,
   ].join(' ');
 
-  /// A node box **wide** enough to seat its ports, which spread along the top
-  /// and bottom edges at fixed horizontal spacing (design §6, issue #377).
+  /// The line an **object box** prints: the object's type followed by its
+  /// creation arguments, the way a Max object box reads — `~sine 440`,
+  /// `.metro 250` (issue #356). Empty for a node the graph does not hold.
   ///
-  /// The port count therefore sets a minimum *width* — which a line of text
-  /// absorbs — rather than the minimum height it used to force, under which no
-  /// one-line object box was possible. Height is the plain default; a
-  /// hand-authored body that wants more says so with its own `defaultSize`.
-  Size _sizeForPorts(int inputs, int outputs) {
-    final ports = math.max(inputs, outputs);
-    return Size(
-      math.max(
-        PatchCanvasConstants.minNodeWidth,
-        PatchCanvasConstants.minWidthForPorts(ports),
-      ),
-      PatchCanvasConstants.defaultNodeHeight,
+  /// Dropping the `~`/`.` prefix and colouring the line by DSP/control is
+  /// issue #380; this is the text as it stands.
+  String objectLineOf(PatchNodeId id) {
+    final node = graph.nodeById(id);
+    if (node == null) return '';
+    return objectLine(node.type, argsOf(id));
+  }
+
+  /// [objectLineOf]'s pure form, for the moment before the node exists — node
+  /// creation measures its own box from this.
+  static String objectLine(String type, String args) {
+    final trimmed = args.trim();
+    return trimmed.isEmpty ? type : '$type $trimmed';
+  }
+
+  /// Whether a node of [type] renders as an object box rather than as a framed
+  /// GUI control (design §7). An **unregistered** type is one too: a plain
+  /// engine object dragged off the palette has no hand-authored body and never
+  /// will.
+  static bool _isObjectBox(String type) =>
+      NodeTypeRegistry.instance.find(type)?.isObjectBox ?? true;
+
+  /// The box a node of [type] needs (issue #379).
+  ///
+  /// An **object box** is measured from the line it prints
+  /// ([PatchObjectBoxMetrics]): as wide as its text, floored by the minimum
+  /// width its port count demands and capped past which the line ellipsises,
+  /// and one text line plus padding tall. Ports spread along the top and bottom
+  /// edges at fixed spacing since issue #377, so the count sets a *width* floor
+  /// a line of text absorbs rather than the height floor it used to force —
+  /// under which no one-line box was possible at all.
+  ///
+  /// A **GUI object** keeps the tuned `defaultSize` its descriptor declares; it
+  /// loses its frame with issue #381, not here.
+  Size _sizeFor({
+    required String type,
+    required String args,
+    required int inputs,
+    required int outputs,
+  }) {
+    final declared = NodeTypeRegistry.instance.find(type)?.defaultSize;
+    if (declared != null) return declared;
+    return PatchObjectBoxMetrics.sizeFor(
+      text: objectLine(type, args),
+      inputs: inputs,
+      outputs: outputs,
     );
   }
 
@@ -326,8 +369,12 @@ class PatcherController {
           title: bodied?.title ?? obj.type,
           voice: 1,
           position: obj.position ?? Offset.zero,
-          size:
-              bodied?.defaultSize ?? _sizeForPorts(ports.inputs, ports.outputs),
+          size: _sizeFor(
+            type: obj.type,
+            args: obj.args,
+            inputs: ports.inputs,
+            outputs: ports.outputs,
+          ),
           inputs: _portsFrom(ports, PatchPortSide.input, 1),
           outputs: _portsFrom(ports, PatchPortSide.output, 1),
         ),
@@ -501,8 +548,9 @@ class PatcherController {
     return woken;
   }
 
-  /// Whether [node]'s registered body displays a `guiValue`. An unregistered
-  /// type renders its creation arguments instead, so it is never polled.
+  /// Whether [node]'s registered body displays a `guiValue`. An object box
+  /// prints its creation arguments instead — which only a journaled
+  /// `setParams` changes — so it is never polled.
   static bool _readsGuiValue(PatchNode node) =>
       NodeTypeRegistry.instance.find(node.type)?.readsGuiValue ?? false;
 
@@ -836,11 +884,10 @@ class PatcherController {
   /// undoable.
   ///
   /// Re-inspects the object afterwards and reshapes the node when the new
-  /// arguments changed its port count ([_resyncPorts], issue #356), then wakes
-  /// it ([PatchNode.markParamsChanged]) so a body that renders its arguments —
-  /// the default args body, the `~sine` freq readout — repaints. Both the
-  /// dialog's apply and its undo/redo come through here, so all three follow
-  /// (issue #354).
+  /// arguments changed its port count or the box its line needs ([_resyncShape],
+  /// issues #356/#379), then wakes it ([PatchNode.markParamsChanged]) so the
+  /// object box repaints with the arguments it now carries. Both the apply and
+  /// its undo/redo come through here, so all three follow (issue #354).
   ///
   /// Returns the cables that had to be dropped because the reconfigured object
   /// no longer has the port they hung off; [SetPatchParamsCommand] re-wires them
@@ -850,34 +897,43 @@ class PatcherController {
     if (native == null) return const [];
     _gateway.setParams(instanceId, native, args);
     _argsByNode[id] = args;
-    final dropped = _resyncPorts(id, native);
+    final dropped = _resyncShape(id, native);
     graph.nodeById(id)?.markParamsChanged();
     return dropped;
   }
 
   /// Re-read [id]'s port topology from the native object and reshape the node
-  /// when it no longer matches the mirror (issue #356).
+  /// when its ports — or the box its line of text now needs — no longer match
+  /// the mirror (issues #356, #379).
   ///
   /// An object's inlet/outlet count follows its creation arguments, so a
   /// `setParams` can reshape the very object the canvas is drawing. Without
-  /// this the mirror goes stale the moment the params dialog is applied: port
+  /// this the mirror goes stale the moment the arguments are applied: port
   /// dots drawn where the object has none, cables wired to outlets that no
   /// longer exist, drag-time compatibility answered against a shape the engine
   /// forgot.
   ///
+  /// The **box** is re-measured on the same pass, because an object box is as
+  /// wide as its text: retyping `.metro 250` as `.metro 60000` makes a longer
+  /// line, and a box left at its old width would ellipsise the very edit that
+  /// was just made.
+  ///
   /// Cables hanging off a port the object lost are dropped from the native
   /// patcher *and* the mirror, and returned so the caller can restore them.
-  /// Returns an empty list when the topology is unchanged — the common case,
+  /// Returns an empty list whenever nothing was disconnected — the common case,
   /// and the only one for the objects whose arity is fixed.
-  List<PatchCable> _resyncPorts(PatchNodeId id, int native) {
+  List<PatchCable> _resyncShape(PatchNodeId id, int native) {
     final node = graph.nodeById(id);
     if (node == null) return const [];
     final snapshot = _gateway.inspect(instanceId, native);
     final inputs = _portsFrom(snapshot, PatchPortSide.input, node.voice);
     final outputs = _portsFrom(snapshot, PatchPortSide.output, node.voice);
-    if (_samePorts(node.inputs, inputs) && _samePorts(node.outputs, outputs)) {
-      return const [];
-    }
+    final size = _sizeSeating(node, inputs.length, outputs.length);
+    final samePorts =
+        _samePorts(node.inputs, inputs) && _samePorts(node.outputs, outputs);
+    if (samePorts && size == node.size) return const [];
+    // Empty whenever the counts held: the filter only catches an index the
+    // object no longer has.
     final dropped = graph.cables
         .where(
           (c) =>
@@ -888,11 +944,7 @@ class PatcherController {
     for (final cable in dropped) {
       removeCablePrimitive(cable);
     }
-    node.reshapePorts(
-      inputs: inputs,
-      outputs: outputs,
-      size: _sizeSeating(node, inputs.length, outputs.length),
-    );
+    node.reshapePorts(inputs: inputs, outputs: outputs, size: size);
     return dropped;
   }
 
@@ -907,11 +959,22 @@ class PatcherController {
     return true;
   }
 
-  /// [node]'s box, grown when a new port count needs more **width** than the
-  /// current one seats — the axis ports spread along since #377. Never shrinks:
-  /// a hand-authored body's tuned size stays its own, and a box does not jump
-  /// around as ports come and go.
+  /// The box [node] should hold after a reconfiguration.
+  ///
+  /// An **object box** is re-measured outright from the line it now prints and
+  /// the ports it now has (issue #379) — it is intrinsically sized, so shrinking
+  /// back is as correct as growing. A **GUI object** keeps its tuned size and
+  /// only ever grows, and only in **width**, when a new port count needs more
+  /// than the current box seats — the axis ports spread along since #377 — so a
+  /// hand-authored body never jumps around as ports come and go.
   Size _sizeSeating(PatchNode node, int inputs, int outputs) {
+    if (_isObjectBox(node.type)) {
+      return PatchObjectBoxMetrics.sizeFor(
+        text: objectLineOf(node.id),
+        inputs: inputs,
+        outputs: outputs,
+      );
+    }
     final needed = PatchCanvasConstants.minWidthForPorts(
       math.max(inputs, outputs),
     );

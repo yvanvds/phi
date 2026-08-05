@@ -1,12 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
-import 'package:phi/design/widgets/patcher/patch_node_frame.dart';
 import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
 import 'package:phi/surfaces/patcher/library/patch_entity_strip.dart';
+import 'package:phi/surfaces/patcher/patcher_node_view.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
@@ -50,7 +50,7 @@ void main() {
 
     final library = engine.patchLibrary;
     final first = library.openAddress!;
-    expect(find.byType(PatchNodeFrame), findsNWidgets(3));
+    expect(find.byType(PatcherNodeView), findsNWidgets(3));
 
     // Expand the strip and duplicate the open patch through its row context menu.
     await tester.tap(find.byKey(PatchEntityStrip.expandToggleKey));
@@ -65,7 +65,7 @@ void main() {
     final copy = library.openAddress!;
     expect(copy, isNot(first));
     expect(copy.name, endsWith('_copy'));
-    expect(find.byType(PatchNodeFrame), findsNWidgets(3));
+    expect(find.byType(PatcherNodeView), findsNWidgets(3));
     // The rebuilt editor mirror carries the graph, not just the visuals.
     expect(library.openEditor!.graph.nodes, hasLength(3));
     expect(library.openEditor!.graph.cables, hasLength(2));

@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/widgets/patcher/patch_canvas_constants.dart';
+import 'package:phi/design/widgets/patcher/patch_object_box_metrics.dart';
 import 'package:phi/domain/patcher/patch_args.dart';
 import 'package:phi/domain/patcher/patch_node.dart';
 import 'package:phi/domain/patcher/patch_node_id.dart';
@@ -125,6 +126,10 @@ void main() {
     const fanType = '.fan';
 
     setUp(() {
+      // Registered *with a body*, so the controller treats it as a GUI node —
+      // the kind that keeps the size its descriptor tuned. The object-box case,
+      // which re-measures instead, is the unregistered one below (issue #379).
+      NodeTypeRegistry.instance.register(desc(fanType));
       gateway.topologyResolver = (type, args) {
         if (type != fanType) return null;
         final outlets = splitPatchArgs(args).length;
@@ -138,6 +143,8 @@ void main() {
         );
       };
     });
+
+    tearDown(NodeTypeRegistry.instance.clear);
 
     PatchNode addFan(String args) => controller.addNode(
       desc: desc(fanType, args: args),
@@ -198,6 +205,48 @@ void main() {
 
       expect(fan.outputs, hasLength(2));
       expect(controller.graph.cables, hasLength(1));
+    });
+
+    test('an object box re-measures its whole box, both axes (issue #379)', () {
+      // Same reshaping object, but *unregistered* — so it has no hand-authored
+      // body and renders as an object box, which is intrinsically sized: it
+      // shrinks back as readily as it grows, and its height answers to its one
+      // line of text rather than to a tuned default.
+      NodeTypeRegistry.instance.clear();
+      final fan = controller.addNode(
+        // No title, no tuned size, no body — a plain engine object.
+        desc: const NodeDescriptor(
+          type: fanType,
+          defaultArgs: '1 2',
+          inputs: [],
+          outputs: [],
+        ),
+        position: Offset.zero,
+      );
+      final created = fan.size;
+      expect(
+        created,
+        PatchObjectBoxMetrics.sizeFor(text: '.fan 1 2', inputs: 1, outputs: 2),
+      );
+
+      controller.applyParams(fan.id, '1 2 3 4 5 6');
+
+      expect(fan.outputs, hasLength(6));
+      expect(
+        fan.size,
+        PatchObjectBoxMetrics.sizeFor(
+          text: '.fan 1 2 3 4 5 6',
+          inputs: 1,
+          outputs: 6,
+        ),
+      );
+      expect(fan.size.width, greaterThan(created.width));
+      // Height is one line of text — the port count buys width only (#377).
+      expect(fan.size.height, created.height);
+
+      // ...and back down again: a shorter line gets a shorter box.
+      controller.applyParams(fan.id, '1');
+      expect(fan.size.width, lessThan(created.width));
     });
 
     test('an unchanged topology leaves the ports and cables alone', () {

@@ -2,7 +2,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
-import 'package:phi/design/widgets/patcher/patch_canvas_constants.dart';
 import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/engine/state/node_type_registry.dart';
@@ -73,12 +72,13 @@ void main() {
     await tester.pumpAndSettle();
 
     final canvasTL = tester.getTopLeft(find.byType(PatcherCanvas));
-    // The middle of the node's header — draggable chrome, and never a body that
-    // runs its own gestures.
+    // The middle of the node's box — the whole of it is draggable chrome since
+    // the header went (issue #379), and it is never a body that runs its own
+    // gestures.
     Offset header() =>
         canvasTL +
         sine.position +
-        Offset(sine.size.width / 2, PatchCanvasConstants.headerHeight / 2);
+        Offset(sine.size.width / 2, sine.size.height / 2);
 
     // Click to select — which is also how the canvas comes to hold the
     // keyboard, exactly as it does for a real user.

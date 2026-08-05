@@ -54,11 +54,13 @@ void main() {
       isNotEmpty,
     );
 
-    // 2) Double-click the `~sine` node (title "OSC · SINE") to open the params
-    //    dialog. Detected from raw pointer timing, so two quick taps suffice.
-    final sineHeader = find.text('osc · sine'.toUpperCase());
-    expect(sineHeader, findsOneWidget);
-    final at = tester.getCenter(sineHeader);
+    // 2) Double-click the `~sine` object box — one line reading `~sine 440`
+    //    since issue #379, and the only thing left to aim at — to open the
+    //    params dialog. Detected from raw pointer timing, so two quick taps
+    //    suffice.
+    final sineLine = find.text('~sine 440');
+    expect(sineLine, findsOneWidget);
+    final at = tester.getCenter(sineLine);
     await tester.tapAt(at);
     await tester.pump(const Duration(milliseconds: 40));
     await tester.tapAt(at);

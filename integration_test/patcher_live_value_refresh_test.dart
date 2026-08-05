@@ -7,7 +7,7 @@ import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
-import 'package:phi/surfaces/patcher/nodes/sine_node_body.dart';
+import 'package:phi/surfaces/patcher/nodes/slider_node_body.dart';
 import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
@@ -34,11 +34,12 @@ void main() {
   Finder railFor(SurfaceId id) =>
       find.byWidgetPredicate((w) => w is RailButton && w.label == id.label);
 
-  /// The frequency the `~sine` node prints on the canvas — reachable whether
-  /// the Patcher is the foreground tab or parked behind another one.
-  Finder freqReadout(String value) => find.descendant(
-    of: find.byType(SineNodeBody, skipOffstage: false),
-    matching: find.text(value, skipOffstage: false),
+  /// The seeded `.slider`'s fader — scoped to its node body, because the Mix
+  /// surface this test parks the patcher behind is full of faders of its own,
+  /// and reachable offstage, because half the point is what happens there.
+  final sliderFader = find.descendant(
+    of: find.byType(SliderNodeBody, skipOffstage: false),
+    matching: find.byType(PhiFader, skipOffstage: false),
     skipOffstage: false,
   );
 
@@ -65,6 +66,8 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    double faderValue() => tester.widget<PhiFader>(sliderFader).value;
+
     await tester.pumpWidget(PhiApp(engine: engine, session: session));
     await tester.pumpAndSettle();
 
@@ -78,35 +81,38 @@ void main() {
     final slider = engine.patcher.graph.nodes.firstWhere(
       (n) => n.type == Obj.gSlider,
     );
-    expect(freqReadout('440'), findsOneWidget);
-    expect(tester.widget<PhiFader>(find.byType(PhiFader)).value, 0.5);
+    expect(faderValue(), 0.5);
 
     // 1) The graph moves on its own — nobody touches the canvas.
-    driveFromEngine(sine.id, '660');
     driveFromEngine(slider.id, '0.8');
+    // The `~sine` next to it is an **object box** (issue #379): it prints the
+    // arguments it was made with, not a live display value, so the poll is not
+    // supposed to notice this at all.
+    driveFromEngine(sine.id, '660');
     await settlePoll();
 
-    expect(freqReadout('660'), findsOneWidget);
-    expect(freqReadout('440'), findsNothing);
-    // The fader followed too: its thumb *and* its readout, from state the body
+    // The fader followed: its thumb *and* its readout, from state the body
     // holds itself, not from a re-read on some unrelated rebuild.
-    expect(tester.widget<PhiFader>(find.byType(PhiFader)).value, 0.8);
+    expect(faderValue(), 0.8);
     expect(find.text('0.80'), findsOneWidget);
+    // The object box did not — and must not: `~sine 440` is what the object is
+    // *set to*, which only a journaled `setParams` changes.
+    expect(find.text('~sine 440'), findsOneWidget);
+    expect(find.text('~sine 660'), findsNothing);
 
     // 2) Park the Patcher behind another surface. It stays mounted — its
     //    selection, pan and zoom survive a tab switch — but it must stop asking
     //    the engine anything at all.
     await tester.tap(railFor(SurfaceId.mix));
     await tester.pumpAndSettle();
-    expect(find.byType(SineNodeBody, skipOffstage: false), findsOneWidget);
+    expect(sliderFader, findsOneWidget);
 
-    driveFromEngine(sine.id, '880');
+    driveFromEngine(slider.id, '0.3');
     await settlePoll();
 
     // Still showing what it showed when it went offstage: no poll ran behind
     // the Mix surface.
-    expect(freqReadout('660'), findsOneWidget);
-    expect(freqReadout('880'), findsNothing);
+    expect(faderValue(), 0.8);
 
     // 3) Bring it back — the refresh resumes and the canvas catches up on its
     //    own, without the user touching a node.
@@ -114,7 +120,7 @@ void main() {
     await tester.pumpAndSettle();
     await settlePoll();
 
-    expect(freqReadout('880'), findsOneWidget);
+    expect(faderValue(), 0.3);
 
     session.dispose();
     await engine.dispose();
