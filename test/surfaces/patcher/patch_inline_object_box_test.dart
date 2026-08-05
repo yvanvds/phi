@@ -4,9 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/engine/bridge/patch_object_descriptor.dart';
 import 'package:phi/surfaces/patcher/create/patch_inline_object_box.dart';
 
-/// The inline object box on its own (issue #358): what it completes, what each
-/// key does, what it refuses, and — the part that matters most for a live
-/// instrument — that a refusal never costs the gesture.
+/// The inline object box on its own (issues #358, #382): what it completes,
+/// what each key does, what it refuses, and — the part that matters most for a
+/// live instrument — that a refusal never costs the gesture. The last group
+/// covers the same box opened *over an existing object*, where the name it
+/// starts with is that object's own.
 void main() {
   PatchObjectDescriptor desc(
     String type, {
@@ -41,9 +43,33 @@ void main() {
     desc('.slider', description: 'horizontal slider'),
     desc('~dac', description: 'audio output', isDsp: true),
     // The collision issue #380 has to answer for: two objects, one bare name.
-    // Neither description matches any query the other tests type.
-    desc('.*', description: 'multiply'),
-    desc('~*', description: 'multiply audio', isDsp: true),
+    // Neither description matches any query the other tests type. Both take an
+    // operand, so an edit of one has something to retype (issue #382).
+    desc(
+      '.*',
+      description: 'multiply',
+      params: const [
+        PatchParamDescriptor(
+          name: 'operand',
+          doc: 'right-hand side',
+          defaultValue: '2',
+          range: '',
+        ),
+      ],
+    ),
+    desc(
+      '~*',
+      description: 'multiply audio',
+      isDsp: true,
+      params: const [
+        PatchParamDescriptor(
+          name: 'operand',
+          doc: 'right-hand side',
+          defaultValue: '2',
+          range: '',
+        ),
+      ],
+    ),
   ];
 
   PatchObjectDescriptor? created;
@@ -56,7 +82,13 @@ void main() {
     dismissed = 0;
   });
 
-  Future<void> pumpBox(WidgetTester tester) async {
+  /// Pump the box — creating by default, or **editing** [editing] when one is
+  /// given, seeded with the line that object prints (issue #382).
+  Future<void> pumpBox(
+    WidgetTester tester, {
+    PatchObjectDescriptor? editing,
+    String initialText = '',
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -64,7 +96,9 @@ void main() {
             alignment: Alignment.topLeft,
             child: PatchInlineObjectBox(
               objectTypes: catalogue,
-              onCreate: (d, a) {
+              editing: editing,
+              initialText: initialText,
+              onCommit: (d, a) {
                 created = d;
                 createdArgs = a;
               },
@@ -334,7 +368,7 @@ void main() {
             alignment: Alignment.topLeft,
             child: PatchInlineObjectBox(
               objectTypes: catalogue,
-              onCreate: (_, _) => count++,
+              onCommit: (_, _) => count++,
               onDismiss: () {},
             ),
           ),
@@ -435,5 +469,113 @@ void main() {
     // should not have to be arrowed to.
     expect(fieldText(tester), '.slider ');
     expect(created, isNull);
+  });
+
+  group('editing an existing object in place (issue #382)', () {
+    PatchObjectDescriptor typed(String type) =>
+        catalogue.firstWhere((d) => d.type == type);
+
+    Future<void> pumpEditing(WidgetTester tester, String type, String line) =>
+        pumpBox(tester, editing: typed(type), initialText: line);
+
+    testWidgets('opens holding the object\'s own line, selected', (
+      tester,
+    ) async {
+      await pumpEditing(tester, '~sine', 'sine 440');
+
+      final field = tester.widget<TextField>(
+        find.byKey(PatchInlineObjectBox.fieldKey),
+      );
+      expect(field.focusNode!.hasPrimaryFocus, isTrue);
+      expect(fieldText(tester), 'sine 440');
+      // Selected, so typing replaces it — the Max habit, and the reason an
+      // argument change is one gesture rather than a select-all first.
+      expect(
+        field.controller!.selection,
+        const TextSelection(baseOffset: 0, extentOffset: 8),
+      );
+    });
+
+    testWidgets('Enter commits the retyped arguments against the same type', (
+      tester,
+    ) async {
+      await pumpEditing(tester, '~sine', 'sine 440');
+      await type(tester, 'sine 220');
+
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(created?.type, '~sine');
+      expect(createdArgs, '220');
+    });
+
+    testWidgets('the object\'s own bare name is not the ambiguous one', (
+      tester,
+    ) async {
+      // `*` names two objects (issue #380) — but over a `~*` it names *this*
+      // one, unchanged, so editing its argument must not ask which `*` it is.
+      await pumpEditing(tester, '~*', '* 2');
+      await type(tester, '* 4');
+
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(created?.type, '~*');
+      expect(find.byKey(PatchInlineObjectBox.rejectKey), findsNothing);
+    });
+
+    testWidgets('an out-of-range argument is refused in place, box open', (
+      tester,
+    ) async {
+      await pumpEditing(tester, '~sine', 'sine 440');
+      await type(tester, 'sine 99999');
+
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(created, isNull);
+      expect(find.text('frequency must be in 0..20000'), findsOneWidget);
+      // Still open, still holding the typo: a bad argument costs a keystroke,
+      // not the object.
+      expect(fieldText(tester), 'sine 99999');
+    });
+
+    testWidgets('committing a different type is refused, and says why', (
+      tester,
+    ) async {
+      await pumpEditing(tester, '~sine', 'sine 440');
+      await type(tester, 'saw');
+
+      await press(tester, LogicalKeyboardKey.enter);
+
+      // Retyping replaces the native object and has to carry its cables across
+      // — that is issue #383. Until it lands the box says so rather than
+      // applying the arguments to the type that is actually there.
+      expect(created, isNull);
+      expect(
+        find.text('retyping is not supported yet · still sine'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('arrowing onto the other candidate is a retype, and refused', (
+      tester,
+    ) async {
+      await pumpEditing(tester, '.*', '* 2');
+      // The name is unchanged, but the highlight has been moved off this
+      // object's own row — so it is a question again, and the answer is `~*`.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(created, isNull);
+      expect(find.byKey(PatchInlineObjectBox.rejectKey), findsOneWidget);
+    });
+
+    testWidgets('Escape leaves the object exactly as it was', (tester) async {
+      await pumpEditing(tester, '~sine', 'sine 440');
+      await type(tester, 'sine 220');
+
+      await press(tester, LogicalKeyboardKey.escape);
+
+      expect(dismissed, 1);
+      expect(created, isNull);
+    });
   });
 }

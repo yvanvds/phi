@@ -36,17 +36,26 @@ import '../../engine/test_doubles/fake_patcher_gateway.dart';
 /// the model — rather than "it moved somewhat": nothing may be swallowed by a
 /// recogniser's slop, and nothing may lag behind the pointer at any zoom.
 void main() {
-  NodeDescriptor desc(String type, {Widget? body}) => NodeDescriptor(
-    type: type,
-    defaultSize: const Size(80, 60),
-    defaultArgs: '',
-    inputs: const [],
-    outputs: const [],
-    buildBody: (ctx, node, controller) => body ?? const SizedBox.shrink(),
-  );
+  NodeDescriptor desc(String type, {Widget? body, String args = ''}) =>
+      NodeDescriptor(
+        type: type,
+        defaultSize: const Size(80, 60),
+        defaultArgs: args,
+        inputs: const [],
+        outputs: const [],
+        buildBody: (ctx, node, controller) => body ?? const SizedBox.shrink(),
+      );
 
   late FakePatcherGateway gateway;
   late PatcherController controller;
+
+  /// The catalogue the palette renders — the inline box completes against the
+  /// same source, so the two gestures can never disagree about what exists.
+  /// Handing it to the canvas is also what enables in-place editing (#382).
+  List<PatchObjectDescriptor> catalogue() => gateway.objectTypes();
+
+  /// The inline box opened over an existing object (issue #382).
+  Finder editBox() => find.byKey(PatcherCanvas.inlineEditKey);
 
   setUp(() {
     NodeTypeRegistry.instance.clear();
@@ -80,7 +89,6 @@ void main() {
       String? args,
     })?
     onCreateObject,
-    void Function(PatchNode node)? onNodeDoubleTap,
     void Function(PatchNode node)? onNodeTap,
     void Function(PatchNode node, Offset globalPosition)? onNodeContextMenu,
   }) async {
@@ -101,7 +109,6 @@ void main() {
                     : null,
                 onCreateObject: onCreateObject,
                 onNodeTap: onNodeTap,
-                onNodeDoubleTap: onNodeDoubleTap,
                 onNodeContextMenu: onNodeContextMenu,
               );
             },
@@ -297,14 +304,13 @@ void main() {
     expect(frameTopLeft(tester), drawnAtStart + const Offset(40, 20));
   });
 
-  testWidgets('click-to-select then drag moves the node and never reports a '
-      'double-click', (tester) async {
+  testWidgets('click-to-select then drag moves the node and never opens the '
+      'editor', (tester) async {
     final sine = controller.addNode(
       desc: desc(Obj.dSine),
       position: const Offset(120, 120),
     );
-    PatchNode? doubleClicked;
-    await pumpCanvas(tester, onNodeDoubleTap: (n) => doubleClicked = n);
+    await pumpCanvas(tester, objectTypes: catalogue());
 
     await tester.tapAt(nodeCenter(tester, sine));
     await tester.pump();
@@ -319,19 +325,17 @@ void main() {
     await g.up();
     await tester.pump();
 
-    expect(doubleClicked, isNull);
+    expect(editBox(), findsNothing);
     expect(sine.position, const Offset(144, 138));
   });
 
-  testWidgets('two movement-free clicks on a node report a double-click', (
-    tester,
-  ) async {
+  testWidgets('two movement-free clicks on an object box open it for editing, '
+      'seeded with its own line', (tester) async {
     final sine = controller.addNode(
       desc: desc(Obj.dSine),
       position: const Offset(120, 120),
     );
-    PatchNode? doubleClicked;
-    await pumpCanvas(tester, onNodeDoubleTap: (n) => doubleClicked = n);
+    await pumpCanvas(tester, objectTypes: catalogue());
 
     final at = nodeCenter(tester, sine);
     await tester.tapAt(at);
@@ -339,7 +343,41 @@ void main() {
     await tester.tapAt(at);
     await tester.pump();
 
-    expect(doubleClicked?.id, sine.id);
+    // The box *is* the editor (issue #382): no modal, and it opens holding
+    // exactly what the object prints, over the object itself.
+    expect(editBox(), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(PatchInlineObjectBox.fieldKey))
+          .controller!
+          .text,
+      controller.objectLineOf(sine.id),
+    );
+    expect(
+      tester.getTopLeft(find.byType(PatchInlineObjectBox)),
+      canvasTL(tester) + sine.position,
+    );
+  });
+
+  testWidgets('a GUI object has no line to retype, so nothing opens', (
+    tester,
+  ) async {
+    // A `.slider` is its own control (issue #381) — in run mode the very same
+    // pixels are how it is played, and there is no text on it to edit.
+    NodeTypeRegistry.instance.register(desc(Obj.gSlider));
+    final slider = controller.addNode(
+      desc: desc(Obj.gSlider),
+      position: const Offset(120, 120),
+    );
+    await pumpCanvas(tester, objectTypes: catalogue());
+
+    final at = nodeCenter(tester, slider);
+    await tester.tapAt(at);
+    await tester.pump();
+    await tester.tapAt(at);
+    await tester.pump();
+
+    expect(editBox(), findsNothing);
   });
 
   testWidgets('a press beside an outlet but inside the node drags the node, '
@@ -1032,10 +1070,9 @@ void main() {
         desc: desc(Obj.dSine),
         position: const Offset(120, 120),
       );
-      PatchNode? doubleClicked;
       await pumpCanvas(
         tester,
-        onNodeDoubleTap: (n) => doubleClicked = n,
+        objectTypes: catalogue(),
         onNodeContextMenu: (_, _) {},
       );
 
@@ -1048,7 +1085,7 @@ void main() {
 
       // A right-click is its own gesture: it neither completes the pending
       // left-click pairing nor drags the node it landed on.
-      expect(doubleClicked, isNull);
+      expect(editBox(), findsNothing);
       expect(sine.position, const Offset(120, 120));
     });
   });
@@ -1257,8 +1294,7 @@ void main() {
         desc: desc(Obj.dSine),
         position: const Offset(120, 120),
       );
-      PatchNode? doubleClicked;
-      await pumpCanvas(tester, onNodeDoubleTap: (n) => doubleClicked = n);
+      await pumpCanvas(tester, objectTypes: catalogue());
 
       final at = nodeCenter(tester, sine);
       await tester.tapAt(at);
@@ -1271,16 +1307,16 @@ void main() {
       await tester.pump();
 
       // The next click opens a *new* pairing rather than completing the one the
-      // cancelled gesture interrupted — otherwise the params dialog opens off a
+      // cancelled gesture interrupted — otherwise the editor opens off a
       // gesture the user abandoned.
       await tester.tapAt(at);
       await tester.pump();
-      expect(doubleClicked, isNull);
+      expect(editBox(), findsNothing);
 
       // Two clean clicks still pair, so the reset did not break double-click.
       await tester.tapAt(at);
       await tester.pump();
-      expect(doubleClicked?.id, sine.id);
+      expect(editBox(), findsOneWidget);
     });
 
     testWidgets('a cancelled middle-drag pan does not swallow the next '
@@ -1327,10 +1363,6 @@ void main() {
   // `patch_inline_object_box_test.dart`.
 
   group('inline object creation', () {
-    /// The catalogue the palette renders — the box completes against the same
-    /// source, so the two gestures can never disagree about what exists.
-    List<PatchObjectDescriptor> catalogue() => gateway.objectTypes();
-
     Finder box() => find.byKey(PatcherCanvas.inlineCreateKey);
     Finder field() => find.byKey(PatchInlineObjectBox.fieldKey);
 
@@ -1449,27 +1481,26 @@ void main() {
       expect(box(), findsNothing);
     });
 
-    testWidgets('a double-click on a node is still the node double-click', (
+    testWidgets('a double-click on a node edits it instead of creating', (
       tester,
     ) async {
       final sine = controller.addNode(
         desc: desc(Obj.dSine),
         position: const Offset(120, 120),
       );
-      PatchNode? doubleClicked;
       await pumpCanvas(
         tester,
         objectTypes: catalogue(),
         onCreateObject: (_, _, {args}) {},
-        onNodeDoubleTap: (n) => doubleClicked = n,
       );
 
       await doubleClickAt(tester, nodeCenter(tester, sine));
 
-      // Empty canvas makes objects, a node opens its parameters: one pairing
-      // mechanism, two destinations, never both at once.
-      expect(doubleClicked?.id, sine.id);
+      // Empty canvas makes objects, a node edits the one it landed on: one
+      // pairing mechanism, two destinations, never both at once.
+      expect(editBox(), findsOneWidget);
       expect(box(), findsNothing);
+      expect(controller.graph.nodes, hasLength(1));
     });
 
     testWidgets('a press inside the box belongs to its field, not the canvas', (
@@ -1612,6 +1643,139 @@ void main() {
       await doubleClickAt(tester, canvasTL(tester) + const Offset(300, 200));
 
       expect(box(), findsNothing);
+    });
+  });
+
+  // ─── editing an object box in place (issue #382) ─────────────────────────
+  //
+  // The same box, opened over an existing object: double-click, type, Enter.
+  // These drive the *canvas* half — that the commit goes through the journaled
+  // `applyParams` and nothing else, and that abandoning it changes nothing. The
+  // box's own keys, completion and refusals live in
+  // `patch_inline_object_box_test.dart`.
+
+  group('editing an object box in place', () {
+    Finder field() => find.byKey(PatchInlineObjectBox.fieldKey);
+
+    Future<void> doubleClickAt(WidgetTester tester, Offset at) async {
+      await tester.tapAt(at);
+      await tester.pump();
+      await tester.tapAt(at);
+      await tester.pump();
+    }
+
+    /// A `~sine` carrying its documented argument, as one dropped off the
+    /// palette does — so the box opens on `sine 440` and an edit is a change.
+    Future<PatchNode> openOnSine(WidgetTester tester) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine, args: '440'),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester, objectTypes: catalogue());
+      await doubleClickAt(tester, nodeCenter(tester, sine));
+      return sine;
+    }
+
+    testWidgets('Enter applies the typed arguments as one journaled step', (
+      tester,
+    ) async {
+      final sine = await openOnSine(tester);
+
+      await tester.enterText(field(), 'sine 220');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      // Through `applyParams` — the same `setParams` the retired dialog used —
+      // so the object box repaints and the engine hears about it once.
+      expect(controller.argsOf(sine.id), '220');
+      expect(controller.objectLineOf(sine.id), 'sine 220');
+      expect(editBox(), findsNothing);
+
+      // One `Ctrl+Z`, and the keyboard is already back on the canvas to press
+      // it — the whole point of a path the hands never leave.
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(controller.argsOf(sine.id), '440');
+    });
+
+    testWidgets('an unchanged line journals nothing', (tester) async {
+      final sine = await openOnSine(tester);
+      expect(controller.argsOf(sine.id), '440');
+
+      // Enter straight away: the object is already what the box says it is.
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      expect(editBox(), findsNothing);
+      expect(controller.undoScope.canUndo, isFalse);
+    });
+
+    testWidgets('Escape leaves the object exactly as it was', (tester) async {
+      final sine = await openOnSine(tester);
+
+      await tester.enterText(field(), 'sine 220');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+
+      expect(editBox(), findsNothing);
+      expect(controller.argsOf(sine.id), '440');
+      // Not even an empty step on the stack: an abandoned edit is no edit.
+      expect(controller.undoScope.canUndo, isFalse);
+    });
+
+    testWidgets('a press elsewhere abandons the edit', (tester) async {
+      final sine = await openOnSine(tester);
+      await tester.enterText(field(), 'sine 220');
+      await tester.pump();
+
+      await tester.tapAt(canvasTL(tester) + const Offset(650, 480));
+      await tester.pump();
+
+      expect(editBox(), findsNothing);
+      expect(controller.argsOf(sine.id), '440');
+    });
+
+    testWidgets('a refusal keeps the box open and the object untouched', (
+      tester,
+    ) async {
+      final sine = await openOnSine(tester);
+
+      await tester.enterText(field(), 'sine 99999');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      // The engine crashes on arguments an object never declared and misbehaves
+      // on out-of-range ones, so the check runs before anything reaches it.
+      expect(controller.argsOf(sine.id), '440');
+      expect(editBox(), findsOneWidget);
+      expect(find.byKey(PatchInlineObjectBox.rejectKey), findsOneWidget);
+
+      // Corrected in place, without re-opening anything.
+      await tester.enterText(field(), 'sine 220');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(controller.argsOf(sine.id), '220');
+    });
+
+    testWidgets('in run mode a double-click plays the patch, it does not edit '
+        'it', (tester) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        initialMode: PatchCanvasMode.run,
+      );
+
+      await doubleClickAt(tester, nodeCenter(tester, sine));
+
+      // Run mode edits nothing (issue #378) — the bodies own every press.
+      expect(editBox(), findsNothing);
     });
   });
 

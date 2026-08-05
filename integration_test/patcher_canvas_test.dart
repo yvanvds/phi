@@ -7,7 +7,6 @@ import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
-import 'package:phi/surfaces/patcher/params/patch_params_dialog.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
 import 'package:phi/surfaces/patcher/patcher_node_view.dart';
 import 'package:yse/yse.dart';
@@ -23,7 +22,8 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 /// Also the end-to-end guard for issue #352: in the composed app a node must
 /// travel exactly as far as the pointer does — measured on the rendered box,
 /// not just in the model — and a click-to-select immediately followed by a drag
-/// must never be read as a double-click and open the params dialog.
+/// must never be read as a double-click and drop the object into its in-place
+/// editor (issue #382).
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -96,7 +96,7 @@ void main() {
       expect(tester.getTopLeft(sineLine), drawnAtStart);
 
       // ── click to select, then drag straight away — the natural sequence that
-      //    used to fire a double-click and open the params dialog instead ─────
+      //    used to fire a double-click and open the editor instead ────────────
       await tester.tapAt(headerCentre);
       await tester.pumpAndSettle();
       expect(graph.selectedNodes, {sine.id});
@@ -108,7 +108,7 @@ void main() {
       await again.up();
       await tester.pumpAndSettle();
 
-      expect(find.byType(PatchParamsDialog), findsNothing);
+      expect(find.byKey(PatcherCanvas.inlineEditKey), findsNothing);
       expect(sine.position, sineStart + const Offset(35, 20));
       expect(tester.getTopLeft(sineLine), drawnAtStart + const Offset(35, 20));
 
@@ -127,8 +127,14 @@ void main() {
       expect(find.byType(PatcherNodeView), findsNWidgets(3));
 
       // ── delete a node with its cable (Delete) — then undo restores both ────
+      // Re-select the dac by way of another node: two clicks on the *same* box
+      // pair into a double-click, and since issue #382 that opens the box for
+      // typing — which would take the keyboard this Delete needs.
+      await tester.tap(sineLine);
+      await tester.pumpAndSettle();
       await tester.tap(dacLine);
       await tester.pumpAndSettle();
+      expect(find.byKey(PatcherCanvas.inlineEditKey), findsNothing);
       await tester.sendKeyEvent(LogicalKeyboardKey.delete);
       await tester.pumpAndSettle();
       expect(find.byType(PatcherNodeView), findsNWidgets(2));
