@@ -92,10 +92,13 @@ import 'patcher_node_view.dart';
 /// #358).
 ///
 /// **A double-click on an object box opens the same box over that object**
-/// (issue #382, design §7/§12.3), seeded with the line it prints: Enter applies
-/// the typed arguments through [PatcherController.applyParams] — one journaled
-/// `setParams` under one `Ctrl+Z` — and Escape leaves the object as it was.
-/// There is no params dialog any more; the box *is* the editor.
+/// (issue #382, design §7/§12.3), seeded with the line it prints: Enter commits
+/// through [PatcherController.applyBoxEdit] — one journaled step under one
+/// `Ctrl+Z` — and Escape leaves the object as it was. There is no params dialog
+/// any more; the box *is* the editor. Retyping the **name** commits too (issue
+/// #383): the object is replaced in place, keeping its position, its selection
+/// and the cables the new type still has room for, and the banner names any it
+/// could not carry.
 class PatcherCanvas extends StatefulWidget {
   const PatcherCanvas({
     required this.controller,
@@ -162,8 +165,13 @@ class PatcherCanvas extends StatefulWidget {
   /// already owns, which is exactly the competition issue #352 removed.
   final void Function(PatchNode node, Offset globalPosition)? onNodeContextMenu;
 
-  /// Key on the transient reject banner shown when a cable drop is incompatible.
+  /// Key on the transient banner shown when a cable drop is incompatible.
   static const Key rejectKey = Key('PatcherCanvas.reject');
+
+  /// Key on the same transient banner when it is reporting what a **retype**
+  /// could not carry over (issue #383). Distinct from [rejectKey] so a test can
+  /// say which piece of news is on screen without reading its text.
+  static const Key retypeNoticeKey = Key('PatcherCanvas.retypeNotice');
 
   /// Key on the rubber-band selection rectangle — present only while a marquee
   /// is actually being dragged, so its absence is assertable (issue #355).
@@ -289,8 +297,10 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   // measures the rendered box to decide whether a press landed inside it.
   GlobalKey _inlineBoxKey = GlobalKey();
 
-  // Transient reject cue for an incompatible cable drop.
-  String? _reject;
+  // The transient banner: what it says, and which kind of news it is (the key
+  // it is found by). Null message means no banner is up.
+  String? _notice;
+  Key _noticeKey = PatcherCanvas.rejectKey;
   Timer? _rejectTimer;
 
   static const double _clickSlop = 4;
@@ -394,13 +404,13 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
                   ),
                 ),
               ),
-              if (_reject != null)
+              if (_notice != null)
                 Positioned(
-                  key: PatcherCanvas.rejectKey,
+                  key: _noticeKey,
                   top: 10,
                   left: 0,
                   right: 0,
-                  child: Center(child: _RejectBanner(message: _reject!)),
+                  child: Center(child: _NoticeBanner(message: _notice!)),
                 ),
             ],
           ),
@@ -1221,15 +1231,26 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   /// The box resolved a type and its arguments passed the check.
   ///
   /// Creating reports the type and the scene point back to the host; **editing**
-  /// applies the arguments straight through [PatcherController.applyParams] —
-  /// one journaled `setParams`, the very path the retired params dialog used,
-  /// so an in-place edit is one `Ctrl+Z` exactly as it always was. Unchanged
-  /// arguments are a no-op there, so re-opening the box and pressing Enter
-  /// records nothing.
+  /// hands the whole line to [PatcherController.applyBoxEdit], which is one
+  /// journaled step either way — new arguments for the same object (issue #382),
+  /// or a **retype** that replaces it and carries its cables across (issue
+  /// #383). Unchanged arguments record nothing, so re-opening the box and
+  /// pressing Enter is free.
+  ///
+  /// Two things follow a retype, because the object under the box is not the
+  /// one that was there: the reference panel is re-pointed at the *new* type,
+  /// and any cable that could not be carried is said out loud — a retype that
+  /// silently drops two connections is discovered an hour later.
   void _commitInline(PatchObjectDescriptor desc, String args) {
     final id = _inlineEditNode;
     if (id != null) {
-      _controller.applyParams(id, args);
+      final retyped = _controller.graph.nodeById(id)?.type != desc.type;
+      final dropped = _controller.applyBoxEdit(id, desc: desc, args: args);
+      if (retyped) {
+        final node = _controller.graph.nodeById(id);
+        if (node != null) widget.onNodeTap?.call(node);
+        if (dropped > 0) _flashRetypeCost(dropped);
+      }
     } else {
       final at = _inlineAt;
       if (at != null) widget.onCreateObject?.call(desc, at, args: args);
@@ -1703,11 +1724,33 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       ..translateByDouble(-scene.dx, -scene.dy, 0, 1);
   }
 
-  void _flashReject() {
+  void _flashReject() =>
+      _flashNotice('cable rejected · incompatible', PatcherCanvas.rejectKey);
+
+  /// Say what a retype could not carry (issue #383).
+  ///
+  /// Dropping a cable is the one part of a retype the canvas cannot show by
+  /// itself: the new object is right there under the pointer, but a connection
+  /// that used to arrive at it is simply absent, and absence is exactly what an
+  /// eye on the box being typed into does not notice. So it is named, through
+  /// the same transient banner a refused wiring uses — the canvas already has
+  /// one voice for "that did not work out", and this is the same kind of news.
+  void _flashRetypeCost(int dropped) => _flashNotice(
+    'retyped · $dropped ${dropped == 1 ? 'cable' : 'cables'} dropped',
+    PatcherCanvas.retypeNoticeKey,
+  );
+
+  /// Raise the transient banner with [message], keyed by what it is about, and
+  /// take it down again a moment later. A second notice replaces the first
+  /// rather than queueing behind it: the news is about what just happened.
+  void _flashNotice(String message, Key key) {
     _rejectTimer?.cancel();
-    setState(() => _reject = 'incompatible');
+    setState(() {
+      _notice = message;
+      _noticeKey = key;
+    });
     _rejectTimer = Timer(const Duration(milliseconds: 1200), () {
-      if (mounted) setState(() => _reject = null);
+      if (mounted) setState(() => _notice = null);
     });
   }
 }
@@ -1777,9 +1820,13 @@ class _MarqueeBox extends StatelessWidget {
   }
 }
 
-/// Transient banner shown when a cable is dropped on an incompatible inlet.
-class _RejectBanner extends StatelessWidget {
-  const _RejectBanner({required this.message});
+/// Transient banner for the things the canvas has to say out loud: a cable
+/// dropped on an incompatible inlet, and — since issue #383 — the connections a
+/// retype could not carry over. One banner rather than one per kind of news,
+/// because it is the same moment for the eye: something just did not survive
+/// the gesture, and the canvas alone knows it.
+class _NoticeBanner extends StatelessWidget {
+  const _NoticeBanner({required this.message});
 
   final String message;
 
@@ -1793,7 +1840,7 @@ class _RejectBanner extends StatelessWidget {
         borderRadius: PhiRadii.all2,
       ),
       child: Text(
-        'cable rejected · $message'.toUpperCase(),
+        message.toUpperCase(),
         style: PhiType.caption().copyWith(color: PhiColors.hot),
       ),
     );

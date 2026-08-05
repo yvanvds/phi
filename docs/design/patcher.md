@@ -234,6 +234,22 @@ live-code control).
   arguments — or the object's very name — happens where you are looking
   instead of behind a modal (§12.3). Selection ring, armed voice border
   and glow carry over unchanged.
+- **Retyping the name replaces the object, in place.** `sine 300`
+  becoming `saw 300` is not a reconfiguration — the engine has no verb
+  that turns one object into another — so the native object is deleted
+  and a new one minted. What makes it an *edit* is what is carried
+  across: the node keeps its logical id, its position and its selection,
+  and **every cable whose endpoint still exists on the new object is
+  re-wired** (the port index still in range on the same side, the types
+  still accepting each other — the same `accepts` mask / `isDspInput`
+  question a drag asks). The rest are dropped, and **the canvas says how
+  many**, through the same transient banner a refused wiring uses: a
+  connection that quietly vanished is discovered an hour later, on a
+  patch that has gone silent for no visible reason. An unknown name or an
+  argument the new type refuses changes nothing at all — it is refused in
+  the box, as ever. All of it is **one journaled step**: one `Ctrl+Z`
+  restores the old object, its arguments *and* every cable that was
+  dropped.
 - **Live GUI bodies** for the interactive control objects — slider,
   toggle, button, number (`.i`/`.f`), message — operable directly on
   the canvas in run mode (`sendFloat`/`sendBang` through the gateway,
@@ -372,7 +388,11 @@ box.**
    node (#356) — the dialog's remaining job was editing, and editing
    belongs where you are looking. Double-click the box and type; Enter
    commits through the same journaled `setParams` the dialog used, so
-   undo/redo are unaffected. Amends §7.
+   undo/redo are unaffected. Retyping the **name** commits too (#383):
+   the object is replaced in place, keeping its position, its selection
+   and the cables the new type still has room for, and the canvas names
+   the ones it could not carry — a dropped connection is the one part of
+   a retype the eye on the box does not notice. Amends §7.
 4. **Colour instead of glyphs** (#380). *Because* the four arithmetic
    pairs (`.+ .- .* ./` against `~+ ~- ~* ~/`) share a bare name, so
    something must disambiguate them — and colour does it without costing

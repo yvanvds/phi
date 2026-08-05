@@ -537,7 +537,7 @@ void main() {
       expect(fieldText(tester), 'sine 99999');
     });
 
-    testWidgets('committing a different type is refused, and says why', (
+    testWidgets('committing a different type commits that type (issue #383)', (
       tester,
     ) async {
       await pumpEditing(tester, '~sine', 'sine 440');
@@ -545,27 +545,41 @@ void main() {
 
       await press(tester, LogicalKeyboardKey.enter);
 
-      // Retyping replaces the native object and has to carry its cables across
-      // — that is issue #383. Until it lands the box says so rather than
-      // applying the arguments to the type that is actually there.
-      expect(created, isNull);
-      expect(
-        find.text('retyping is not supported yet · still sine'),
-        findsOneWidget,
-      );
+      // The retype the box used to refuse: the name resolves against the
+      // catalogue like any other, and the host is handed the *new* type to
+      // replace the object with. Nothing here knows that it is a retype.
+      expect(created?.type, '~saw');
+      expect(find.byKey(PatchInlineObjectBox.rejectKey), findsNothing);
     });
 
-    testWidgets('arrowing onto the other candidate is a retype, and refused', (
+    testWidgets('a retype\'s arguments are checked against the new type', (
+      tester,
+    ) async {
+      // `~saw` documents no parameters at all, so the operand that was legal a
+      // moment ago is not — and the check runs before anything is replaced,
+      // because the engine crashes on arguments an object never declared.
+      await pumpEditing(tester, '~sine', 'sine 440');
+      await type(tester, 'saw 220');
+
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(created, isNull);
+      expect(find.text('~saw takes no arguments'), findsOneWidget);
+    });
+
+    testWidgets('arrowing onto the other candidate retypes to it', (
       tester,
     ) async {
       await pumpEditing(tester, '.*', '* 2');
       // The name is unchanged, but the highlight has been moved off this
-      // object's own row — so it is a question again, and the answer is `~*`.
+      // object's own row — so it is a question again, and the answer is the
+      // other `*` (issue #380), which is a retype.
       await press(tester, LogicalKeyboardKey.arrowDown);
       await press(tester, LogicalKeyboardKey.enter);
 
-      expect(created, isNull);
-      expect(find.byKey(PatchInlineObjectBox.rejectKey), findsOneWidget);
+      expect(created?.type, '~*');
+      expect(createdArgs, '2');
+      expect(find.byKey(PatchInlineObjectBox.rejectKey), findsNothing);
     });
 
     testWidgets('Escape leaves the object exactly as it was', (tester) async {
