@@ -269,16 +269,21 @@ class PatcherController {
       if (p.defaultValue.isNotEmpty) p.defaultValue,
   ].join(' ');
 
-  /// A node box tall enough to seat its ports (which sit at fixed vertical
-  /// spacing measured from the header). One-port minimum so a portless object
-  /// still gets a visible body.
+  /// A node box **wide** enough to seat its ports, which spread along the top
+  /// and bottom edges at fixed horizontal spacing (design §6, issue #377).
+  ///
+  /// The port count therefore sets a minimum *width* — which a line of text
+  /// absorbs — rather than the minimum height it used to force, under which no
+  /// one-line object box was possible. Height is the plain default; a
+  /// hand-authored body that wants more says so with its own `defaultSize`.
   Size _sizeForPorts(int inputs, int outputs) {
-    final rows = math.max(1, math.max(inputs, outputs));
+    final ports = math.max(inputs, outputs);
     return Size(
-      120,
-      PatchCanvasConstants.headerHeight +
-          PatchCanvasConstants.firstPortOffset +
-          rows * PatchCanvasConstants.portSpacing,
+      math.max(
+        PatchCanvasConstants.minNodeWidth,
+        PatchCanvasConstants.minWidthForPorts(ports),
+      ),
+      PatchCanvasConstants.defaultNodeHeight,
     );
   }
 
@@ -902,14 +907,17 @@ class PatcherController {
     return true;
   }
 
-  /// [node]'s box, grown when a new port count needs more height than the
-  /// current one seats. Never shrinks: a hand-authored body's tuned size stays
-  /// its own, and a box does not jump around as ports come and go.
+  /// [node]'s box, grown when a new port count needs more **width** than the
+  /// current one seats — the axis ports spread along since #377. Never shrinks:
+  /// a hand-authored body's tuned size stays its own, and a box does not jump
+  /// around as ports come and go.
   Size _sizeSeating(PatchNode node, int inputs, int outputs) {
-    final needed = _sizeForPorts(inputs, outputs).height;
-    return node.size.height >= needed
+    final needed = PatchCanvasConstants.minWidthForPorts(
+      math.max(inputs, outputs),
+    );
+    return node.size.width >= needed
         ? node.size
-        : Size(node.size.width, needed);
+        : Size(needed, node.size.height);
   }
 
   /// Wire [cable] into the native patcher and the Dart mirror.

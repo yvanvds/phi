@@ -66,11 +66,13 @@ class PatchCablePainter extends CustomPainter {
   }) {
     final color = PhiVoices.color(voice);
     final glow = PhiVoices.glow(voice);
-    const cx = PatchCanvasConstants.cableControlOffset;
+    // Vertical control points: out of the outlet on the bottom edge heading
+    // down, into the inlet on the top edge from above (#377).
+    const cy = PatchCanvasConstants.cableControlOffset;
 
     final path = Path()
       ..moveTo(a.dx, a.dy)
-      ..cubicTo(a.dx + cx, a.dy, b.dx - cx, b.dy, b.dx, b.dy);
+      ..cubicTo(a.dx, a.dy + cy, b.dx, b.dy - cy, b.dx, b.dy);
 
     // A selected cable wears a wide bright halo under the wire so it reads as
     // picked regardless of its voice colour.

@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/design/widgets/patcher/patch_canvas_constants.dart';
 import 'package:phi/domain/patcher/patch_args.dart';
 import 'package:phi/domain/patcher/patch_node.dart';
 import 'package:phi/domain/patcher/patch_node_id.dart';
@@ -148,17 +149,22 @@ void main() {
     PatchPortId inp(PatchNode n, int i) =>
         PatchPortId(nodeId: n.id, side: PatchPortSide.input, index: i);
 
-    test('an argument that adds an outlet grows the node', () {
+    test('arguments that add outlets grow the node — wider, not taller', () {
       final fan = addFan('1 2');
       expect(fan.outputs, hasLength(2));
+      expect(fan.size, const Size(120, 80));
 
-      controller.applyParams(fan.id, '1 2 3');
+      controller.applyParams(fan.id, '1 2 3 4 5 6');
 
-      expect(fan.outputs, hasLength(3));
-      expect(fan.outputs.last.index, 2);
-      // The box grew to seat the third port instead of drawing it past its
-      // own bottom edge.
-      expect(fan.size.height, greaterThan(80));
+      expect(fan.outputs, hasLength(6));
+      expect(fan.outputs.last.index, 5);
+      // Ports spread along the horizontal edges since #377, so the box grows
+      // *wider* to seat the extra ones rather than drawing them past its own
+      // right edge — and its height, which no longer answers to the port
+      // count, is left exactly as the descriptor tuned it.
+      expect(fan.size.width, PatchCanvasConstants.minWidthForPorts(6));
+      expect(fan.size.width, greaterThan(120));
+      expect(fan.size.height, 80);
     });
 
     test('losing an outlet drops the cables that hung off it, and undo wires '

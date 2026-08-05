@@ -10,8 +10,9 @@ import '../../domain/patcher/patch_port_kind.dart';
 ///
 /// A cable may be dragged from either end (issue #359). [backwards] says the
 /// anchor is an *inlet* and the free end is looking for an outlet, which flips
-/// the cubic's control points so the wire still leaves each end horizontally
-/// outward instead of doubling back on itself.
+/// the cubic's control points so the wire still leaves each end vertically
+/// outward — down from an outlet, up from an inlet (#377) — instead of doubling
+/// back on itself.
 class PatcherGhostCable extends StatelessWidget {
   const PatcherGhostCable({
     required this.source,
@@ -69,16 +70,18 @@ class _GhostPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final cx = backwards
+    // Down out of an anchored outlet, up out of an anchored inlet — the same
+    // axis the finished cable uses (#377).
+    final cy = backwards
         ? -PatchCanvasConstants.cableControlOffset
         : PatchCanvasConstants.cableControlOffset;
     final path = Path()
       ..moveTo(source.dx, source.dy)
       ..cubicTo(
-        source.dx + cx,
-        source.dy,
-        cursor.dx - cx,
-        cursor.dy,
+        source.dx,
+        source.dy + cy,
+        cursor.dx,
+        cursor.dy - cy,
         cursor.dx,
         cursor.dy,
       );

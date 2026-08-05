@@ -5,15 +5,16 @@ import 'patch_canvas_constants.dart';
 
 /// Pure-function helpers for the patcher's cable cubic — shared by the hit-test
 /// so clicking a cable and painting it agree on one curve. The cubic matches
-/// [PatchCablePainter]'s: horizontal control points a fixed
-/// [PatchCanvasConstants.cableControlOffset] out from each endpoint.
+/// [PatchCablePainter]'s: **vertical** control points a fixed
+/// [PatchCanvasConstants.cableControlOffset] out from each endpoint, so the
+/// wire leaves the outlet downward and reaches the inlet from above (#377).
 abstract final class PatchCableGeometry {
   /// Point on the cable's cubic at parameter [t] in `[0, 1]`, between output
   /// [a] and input [b].
   static Offset pointAt(Offset a, Offset b, double t) {
-    const cx = PatchCanvasConstants.cableControlOffset;
-    final c1 = Offset(a.dx + cx, a.dy);
-    final c2 = Offset(b.dx - cx, b.dy);
+    const cy = PatchCanvasConstants.cableControlOffset;
+    final c1 = Offset(a.dx, a.dy + cy);
+    final c2 = Offset(b.dx, b.dy - cy);
     final mt = 1 - t;
     final mt2 = mt * mt;
     final t2 = t * t;

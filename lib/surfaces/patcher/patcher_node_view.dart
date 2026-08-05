@@ -50,8 +50,8 @@ class PatcherNodeView extends StatelessWidget {
     return ListenableBuilder(
       listenable: node,
       builder: (context, _) {
-        final inputYs = _portYs(node.inputs);
-        final outputYs = _portYs(node.outputs);
+        final inputXs = _portXs(node.inputs);
+        final outputXs = _portXs(node.outputs);
         return Stack(
           clipBehavior: Clip.none,
           children: [
@@ -77,8 +77,8 @@ class PatcherNodeView extends StatelessWidget {
               title: node.title,
               voice: node.voice,
               armed: node.armed,
-              inputPortYs: inputYs,
-              outputPortYs: outputYs,
+              inputPortXs: inputXs,
+              outputPortXs: outputXs,
               inputVoices: [for (final p in node.inputs) p.voice],
               outputVoices: [for (final p in node.outputs) p.voice],
               body: Padding(
@@ -94,34 +94,35 @@ class PatcherNodeView extends StatelessWidget {
     );
   }
 
-  static List<double> _portYs(List<PatchPort> ports) {
-    return [
-      for (var i = 0; i < ports.length; i++)
-        PatchCanvasConstants.headerHeight +
-            PatchCanvasConstants.firstPortOffset +
-            i * PatchCanvasConstants.portSpacing,
-    ];
-  }
+  static List<double> _portXs(List<PatchPort> ports) => [
+    for (var i = 0; i < ports.length; i++) patchPortOffsetAlongEdge(i),
+  ];
 }
+
+/// Distance from a node's left edge to the centre of its port number [index],
+/// on either horizontal edge (design §6, issue #377).
+///
+/// The one place the spread is expressed: the frame draws its dots at these
+/// offsets, [portPositionsFor] resolves the same offsets into scene space for
+/// the cables and the hit-tests, and
+/// [PatchCanvasConstants.minWidthForPorts] is the width that keeps the last of
+/// them inside the box.
+double patchPortOffsetAlongEdge(int index) =>
+    PatchCanvasConstants.firstPortOffset +
+    index * PatchCanvasConstants.portSpacing;
 
 /// Compute canvas-local port centres for a node — used by the canvas to
 /// build the `Map<PatchPortId, Offset>` the cable painter consumes.
+///
+/// Inlets sit on the node's **top** edge and outlets on its **bottom** one, so
+/// a cable drops out of one box and into the next (design §6).
 Map<PatchPortId, Offset> portPositionsFor(PatchNode node) {
   final out = <PatchPortId, Offset>{};
   final origin = node.position;
   final size = node.size;
   for (var i = 0; i < node.inputs.length; i++) {
-    out[PatchPortId(
-      nodeId: node.id,
-      side: PatchPortSide.input,
-      index: i,
-    )] = Offset(
-      origin.dx,
-      origin.dy +
-          PatchCanvasConstants.headerHeight +
-          PatchCanvasConstants.firstPortOffset +
-          i * PatchCanvasConstants.portSpacing,
-    );
+    out[PatchPortId(nodeId: node.id, side: PatchPortSide.input, index: i)] =
+        Offset(origin.dx + patchPortOffsetAlongEdge(i), origin.dy);
   }
   for (var i = 0; i < node.outputs.length; i++) {
     out[PatchPortId(
@@ -129,11 +130,8 @@ Map<PatchPortId, Offset> portPositionsFor(PatchNode node) {
       side: PatchPortSide.output,
       index: i,
     )] = Offset(
-      origin.dx + size.width,
-      origin.dy +
-          PatchCanvasConstants.headerHeight +
-          PatchCanvasConstants.firstPortOffset +
-          i * PatchCanvasConstants.portSpacing,
+      origin.dx + patchPortOffsetAlongEdge(i),
+      origin.dy + size.height,
     );
   }
   return out;
