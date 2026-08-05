@@ -4,6 +4,13 @@
 > Design record, 2026-07-19 — reviewed; decisions in §10. Leads to the
 > "patcher" epic on `yvanvds/phi`.
 >
+> **Revised 2026-08-05** (epic #375, revision issue #376): object boxes
+> replace headered nodes, ports move to the top and bottom edges, an
+> edit/run mode replaces header-dragging, and the params dialog retires.
+> The five review decisions behind that are §12; §5–§7 carry the amended
+> text with the superseded rule kept visible beside it, because *why* the
+> header was dropped outlives a document that never had one.
+>
 > **Depends on:** the racks & voices design
 > ([racks-and-voices.md](racks-and-voices.md), epic #203) for the
 > fx-insert placement role only — everything else in this epic builds on
@@ -94,23 +101,63 @@ live-code control).
 - Left palette fed entirely by `PatcherRegistry`: sections by
   `PCategory`, a search box filtering on name + description,
   drag-to-canvas creates the object with its documented defaults
-  (`args` editable later via params).
+  (`args` editable afterwards on the box itself — §7).
 - Selecting a palette entry (or a canvas node) shows the **reference
   panel**: description, per-inlet and per-outlet docs with types and
   ranges, creation params — the engine's own documentation, rendered.
   Max-grade discoverability for free.
-- DSP objects (`~` prefix) visually distinct from control objects
-  (`.` prefix) in the palette, matching cable coloring.
+- **Colour tells DSP from control — not a glyph.** A DSP object reads
+  in the same blue the cables and the overview already carry; a control
+  object in the ordinary foreground. The `~` / `.` prefix stays the
+  canonical type id you *type*, and the search box and the completion
+  list still match on it; it is simply not something you have to read on
+  every entry. The palette's leading DSP/control dot goes with it, being
+  the same fact said twice (§12.4).
+
+  > *Superseded 2026-08-05 (#376, decision §12.4):* "DSP objects (`~`
+  > prefix) visually distinct from control objects (`.` prefix) in the
+  > palette, matching cable coloring" — a drawn prefix plus a leading
+  > dot. Kept here because the cable-colour *match* survives the change;
+  > only the way the palette states it does not.
 
 ## 6. Canvas interactions
 
+- **Inlets sit on the top edge, outlets on the bottom,** spread
+  horizontally — Max's arrangement, and cables therefore drop out of the
+  bottom of one box and arrive at the top of the next. This is not
+  cosmetics: ports stacked down a vertical edge set a node's *height*
+  from its port count, so a `.*` with two inlets could never be shorter
+  than roughly 64px however little it had to say — a one-line object box
+  (§7) is impossible while that holds. On the horizontal edges the port
+  count sets a node's *minimum width* instead, which a line of text
+  happily absorbs. Ports are computed from the live topology the gateway
+  reports, so nothing about this migrates: only node *positions* persist,
+  and they are untouched (§12.1, epic slice #377).
 - **Node dragging is body dragging** — click anywhere on a node and
   move it (killing the select-an-outlet-first misfeature); positions
   write through to GUI properties as today. The node stays under the
   pointer at any zoom: the canvas drives the drag from raw pointer
   positions in scene space, so nothing is swallowed by a gesture
-  recogniser's slop. A live GUI body (fader, number field, message box)
-  owns its own presses — drag those nodes by the header.
+  recogniser's slop.
+- **Edit mode and run mode** decide who owns a press on a live GUI body,
+  because with the header gone there is no neutral chrome left to drag a
+  fader by. In **edit mode** bodies are inert — a fader doesn't move, a
+  number box doesn't take focus — and a press anywhere on a node drags
+  it, a marquee sweeps across GUI nodes like any others, double-click
+  opens the in-place editor, and `Delete`, `Ctrl+D` and the arrow nudges
+  all live. In **run mode** bodies are live and own every press; nodes
+  neither move nor select nor delete. Panning, zooming and `Ctrl+0` work
+  in both, because navigating is not editing. The toggle sits in the
+  placement bar with a visible mode indicator, and `Ctrl+E` flips it —
+  read from the key's *position* like `Ctrl+0`, so it survives AZERTY.
+  The mode is performance state: per open surface, never persisted, and
+  a reopened project starts in edit mode (§12.5, epic slice #378).
+
+  > *Superseded 2026-08-05 (#376, decision §12.5):* "A live GUI body
+  > (fader, number field, message box) owns its own presses — drag those
+  > nodes by the header." Per-node arbitration worked only while every
+  > node had a header; a mode is also what a live-performance surface
+  > wants on its own terms.
 - **Cables:** drag between an outlet and an inlet, from **either end** —
   forwards from the outlet or backwards from the inlet, Max-style. The
   ghost cable colors by the anchored port's type and the compatible
@@ -145,21 +192,48 @@ live-code control).
   1:1, and reduces to the identity view on an empty canvas. Read from
   the key's *position* rather than its glyph, so it survives a shifted
   digit row on AZERTY.
-- **Cursor and hover** teach the hit zones: a move cursor over
-  draggable node chrome, a crosshair plus a ring over a port, a pointer
-  over a cable, a grab hand where a cable would detach. Resolved from
-  the same scene-space hit-tests the presses use, so the cursor is a
-  preview of what a press would do rather than a second opinion.
+- **Cursor and hover** teach the hit zones: a move cursor over a node a
+  press would drag, a crosshair plus a ring over a port, a pointer over
+  a cable, a grab hand where a cable would detach. Resolved from the
+  same scene-space hit-tests the presses use, so the cursor is a preview
+  of what a press would do rather than a second opinion — which means it
+  must also tell the truth about the *mode* it is previewing, since in
+  run mode a press on the same pixel plays the object instead of moving
+  it.
 - Undo/redo ride the per-surface command scope, as everywhere.
 
 ## 7. Node internals
 
+- **There are no headers, anywhere.** The object *is* the box. A node
+  used to be a 22px uppercase title band plus a body that printed
+  roughly the same thing again — two rows and ~70px of canvas for one
+  line's worth of information, about twice the pixels a Max patch of the
+  same graph spends. What replaces it splits by kind: an **object box**
+  is a bordered single line of mono text, and a **GUI object** is its own
+  control with no frame around it at all (§12.2, epic slices #379/#381).
+
+  > *Superseded 2026-08-05 (#376, decision §12.2):* every node rendered
+  > as a header (`osc · sine`, `out · L/R`) over a body. The display
+  > title stops being rendered; if nothing renders it once GUI objects
+  > lose their headers too, the field goes rather than lingering dead.
+- **The object box is one editable line** — `sine 300`, bordered, as
+  wide as its text needs, floored by the minimum width its port count
+  demands (§6) and capped at a width past which the line ellipsises;
+  one text line plus padding tall. **The box is also the editor:**
+  double-click it and type, Enter commits through the same journaled
+  `setParams` path an editor dialog would have used, so retyping the
+  arguments — or the object's very name — happens where you are looking
+  instead of behind a modal (§12.3). Selection ring, armed voice border
+  and glow carry over unchanged.
 - **Live GUI bodies** for the interactive control objects — slider,
   toggle, button, number (`.i`/`.f`), message — operable directly on
-  the canvas (`sendFloat`/`sendBang` through the gateway, display via
-  `guiValue`). The existing slider body generalises.
-- **Editable bodies own the keyboard too.** Clicking a number box takes
-  focus and selects the value (Max behaviour): Enter commits and pushes,
+  the canvas in run mode (`sendFloat`/`sendBang` through the gateway,
+  display via `guiValue`). The existing slider body generalises. A bang
+  is a button, a toggle is a checkbox, a slider is a fader: nothing says
+  so in a caption, because the control already does.
+- **Editable bodies own the keyboard too** — in run mode, where bodies
+  own their presses at all (§6). Clicking a number box takes focus and
+  selects the value (Max behaviour): Enter commits and pushes,
   moving focus away commits, Escape reverts to the live `guiValue`. The
   canvas never grabs focus back from such a press and never claims a key
   while one of them holds focus — so Backspace edits text there instead
@@ -182,10 +256,21 @@ live-code control).
   focused number field) keeps what the hand is doing. Polling is v1
   because yse reports on demand only; a per-object dirty flag from
   `dart-yse` would swap in behind `refreshGuiValues`.
-- **Params dialog** (double-click a non-GUI node): one field per
-  documented creation parameter (name, doc, default, range from
-  `PatcherParam`), applying via `setParams` — the same
-  metadata-driven-editor pattern as the MIDI transform editors.
+- **The params dialog is retired.** Arguments are edited on the box
+  (above), and the documentation the dialog used to carry alongside its
+  fields is already on screen: the **reference panel** (§5) renders each
+  creation parameter's doc, default, range and current value for the
+  selected node (#356). A modal that shows what a panel is showing
+  anyway, in order to edit what the box can edit in place, has nothing
+  left to do (§12.3).
+
+  > *Superseded 2026-08-05 (#376, decision §12.3):* "**Params dialog**
+  > (double-click a non-GUI node): one field per documented creation
+  > parameter (name, doc, default, range from `PatcherParam`), applying
+  > via `setParams` — the same metadata-driven-editor pattern as the MIDI
+  > transform editors." The `setParams` path and its journaling survive
+  > intact; only the dialog around them goes. Double-click now opens the
+  > in-place editor.
 
 ## 8. Runtime architecture
 
@@ -242,9 +327,64 @@ Roughly eight issues, in dependency order:
 5. Canvas: body dragging, marquee/multi-select, delete/duplicate,
    typed cable authoring + cable selection/deletion.
 6. Node internals: live GUI bodies (slider/toggle/button/number/
-   message) + metadata-driven params dialog.
+   message) + metadata-driven params dialog — *the dialog since retired,
+   §12.3; the boxes since lost their headers, §12.2.*
 7. Entity strip + placement UI: open-patcher selection, new/duplicate/
    rename/delete with impact, source-on-bus picker, start/stop.
 8. Insert placement via the racks seam (`fx.` kind `patcher` wrapping
    a `patch.` ref, INSERTS picker integration) — **depends on epic
    #203 (#204, #212)**.
+
+## 12. Object boxes — review decisions (2026-08-05)
+
+Epic #375, recorded by #376. The canvas built from §5–§7 is readable but
+*heavy*: a bang is a `BANG` header with a button inside it, a slider a
+`SLIDER` header with a fader inside it, an engine object a header plus a
+dim line printing `~sine 440` underneath. Next to a Max patch of the same
+graph it is roughly twice the pixels for the same information — and the
+arguments, the thing you actually tune, live behind a modal instead of on
+the object. Max's answer, which this epic adopts: **the object *is* the
+box.**
+
+1. **Inlets move to the top edge, outlets to the bottom** (#377).
+   *Because* it is what makes a one-line box possible at all, not
+   because it looks more like Max. Ports stacked down the left edge at
+   26px spacing set the node's height from its port count: a `.*` with
+   two inlets can never be shorter than ~64px however little it says. On
+   the horizontal edges the count sets a *minimum width*, which text
+   absorbs. Foundation slice — #379 and #381 both need it. Amends §6.
+2. **No headers, anywhere** (#379, #381). *Because* the header says what
+   the thing already shows: a fader is visibly a fader, and `~sine 440`
+   names itself. An object box is a bordered line of text; a GUI object
+   is its own control and nothing else. Amends §7.
+3. **The box is the editor; the params dialog retires** (#382, #383).
+   *Because* the reference panel already renders every creation
+   parameter's doc, default, range and current value for the selected
+   node (#356) — the dialog's remaining job was editing, and editing
+   belongs where you are looking. Double-click the box and type; Enter
+   commits through the same journaled `setParams` the dialog used, so
+   undo/redo are unaffected. Amends §7.
+4. **Colour instead of glyphs** (#380). *Because* the four arithmetic
+   pairs (`.+ .- .* ./` against `~+ ~- ~* ~/`) share a bare name, so
+   something must disambiguate them — and colour does it without costing
+   a character on every box: DSP objects in the blue the cables and the
+   overview already use, control objects in the ordinary foreground. The
+   prefix remains the canonical type id you *type*, disambiguated by the
+   completion list at the moment it matters. Amends §5.
+5. **Edit / run mode** (#378). *Because* dropping headers takes away the
+   one piece of neutral chrome a GUI node could be dragged by, and
+   per-node arbitration ("bodies own their presses") then leaves a slider
+   unmovable and un-marquee-able. A mode resolves it globally — and a
+   live-performance surface wants the split regardless: a state where the
+   patch is *played* and nothing can be nudged out of place by accident.
+   Edit mode: bodies inert, everything drags. Run mode: bodies live,
+   nothing moves. Amends §6.
+
+**Done when** (epic-level): a patch of `sine 300 → * 0.4 → dac` reads as
+three one-line boxes with the DSP ones in blue and cables dropping from
+bottom edge to top edge; a bang, a toggle and a slider sit on the canvas
+as a button, a checkbox and a fader with no chrome around them;
+double-clicking `* 0.4` and typing `* 0.8` changes what is sounding
+without a dialog; flipping to run mode makes the whole patch playable and
+immovable — and the whole thing takes visibly less canvas than it does
+today.
