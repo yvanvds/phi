@@ -63,6 +63,24 @@ flutter test
 dart format --output=none --set-exit-if-changed lib test integration_test
 ```
 
+### Integration tests
+
+`flutter test` only walks `test/`. The end-to-end suite lives in
+`integration_test/`, needs a real device, and — on Windows — must be driven one
+file per `flutter test` invocation: a single `flutter test integration_test`
+run does not reliably carry the whole folder. Use the driver:
+
+```powershell
+pwsh tool/run_integration_tests.ps1                 # all files, one run each
+pwsh tool/run_integration_tests.ps1 -Filter 'midi_*'  # just one surface
+pwsh tool/run_integration_tests.ps1 -Shard 2 -Of 4    # the slice CI runs
+```
+
+It keeps going after a failure, prints the log of every file that failed, and
+exits non-zero if any did. No `libyse.dll` is needed — the suite injects
+`FakeYseGateway` throughout. CI runs the same script nightly and on release PRs
+into `main`; see [.github/workflows/integration.yaml](.github/workflows/integration.yaml).
+
 ### Design tokens
 
 `design system/colors_and_type.css` is the source of truth for the Dart token

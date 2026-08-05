@@ -78,6 +78,11 @@ jobs:
   # Expensive Windows build: produces a runnable .exe bundle carrying libyse.dll.
   # Gated to main (release PRs from develop + pushes to main) and manual dispatch;
   # routine feature PRs to develop skip it to keep everyday CI cheap (issue #12).
+  #
+  # Sibling tier: `integration_test/` is only format-checked and analyzed here —
+  # executing it needs a Flutter device, so it lives in integration.yaml on the
+  # same windows/cost tier (nightly on develop + release PRs into main, issue
+  # #391). Read that file's header for the trade-off.
   build-windows:
     name: build windows (.exe + bundle libyse.dll)
     needs: analyze-test-scan

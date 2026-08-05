@@ -1,0 +1,98 @@
+name: Integration tests
+
+# Why this is a separate workflow, and why it is *not* on every develop PR
+# (issue #391, cost rationale from issue #12):
+#
+# `integration_test/` is format-checked and analyzed by ci.yaml, but nothing
+# there ever executes it — `flutter test` only walks `test/`. The suite also
+# needs a real Flutter device (`-d windows`), so it cannot be bolted onto the
+# ubuntu-latest analyze job; it needs windows-latest, which GitHub bills at 2x.
+#
+# The trade-off chosen: a nightly run on `develop` plus every release PR into
+# `main`, instead of every PR. Everyday feature PRs to `develop` stay cheap
+# (same tier as the `build-windows` job in ci.yaml), drift is caught within a
+# day by the nightly, and nothing can reach `main` without a green end-to-end
+# sweep. The gap this accepts: an e2e break can sit on `develop` for up to
+# 24 hours. Use the manual dispatch below to close that gap on demand.
+#
+# Two mechanics worth knowing:
+#   * One `flutter test integration_test` run does NOT reliably drive the whole
+#     folder on Windows, so tool/run_integration_tests.ps1 runs each file as its
+#     own `flutter test` invocation and aggregates the results.
+#   * No `libyse.dll` is needed: every file in the suite injects
+#     `FakeYseGateway`, so the app under test never opens the native engine.
+#     That is what keeps this job a plain runner with no release download.
+
+on:
+  schedule:
+    # 03:17 UTC nightly. Scheduled runs always use the default branch (develop).
+    - cron: '17 3 * * *'
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: 'Wildcard over file names, e.g. patcher_* (default: all)'
+        required: false
+        default: '*'
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    name: integration ${{ matrix.shard }}/4
+    # Don't burn a fork's minutes on the inherited nightly cron.
+    if: ${{ github.event_name != 'schedule' || github.repository == 'yvanvds/phi' }}
+    runs-on: windows-latest
+    timeout-minutes: 75
+    strategy:
+      # Every shard reports its own failures; one broken surface should not
+      # hide the state of the other three.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout phi
+        uses: actions/checkout@v4
+        with:
+          path: phi
+
+      - name: Checkout dart-yse (path dep sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: yvanvds/dart-yse
+          path: dart-yse
+          ref: main
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.3'
+          channel: stable
+          cache: true
+
+      - name: Resolve dart-yse deps
+        working-directory: dart-yse
+        run: dart pub get
+
+      - name: Resolve phi deps
+        working-directory: phi
+        run: flutter pub get
+
+      - name: Run integration suite (one flutter test run per file)
+        shell: pwsh
+        working-directory: phi
+        # The dispatch input travels via env rather than string interpolation,
+        # so a filter value can never be spliced into the command line.
+        env:
+          FILTER: ${{ github.event.inputs.filter || '*' }}
+        run: >
+          ./tool/run_integration_tests.ps1
+          -Shard ${{ matrix.shard }}
+          -Of 4
+          -Filter $env:FILTER
