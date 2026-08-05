@@ -94,6 +94,27 @@ jobs:
         working-directory: phi
         run: flutter pub get
 
+      # windows/runner/main.cpp opens a 1280x720 window at origin (10,10), but
+      # the GitHub image boots a 1024x768 virtual display, so the window is
+      # clamped and the app lays out at a size no developer ever sees — taps
+      # then land on the neighbouring widget. Give it a desktop-sized display.
+      - name: Widen the virtual display
+        shell: pwsh
+        run: |
+          function Show-Resolution($when) {
+            $mode = Get-CimInstance Win32_VideoController |
+              Select-Object -First 1 CurrentHorizontalResolution, CurrentVerticalResolution
+            Write-Host "$when : $($mode.CurrentHorizontalResolution)x$($mode.CurrentVerticalResolution)"
+          }
+          Show-Resolution 'before'
+          if (Get-Command Set-DisplayResolution -ErrorAction SilentlyContinue) {
+            Set-DisplayResolution -Width 1920 -Height 1080 -Force
+            Show-Resolution 'after'
+          }
+          else {
+            Write-Host 'Set-DisplayResolution is not available on this image.'
+          }
+
       - name: Run integration suite (one flutter test run per file)
         shell: pwsh
         working-directory: phi
