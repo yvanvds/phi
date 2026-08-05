@@ -807,8 +807,10 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // A press on a **port of either side** starts a cable drag: from an outlet
     // forwards, from an inlet backwards, Max-style (issue #359). Checked first
     // so a port just past a node's edge wins over the node itself; the press
-    // radius is tight enough (portPressRadius) that the zone never reaches the
-    // header or the bulk of the body, which stay node-drag territory.
+    // radius is tight enough (portPressRadius, half the spacing between two
+    // neighbouring dots) that the zone never reaches past its own dot's
+    // neighbourhood on the top and bottom edges the ports now spread along
+    // (#377) — the rest of the box stays node-drag territory.
     final port = _portPressAt(scene);
     if (port != null) {
       setState(() => _cursor = scene);

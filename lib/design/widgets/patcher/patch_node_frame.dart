@@ -8,8 +8,10 @@ import 'patch_port_dot.dart';
 
 /// Visual chrome for one node: 22px uppercase mono header, a body slot
 /// underneath, voice-coloured 1px border that lights up when [armed],
-/// and ports protruding from the left and right edges at the supplied
-/// pixel offsets.
+/// and ports protruding from the **top** edge (inlets) and the **bottom**
+/// edge (outlets) at the supplied pixel offsets — Max's arrangement, and what
+/// lets a node's port count set a minimum *width* rather than a height
+/// (design §6, issue #377).
 ///
 /// Visual-only and unaware of [PatchNode]/[PatcherController]; callers
 /// wrap it in a `GestureDetector`/`Listener` for drag and tap.
@@ -18,8 +20,8 @@ class PatchNodeFrame extends StatelessWidget {
     required this.title,
     required this.voice,
     required this.armed,
-    required this.inputPortYs,
-    required this.outputPortYs,
+    required this.inputPortXs,
+    required this.outputPortXs,
     required this.inputVoices,
     required this.outputVoices,
     required this.body,
@@ -36,18 +38,18 @@ class PatchNodeFrame extends StatelessWidget {
   /// When true, draws a voiced 1px border and a faint glow underneath.
   final bool armed;
 
-  /// Y-position of each input port centre, measured from the top of the
-  /// frame. Length matches the number of inputs.
-  final List<double> inputPortYs;
+  /// X-position of each input port centre along the **top** edge, measured
+  /// from the left of the frame. Length matches the number of inputs.
+  final List<double> inputPortXs;
 
-  /// Y-position of each output port centre, measured from the top of
-  /// the frame.
-  final List<double> outputPortYs;
+  /// X-position of each output port centre along the **bottom** edge,
+  /// measured from the left of the frame.
+  final List<double> outputPortXs;
 
-  /// Voice index per input port. Length matches [inputPortYs].
+  /// Voice index per input port. Length matches [inputPortXs].
   final List<int> inputVoices;
 
-  /// Voice index per output port. Length matches [outputPortYs].
+  /// Voice index per output port. Length matches [outputPortXs].
   final List<int> outputVoices;
 
   /// Body widget drawn below the header.
@@ -80,16 +82,16 @@ class PatchNodeFrame extends StatelessWidget {
             ],
           ),
         ),
-        for (var i = 0; i < inputPortYs.length; i++)
+        for (var i = 0; i < inputPortXs.length; i++)
           Positioned(
-            left: -PatchCanvasConstants.portDotRadius,
-            top: inputPortYs[i] - PatchCanvasConstants.portDotRadius,
+            left: inputPortXs[i] - PatchCanvasConstants.portDotRadius,
+            top: -PatchCanvasConstants.portDotRadius,
             child: PatchPortDot(voice: inputVoices[i]),
           ),
-        for (var i = 0; i < outputPortYs.length; i++)
+        for (var i = 0; i < outputPortXs.length; i++)
           Positioned(
-            right: -PatchCanvasConstants.portDotRadius,
-            top: outputPortYs[i] - PatchCanvasConstants.portDotRadius,
+            left: outputPortXs[i] - PatchCanvasConstants.portDotRadius,
+            bottom: -PatchCanvasConstants.portDotRadius,
             child: PatchPortDot(voice: outputVoices[i]),
           ),
       ],

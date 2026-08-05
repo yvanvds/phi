@@ -2382,6 +2382,40 @@ main + app          (orchestration)
   cancelled pan, fit at 1:1 / zoomed out / empty / silent under a number field)
   and an end-to-end `patcher_view_navigation` integration test through the real
   app. Follow-up filed: #373, the zoom clamp reading `getMaxScaleOnAxis`.
+- **Patcher ports move to the horizontal edges** (issue #377, object-box epic
+  #375, design `docs/design/patcher.md` §6 + §12.1) — **inlets on a node's top
+  edge, outlets on its bottom one**, spread horizontally, Max-style. Not
+  cosmetics: ports stacked down a vertical edge set a node's *height* from its
+  port count (a two-inlet object could never be shorter than ~64px), so the
+  one-line object box the epic is built on was impossible while that held. On
+  the horizontal edges the count sets a **minimum width** instead, which a line
+  of text absorbs. The spread is a fixed pitch from the left
+  (`PatchCanvasConstants.firstPortOffset` + `portSpacing`, and the new
+  `minWidthForPorts`) rather than an even distribution across the box, so a box
+  that grows or shrinks while it is retyped in place (#382) does not drag its
+  cables sideways with every keystroke. One helper,
+  `patchPortOffsetAlongEdge` (`lib/surfaces/patcher/patcher_node_view.dart`),
+  is what the frame's dots, `portPositionsFor`'s scene points and the width
+  floor all read. `PatchNodeFrame` takes `inputPortXs` / `outputPortXs` and
+  straddles the dots over the top and bottom edges; `PatcherController`'s
+  port-driven sizing grows a box **wider** (`_sizeForPorts` / `_sizeSeating`)
+  instead of taller, height falling back to `defaultNodeHeight`. The cable
+  cubic's control points move to the **vertical** axis in
+  `PatchCableGeometry`, `PatchCablePainter` and `PatcherGhostCable`, so a wire
+  leaves an outlet downward and arrives at an inlet from above — and because
+  the hit-test walks that same cubic, cable selection, endpoint detach-and-
+  reroute (#359) and the hover cursor (#352/#359) all re-derive with no changes
+  of their own. **No persistence migration:** ports are computed from the live
+  topology the gateway reports and only node *positions* persist, so an
+  existing patch loads with every connection intact. Covered by unit tests
+  (`portPositionsFor` axis + width-independence + the `minWidthForPorts`
+  formula, the cubic's vertical tangents, port count growing a box wider not
+  taller), a `PatchNodeFrame` widget test (dots straddling the horizontal
+  edges), and an end-to-end `patcher_port_edges` integration test through the
+  real app (the seeded patch loads with both cables; the *rendered* dots sit on
+  the composed box's top and bottom edges and a two-inlet object spreads them
+  along the top; a cable is authored by dragging out of one box's underside
+  into the next box's top, clicked on the painted curve, and undone).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 
