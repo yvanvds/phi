@@ -9,6 +9,7 @@ import 'package:phi/engine/state/node_type_registry.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
 import 'package:phi/surfaces/patcher/nodes/number_node_body.dart';
+import 'package:phi/surfaces/patcher/patcher_node_view.dart';
 import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
@@ -56,6 +57,13 @@ void main() {
 
     // Drop a `.f` box onto the canvas — the same node the palette creates.
     final patcher = engine.patcher;
+    // The seeded `~dac`, named by its own id: it is an object box now
+    // (issue #379), printing exactly the `~dac` the palette also lists.
+    final dacLine = find.byKey(
+      PatcherNodeView.objectLineKey(
+        patcher.graph.nodes.firstWhere((n) => n.type == Obj.dDac).id,
+      ),
+    );
     patcher.addNode(
       desc: NodeTypeRegistry.instance.find(Obj.gFloat)!,
       position: const Offset(140, 420),
@@ -93,7 +101,7 @@ void main() {
     // Select the `~dac` first, so a wrongly-routed Backspace would be visible
     // as a deleted node.
     final nodesBefore = patcher.graph.nodes.length;
-    await tester.tap(find.text('out · L/R'.toUpperCase()));
+    await tester.tap(dacLine);
     await tester.pumpAndSettle();
     expect(patcher.graph.selectedNodes, hasLength(1));
 
@@ -115,7 +123,7 @@ void main() {
     expect(box().controller!.text, '440');
 
     // Re-select the dac by clicking it, then Delete removes it as ever.
-    await tester.tap(find.text('out · L/R'.toUpperCase()));
+    await tester.tap(dacLine);
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.delete);
     await tester.pumpAndSettle();

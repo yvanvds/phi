@@ -28,26 +28,37 @@ class PortSpec {
 /// One descriptor per `Obj.*` constant. Held by [NodeTypeRegistry] and
 /// looked up at canvas-build time to render the node's body and pass the
 /// right creation args to the gateway.
+///
+/// [buildBody] is what splits the two kinds of node the canvas draws (design
+/// §7, issue #379): a descriptor **with** a body is a GUI object rendered in a
+/// `PatchNodeFrame`, and one **without** — like every unregistered engine
+/// object — is an object box, a single bordered line of its type and
+/// arguments. [title] and [defaultSize] belong to the first kind only: an
+/// object box renders no title and measures its own box from its text.
 class NodeDescriptor {
   const NodeDescriptor({
     required this.type,
-    required this.title,
-    required this.defaultSize,
     required this.defaultArgs,
     required this.inputs,
     required this.outputs,
-    required this.buildBody,
+    this.title,
+    this.defaultSize,
+    this.buildBody,
     this.readsGuiValue = false,
   });
 
   /// One of the `Obj.*` string constants from `package:yse`.
   final String type;
 
-  /// Display title for the node header. Uppercase mono.
-  final String title;
+  /// Display title for the node header. Uppercase mono. **Null for an object
+  /// box**, which has no header to put it in — the type id is already the
+  /// first thing its line says (issue #379). Kept for the GUI objects, whose
+  /// headers only retire with issue #381.
+  final String? title;
 
-  /// On-canvas size.
-  final Size defaultSize;
+  /// On-canvas size. Null for an object box, which is measured from its line
+  /// of text by `PatchObjectBoxMetrics` instead.
+  final Size? defaultSize;
 
   /// Creation argument string passed to `Patcher.createObject`.
   final String defaultArgs;
@@ -57,20 +68,25 @@ class NodeDescriptor {
   final List<PortSpec> inputs;
   final List<PortSpec> outputs;
 
-  /// Builds the body widget shown below the node header.
-  final NodeBodyBuilder buildBody;
+  /// Builds the body widget shown below the node header — **null** for an
+  /// object box, which is its own line of text and has no body slot.
+  final NodeBodyBuilder? buildBody;
+
+  /// Whether a node of this type renders as an object box rather than as a
+  /// framed GUI control (design §7).
+  bool get isObjectBox => buildBody == null;
 
   /// Whether the body **displays the engine's `guiValue`** — a fader readout, a
-  /// number box, a toggle's on/off, the `~sine` freq line. Only these nodes are
-  /// polled by the surface's gated refresh, so an idle patch of plain objects
-  /// costs nothing (issue #357).
+  /// number box, a toggle's on/off. Only these nodes are polled by the
+  /// surface's gated refresh, so an idle patch of plain objects costs nothing
+  /// (issue #357).
   ///
-  /// Deliberately narrower than "the body is a live control": `~sine` displays
-  /// a `guiValue` but takes no gesture, while `.b` (a momentary bang) and `.m`
-  /// (which renders its creation args) are operable but have no display value
-  /// to re-read. Polling by "is it interactive" would therefore both miss the
-  /// very node the cable-driven bug was reported against and burn reads on two
-  /// bodies that can never change from underneath.
+  /// Deliberately narrower than "the body is a live control": `.b` (a momentary
+  /// bang) and `.m` (which renders its creation args) are operable but have no
+  /// display value to re-read, so polling by "is it interactive" would burn
+  /// reads on bodies that can never change from underneath. An **object box**
+  /// never qualifies either — it prints the arguments the object was made
+  /// with, which only a journaled `setParams` changes (issue #379).
   ///
   /// There is no companion "the body owns its presses" flag any more: since
   /// issue #378 that is the canvas's **mode**, not the type's — in edit mode

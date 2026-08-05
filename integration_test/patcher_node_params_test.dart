@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
+import 'package:phi/design/widgets/patcher/patch_object_box.dart';
 import 'package:phi/domain/patcher/patch_port_kind.dart';
 import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/bridge/patch_object_descriptor.dart';
@@ -10,7 +11,6 @@ import 'package:phi/engine/bridge/patcher_node_snapshot.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
-import 'package:phi/surfaces/patcher/nodes/patch_args_body.dart';
 import 'package:phi/surfaces/patcher/palette/patcher_palette.dart';
 import 'package:phi/surfaces/patcher/params/patch_params_dialog.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
@@ -71,9 +71,10 @@ void main() {
   Finder railFor(SurfaceId id) =>
       find.byWidgetPredicate((w) => w is RailButton && w.label == id.label);
 
-  /// What the node actually prints on the canvas.
+  /// What the node actually prints on the canvas — its object box's one line
+  /// (issue #379), which is the whole node now.
   Finder bodyText(String value) => find.descendant(
-    of: find.byType(PatchArgsBody),
+    of: find.byType(PatchObjectBox),
     matching: find.text(value),
   );
 
@@ -124,9 +125,9 @@ void main() {
     expect(bodyText('.metro 250'), findsOneWidget);
 
     // ─── (2) right-click → edit parameters… reaches the dialog ────────────
-    final header = find.text('.metro'.toUpperCase());
+    // On the box itself: there is no header left to aim at (issue #379).
     final rightClick = await tester.startGesture(
-      tester.getCenter(header),
+      tester.getCenter(bodyText('.metro 250')),
       kind: PointerDeviceKind.mouse,
       buttons: kSecondaryMouseButton,
     );

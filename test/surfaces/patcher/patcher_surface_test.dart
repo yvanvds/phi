@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/widgets/fader/phi_fader.dart';
 import 'package:phi/design/widgets/patcher/patch_node_frame.dart';
+import 'package:phi/design/widgets/patcher/patch_object_box.dart';
+import 'package:phi/domain/patcher/patch_node.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/engine/state/node_type_registry.dart';
 import 'package:phi/surfaces/patcher/palette/patcher_palette.dart';
 import 'package:phi/surfaces/patcher/params/patch_params_dialog.dart';
 import 'package:phi/surfaces/patcher/patch_canvas_mode.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
+import 'package:phi/surfaces/patcher/patcher_node_view.dart';
 import 'package:phi/surfaces/patcher/patcher_surface.dart';
 import 'package:phi/surfaces/patcher/placement/patch_placement_bar.dart';
 import 'package:phi/surfaces/patcher/reference/patch_reference_panel.dart';
@@ -91,7 +94,11 @@ void main() {
       // ListenableBuilder picks up the graph changes.
       await tester.pump();
 
-      expect(find.byType(PatchNodeFrame), findsNWidgets(3));
+      expect(find.byType(PatcherNodeView), findsNWidgets(3));
+      // Two of them — `~sine` and `~dac` — are object boxes now; only the
+      // `.slider`'s GUI body still wears a frame, until issue #381 (#379).
+      expect(find.byType(PatchObjectBox), findsNWidgets(2));
+      expect(find.byType(PatchNodeFrame), findsOneWidget);
       expect(engine.patcher.graph.cables, hasLength(2));
       expect(patcherGateway.cables, hasLength(2));
       // The seed mounts the patcher as a source once a `~dac` exists — the
@@ -162,6 +169,29 @@ void main() {
       expect((added.single.position - expected).distance, lessThan(1.0));
     });
 
+    /// One node's chrome, named by its **logical id** rather than by what it
+    /// prints: an object box prints its type and arguments (issue #379), and
+    /// the seeded patch already holds a `~sine` and a `~dac` of its own — the
+    /// friendly titles that used to tell a dropped node apart are gone with the
+    /// headers. Kind-agnostic, so it names a GUI node's frame just as well.
+    Finder viewOf(PatchNode node) => find.byWidgetPredicate(
+      (w) => w is PatcherNodeView && w.node.id == node.id,
+    );
+
+    /// Drop a palette entry of [type] on the canvas centre and return the node
+    /// it created — the newest in the graph.
+    Future<PatchNode> dropOnCanvas(WidgetTester tester, String type) async {
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(PatcherPalette.entryKey(type))),
+      );
+      await tester.pump();
+      await gesture.moveTo(tester.getCenter(find.byType(PatcherCanvas)));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      return engine.patcher.graph.nodes.last;
+    }
+
     testWidgets('tapping a canvas node shows its reference', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -173,20 +203,9 @@ void main() {
       // Nothing selected yet → the reference panel is empty.
       expect(find.byKey(PatchReferencePanel.emptyKey), findsOneWidget);
 
-      // Drag a `~dac` onto the visible centre of the canvas, then tap it. Its
-      // header reads its own type id (`~DAC`), unique against the seeded
-      // `OUT · L/R` dac, so we can find and tap exactly this node.
-      final canvas = find.byType(PatcherCanvas);
-      final gesture = await tester.startGesture(
-        tester.getCenter(find.byKey(PatcherPalette.entryKey(Obj.dDac))),
-      );
-      await tester.pump();
-      await gesture.moveTo(tester.getCenter(canvas));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text(Obj.dDac.toUpperCase()));
+      // Drag a `~dac` onto the visible centre of the canvas, then tap it.
+      final dac = await dropOnCanvas(tester, Obj.dDac);
+      await tester.tap(viewOf(dac));
       await tester.pump();
 
       // The reference now documents the tapped node's engine metadata.
@@ -195,21 +214,6 @@ void main() {
     });
 
     // ─── node context menu + live param values (issue #356) ───────────────
-
-    /// Drop a palette entry of [type] on the canvas centre and return its
-    /// header finder — the dropped node's header shows its raw type id, which
-    /// the friendly-titled seeded nodes never do, so it names exactly this one.
-    Future<Finder> dropOnCanvas(WidgetTester tester, String type) async {
-      final gesture = await tester.startGesture(
-        tester.getCenter(find.byKey(PatcherPalette.entryKey(type))),
-      );
-      await tester.pump();
-      await gesture.moveTo(tester.getCenter(find.byType(PatcherCanvas)));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-      return find.text(type.toUpperCase());
-    }
 
     Future<void> rightClick(WidgetTester tester, Finder target) async {
       final g = await tester.startGesture(
@@ -232,7 +236,7 @@ void main() {
       await tester.pump();
 
       final sine = await dropOnCanvas(tester, Obj.dSine);
-      await rightClick(tester, sine);
+      await rightClick(tester, viewOf(sine));
 
       expect(find.text('edit parameters…'), findsOneWidget);
       expect(find.text('duplicate · ctrl+d'), findsOneWidget);
@@ -263,7 +267,7 @@ void main() {
       // `.slider` is operated through its live body and documents no params, so
       // offering a dialog would open one with nothing in it.
       final slider = await dropOnCanvas(tester, Obj.gSlider);
-      await rightClick(tester, slider);
+      await rightClick(tester, viewOf(slider));
 
       expect(find.text('edit parameters…'), findsNothing);
       expect(find.text('duplicate · ctrl+d'), findsOneWidget);
@@ -283,13 +287,14 @@ void main() {
       final sine = await dropOnCanvas(tester, Obj.dSine);
       final afterDrop = controller.graph.nodes.length;
 
-      await rightClick(tester, sine);
+      await rightClick(tester, viewOf(sine));
       await tester.tap(find.text('duplicate · ctrl+d'));
       await tester.pumpAndSettle();
       expect(controller.graph.nodes, hasLength(afterDrop + 1));
 
       // The copy became the selection, so `delete` from its menu takes it back.
-      await rightClick(tester, find.text(Obj.dSine.toUpperCase()).first);
+      // The copy is the newest node in the graph.
+      await rightClick(tester, viewOf(controller.graph.nodes.last));
       await tester.tap(find.text('delete · del'));
       await tester.pumpAndSettle();
       expect(controller.graph.nodes, hasLength(afterDrop));
@@ -306,7 +311,7 @@ void main() {
 
       final controller = engine.patcher;
       final sine = await dropOnCanvas(tester, Obj.dSine);
-      await tester.tap(sine);
+      await tester.tap(viewOf(sine));
       await tester.pump();
 
       // Selection alone answers "what is this set to".
@@ -314,10 +319,7 @@ void main() {
       expect(value, findsOneWidget);
       expect(find.text('= 440'), findsOneWidget);
 
-      final node = controller.graph.nodes.firstWhere(
-        (n) => n.title == Obj.dSine,
-      );
-      controller.applyParams(node.id, '660');
+      controller.applyParams(sine.id, '660');
       await tester.pump();
       expect(find.text('= 660'), findsOneWidget);
 
@@ -344,7 +346,7 @@ void main() {
       expect(canvasMode(), PatchCanvasMode.edit);
 
       final sine = await dropOnCanvas(tester, Obj.dSine);
-      await tester.tap(sine);
+      await tester.tap(viewOf(sine));
       await tester.pump();
       expect(controller.graph.selectedNodes, isNotEmpty);
 

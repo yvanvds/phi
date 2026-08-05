@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
-import 'package:phi/design/widgets/patcher/patch_node_frame.dart';
 import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/engine/state/node_type_registry.dart';
@@ -13,6 +12,7 @@ import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
 import 'package:phi/surfaces/patcher/nodes/number_node_body.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
+import 'package:phi/surfaces/patcher/patcher_node_view.dart';
 import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
@@ -89,7 +89,7 @@ void main() {
     /// where things *land*, and only the layout knows that.
     Rect drawn() {
       Rect? r;
-      for (final e in find.byType(PatchNodeFrame).evaluate()) {
+      for (final e in find.byType(PatcherNodeView).evaluate()) {
         final box = e.renderObject! as RenderBox;
         final rect = box.localToGlobal(Offset.zero) & box.size;
         r = r == null ? rect : r.expandToInclude(rect);
@@ -259,7 +259,7 @@ void main() {
       reason: 'Ctrl+0 must fit the graph into the viewport it was really given',
     );
     // Both nodes came back, not just the one nearest the origin.
-    expect(find.byType(PatchNodeFrame), findsNWidgets(2));
+    expect(find.byType(PatcherNodeView), findsNWidgets(2));
     expect(patcher.graph.nodeById(sine.id), isNotNull);
 
     // ── 5) the wheel zooms, and the zoom-out floor really bites (#373) ───────
@@ -275,7 +275,7 @@ void main() {
 
     /// Where each drawn node's corner sits on screen.
     List<Offset> corners() => [
-      for (final e in find.byType(PatchNodeFrame).evaluate())
+      for (final e in find.byType(PatcherNodeView).evaluate())
         (e.renderObject! as RenderBox).localToGlobal(Offset.zero),
     ];
 
@@ -316,7 +316,7 @@ void main() {
     // The patch is still a patch — a quarter size, not wheeled away to a dot.
     expect(spread(), closeTo(unzoomed * 0.25, 0.5));
     // And still on screen, at the size a quarter zoom leaves it.
-    expect(find.byType(PatchNodeFrame), findsNWidgets(2));
+    expect(find.byType(PatcherNodeView), findsNWidgets(2));
     for (final c in corners()) {
       expect(canvas.contains(c), isTrue);
     }

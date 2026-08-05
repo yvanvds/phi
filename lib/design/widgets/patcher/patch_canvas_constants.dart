@@ -13,7 +13,27 @@ abstract final class PatchCanvasConstants {
   static const double gridMajor = 64;
 
   /// Header height of a node — uppercase mono title area.
+  ///
+  /// Only the **GUI** node frame still has one: an engine object is a
+  /// [PatchObjectBox], one bordered line of text with no header at all
+  /// (design §7, issue #379).
   static const double headerHeight = 22;
+
+  /// Border thickness of a node box — the frame's and the object box's alike.
+  static const double nodeBorderWidth = 1;
+
+  /// Horizontal padding between an object box's border and its line of text.
+  /// Max-ish tightness: the box is the object, so it spends no pixels saying
+  /// so twice (design §7, issue #379).
+  static const double objectBoxPaddingH = 7;
+
+  /// Vertical padding above and below an object box's single text line.
+  static const double objectBoxPaddingV = 4;
+
+  /// Width past which an object box stops growing with its text and ellipsises
+  /// the line instead. A long argument list is read in the reference panel
+  /// (design §5), not across half the canvas.
+  static const double objectBoxMaxWidth = 240;
 
   /// Horizontal spacing between successive ports along a node's edge.
   ///
@@ -33,14 +53,6 @@ abstract final class PatchCanvasConstants {
   /// port's centre. Applied on both sides, so [minWidthForPorts] leaves the
   /// same margin at the right as at the left.
   static const double firstPortOffset = 16;
-
-  /// Default height of a node box the registry has no tuned size for — one
-  /// header plus a line of body, the shape a port-count-driven height used to
-  /// produce for a single-port object.
-  static const double defaultNodeHeight = 64;
-
-  /// Default width floor for a node box, independent of its ports.
-  static const double minNodeWidth = 120;
 
   /// The narrowest box that seats [count] ports along one horizontal edge:
   /// [firstPortOffset] of margin at each end and [portSpacing] between

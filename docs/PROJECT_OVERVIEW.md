@@ -2190,11 +2190,12 @@ main + app          (orchestration)
 - **Object parameters on the node body + discoverable editing** (issue #356,
   patcher epic) — an object's arguments were invisible: a drag-created engine
   object rendered an **empty** body, and the only way to see or change its params
-  was knowing to double-click. Four legs. (1) A **default args body**
-  (`lib/surfaces/patcher/nodes/patch_args_body.dart`) — every node with no
-  hand-authored GUI body now prints `type args` the way a Max object box does
-  (`~sine 440`, `.metro 250`), read from `argsOf` on each build so it follows an
-  apply and its undo/redo through the existing `markParamsChanged` wake-up.
+  was knowing to double-click. Four legs. (1) A **default args body** — every
+  node with no hand-authored GUI body now prints `type args` the way a Max object
+  box does (`~sine 440`, `.metro 250`), read from `argsOf` on each build so it
+  follows an apply and its undo/redo through the existing `markParamsChanged`
+  wake-up. *(Since #379 that line is the whole node: `PatchArgsBody` became
+  `PatchObjectBox`, fed by `PatcherController.objectLineOf`.)*
   (2) The **reference panel shows current values**: with a canvas node selected
   the surface passes its live argument string to `PatchReferencePanel`, which
   renders `= <value>` beside each documented `PatchParamDescriptor` (positional,
@@ -2454,6 +2455,46 @@ main + app          (orchestration)
   surface tests (the bar's toggle reaches the canvas and drops the selection; a
   fresh surface starts in edit), and an end-to-end `patcher_edit_run_mode`
   integration test through the real app.
+- **The patcher object box** (issue #379, object-box epic #375, design
+  `docs/design/patcher.md` §7 + §12.2) — **an engine object is one bordered line
+  of mono text, and the header is gone.** A node used to be a 22px uppercase
+  title band (`OSC · SINE`, `OUT · L/R`) over a body printing roughly the same
+  thing again with its arguments (`~sine 440`): two rows and ~70px of canvas for
+  one line's worth of information. `PatchObjectBox`
+  (`lib/design/widgets/patcher/`) replaces both — `bg1` fill, 1px `line1` border
+  that goes voiced and glows while the node is armed, the #377 port dots
+  straddling the top and bottom edges, and a single ellipsised line. **Which
+  chrome a node gets is the descriptor's `buildBody`**: a type with a
+  hand-authored GUI body is a `PatchNodeFrame` around it (headers there retire
+  with #381), and every other engine object — including every unregistered one —
+  is an object box. `NodeDescriptor.title` and `defaultSize` become nullable and
+  belong to the framed kind only; `PatchNode.title` stays, because those frames
+  still render it. **The box is measured, not laid out**: a node's rectangle is
+  model state the cable layer reads port centres off, so `PatchObjectBoxMetrics`
+  sizes it up front from the line it will print — as wide as its text, floored by
+  `minWidthForPorts` (the floor outranks the cap, or dots would hang off the
+  edges), capped at `objectBoxMaxWidth` past which the line ellipsises, and one
+  text line plus padding tall, whatever the port count. `PatcherController` gains
+  `objectLineOf` (`type args`, the old `PatchArgsBody`'s text) and measures at
+  creation, on a rebuild from a live instance, and on every `setParams` — so
+  retyping `.metro 250` as `.metro 60000` re-measures rather than ellipsising the
+  edit; a GUI node keeps its tuned size and still only grows wider. `~sine` and
+  `~dac` lose their hand-authored bodies with this (`SineNodeBody`,
+  `PatchArgsBody` deleted), so the `guiValue` poll set (#357) narrows to the
+  bodies that actually display one. The rendered text is still `~sine 440` —
+  dropping the prefix and colouring the line by DSP/control is #380. Covered by
+  widget tests (`PatchObjectBox`: one line and no second `Text`, ellipsis, the
+  neutral vs. armed border + glow, dots on the horizontal edges),
+  `PatchObjectBoxMetrics` unit tests (intrinsic width, port floor, cap, floor
+  beating cap, height independent of ports and of line length), node-view tests
+  (unregistered type → box printing `type args`, no title rendered, created at the
+  measured size, following an apply/undo/redo *and* re-measuring, a GUI body still
+  framed at its tuned size), controller tests (an object box re-measuring both
+  axes across a reshape and shrinking back), and an end-to-end
+  `patcher_object_box` integration test through the real app with real fonts (the
+  seeded `~sine`/`~dac` render as single lines with no title anywhere, sized to
+  their own text and floored by their ports, and a params edit grows the box
+  in place and round-trips under Ctrl+Z / Ctrl+Y).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

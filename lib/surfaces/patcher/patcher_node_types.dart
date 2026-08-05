@@ -6,7 +6,6 @@ import '../../engine/state/node_type_registry.dart';
 import 'nodes/button_node_body.dart';
 import 'nodes/message_node_body.dart';
 import 'nodes/number_node_body.dart';
-import 'nodes/sine_node_body.dart';
 import 'nodes/slider_node_body.dart';
 import 'nodes/toggle_node_body.dart';
 
@@ -21,19 +20,18 @@ import 'nodes/toggle_node_body.dart';
 void registerBuiltInPatcherNodes() {
   final registry = NodeTypeRegistry.instance;
 
+  // ─── object boxes (issue #379) ─────────────────────────────────────────
+  // Registered for their creation args and documented port shapes only: with
+  // no `buildBody` they render as object boxes — one bordered line reading
+  // `~sine 440` — so they carry neither a title nor a tuned size, and the
+  // controller measures their box from that line.
+
   registry.register(
-    NodeDescriptor(
+    const NodeDescriptor(
       type: Obj.dSine,
-      title: 'osc · sine',
-      defaultSize: const Size(130, 70),
       defaultArgs: '440',
-      inputs: const [PortSpec(kind: PatchPortKind.control, label: 'freq')],
-      outputs: const [PortSpec(kind: PatchPortKind.audio)],
-      buildBody: (ctx, node, controller) =>
-          SineNodeBody(node: node, controller: controller),
-      // Its freq readout is the object's live `guiValue`, so a cable into the
-      // freq inlet has to reach the display (issue #357).
-      readsGuiValue: true,
+      inputs: [PortSpec(kind: PatchPortKind.control, label: 'freq')],
+      outputs: [PortSpec(kind: PatchPortKind.audio)],
     ),
   );
 
@@ -56,17 +54,14 @@ void registerBuiltInPatcherNodes() {
   );
 
   registry.register(
-    NodeDescriptor(
+    const NodeDescriptor(
       type: Obj.dDac,
-      title: 'out · L/R',
-      defaultSize: const Size(110, 60),
       defaultArgs: '',
-      inputs: const [
+      inputs: [
         PortSpec(kind: PatchPortKind.audio, label: 'L'),
         PortSpec(kind: PatchPortKind.audio, label: 'R'),
       ],
-      outputs: const [],
-      buildBody: (ctx, node, controller) => const SizedBox.shrink(),
+      outputs: [],
     ),
   );
 

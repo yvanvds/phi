@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
-import 'package:phi/design/widgets/patcher/patch_node_frame.dart';
 import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
+import 'package:phi/surfaces/patcher/patcher_node_view.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
@@ -53,7 +53,7 @@ void main() {
     // The surface seeds slider → sine → dac (3 nodes, 2 cables) and, now that
     // a `~dac` exists, mounts the patcher as a source. All three ops routed
     // through the single instance the controller owns.
-    expect(find.byType(PatchNodeFrame), findsNWidgets(3));
+    expect(find.byType(PatcherNodeView), findsNWidgets(3));
     expect(engine.patcher.graph.cables, hasLength(2));
     expect(patcherGateway.cables, hasLength(2));
     expect(patcherGateway.mounted, isTrue);

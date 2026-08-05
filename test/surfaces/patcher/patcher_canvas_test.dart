@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/widgets/patcher/patch_cable_geometry.dart';
 import 'package:phi/design/widgets/patcher/patch_canvas_constants.dart';
-import 'package:phi/design/widgets/patcher/patch_node_frame.dart';
 import 'package:phi/design/widgets/patcher/patch_port_dot.dart';
 import 'package:phi/domain/patcher/patch_args.dart';
 import 'package:phi/domain/patcher/patch_node.dart';
@@ -171,9 +170,11 @@ void main() {
 
   /// Where the node's chrome actually sits on screen — the model position is
   /// only half the story, since the canvas lays each node out from its own
-  /// build.
+  /// build. Found by the *view*, which is the node whichever chrome it wears:
+  /// a frame for a GUI body, an object box for a plain engine object
+  /// (issue #379).
   Offset frameTopLeft(WidgetTester tester) =>
-      tester.getTopLeft(find.byType(PatchNodeFrame));
+      tester.getTopLeft(find.byType(PatcherNodeView));
 
   Offset canvasTL(WidgetTester tester) =>
       tester.getTopLeft(find.byType(PatcherCanvas));
