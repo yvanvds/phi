@@ -26,7 +26,6 @@ void main() {
 
   NodeDescriptor desc(String type, {String args = ''}) => NodeDescriptor(
     type: type,
-    title: type,
     defaultSize: const Size(120, 80),
     defaultArgs: args,
     inputs: const [],
@@ -214,7 +213,7 @@ void main() {
       // line of text rather than to a tuned default.
       NodeTypeRegistry.instance.clear();
       final fan = controller.addNode(
-        // No title, no tuned size, no body — a plain engine object.
+        // No tuned size, no body — a plain engine object.
         desc: const NodeDescriptor(
           type: fanType,
           defaultArgs: '1 2',

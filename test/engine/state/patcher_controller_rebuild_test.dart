@@ -13,7 +13,7 @@ import '../test_doubles/fake_patcher_gateway.dart';
 /// reloaded dump — or re-materialised by a rename — shows its graph instead of
 /// an empty canvas.
 ///
-/// The node-type registry is cleared in setUp so no hand-authored body's title /
+/// The node-type registry is cleared in setUp so no hand-authored body's tuned
 /// size interferes — the reconstruction is asserted against the type-driven
 /// fallbacks.
 void main() {
@@ -61,8 +61,9 @@ void main() {
     expect(editor.graph.nodes, hasLength(3));
 
     final sine = editor.graph.nodeById(PatchNodeId(s.sine))!;
+    // The type is the only name a node carries since issue #381 — there is no
+    // display title beside it any more, because nothing renders one.
     expect(sine.type, Obj.dSine);
-    expect(sine.title, Obj.dSine); // no body registered → type is the title
     expect(sine.position, const Offset(200, 40));
     expect(sine.inputs.single.kind, PatchPortKind.control);
     expect(sine.outputs.single.kind, PatchPortKind.audio);

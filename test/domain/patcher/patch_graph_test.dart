@@ -16,7 +16,6 @@ PatchNode _node(
 }) => PatchNode(
   id: PatchNodeId(id),
   type: '~sine',
-  title: 'osc · sine',
   voice: 1,
   position: Offset.zero,
   size: const Size(130, 70),

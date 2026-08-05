@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../design/tokens/phi_colors.dart';
-import '../../../design/tokens/phi_radii.dart';
 import '../../../design/tokens/phi_type.dart';
+import '../../../design/widgets/patcher/patch_number_box.dart';
 import '../../../domain/patcher/patch_node.dart';
 import '../../../engine/state/patcher_controller.dart';
 import 'gui_value_link.dart';
@@ -40,6 +40,12 @@ import 'gui_value_link.dart';
 /// scrub. Putting a drag recogniser here instead would have had to out-race the
 /// [TextField]'s, which sits deeper and would win — the same arena problem
 /// issue #352 took off the canvas.
+///
+/// Since issue #381 the node **is** the readout: no `NUMBER · F` header, no
+/// frame, no padding around it — a [PatchNumberBox] fills the node's rectangle,
+/// and its cut top-right corner is what tells a number box from a message box
+/// now that no caption does. Presentation only: the push, the focus/commit/
+/// revert behaviour, the `guiValue` link and the scrub are all untouched.
 class NumberNodeBody extends StatefulWidget {
   const NumberNodeBody({
     required this.node,
@@ -278,59 +284,52 @@ class _NumberNodeBodyState extends State<NumberNodeBody> {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      // A raw [Listener], not a recogniser: it observes the pointer instead of
-      // competing for it, so the field below keeps every press the scrub does
-      // not claim (issue #359).
-      child: Listener(
-        onPointerDown: _onScrubDown,
-        onPointerMove: _onScrubMove,
-        onPointerUp: (_) => _endScrub(),
-        onPointerCancel: (_) => _endScrub(),
-        child: Container(
-          decoration: BoxDecoration(
-            color: PhiColors.bg2,
-            borderRadius: PhiRadii.all1,
-            border: Border.all(color: PhiColors.line2),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          // Escape lives here rather than on the canvas: the canvas deliberately
-          // ignores keys while a descendant holds focus (issue #353), and this
-          // binding sits between the field and the canvas so it wins either way.
-          child: CallbackShortcuts(
-            bindings: {
-              const SingleActivator(LogicalKeyboardKey.escape): _revert,
-            },
-            child: TextField(
-              controller: _text,
-              focusNode: _focus,
-              onChanged: (_) => _dirty = true,
-              onSubmitted: _commit,
-              // The readout's primary affordance is the drag, and the [TextField]
-              // sits deeper than any region this body could wrap it in — so the
-              // cursor is set on the field itself or it never shows at all.
-              mouseCursor: SystemMouseCursors.resizeUpDown,
-              // Drag-to-select-text is given up so drag-to-scrub can exist.
-              // The two are the same gesture over the same three characters,
-              // and the field's own one wins by construction: selecting on drag
-              // reports `SelectionChangedCause.drag`, which asks for the
-              // keyboard — so every scrub would end with the box back in edit
-              // mode, deaf to the engine until it was clicked away from. A
-              // click still focuses and still selects the whole value (issue
-              // #353), which is the only selection a three-digit readout needs.
-              enableInteractiveSelection: false,
-              keyboardType: const TextInputType.numberWithOptions(
-                signed: true,
-                decimal: true,
-              ),
-              decoration: const InputDecoration(
-                isDense: true,
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
-              ),
-              style: PhiType.mono().copyWith(color: PhiColors.fg0),
-              textAlign: TextAlign.right,
+    // A raw [Listener], not a recogniser: it observes the pointer instead of
+    // competing for it, so the field below keeps every press the scrub does
+    // not claim (issue #359).
+    return Listener(
+      onPointerDown: _onScrubDown,
+      onPointerMove: _onScrubMove,
+      onPointerUp: (_) => _endScrub(),
+      onPointerCancel: (_) => _endScrub(),
+      child: PatchNumberBox(
+        // Escape lives here rather than on the canvas: the canvas deliberately
+        // ignores keys while a descendant holds focus (issue #353), and this
+        // binding sits between the field and the canvas so it wins either way.
+        child: CallbackShortcuts(
+          bindings: {const SingleActivator(LogicalKeyboardKey.escape): _revert},
+          child: TextField(
+            controller: _text,
+            focusNode: _focus,
+            onChanged: (_) => _dirty = true,
+            onSubmitted: _commit,
+            // The readout's primary affordance is the drag, and the [TextField]
+            // sits deeper than any region this body could wrap it in — so the
+            // cursor is set on the field itself or it never shows at all.
+            mouseCursor: SystemMouseCursors.resizeUpDown,
+            // Drag-to-select-text is given up so drag-to-scrub can exist.
+            // The two are the same gesture over the same three characters,
+            // and the field's own one wins by construction: selecting on drag
+            // reports `SelectionChangedCause.drag`, which asks for the
+            // keyboard — so every scrub would end with the box back in edit
+            // mode, deaf to the engine until it was clicked away from. A
+            // click still focuses and still selects the whole value (issue
+            // #353), which is the only selection a three-digit readout needs.
+            enableInteractiveSelection: false,
+            keyboardType: const TextInputType.numberWithOptions(
+              signed: true,
+              decimal: true,
             ),
+            decoration: const InputDecoration(
+              isDense: true,
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+            ),
+            // Left, the way a Max number box reads — and the way the box's cut
+            // right corner requires, since a right-aligned value would run into
+            // it.
+            style: PhiType.monoS().copyWith(color: PhiColors.fg0),
+            textAlign: TextAlign.left,
           ),
         ),
       ),

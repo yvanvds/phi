@@ -30,18 +30,21 @@ class PortSpec {
 /// right creation args to the gateway.
 ///
 /// [buildBody] is what splits the two kinds of node the canvas draws (design
-/// §7, issue #379): a descriptor **with** a body is a GUI object rendered in a
-/// `PatchNodeFrame`, and one **without** — like every unregistered engine
-/// object — is an object box, a single bordered line of its type and
-/// arguments. [title] and [defaultSize] belong to the first kind only: an
-/// object box renders no title and measures its own box from its text.
+/// §7, issues #379/#381): a descriptor **with** a body is a GUI object — the
+/// control itself, with no frame around it — and one **without** — like every
+/// unregistered engine object — is an object box, a single bordered line of its
+/// type and arguments. [defaultSize] belongs to the first kind only: an object
+/// box measures its own box from its text.
+///
+/// There is no display `title` any more. It fed the node header, and since
+/// issue #381 no node has one — neither kind renders a caption, because the box
+/// prints its own name and a control already looks like what it is.
 class NodeDescriptor {
   const NodeDescriptor({
     required this.type,
     required this.defaultArgs,
     required this.inputs,
     required this.outputs,
-    this.title,
     this.defaultSize,
     this.buildBody,
     this.readsGuiValue = false,
@@ -50,14 +53,9 @@ class NodeDescriptor {
   /// One of the `Obj.*` string constants from `package:yse`.
   final String type;
 
-  /// Display title for the node header. Uppercase mono. **Null for an object
-  /// box**, which has no header to put it in — the type id is already the
-  /// first thing its line says (issue #379). Kept for the GUI objects, whose
-  /// headers only retire with issue #381.
-  final String? title;
-
-  /// On-canvas size. Null for an object box, which is measured from its line
-  /// of text by `PatchObjectBoxMetrics` instead.
+  /// On-canvas size — a GUI control's tuned rectangle, which the control fills
+  /// edge to edge (issue #381). Null for an object box, which is measured from
+  /// its line of text by `PatchObjectBoxMetrics` instead.
   final Size? defaultSize;
 
   /// Creation argument string passed to `Patcher.createObject`.
@@ -68,8 +66,8 @@ class NodeDescriptor {
   final List<PortSpec> inputs;
   final List<PortSpec> outputs;
 
-  /// Builds the body widget shown below the node header — **null** for an
-  /// object box, which is its own line of text and has no body slot.
+  /// Builds the control the node *is* — **null** for an object box, which is
+  /// its own line of text and has no control to build.
   final NodeBodyBuilder? buildBody;
 
   /// Whether a node of this type renders as an object box rather than as a

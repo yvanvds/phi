@@ -104,8 +104,9 @@ void main() {
     // The whole point of moving ports onto the horizontal edges (#377): the
     // count buys width, never height.
     expect(many.height, none.height);
-    // And a one-line box is well under the two-row node it replaces.
-    expect(none.height, lessThan(2 * PatchCanvasConstants.headerHeight));
+    // And a one-line box is well under the two-row node it replaces — a 22px
+    // header band over a body, ~70px all told.
+    expect(none.height, lessThan(44));
   });
 
   test('a longer line does not make a taller box', () {

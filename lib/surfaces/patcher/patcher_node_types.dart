@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:yse/yse.dart';
 
+import '../../design/widgets/patcher/patch_canvas_constants.dart';
+import '../../design/widgets/patcher/patch_object_box_metrics.dart';
 import '../../domain/patcher/patch_port_kind.dart';
 import '../../engine/state/node_type_registry.dart';
 import 'nodes/button_node_body.dart';
@@ -19,6 +21,8 @@ import 'nodes/toggle_node_body.dart';
 /// the set.
 void registerBuiltInPatcherNodes() {
   final registry = NodeTypeRegistry.instance;
+  const square = PatchCanvasConstants.guiControlMinSize;
+  final lineHeight = _guiLineBoxHeight();
 
   // ─── object boxes (issue #379) ─────────────────────────────────────────
   // Registered for their creation args and documented port shapes only: with
@@ -38,9 +42,10 @@ void registerBuiltInPatcherNodes() {
   registry.register(
     NodeDescriptor(
       type: Obj.gSlider,
-      title: 'slider',
-      // Tall enough to seat the fader plus its `guiValue` readout (issue #223).
-      defaultSize: const Size(90, 190),
+      // A bare fader and nothing else (issue #381): as wide as the track plus
+      // its thumb overhang, floored by the port geometry, and a Max-ish throw
+      // tall. No header, no readout, so no rows to seat.
+      defaultSize: const Size(square + 4, 140),
       // gSlider registers no `ADD_PARAM` in its C++ constructor, so the
       // YSE parameter parser dereferences an empty vector if we pass any
       // args here — segfault. Leave empty.
@@ -74,8 +79,8 @@ void registerBuiltInPatcherNodes() {
   registry.register(
     NodeDescriptor(
       type: Obj.gToggle,
-      title: 'toggle',
-      defaultSize: const Size(90, 80),
+      // The switch itself — a square with a cross in it (issue #381).
+      defaultSize: const Size(square, square),
       defaultArgs: '',
       inputs: const [PortSpec(kind: PatchPortKind.control)],
       outputs: const [PortSpec(kind: PatchPortKind.control)],
@@ -88,8 +93,8 @@ void registerBuiltInPatcherNodes() {
   registry.register(
     NodeDescriptor(
       type: Obj.gButton,
-      title: 'button',
-      defaultSize: const Size(90, 90),
+      // The bang square itself — no frame, no `bang` caption (issue #381).
+      defaultSize: const Size(square, square),
       defaultArgs: '',
       inputs: const [PortSpec(kind: PatchPortKind.control)],
       outputs: const [PortSpec(kind: PatchPortKind.control)],
@@ -101,8 +106,8 @@ void registerBuiltInPatcherNodes() {
   registry.register(
     NodeDescriptor(
       type: Obj.gFloat,
-      title: 'number · f',
-      defaultSize: const Size(110, 70),
+      // A bare readout, one line tall like an object box (issue #381).
+      defaultSize: Size(_numberBoxWidth, lineHeight),
       defaultArgs: '',
       inputs: const [PortSpec(kind: PatchPortKind.control)],
       outputs: const [PortSpec(kind: PatchPortKind.control)],
@@ -115,8 +120,7 @@ void registerBuiltInPatcherNodes() {
   registry.register(
     NodeDescriptor(
       type: Obj.gInt,
-      title: 'number · i',
-      defaultSize: const Size(110, 70),
+      defaultSize: Size(_numberBoxWidth, lineHeight),
       defaultArgs: '',
       inputs: const [PortSpec(kind: PatchPortKind.control)],
       outputs: const [PortSpec(kind: PatchPortKind.control)],
@@ -129,8 +133,9 @@ void registerBuiltInPatcherNodes() {
   registry.register(
     NodeDescriptor(
       type: Obj.gMessage,
-      title: 'message',
-      defaultSize: const Size(120, 66),
+      // The message box itself, one line tall — its notched right edge is what
+      // tells it from a number box now (issue #381).
+      defaultSize: Size(_messageBoxWidth, lineHeight),
       defaultArgs: '',
       inputs: const [PortSpec(kind: PatchPortKind.control)],
       outputs: const [PortSpec(kind: PatchPortKind.control)],
@@ -139,3 +144,22 @@ void registerBuiltInPatcherNodes() {
     ),
   );
 }
+
+/// Width a bare number box opens at — room for a few digits and their sign
+/// before the cut corner, and no more: a readout that says `0.5` has no use for
+/// the 110px the old `NUMBER · F` frame spent (issue #381).
+const double _numberBoxWidth = 64;
+
+/// Width a bare message box opens at — wider than a number box, because what
+/// goes in it is words rather than digits.
+const double _messageBoxWidth = 96;
+
+/// Height of the one-line GUI controls — the two number boxes and the message
+/// box (issue #381).
+///
+/// **Measured**, not chosen: it is exactly what an object box spends on its own
+/// single line, so a row of mixed nodes sits on one baseline instead of stepping
+/// — and so the readout inside a number box is guaranteed the height its font
+/// actually needs, whatever font the app resolves at runtime.
+double _guiLineBoxHeight() =>
+    PatchObjectBoxMetrics.sizeFor(text: '0', inputs: 1, outputs: 1).height;

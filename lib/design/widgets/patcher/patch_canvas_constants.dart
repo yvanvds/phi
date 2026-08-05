@@ -12,14 +12,8 @@ abstract final class PatchCanvasConstants {
   /// Backdrop grid major-line size.
   static const double gridMajor = 64;
 
-  /// Header height of a node — uppercase mono title area.
-  ///
-  /// Only the **GUI** node frame still has one: an engine object is a
-  /// [PatchObjectBox], one bordered line of text with no header at all
-  /// (design §7, issue #379).
-  static const double headerHeight = 22;
-
-  /// Border thickness of a node box — the frame's and the object box's alike.
+  /// Border thickness of a node box — the object box's and the GUI controls'
+  /// own outlines alike.
   static const double nodeBorderWidth = 1;
 
   /// Horizontal padding between an object box's border and its line of text.
@@ -53,6 +47,16 @@ abstract final class PatchCanvasConstants {
   /// port's centre. Applied on both sides, so [minWidthForPorts] leaves the
   /// same margin at the right as at the left.
   static const double firstPortOffset = 16;
+
+  /// The smallest square a **bare GUI control** — a bang, a toggle — is drawn
+  /// at, and the width floor every other control shares (issue #381).
+  ///
+  /// It is `minWidthForPorts(1)` written as a constant so the registry's tuned
+  /// sizes stay `const`, and it is that number rather than a taste: ports hang
+  /// off the top and bottom edges from a fixed [firstPortOffset] inset
+  /// (issue #377), so a control narrower than this would strand its own dots
+  /// off its sides.
+  static const double guiControlMinSize = 2 * firstPortOffset;
 
   /// The narrowest box that seats [count] ports along one horizontal edge:
   /// [firstPortOffset] of margin at each end and [portSpacing] between

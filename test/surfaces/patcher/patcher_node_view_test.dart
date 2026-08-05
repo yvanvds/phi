@@ -28,7 +28,6 @@ void main() {
   }) => PatchNode(
     id: const PatchNodeId(7),
     type: '.fan',
-    title: 'fan',
     voice: 1,
     position: position,
     size: size,

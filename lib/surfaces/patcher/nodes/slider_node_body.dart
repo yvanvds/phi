@@ -24,6 +24,12 @@ import 'gui_value_link.dart';
 /// ends with the gesture, not the argument — on release the object is asked
 /// once more and wins, so a drag that overlapped a cable settles on what the
 /// patch actually holds rather than on where the hand happened to stop.
+///
+/// Since issue #381 the node **is** the fader: no header, no frame, no padding,
+/// and no numeric readout stacked above the track — the fader's own position is
+/// what a fader says, and the exact number is a number box's job. The track
+/// takes the node's full height, so a resized node is a longer throw rather than
+/// a fixed fader floating in a box.
 class SliderNodeBody extends StatefulWidget {
   const SliderNodeBody({
     required this.node,
@@ -108,25 +114,25 @@ class _SliderNodeBodyState extends State<SliderNodeBody> {
     });
   }
 
+  /// Track height for a fader given no bounded height to fill — a widget test
+  /// pumping the body on its own. On the canvas the node's rectangle decides.
+  static const double _fallbackHeight = 110;
+
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: PhiFader(
-        value: _value,
-        height: 110,
-        readout: _readout(),
-        voiceColor: PhiVoices.color(widget.node.voice),
-        voiceGlow: PhiVoices.glow(widget.node.voice),
-        onChanged: _push,
-        onChangeEnd: _release,
+    return LayoutBuilder(
+      builder: (context, constraints) => Center(
+        child: PhiFader(
+          value: _value,
+          height: constraints.hasBoundedHeight
+              ? constraints.maxHeight
+              : _fallbackHeight,
+          voiceColor: PhiVoices.color(widget.node.voice),
+          voiceGlow: PhiVoices.glow(widget.node.voice),
+          onChanged: _push,
+          onChangeEnd: _release,
+        ),
       ),
     );
-  }
-
-  /// The engine's reported display value, falling back to the local position
-  /// before the first push has landed a `guiValue`.
-  String _readout() {
-    final v = double.tryParse(_gui.value) ?? _value;
-    return v.toStringAsFixed(2);
   }
 }

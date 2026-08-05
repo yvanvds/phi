@@ -7,7 +7,6 @@ import 'package:yse/yse.dart';
 
 NodeDescriptor _desc(String type) => NodeDescriptor(
   type: type,
-  title: 'demo',
   defaultSize: const Size(120, 60),
   defaultArgs: '',
   inputs: const [],

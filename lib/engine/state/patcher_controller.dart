@@ -140,7 +140,6 @@ class PatcherController {
     return _create(
       type: desc.type,
       args: desc.defaultArgs,
-      title: desc.title ?? desc.type,
       voice: voice,
       position: position,
       size: desc.defaultSize,
@@ -174,7 +173,6 @@ class PatcherController {
     return _create(
       type: desc.type,
       args: args ?? _defaultArgsFor(desc),
-      title: desc.type,
       voice: voice,
       position: position,
       // No size: _create measures the object box, or takes the tuned size a
@@ -213,7 +211,6 @@ class PatcherController {
   PatchNode _create({
     required String type,
     required String args,
-    required String title,
     required int voice,
     required Offset position,
     Size? size,
@@ -227,17 +224,15 @@ class PatcherController {
     final node = PatchNode(
       id: id,
       type: type,
-      title: title,
       voice: voice,
       position: position,
-      size:
-          size ??
-          _sizeFor(
-            type: type,
-            args: args,
-            inputs: snapshot.inputs,
-            outputs: snapshot.outputs,
-          ),
+      size: _sizeFor(
+        type: type,
+        args: args,
+        inputs: snapshot.inputs,
+        outputs: snapshot.outputs,
+        declared: size,
+      ),
       inputs: _portsFrom(snapshot, PatchPortSide.input, voice),
       outputs: _portsFrom(snapshot, PatchPortSide.output, voice),
     );
@@ -319,16 +314,28 @@ class PatcherController {
   /// a line of text absorbs rather than the height floor it used to force —
   /// under which no one-line box was possible at all.
   ///
-  /// A **GUI object** keeps the tuned `defaultSize` its descriptor declares; it
-  /// loses its frame with issue #381, not here.
+  /// A **GUI object** keeps the tuned `defaultSize` its descriptor declares —
+  /// the rectangle its bare control fills edge to edge since issue #381 — but is
+  /// held to the same port floor, since its ports hang off the very same top and
+  /// bottom edges and a control narrower than its dots would strand them.
+  ///
+  /// [declared] lets a caller name the size instead of the registry, which is
+  /// what `addNode` does for a descriptor that was never registered; it goes
+  /// through the same floor rather than around it.
   Size _sizeFor({
     required String type,
     required String args,
     required int inputs,
     required int outputs,
+    Size? declared,
   }) {
-    final declared = NodeTypeRegistry.instance.find(type)?.defaultSize;
-    if (declared != null) return declared;
+    final tuned = declared ?? NodeTypeRegistry.instance.find(type)?.defaultSize;
+    if (tuned != null) {
+      final floor = PatchCanvasConstants.minWidthForPorts(
+        math.max(inputs, outputs),
+      );
+      return Size(math.max(tuned.width, floor), tuned.height);
+    }
     return PatchObjectBoxMetrics.sizeFor(
       text: objectLine(type, args),
       inputs: inputs,
@@ -366,13 +373,11 @@ class PatcherController {
       final id = PatchNodeId(obj.handleId);
       _nativeByNode[id] = obj.handleId;
       _argsByNode[id] = obj.args;
-      final bodied = NodeTypeRegistry.instance.find(obj.type);
       final ports = obj.ports;
       graph.addNode(
         PatchNode(
           id: id,
           type: obj.type,
-          title: bodied?.title ?? obj.type,
           voice: 1,
           position: obj.position ?? Offset.zero,
           size: _sizeFor(
@@ -1027,7 +1032,6 @@ class PatcherController {
     return PatchNodeSpec(
       type: n.type,
       args: _argsByNode[id] ?? '',
-      title: n.title,
       voice: n.voice,
       position: n.position,
       size: n.size,
@@ -1095,7 +1099,6 @@ class PatcherController {
   PatchNode _nodeFromSpec(PatchNodeId id, PatchNodeSpec spec) => PatchNode(
     id: id,
     type: spec.type,
-    title: spec.title,
     voice: spec.voice,
     position: spec.position,
     size: spec.size,

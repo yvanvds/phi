@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../design/tokens/phi_colors.dart';
 import '../../design/widgets/patcher/patch_canvas_constants.dart';
-import '../../design/widgets/patcher/patch_node_frame.dart';
+import '../../design/widgets/patcher/patch_gui_object.dart';
 import '../../design/widgets/patcher/patch_object_box.dart';
 import '../../domain/patcher/patch_node.dart';
 import '../../domain/patcher/patch_node_id.dart';
@@ -15,12 +15,13 @@ import '../../engine/state/patcher_controller.dart';
 /// Binds one [PatchNode] to the chrome its kind gets (design §6, "click
 /// anywhere on a node and move it").
 ///
-/// Two kinds, and the descriptor decides (design §7, issue #379): a type with a
-/// hand-authored GUI body is a [PatchNodeFrame] around that body, and every
-/// other engine object is a [PatchObjectBox] — one bordered line reading
-/// `sine 440` in the DSP blue, no header, no drawn `~`/`.` prefix (issues #379,
-/// #380). The frame's headers only survive here because the GUI objects have
-/// not lost theirs yet (issue #381).
+/// Two kinds, and the descriptor decides (design §7, §12.2). Every engine object
+/// is a [PatchObjectBox] — one bordered line reading `sine 440` in the DSP blue,
+/// no header, no drawn `~`/`.` prefix (issues #379, #380). A type with a
+/// hand-authored GUI body is a [PatchGuiObject]: the control itself, filling the
+/// node, with nothing around it but its ports (issue #381). **There are no
+/// headers left anywhere** — which is why `PatchNode` no longer carries a
+/// display title at all.
 ///
 /// **Purely visual** where pointers are concerned: select, double-click and
 /// body-drag are all driven by the canvas's raw pointer pipeline, which sees
@@ -113,20 +114,18 @@ class PatcherNodeView extends StatelessWidget {
                 outputVoices: outputVoices,
               )
             else
-              PatchNodeFrame(
-                title: node.title,
+              PatchGuiObject(
                 voice: node.voice,
                 armed: node.armed,
                 inputPortXs: inputXs,
                 outputPortXs: outputXs,
                 inputVoices: inputVoices,
                 outputVoices: outputVoices,
-                body: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: IgnorePointer(
-                    ignoring: !bodyLive,
-                    child: body(context, node, controller),
-                  ),
+                // No padding: the control *is* the node, so it takes the whole
+                // rectangle the canvas laid out for it (issue #381).
+                child: IgnorePointer(
+                  ignoring: !bodyLive,
+                  child: body(context, node, controller),
                 ),
               ),
           ],

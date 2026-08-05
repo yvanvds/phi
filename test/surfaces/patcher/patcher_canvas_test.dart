@@ -38,7 +38,6 @@ import '../../engine/test_doubles/fake_patcher_gateway.dart';
 void main() {
   NodeDescriptor desc(String type, {Widget? body}) => NodeDescriptor(
     type: type,
-    title: type,
     defaultSize: const Size(80, 60),
     defaultArgs: '',
     inputs: const [],
@@ -373,7 +372,6 @@ void main() {
   NodeDescriptor numberDesc() {
     final d = NodeDescriptor(
       type: Obj.gFloat,
-      title: Obj.gFloat,
       defaultSize: const Size(110, 70),
       defaultArgs: '',
       inputs: const [],
@@ -1074,7 +1072,6 @@ void main() {
     final fan = controller.addNode(
       desc: NodeDescriptor(
         type: '.fan',
-        title: '.fan',
         defaultSize: const Size(120, 64),
         defaultArgs: '1 2',
         inputs: const [],

@@ -2,10 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-import '../../../design/tokens/phi_colors.dart';
-import '../../../design/tokens/phi_radii.dart';
-import '../../../design/tokens/phi_type.dart';
-import '../../../design/tokens/phi_voices.dart';
+import '../../../design/widgets/patcher/patch_bang_square.dart';
 import '../../../domain/patcher/patch_node.dart';
 import '../../../engine/state/patcher_controller.dart';
 
@@ -13,6 +10,11 @@ import '../../../engine/state/patcher_controller.dart';
 /// bang into the object's hot inlet via [PatcherController.setControlBang]
 /// (`sendBang`) on tap, flashing briefly in the node's voice colour (design
 /// `docs/design/patcher.md` §7).
+///
+/// Since issue #381 the node **is** the square: no header, no frame, no `bang`
+/// caption inside it, and no padding around it — the [PatchBangSquare] fills the
+/// node's whole rectangle. The wiring is untouched: the same `sendBang` on the
+/// same hot inlet, and the same brief flash to acknowledge it.
 class ButtonNodeBody extends StatefulWidget {
   const ButtonNodeBody({
     required this.node,
@@ -48,39 +50,10 @@ class _ButtonNodeBodyState extends State<ButtonNodeBody> {
 
   @override
   Widget build(BuildContext context) {
-    final voice = PhiVoices.color(widget.node.voice);
-    return Center(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _bang,
-        child: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: _flash ? voice : PhiColors.bg2,
-            borderRadius: PhiRadii.all2,
-            border: Border.all(
-              color: _flash ? voice : PhiColors.line2,
-              width: 1.5,
-            ),
-            boxShadow: _flash
-                ? [
-                    BoxShadow(
-                      color: PhiVoices.glow(widget.node.voice),
-                      blurRadius: 10,
-                    ),
-                  ]
-                : null,
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            'bang',
-            style: PhiType.caption().copyWith(
-              color: _flash ? PhiColors.bg0 : PhiColors.fg2,
-            ),
-          ),
-        ),
-      ),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _bang,
+      child: PatchBangSquare(flash: _flash, voice: widget.node.voice),
     );
   }
 }
