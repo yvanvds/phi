@@ -90,6 +90,12 @@ import 'patcher_node_view.dart';
 /// **double-click on empty canvas** opens the inline object box at that scene
 /// point — the same callback, with the arguments typed into the box (issue
 /// #358).
+///
+/// **A double-click on an object box opens the same box over that object**
+/// (issue #382, design §7/§12.3), seeded with the line it prints: Enter applies
+/// the typed arguments through [PatcherController.applyParams] — one journaled
+/// `setParams` under one `Ctrl+Z` — and Escape leaves the object as it was.
+/// There is no params dialog any more; the box *is* the editor.
 class PatcherCanvas extends StatefulWidget {
   const PatcherCanvas({
     required this.controller,
@@ -99,7 +105,6 @@ class PatcherCanvas extends StatefulWidget {
     this.onToggleMode,
     this.onCreateObject,
     this.onNodeTap,
-    this.onNodeDoubleTap,
     this.onNodeContextMenu,
     super.key,
   });
@@ -147,14 +152,9 @@ class PatcherCanvas extends StatefulWidget {
   /// handled by the canvas regardless.
   final void Function(PatchNode node)? onNodeTap;
 
-  /// Called when a node is double-clicked — opens the metadata params dialog
-  /// for a non-GUI node (design §7). Detected from raw pointer timing so it
-  /// never adds a disambiguation delay to the node's own single-tap select.
-  final void Function(PatchNode node)? onNodeDoubleTap;
-
   /// Called on a **right-click** over a node, with the node and the global
   /// pointer position — the surface opens the node's context menu there
-  /// (`edit parameters…` / duplicate / delete, issue #356). Null disables it.
+  /// (duplicate / delete, issue #356). Null disables it.
   ///
   /// The secondary button is read from this canvas's own [Listener] rather than
   /// from a `GestureDetector.onSecondaryTapDown` on the node: a recogniser here
@@ -169,8 +169,15 @@ class PatcherCanvas extends StatefulWidget {
   /// is actually being dragged, so its absence is assertable (issue #355).
   static const Key marqueeKey = Key('PatcherCanvas.marquee');
 
-  /// Key on the inline object box — present only while one is open (issue #358).
+  /// Key on the inline object box while it is **creating** — present only while
+  /// one is open (issue #358).
   static const Key inlineCreateKey = Key('PatcherCanvas.inlineCreate');
+
+  /// Key on the inline object box while it is **editing an existing object** —
+  /// present only while one is open (issue #382). Distinct from
+  /// [inlineCreateKey] so a test can say which of the two gestures is in flight
+  /// without inspecting the box itself.
+  static const Key inlineEditKey = Key('PatcherCanvas.inlineEdit');
 
   /// Key on the ring drawn around the port under the pointer — present only
   /// while one is actually hovered, so its absence is assertable (issue #359).
@@ -270,9 +277,17 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   Offset _lastTapLocal = Offset.zero;
   Duration _lastTapAt = Duration.zero;
 
-  // Scene point of the open inline object box, or null when none is open.
-  Offset? _inlineCreateAt;
-  final GlobalKey _inlineBoxKey = GlobalKey();
+  // The open inline object box: the scene point it sits at, and — when it is
+  // editing rather than creating (issue #382) — the node it was opened on. Null
+  // `_inlineAt` means no box is open; a non-null `_inlineEditNode` means the
+  // box's Enter applies parameters instead of creating an object.
+  Offset? _inlineAt;
+  PatchNodeId? _inlineEditNode;
+
+  // Identity of the open box, renewed on every opening so its state is never
+  // carried from one target to the next. A [GlobalKey] because the canvas
+  // measures the rendered box to decide whether a press landed inside it.
+  GlobalKey _inlineBoxKey = GlobalKey();
 
   // Transient reject cue for an incompatible cable drop.
   String? _reject;
@@ -491,21 +506,11 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
             child: const IgnorePointer(child: _MarqueeBox()),
           ),
         // The box lives *in the scene*, at the point that was double-clicked,
-        // so it sits where the object it is about to make will — and pans and
-        // zooms with everything else rather than floating over it. Last child,
-        // so its completion list covers the nodes it overlaps.
-        if (_inlineCreateAt != null)
-          Positioned(
-            key: PatcherCanvas.inlineCreateKey,
-            left: _inlineCreateAt!.dx,
-            top: _inlineCreateAt!.dy,
-            child: PatchInlineObjectBox(
-              key: _inlineBoxKey,
-              objectTypes: widget.objectTypes,
-              onCreate: _createInline,
-              onDismiss: _closeInlineCreate,
-            ),
-          ),
+        // so it sits where the object it is about to make will — or, for an
+        // edit, right on top of the object it is editing (issue #382) — and
+        // pans and zooms with everything else rather than floating over it.
+        // Last child, so its completion list covers the nodes it overlaps.
+        if (_inlineAt != null) _inlineBox(_inlineAt!),
       ],
     );
   }
@@ -842,7 +847,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // never reach the journal (issue #368).
     _commitNudge();
     _pressBelongsToWidget = false;
-    if (_inlineCreateAt != null) {
+    if (_inlineAt != null) {
       // A press inside the open inline object box belongs to its field — the
       // same rule an editable node body gets (issue #353): the canvas starts no
       // gesture here and does not take the keyboard back on release, so the
@@ -852,9 +857,9 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
         return;
       }
       // A press anywhere else abandons the box, exactly as Escape does — the
-      // canvas is left untouched — and the press itself goes on to do whatever
-      // it would have done.
-      _closeInlineCreate();
+      // canvas, and the object being edited, are left untouched — and the press
+      // itself goes on to do whatever it would have done.
+      _closeInline();
     }
     if (event.buttons == kMiddleMouseButton) {
       _panning = true;
@@ -1148,27 +1153,99 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     _lastTapAt = Duration.zero;
   }
 
-  // ─── inline object creation (issue #358) ──────────────────────────────
+  // ─── the inline object box (issues #358, #382) ────────────────────────
+
+  /// The open box, positioned in the scene — creating at the double-clicked
+  /// point, or editing the object it was opened on.
+  Widget _inlineBox(Offset at) {
+    final id = _inlineEditNode;
+    final editing = id == null ? null : _descriptorForNode(id);
+    return Positioned(
+      key: editing == null
+          ? PatcherCanvas.inlineCreateKey
+          : PatcherCanvas.inlineEditKey,
+      left: at.dx,
+      top: at.dy,
+      child: PatchInlineObjectBox(
+        // A **fresh** key per opening (see `_openInlineEdit`): the box seeds its
+        // field once, in `initState`, so an element reused across two openings
+        // would come up holding the previous object's line.
+        key: _inlineBoxKey,
+        objectTypes: widget.objectTypes,
+        editing: editing,
+        initialText: editing == null ? '' : _controller.objectLineOf(id!),
+        onCommit: _commitInline,
+        onDismiss: _closeInline,
+      ),
+    );
+  }
 
   void _openInlineCreate(Offset scene) {
     if (widget.objectTypes.isEmpty || widget.onCreateObject == null) return;
-    setState(() => _inlineCreateAt = scene);
+    setState(() {
+      _inlineAt = scene;
+      _inlineEditNode = null;
+      _inlineBoxKey = GlobalKey();
+    });
+  }
+
+  /// Double-click on an object box: open the same box over it, seeded with the
+  /// line it prints (issue #382).
+  ///
+  /// Only for nodes that *are* object boxes. A GUI object is its own control
+  /// (issue #381) — it has no line of text to retype, and in run mode the very
+  /// same pixels are how it is played.
+  void _openInlineEdit(PatchNode node) {
+    if (widget.objectTypes.isEmpty) return;
+    if (!PatcherController.isObjectBox(node.type)) return;
+    if (_descriptorForNode(node.id) == null) return;
+    setState(() {
+      _inlineAt = node.position;
+      _inlineEditNode = node.id;
+      _inlineBoxKey = GlobalKey();
+    });
   }
 
   /// Take the box down and hand the keyboard back to the canvas, so `Ctrl+Z`
-  /// reaches the undo scope straight away — the object just typed is undone
-  /// without a click in between, which is the whole point of a keyboard path.
-  void _closeInlineCreate() {
-    setState(() => _inlineCreateAt = null);
+  /// reaches the undo scope straight away — the object just typed, or the
+  /// arguments just applied, are undone without a click in between, which is
+  /// the whole point of a keyboard path.
+  void _closeInline() {
+    setState(() {
+      _inlineAt = null;
+      _inlineEditNode = null;
+    });
     _focus.requestFocus();
   }
 
-  /// The box resolved a type and its arguments passed the check: report it at
-  /// the scene point the box was opened on, then close.
-  void _createInline(PatchObjectDescriptor desc, String args) {
-    final at = _inlineCreateAt;
-    if (at != null) widget.onCreateObject?.call(desc, at, args: args);
-    _closeInlineCreate();
+  /// The box resolved a type and its arguments passed the check.
+  ///
+  /// Creating reports the type and the scene point back to the host; **editing**
+  /// applies the arguments straight through [PatcherController.applyParams] —
+  /// one journaled `setParams`, the very path the retired params dialog used,
+  /// so an in-place edit is one `Ctrl+Z` exactly as it always was. Unchanged
+  /// arguments are a no-op there, so re-opening the box and pressing Enter
+  /// records nothing.
+  void _commitInline(PatchObjectDescriptor desc, String args) {
+    final id = _inlineEditNode;
+    if (id != null) {
+      _controller.applyParams(id, args);
+    } else {
+      final at = _inlineAt;
+      if (at != null) widget.onCreateObject?.call(desc, at, args: args);
+    }
+    _closeInline();
+  }
+
+  /// The catalogue entry documenting the node at [id], or null when the graph
+  /// no longer holds it or the engine never documented its type.
+  PatchObjectDescriptor? _descriptorForNode(PatchNodeId id) {
+    final node = _controller.graph.nodeById(id);
+    if (node == null) return null;
+    for (final d in widget.objectTypes) {
+      if (d.type == node.type) return d;
+    }
+    return null;
   }
 
   /// Whether a press at [global] landed inside the open box's own rectangle.
@@ -1201,7 +1278,9 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     final paired = _lastTapNode == id && at - _lastTapAt <= kDoubleTapTimeout;
     _invalidatePendingTap();
     if (paired) {
-      widget.onNodeDoubleTap?.call(node);
+      // The box *is* the editor (issue #382, design §12.3): a double-click on
+      // an object box opens it for typing, where it used to open a modal.
+      _openInlineEdit(node);
     } else {
       _lastTapNode = id;
       _lastTapAt = at;
@@ -1225,8 +1304,8 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     _focus.requestFocus();
     // A right-click is its own gesture, so it invalidates any pending left-click
     // pairing exactly as a moved press does — otherwise the click before it and
-    // the click after it pair up and the params dialog opens off a double-click
-    // the user never made.
+    // the click after it pair up and an object drops into the editor off a
+    // double-click the user never made.
     _invalidatePendingTap();
     if (!_controller.graph.isNodeSelected(node.id)) {
       _controller.selectNode(node.id);
@@ -1292,8 +1371,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       // it invalidates the press before it, exactly as a moved press does.
       //
       // An *open* inline object box is deliberately not dropped here: it is the
-      // result of a completed gesture, not part of one in flight — the same
-      // standing the params dialog a node double-click opened has — and a
+      // result of a completed gesture, not part of one in flight — and a
       // cancelled press must not throw away a name half typed into it.
       _invalidatePendingTap();
       _pressScene = null;

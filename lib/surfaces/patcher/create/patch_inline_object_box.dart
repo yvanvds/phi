@@ -12,9 +12,16 @@ import '../../../domain/patcher/patch_type_name.dart';
 import '../../../engine/bridge/patch_creation_args.dart';
 import '../../../engine/bridge/patch_object_descriptor.dart';
 
-/// The **inline object box** — the Max speed path for making an object: a
-/// double-click on empty canvas drops this empty box at the click point, the
-/// name is typed with completion, and Enter instantiates (issue #358).
+/// The **inline object box** — the Max speed path for making an object, and
+/// since issue #382 for editing one: a double-click on empty canvas drops this
+/// box empty at the click point and Enter instantiates (issue #358); a
+/// double-click on an existing object box opens the very same widget over that
+/// object, seeded with the line it prints, and Enter applies the arguments.
+///
+/// One widget for both because they are one gesture with two destinations: the
+/// same catalogue, the same ranking, the same arrows and Tab, the same argument
+/// check, the same inline refusal. What [editing] adds is only what an existing
+/// object changes about the answer — see "editing in place" below.
 ///
 /// The palette stays the discovery route; this is the one where the hands never
 /// leave the keyboard, so every decision below is made in favour of not making
@@ -44,6 +51,20 @@ import '../../../engine/bridge/patch_object_descriptor.dart';
 ///   corrected in place rather than costing the whole gesture. **Escape**
 ///   dismisses and leaves the canvas exactly as it was.
 ///
+/// **Editing in place** ([editing] non-null, issue #382) changes two answers
+/// and nothing else:
+/// - **The object's own name is never ambiguous.** A `~*` opens reading `* 2`,
+///   and that bare `*` is not the collision of issue #380 asking to be settled
+///   — it is this object's name, unchanged. So the name the box opened with
+///   resolves straight back to the object it opened on, and only *moving* the
+///   highlight makes it a question again.
+/// - **A different type is refused, for now.** Retyping an object — `~sine`
+///   becoming `~saw` — is a different edit: the native object is replaced and
+///   its cables have to survive it. That is issue #383; until it lands this
+///   box says so inline rather than silently applying the arguments to the old
+///   type. The refusal is the whole seam: #383 replaces it with the retype
+///   path, and everything above stays as it is.
+///
 /// Keys are owned *here* rather than on the canvas: the canvas deliberately
 /// ignores every key while a descendant holds focus (issue #353), so — exactly
 /// like the number box — the bindings sit between this field and the canvas,
@@ -52,19 +73,32 @@ import '../../../engine/bridge/patch_object_descriptor.dart';
 class PatchInlineObjectBox extends StatefulWidget {
   const PatchInlineObjectBox({
     required this.objectTypes,
-    required this.onCreate,
+    required this.onCommit,
     required this.onDismiss,
+    this.editing,
+    this.initialText = '',
     super.key,
   });
 
   /// The catalogue to complete against — the palette's own source.
   final List<PatchObjectDescriptor> objectTypes;
 
-  /// Called when Enter resolved a type and its arguments passed the check.
-  final void Function(PatchObjectDescriptor desc, String args) onCreate;
+  /// The object this box is **editing in place**, or null when it is creating a
+  /// new one (issue #382). Supplied together with [initialText], which is the
+  /// line that object currently prints.
+  final PatchObjectDescriptor? editing;
 
-  /// Called when the box gives up the gesture (Escape). The canvas is left
-  /// untouched.
+  /// What the field opens holding — empty for a create, the edited object's own
+  /// line (`sine 440`) for an edit. Seeded **selected**, so typing replaces it
+  /// and the common edit (new arguments, same object) is one gesture.
+  final String initialText;
+
+  /// Called when Enter resolved a type and its arguments passed the check — to
+  /// create the object, or to apply the arguments to the one being [editing].
+  final void Function(PatchObjectDescriptor desc, String args) onCommit;
+
+  /// Called when the box gives up the gesture (Escape). The canvas — and the
+  /// object being edited — are left untouched.
   final VoidCallback onDismiss;
 
   /// Width of the typing field. The completion list matches it.
@@ -110,7 +144,7 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
   /// desktop text field — once as a key event this widget's own binding claims,
   /// once as the platform's submit action — and creating the object twice off
   /// one keypress is not a mistake the undo stack should have to describe.
-  bool _created = false;
+  bool _committed = false;
 
   static const double _rowHeight = 24;
   static const double _maxListHeight = 168;
@@ -118,7 +152,17 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
   @override
   void initState() {
     super.initState();
-    _matches = _matchesFor('');
+    // An edit opens holding the object's own line, **selected**: typing
+    // replaces it outright (the Max habit), while an arrow or a click puts the
+    // caret in it for a one-character correction.
+    final seed = widget.initialText;
+    if (seed.isNotEmpty) {
+      _text.value = TextEditingValue(
+        text: seed,
+        selection: TextSelection(baseOffset: 0, extentOffset: seed.length),
+      );
+    }
+    _matches = _matchesFor(_name);
     // Take the keyboard *explicitly* rather than with `autofocus`. The canvas
     // grabs focus on the very pointer-up that opens this box, and an autofocus
     // is skipped whenever its scope already has a focused descendant — so the
@@ -235,13 +279,29 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
     }
   }
 
+  /// Whether [name] is the **edited object's own name** — its bare id, left as
+  /// the box opened with it (issue #382).
+  ///
+  /// False the moment the user has *chosen* something else: an arrow onto
+  /// another row makes the name a question again, exactly as it would in a
+  /// create.
+  bool _isOwnName(String name) {
+    final editing = widget.editing;
+    if (editing == null || _chosen) return false;
+    return PatchTypeName.bare(editing.type) == name.toLowerCase();
+  }
+
   /// The type the current text would instantiate: an exact catalogue id when the
-  /// name already is one, else whatever the highlight is on.
+  /// name already is one, the edited object itself when its own name is still
+  /// standing, else whatever the highlight is on.
   PatchObjectDescriptor? get _resolved {
     final name = _name;
     if (name.isEmpty) return null;
     final exact = _exact(name);
     if (exact != null) return exact;
+    // An unchanged bare name keeps the object's current type: `*` over a `~*`
+    // means `~*`, not the `.*` that happens to rank first (issues #380, #382).
+    if (_isOwnName(name)) return widget.editing;
     if (_matches.isEmpty) return null;
     return _matches[_index.clamp(0, _matches.length - 1)];
   }
@@ -265,10 +325,10 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
     });
   }
 
-  /// Enter: resolve the name, check the arguments, and create — or refuse
+  /// Enter: resolve the name, check the arguments, and commit — or refuse
   /// inline and stay open.
   void _submit() {
-    if (_created) return;
+    if (_committed) return;
     final name = _name;
     if (name.isEmpty) {
       setState(() => _reject = 'type an object name');
@@ -278,8 +338,9 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
     // list is already showing both, in the two colours that tell them apart;
     // this refusal is what makes you look at it. An arrow (or a second Enter,
     // taking the highlight) then decides, and typing the id out in full never
-    // gets here at all.
-    if (!_chosen && _exact(name) == null) {
+    // gets here at all. An *edit* whose name is still the object's own is not
+    // that question — the object already answered it.
+    if (!_chosen && _exact(name) == null && !_isOwnName(name)) {
       final candidates = _bareCandidates(name);
       if (candidates.length > 1) {
         setState(() {
@@ -295,14 +356,27 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
       setState(() => _reject = 'unknown object · $_name');
       return;
     }
+    // Retyping an object in place is issue #383: the native object is replaced,
+    // not reconfigured, and its cables have to survive that. Refusing here
+    // keeps this slice honest — the alternative is applying the arguments to
+    // the old type and silently ignoring the name that was typed.
+    final editing = widget.editing;
+    if (editing != null && desc.type != editing.type) {
+      setState(
+        () => _reject =
+            'retyping is not supported yet · '
+            'still ${PatchTypeName.bare(editing.type)}',
+      );
+      return;
+    }
     final checked = PatchCreationArgs.check(desc, _typedArgs);
     final problem = checked.problem;
     if (problem != null) {
       setState(() => _reject = problem);
       return;
     }
-    _created = true;
-    widget.onCreate(desc, checked.args);
+    _committed = true;
+    widget.onCommit(desc, checked.args);
   }
 
   @override

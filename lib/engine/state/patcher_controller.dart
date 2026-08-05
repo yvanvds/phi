@@ -297,11 +297,16 @@ class PatcherController {
     return trimmed.isEmpty ? name : '$name $trimmed';
   }
 
-  /// Whether a node of [type] renders as an object box rather than as a framed
+  /// Whether a node of [type] renders as an object box rather than as a bare
   /// GUI control (design §7). An **unregistered** type is one too: a plain
   /// engine object dragged off the palette has no hand-authored body and never
   /// will.
-  static bool _isObjectBox(String type) =>
+  ///
+  /// Public because the canvas asks the same question the sizing does: an
+  /// object box is the thing a double-click edits in place (issue #382), and a
+  /// GUI object is operated through its body instead. Two answers would be one
+  /// too many.
+  static bool isObjectBox(String type) =>
       NodeTypeRegistry.instance.find(type)?.isObjectBox ?? true;
 
   /// The box a node of [type] needs (issue #379).
@@ -865,10 +870,11 @@ class PatcherController {
     );
   }
 
-  /// Apply a new creation-argument string to a node from the params dialog
-  /// (design §7), journaled as one [SetPatchParamsCommand] so Ctrl+Z restores
-  /// the prior parameters. A no-op when the args are unchanged, so re-opening
-  /// the dialog and pressing done without an edit records nothing.
+  /// Apply a new creation-argument string to a node — typed into its object box
+  /// on the canvas (design §7, issue #382) — journaled as one
+  /// [SetPatchParamsCommand] so Ctrl+Z restores the prior parameters. A no-op
+  /// when the args are unchanged, so opening the box and pressing Enter without
+  /// an edit records nothing.
   void applyParams(PatchNodeId id, String args) {
     if (argsOf(id) == args) return;
     undoScope.run(SetPatchParamsCommand(this, id, args));
@@ -979,7 +985,7 @@ class PatcherController {
   /// than the current box seats — the axis ports spread along since #377 — so a
   /// hand-authored body never jumps around as ports come and go.
   Size _sizeSeating(PatchNode node, int inputs, int outputs) {
-    if (_isObjectBox(node.type)) {
+    if (isObjectBox(node.type)) {
       return PatchObjectBoxMetrics.sizeFor(
         text: objectLineOf(node.id),
         inputs: inputs,

@@ -7,8 +7,8 @@ import 'package:phi/design/widgets/patcher/patch_object_box.dart';
 import 'package:phi/domain/patcher/patch_node.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/engine/state/node_type_registry.dart';
+import 'package:phi/surfaces/patcher/create/patch_inline_object_box.dart';
 import 'package:phi/surfaces/patcher/palette/patcher_palette.dart';
-import 'package:phi/surfaces/patcher/params/patch_params_dialog.dart';
 import 'package:phi/surfaces/patcher/patch_canvas_mode.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
 import 'package:phi/surfaces/patcher/patcher_node_view.dart';
@@ -226,8 +226,8 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('right-clicking a node opens the verbs, and edit parameters '
-        'reaches the dialog', (tester) async {
+    testWidgets('right-clicking a node opens the verbs — and no params dialog '
+        'is among them any more', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(body: PatcherSurface(engine: engine)),
@@ -238,25 +238,15 @@ void main() {
       final sine = await dropOnCanvas(tester, Obj.dSine);
       await rightClick(tester, viewOf(sine));
 
-      expect(find.text('edit parameters…'), findsOneWidget);
       expect(find.text('duplicate · ctrl+d'), findsOneWidget);
       expect(find.text('delete · del'), findsOneWidget);
-
-      await tester.tap(find.text('edit parameters…'));
-      await tester.pumpAndSettle();
-
-      // The same dialog double-click opens — the menu is a second door, not a
-      // second implementation.
-      expect(find.byType(PatchParamsDialog), findsOneWidget);
-      expect(
-        find.byKey(PatchParamsDialog.fieldKey('frequency')),
-        findsOneWidget,
-      );
+      // The verb's whole content was "open the params dialog", and the dialog
+      // is gone: arguments are typed on the box itself (issue #382).
+      expect(find.text('edit parameters…'), findsNothing);
     });
 
-    testWidgets('a GUI object is offered no parameters to edit', (
-      tester,
-    ) async {
+    testWidgets('double-clicking an object box opens it for typing, not a '
+        'dialog', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(body: PatcherSurface(engine: engine)),
@@ -264,13 +254,23 @@ void main() {
       );
       await tester.pump();
 
-      // `.slider` is operated through its live body and documents no params, so
-      // offering a dialog would open one with nothing in it.
-      final slider = await dropOnCanvas(tester, Obj.gSlider);
-      await rightClick(tester, viewOf(slider));
+      final sine = await dropOnCanvas(tester, Obj.dSine);
+      final at = tester.getCenter(viewOf(sine));
+      await tester.tapAt(at);
+      await tester.pump();
+      await tester.tapAt(at);
+      await tester.pumpAndSettle();
 
-      expect(find.text('edit parameters…'), findsNothing);
-      expect(find.text('duplicate · ctrl+d'), findsOneWidget);
+      // The surface wires the catalogue into the canvas, which is what lets the
+      // box complete against the same source the palette renders.
+      expect(find.byKey(PatcherCanvas.inlineEditKey), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(PatchInlineObjectBox.fieldKey))
+            .controller!
+            .text,
+        'sine 440',
+      );
     });
 
     testWidgets('the menu duplicates and deletes the node it was opened on', (

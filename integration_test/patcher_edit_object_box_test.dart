@@ -1,4 +1,4 @@
-import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -11,8 +11,8 @@ import 'package:phi/engine/bridge/patcher_node_snapshot.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
+import 'package:phi/surfaces/patcher/create/patch_inline_object_box.dart';
 import 'package:phi/surfaces/patcher/palette/patcher_palette.dart';
-import 'package:phi/surfaces/patcher/params/patch_params_dialog.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
 import 'package:phi/surfaces/patcher/reference/patch_reference_panel.dart';
 
@@ -20,17 +20,18 @@ import '../test/engine/test_doubles/fake_patcher_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
 
 /// End-to-end proof that an object's parameters are **visible on the canvas**
-/// and **editable without knowing the double-click** (issue #356), through the
-/// real [PhiApp] — real rail navigation, real palette drag, real menu route,
-/// real dialog route, real fonts and layout — backed by a [FakePatcherGateway]
-/// so no native `libyse.dll` is touched.
+/// (issue #356) and **editable on the object itself** (issue #382), through the
+/// real [PhiApp] — real rail navigation, real palette drag, real double-click
+/// timing, real fonts and layout — backed by a [FakePatcherGateway] so no
+/// native `libyse.dll` is touched.
 ///
 /// Widget tests cover each piece in isolation and structurally cannot cover
-/// this: the body only refreshes because the *composed* canvas rebuilds the
+/// this: the object box only reprints because the *composed* canvas rebuilds the
 /// node from its own listener, the reference panel only refreshes because the
-/// surface binds it to the live graph, and the context menu is a real overlay
-/// route stacked over the canvas's raw pointer pipeline — which is exactly
-/// where a competing gesture recogniser would show up.
+/// surface binds it to the live graph, and the in-place editor is a real text
+/// field opened out of the canvas's raw pointer pipeline — which is exactly
+/// where a competing gesture recogniser, or the canvas taking the keyboard back
+/// on the release that opened the box, would show up.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -85,8 +86,8 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('a dropped object shows its args, right-click edits them, and '
-      'the canvas + reference panel follow the edit and its undo', (
+  testWidgets('a dropped object shows its args, a double-click retypes them in '
+      'place, and the canvas + reference panel follow the edit and its undo', (
     tester,
   ) async {
     final patcherGateway = FakePatcherGateway()
@@ -124,43 +125,57 @@ void main() {
     // empty box that told the user nothing at all.
     expect(bodyText('metro 250'), findsOneWidget);
 
-    // ─── (2) right-click → edit parameters… reaches the dialog ────────────
-    // On the box itself: there is no header left to aim at (issue #379).
-    final rightClick = await tester.startGesture(
-      tester.getCenter(bodyText('metro 250')),
-      kind: PointerDeviceKind.mouse,
-      buttons: kSecondaryMouseButton,
-    );
-    await tester.pump();
-    await rightClick.up();
+    // ─── (2) double-click the box — it becomes the editor ─────────────────
+    // On the box itself: there is no header left to aim at (issue #379), and no
+    // dialog left to open (issue #382). Two quick taps, read out of the
+    // canvas's own pointer timing.
+    final at = tester.getCenter(bodyText('metro 250'));
+    await tester.tapAt(at);
+    await tester.pump(const Duration(milliseconds: 40));
+    await tester.tapAt(at);
     await tester.pumpAndSettle();
 
-    expect(find.text('edit parameters…'), findsOneWidget);
-    await tester.tap(find.text('edit parameters…'));
-    await tester.pumpAndSettle();
+    expect(find.byKey(PatcherCanvas.inlineEditKey), findsOneWidget);
+    final field = find.byKey(PatchInlineObjectBox.fieldKey);
+    // Seeded with the line the object was printing a moment ago, and holding
+    // the keyboard: the canvas took focus on the very release that opened it,
+    // so this is where a focus fight would show.
+    expect(tester.widget<TextField>(field).controller!.text, 'metro 250');
+    expect(tester.widget<TextField>(field).focusNode!.hasPrimaryFocus, isTrue);
 
     // ─── (3) the selection alone already answered "set to what?" ──────────
-    // The right-click selected the node, so the panel is showing its value
-    // behind the dialog.
+    // The first click selected the node, so the panel is showing its value
+    // beside the box being typed into — which is why the dialog's own copy of
+    // that documentation had nothing left to do.
     expect(
       find.byKey(PatchReferencePanel.valueKey('interval')),
       findsOneWidget,
     );
     expect(find.text('= 250'), findsOneWidget);
 
-    await tester.enterText(
-      find.byKey(PatchParamsDialog.fieldKey('interval')),
-      '500',
-    );
-    await tester.tap(find.byKey(PatchParamsDialog.doneKey));
+    // An argument the type documents a range for is refused before it can reach
+    // the engine, and the box stays open on the typo.
+    await tester.enterText(field, 'metro 99999');
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.byKey(PatchInlineObjectBox.rejectKey), findsOneWidget);
+    expect(bodyText('metro 250'), findsOneWidget);
+
+    await tester.enterText(field, 'metro 500');
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
 
     // ─── (4) canvas and panel both follow the apply, immediately ──────────
+    expect(find.byKey(PatcherCanvas.inlineEditKey), findsNothing);
     expect(bodyText('metro 500'), findsOneWidget);
     expect(bodyText('metro 250'), findsNothing);
     expect(find.text('= 500'), findsOneWidget);
 
     // ─── (5) …and both round-trip under Ctrl+Z / Ctrl+Y ───────────────────
+    // One step for the whole edit, and the keyboard is already back on the
+    // canvas to press it.
     await ctrl(tester, LogicalKeyboardKey.keyZ);
     expect(bodyText('metro 250'), findsOneWidget);
     expect(find.text('= 250'), findsOneWidget);

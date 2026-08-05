@@ -14,7 +14,6 @@ import '../../engine/state/patcher_controller.dart';
 import '../surface.dart';
 import 'library/patch_entity_strip.dart';
 import 'palette/patcher_palette.dart';
-import 'params/patch_params_dialog.dart';
 import 'patch_canvas_mode.dart';
 import 'patch_gui_poller.dart';
 import 'patcher_canvas.dart';
@@ -24,7 +23,7 @@ import 'reference/patch_reference_panel.dart';
 
 /// A verb on the node context menu (issue #356). Every one of them already has
 /// a keyboard route; the menu is what makes them discoverable without one.
-enum _NodeAction { editParams, duplicate, delete }
+enum _NodeAction { duplicate, delete }
 
 /// Patcher surface — pan/zoom canvas of nodes and cables.
 ///
@@ -155,28 +154,6 @@ class _PatcherViewportState extends State<_PatcherViewport> {
     );
   }
 
-  /// Double-click (or the context menu's `edit parameters…`) on a node with
-  /// documented parameters opens the metadata params dialog (design §7). GUI
-  /// objects are operated through their live bodies, so they are left to their
-  /// body; nodes with no documented parameters have nothing to edit.
-  void _editParams(PatchNode node) {
-    final desc = _descriptorForType(node.type);
-    if (desc == null || !_hasEditableParams(desc)) return;
-    showPatchParamsDialog(
-      context,
-      controller: widget.engine.patcher,
-      node: node,
-      descriptor: desc,
-    );
-  }
-
-  /// Whether [desc] is a type the params dialog has anything to offer for —
-  /// the one rule behind both the double-click and the context menu's
-  /// `edit parameters…` entry, so the menu can never offer a dialog that
-  /// [_editParams] would silently decline to open.
-  static bool _hasEditableParams(PatchObjectDescriptor desc) =>
-      desc.category != PatchObjectCategory.gui && desc.params.isNotEmpty;
-
   /// Right-click on a node: the standard affordances, named (issue #356).
   ///
   /// The canvas has already pointed the selection at [node] — either alone, or
@@ -185,20 +162,20 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   /// controller verbs `Ctrl+D` and `Delete` reach, journaled the same way; the
   /// menu only makes them findable without the shortcut.
   ///
+  /// `edit parameters…` is **not** among them any more (issue #382): the verb's
+  /// whole content was "open the params dialog", and with the box as the editor
+  /// there is no dialog to open — arguments are typed on the object itself,
+  /// double-click, and documented by the reference panel beside it (design
+  /// §7/§12.3).
+  ///
   /// The editor is resolved *after* the menu closes, since the open patch can
   /// change while it is up.
   Future<void> _onNodeContextMenu(PatchNode node, Offset global) async {
-    final desc = _descriptorForType(node.type);
-    final action = await _showNodeMenu(
-      global,
-      editable: desc != null && _hasEditableParams(desc),
-    );
+    final action = await _showNodeMenu(global);
     if (action == null || !mounted) return;
     final controller = widget.engine.patcherOrNull;
     if (controller == null) return;
     switch (action) {
-      case _NodeAction.editParams:
-        _editParams(node);
       case _NodeAction.duplicate:
         controller.duplicateSelection();
       case _NodeAction.delete:
@@ -208,8 +185,7 @@ class _PatcherViewportState extends State<_PatcherViewport> {
 
   /// The node context menu, anchored at the global pointer position — same
   /// styling as the state canvas's menus so the two surfaces feel of a piece.
-  /// `edit parameters…` is offered only when the type has parameters to edit.
-  Future<_NodeAction?> _showNodeMenu(Offset global, {required bool editable}) {
+  Future<_NodeAction?> _showNodeMenu(Offset global) {
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     return showMenu<_NodeAction>(
       context: context,
@@ -219,7 +195,6 @@ class _PatcherViewportState extends State<_PatcherViewport> {
       ),
       color: PhiColors.bg2,
       items: [
-        if (editable) _menuItem('edit parameters…', _NodeAction.editParams),
         _menuItem('duplicate · ctrl+d', _NodeAction.duplicate),
         _menuItem('delete · del', _NodeAction.delete),
       ],
@@ -326,7 +301,6 @@ class _PatcherViewportState extends State<_PatcherViewport> {
                               onToggleMode: () => _setMode(_mode.flipped),
                               onCreateObject: _createObject,
                               onNodeTap: _selectNode,
-                              onNodeDoubleTap: _editParams,
                               onNodeContextMenu: _onNodeContextMenu,
                             ),
                           ),

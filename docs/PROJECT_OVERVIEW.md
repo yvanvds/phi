@@ -1823,21 +1823,20 @@ main + app          (orchestration)
   `.b` button (a bang → `sendBang`), `.i`/`.f` number (an editable readout that pushes
   `sendFloat` then re-reads `guiValue`, so it shows the authoritative engine value —
   a cable into its inlet would set the same), and `.m` message (its args, fired as a
-  bang on tap). Non-GUI nodes get a **double-click params dialog**
-  (`params/patch_params_dialog.dart`) — one field per documented `PatchParamDescriptor`
-  (name · doc · default · range), seeded from the node's current args, joined back into
-  a positional arg string and applied through `setParams` as a single
-  `SetPatchParamsCommand` on the surface `undoScope` (so the whole edit round-trips
-  under one Ctrl+Z) — the same metadata-driven-editor pattern as the MIDI transform
-  editors. Double-click is detected from raw pointer timing in the canvas (a nested
-  `GestureDetector.onDoubleTap` would delay the node's single-tap select), gated to
-  non-GUI types (GUI objects are operated live). Covered by unit tests (controller
-  `guiValueOf` / `setControlBang` / `applyParams` undo/redo + unknown-handle
-  tolerance), widget tests (each body's interaction reaching the fake gateway,
-  the number body's `guiValue` display refresh, the dialog round-tripping a fake
-  type's params with undo), and an end-to-end `patcher_node_gui` integration test
-  (operate the seeded slider → `sendFloat`; double-click `~sine` → edit frequency →
-  `setParams` into the live patch).
+  bang on tap). Non-GUI nodes got a **double-click params dialog** — one field per
+  documented `PatchParamDescriptor` (name · doc · default · range), seeded from the
+  node's current args, joined back into a positional arg string and applied through
+  `setParams` as a single `SetPatchParamsCommand` on the surface `undoScope` (so the
+  whole edit round-trips under one Ctrl+Z). Double-click is detected from raw pointer
+  timing in the canvas (a nested `GestureDetector.onDoubleTap` would delay the node's
+  single-tap select). *(The dialog is **retired** since #382: the same double-click
+  now opens the object box itself for typing, through the same journaled
+  `applyParams`. `PatchParamsDialog` and its folder are deleted.)* Covered by unit
+  tests (controller `guiValueOf` / `setControlBang` / `applyParams` undo/redo +
+  unknown-handle tolerance), widget tests (each body's interaction reaching the fake
+  gateway, the number body's `guiValue` display refresh), and an end-to-end
+  `patcher_node_gui` integration test (operate the seeded slider → `sendFloat`;
+  double-click `~sine` → retype the frequency → `setParams` into the live patch).
 - **Patcher entity strip + source-on-bus placement** (issue #224, patcher epic,
   design `docs/design/patcher.md` §3, §4, §8) — the slice that joins the surface
   (which until now edited a single hardwired demo patcher) to the per-entity world
@@ -2204,7 +2203,8 @@ main + app          (orchestration)
   answers "what is this set to" and keeps answering it across an edit. A param
   the node carries no argument for shows no value rather than claiming the
   documented default. (3) A **node context menu** — `edit parameters…` (gated to
-  the same non-GUI/has-params rule the double-click uses) · duplicate · delete,
+  the same non-GUI/has-params rule the double-click uses; *dropped in #382 with the
+  dialog it opened*) · duplicate · delete,
   styled like the state canvas's menus. The secondary button is read from the
   canvas's own raw `Listener` (a `GestureDetector` there would re-enter the arena
   issue #352 emptied): it selects the node it landed on unless that node is
@@ -2218,10 +2218,10 @@ main + app          (orchestration)
   tests (grow / shrink-with-cable-drop-and-undo / unchanged-topology no-op),
   widget tests (the args body's render + refresh + hand-authored-body precedence,
   the panel's current values, right-click selection semantics, the canvas
-  redrawing port dots after a reshape, the menu reaching the dialog and
-  duplicating/deleting), and an end-to-end `patcher_node_params` integration test
-  (drop `.metro` → body reads `.metro 250` → right-click → `edit parameters…` →
-  apply 500 → body *and* panel follow → Ctrl+Z/Y round-trip both).
+  redrawing port dots after a reshape, the menu duplicating/deleting), and an
+  end-to-end integration test (drop `.metro` → body reads `.metro 250` → edit it
+  → body *and* panel follow → Ctrl+Z/Y round-trip both) — renamed
+  `patcher_edit_object_box` when #382 made the edit an in-place one.
 - **GUI bodies follow the engine** (issue #357, patcher epic) — the live bodies
   only ever re-read `guiValue` *after their own push*, so a value arriving over
   a **cable** moved the native object and repainted nothing: the seeded
@@ -2571,6 +2571,44 @@ main + app          (orchestration)
   matching an object box's line height; in run mode each still bangs/pushes and
   still follows a value arriving from the graph; in edit mode the bang drags from
   the middle of its own square).
+- **Edit an object box in place** (issue #382, object-box epic #375, design
+  `docs/design/patcher.md` §7 + §12.3) — **the box is the editor.** Changing
+  `~sine 440` to `~sine 300` meant double-clicking the node, reading a modal,
+  editing a field and pressing *apply*; now a double-click on the box turns it
+  into a text field seeded with its own line (`sine 440`, selected so typing
+  replaces it) and Enter commits. **One widget, not a second one:**
+  `PatchInlineObjectBox` (#358) grows an `editing` descriptor + `initialText`
+  and is reused as-is, so the completion catalogue, the ranking, the arrows, Tab,
+  the `PatchCreationArgs` check and the inline refusal are literally the same
+  code the create path runs. Two answers change when `editing` is set. The
+  **object's own name is never ambiguous** — a bare `*` over a `~*` is not the
+  #380 collision asking to be settled, it is this object's name unchanged, so it
+  resolves straight back to the object (moving the highlight makes it a question
+  again). And **a different type is refused inline** with a reason that says so:
+  retyping replaces the native object and has to carry its cables across, which
+  is issue #383 — that single refusal is the whole seam it will replace. Enter
+  applies through the existing journaled `PatcherController.applyParams`, so the
+  edit is one `setParams` under one `Ctrl+Z` and the box reprints and re-measures
+  through `markParamsChanged` / `_resyncShape`; an unchanged line journals
+  nothing. Escape (or a press elsewhere) leaves the object exactly as it was, and
+  a refusal keeps the field open on the typo. The canvas owns the gesture: its
+  raw-pointer double-click pairing (#352) now routes to `_openInlineEdit` instead
+  of an `onNodeDoubleTap` callback — that parameter is **gone** — gated to nodes
+  that *are* object boxes via a now-public `PatcherController.isObjectBox`, so a
+  GUI control (#381) is operated rather than typed. **The params dialog retires**:
+  `PatchParamsDialog`, `showPatchParamsDialog`, the surface's double-click route
+  and the context menu's `edit parameters…` verb are all deleted — the reference
+  panel (#356) already renders every parameter's doc, default, range and current
+  value beside the box being typed into. Covered by widget tests on the box
+  (opens holding its line selected; commits new args against the same type; its
+  own bare name never asks; an out-of-range value refused in place; a different
+  type refused with the retype reason; arrowing onto the other candidate is a
+  retype; Escape commits nothing), on the canvas (Enter → `applyParams` + one
+  Ctrl+Z; unchanged line journals nothing; Escape and a press elsewhere change
+  nothing; a refusal keeps the box open; a GUI object opens nothing; run mode
+  opens nothing) and on the surface (double-click reaches the editor, no
+  `edit parameters…` in the menu), plus the end-to-end
+  `patcher_edit_object_box` integration test through the real app.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

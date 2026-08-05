@@ -9,7 +9,7 @@ import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
-import 'package:phi/surfaces/patcher/params/patch_params_dialog.dart';
+import 'package:phi/surfaces/patcher/create/patch_inline_object_box.dart';
 import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
@@ -93,8 +93,9 @@ void main() {
     );
 
     // ─── (3) an argument edit re-measures the box ─────────────────────────
-    // Double-click the box itself: there is no header to aim at any more.
-    // Detected from raw pointer timing, so two quick taps suffice.
+    // Double-click the box itself: there is no header to aim at any more, and
+    // the box *is* the editor (issue #382). Detected from raw pointer timing,
+    // so two quick taps suffice.
     final at = tester.getCenter(boxFor('sine 440'));
     await tester.tapAt(at);
     await tester.pump(const Duration(milliseconds: 40));
@@ -102,10 +103,11 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-      find.byKey(PatchParamsDialog.fieldKey('frequency')),
-      '1234.5678',
+      find.byKey(PatchInlineObjectBox.fieldKey),
+      'sine 1234.5678',
     );
-    await tester.tap(find.byKey(PatchParamsDialog.doneKey));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
 
     final sine = engine.patcher.graph.nodes.firstWhere(
