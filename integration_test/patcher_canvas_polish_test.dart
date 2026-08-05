@@ -16,8 +16,10 @@ import 'package:phi/engine/state/node_type_registry.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
 import 'package:phi/surfaces/patcher/nodes/number_node_body.dart';
+import 'package:phi/surfaces/patcher/patch_canvas_mode.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
 import 'package:phi/surfaces/patcher/patcher_node_view.dart';
+import 'package:phi/surfaces/patcher/placement/patch_placement_bar.dart';
 import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
@@ -35,6 +37,13 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 /// stack has them; and the number scrub has to survive the canvas's own raw
 /// pointer pipeline, the surface's poll and the app-level text shortcuts all
 /// being stacked above a field that a press must still be able to reach.
+///
+/// The scrub leg runs in **run mode** (issue #378): with the node header gone,
+/// a GUI body that owned its own presses would leave a fader unmovable, so the
+/// canvas switches every body off in `edit` mode and a number box only scrubs
+/// while the patch is being played. The hover and the cable detach are editing,
+/// and stay on either side of it in `edit` — the mode is flipped from the
+/// placement bar, exactly as a user flips it.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -129,6 +138,19 @@ void main() {
     String shown() => tester.widget<TextField>(field).controller!.text;
     expect(shown(), '0');
 
+    PatchCanvasMode mode() =>
+        tester.widget<PatcherCanvas>(find.byType(PatcherCanvas)).mode;
+    Future<void> flipMode() async {
+      await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+      await tester.pumpAndSettle();
+    }
+
+    // Play the patch: only then is the body live and the readout a control at
+    // all (issue #378).
+    expect(mode(), PatchCanvasMode.edit);
+    await flipMode();
+    expect(mode(), PatchCanvasMode.run);
+
     final scrub = await tester.startGesture(
       tester.getCenter(field),
       kind: PointerDeviceKind.mouse,
@@ -152,6 +174,11 @@ void main() {
     expect(tester.widget<TextField>(field).focusNode!.hasPrimaryFocus, isFalse);
 
     // ── 3) a cable grabbed near its end and dropped on nothing is deleted ───
+    // Back to editing: re-routing a cable is an edit, and a patch being played
+    // cannot be rewired (issue #378).
+    await flipMode();
+    expect(mode(), PatchCanvasMode.edit);
+
     expect(patcher.graph.cables, hasLength(1));
     final a = portOf(out(slider, 0));
     final b = portOf(inp(sine, 0));
