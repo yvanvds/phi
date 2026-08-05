@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -2364,6 +2366,105 @@ void main() {
 
       await ctrl(tester, LogicalKeyboardKey.digit0);
       expect(controller.transform.value, moved);
+    });
+  });
+
+  // ─── the wheel zoom is held inside its range (issue #373) ────────────────
+
+  group('wheel zoom clamp', () {
+    /// The view's zoom, read off the x basis. Deliberately **not**
+    /// `Matrix4.getMaxScaleOnAxis` — that is the bug under test: it maxes over
+    /// all three axes, and the canvas leaves z at unity, so it reports `1.0`
+    /// for every zoomed-*out* view and would mask exactly what is asserted
+    /// here.
+    double viewScale() => controller.transform.value.entry(0, 0);
+
+    /// [times] wheel notches at the middle of the canvas. Negative [dy] is
+    /// wheel-up, which zooms in.
+    Future<void> wheel(WidgetTester tester, double dy, {int times = 1}) async {
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      pointer.hover(canvasTL(tester) + const Offset(400, 300));
+      for (var i = 0; i < times; i++) {
+        await tester.sendEventToBinding(pointer.scroll(Offset(0, dy)));
+        await tester.pump();
+      }
+    }
+
+    testWidgets('wheeling down stops at the 0.25 floor and stays there', (
+      tester,
+    ) async {
+      controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester);
+
+      // Far more notches than the 15 that reach the floor from 1:1, so an
+      // unclamped view would have shrunk the patch away to nothing.
+      await wheel(tester, 100, times: 40);
+      expect(viewScale(), closeTo(0.25, 1e-9));
+
+      // The floor is terminal, not merely a value passed through: more of the
+      // same gesture leaves the view untouched.
+      final atFloor = controller.transform.value.clone();
+      await wheel(tester, 100, times: 5);
+      expect(controller.transform.value, atFloor);
+
+      // And the way back is measured from where the view really is: three
+      // notches up from the floor is the floor times 1.1³, not three notches
+      // up from wherever an unclamped shrink had run off to.
+      await wheel(tester, -100, times: 3);
+      expect(viewScale(), closeTo(0.25 * math.pow(1.1, 3), 1e-9));
+    });
+
+    testWidgets('wheeling back up returns through the same scales', (
+      tester,
+    ) async {
+      await pumpCanvas(tester);
+
+      final down = <double>[];
+      for (var i = 0; i < 5; i++) {
+        await wheel(tester, 100);
+        down.add(viewScale());
+      }
+      expect(down.last, closeTo(math.pow(1 / 1.1, 5).toDouble(), 1e-9));
+
+      for (final expected in down.reversed.skip(1)) {
+        await wheel(tester, -100);
+        expect(viewScale(), closeTo(expected, 1e-9));
+      }
+      await wheel(tester, -100);
+      expect(viewScale(), closeTo(1.0, 1e-9));
+    });
+
+    testWidgets('wheeling up stops at the 4.0 ceiling', (tester) async {
+      await pumpCanvas(tester);
+
+      await wheel(tester, -100, times: 40);
+      expect(viewScale(), closeTo(4.0, 1e-9));
+
+      final atCeiling = controller.transform.value.clone();
+      await wheel(tester, -100, times: 5);
+      expect(controller.transform.value, atCeiling);
+    });
+
+    testWidgets('the point under the cursor stays put on the way out', (
+      tester,
+    ) async {
+      await pumpCanvas(tester);
+      final anchor = canvasTL(tester) + const Offset(400, 300);
+      final scene = MatrixUtils.transformPoint(
+        Matrix4.inverted(controller.transform.value),
+        anchor - canvasTL(tester),
+      );
+
+      await wheel(tester, 100, times: 40);
+
+      final after =
+          canvasTL(tester) +
+          MatrixUtils.transformPoint(controller.transform.value, scene);
+      expect(after.dx, closeTo(anchor.dx, 1e-6));
+      expect(after.dy, closeTo(anchor.dy, 1e-6));
     });
   });
 }
