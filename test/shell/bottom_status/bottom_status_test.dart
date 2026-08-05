@@ -191,10 +191,17 @@ void main() {
       // Everything is still mounted — scrolled out of view, not dropped.
       expect(find.text('256 / 44k'), findsOneWidget);
       expect(find.text('5.8 ms'), findsOneWidget);
-      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      // The readouts are genuinely wider than the room they were given, i.e.
+      // this window really does exercise the scrolling path.
+      expect(
+        tester.getSize(find.byType(SingleChildScrollView)).width,
+        lessThan(tester.getSize(find.byKey(BottomStatus.readoutsKey)).width),
+      );
     });
 
-    testWidgets('does not scroll when the window has room', (tester) async {
+    testWidgets('pins the readouts to the right when the window has room', (
+      tester,
+    ) async {
       await pump(tester);
       telemetry.add(
         const EngineTelemetry(
@@ -211,9 +218,13 @@ void main() {
       await tester.pump();
 
       expect(tester.takeException(), isNull);
-      // The row still fills the bar, chips pinned right — the common layout is
-      // unchanged by the scroll wrapper.
+      // The strip still fills the bar and the readouts sit flush against its
+      // right edge — the common layout is unchanged by the scroll wrapper.
       expect(tester.getSize(find.byType(Row).first).width, 1200);
+      expect(
+        tester.getBottomRight(find.byKey(BottomStatus.readoutsKey)).dx,
+        closeTo(1200, 0.5),
+      );
     });
 
     testWidgets('the panic button runs onPanic (issue #264)', (tester) async {

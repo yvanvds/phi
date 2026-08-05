@@ -76,6 +76,10 @@ class BottomStatus extends StatelessWidget {
 
   static void _noPanic() {}
 
+  /// The scrolling readout cluster (chips, health, MIDI, log toggle) — keyed so
+  /// the narrow-window layout tests (issue #400) can measure it.
+  static const Key readoutsKey = Key('BottomStatus.readouts');
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -89,36 +93,45 @@ class BottomStatus extends StatelessWidget {
         initialData: EngineTelemetry.zero,
         builder: (context, snapshot) {
           final t = snapshot.data ?? EngineTelemetry.zero;
-          // In a window narrower than the strip's content (issue #400), scroll
-          // horizontally instead of asserting a `RenderFlex overflowed` —
-          // the header pattern from #287 / #299. `IntrinsicWidth` gives the
-          // `Spacer` a bounded width to divide (the row's natural width), while
-          // `minWidth: maxWidth` keeps the row filling — the chips pinned right
-          // — at any normal window size, so the common layout is unchanged.
-          // Only reachable once a device is open: `BUF` / `LAT` carry real
-          // values then, not the `—` placeholder, which is what pushes the row
-          // past a ~768px window.
-          return LayoutBuilder(
-            builder: (context, constraints) => SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                child: IntrinsicWidth(child: _buildRow(t)),
+          return Row(
+            children: [
+              const SizedBox(width: PhiSpacing.s3),
+              _LiveDot(session: session),
+              const SizedBox(width: PhiSpacing.s3),
+              PanicButton(onPanic: onPanic),
+              // The readouts take whatever is left and scroll inside it rather
+              // than pushing the strip past the window (issue #400): once a
+              // device is open `BUF` / `LAT` carry real values instead of the
+              // `—` placeholder, and the natural width clears a ~768px window.
+              //
+              // `reverse: true` pins them to the right edge — what the `Spacer`
+              // used to do — so a roomy window looks exactly as before while a
+              // narrow one keeps the health chip and log toggle in view and
+              // scrolls the telemetry off to the left.
+              //
+              // Deliberately *not* the `IntrinsicWidth` header pattern of #287
+              // / #299: the strip carries a dozen real-font `Text`s, and each
+              // one's laid-out width can exceed its reported intrinsic width by
+              // a fraction of a pixel. Summed, that under-measures the row by
+              // ~10px and it overflows anyway. A bounded `Expanded` cannot.
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  reverse: true,
+                  child: _buildReadouts(t),
+                ),
               ),
-            ),
+            ],
           );
         },
       ),
     );
   }
 
-  Widget _buildRow(EngineTelemetry t) => Row(
+  Widget _buildReadouts(EngineTelemetry t) => Row(
+    key: readoutsKey,
+    mainAxisSize: MainAxisSize.min,
     children: [
-      const SizedBox(width: PhiSpacing.s3),
-      _LiveDot(session: session),
-      const SizedBox(width: PhiSpacing.s3),
-      PanicButton(onPanic: onPanic),
-      const Spacer(),
       StatusChip(label: 'CPU', value: formatCpu(t.cpuLoad)),
       StatusChip(label: 'BUF', value: formatBuffer(t.bufferSize, t.sampleRate)),
       StatusChip(label: 'LAT', value: formatLatency(t.latencyMs)),
