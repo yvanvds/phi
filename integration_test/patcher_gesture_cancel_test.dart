@@ -67,7 +67,7 @@ void main() {
 
     // The object box is the whole node since issue #379 — its middle is where
     // a body drag is aimed, there being no header any more.
-    final sineLine = find.text('~sine 440');
+    final sineLine = find.text('sine 440');
     final sineHeaderCentre =
         canvasTL +
         sine.position +

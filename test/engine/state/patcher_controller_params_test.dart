@@ -226,7 +226,8 @@ void main() {
       final created = fan.size;
       expect(
         created,
-        PatchObjectBoxMetrics.sizeFor(text: '.fan 1 2', inputs: 1, outputs: 2),
+        // Measured from the bare line the box prints (issue #380).
+        PatchObjectBoxMetrics.sizeFor(text: 'fan 1 2', inputs: 1, outputs: 2),
       );
 
       controller.applyParams(fan.id, '1 2 3 4 5 6');
@@ -235,7 +236,7 @@ void main() {
       expect(
         fan.size,
         PatchObjectBoxMetrics.sizeFor(
-          text: '.fan 1 2 3 4 5 6',
+          text: 'fan 1 2 3 4 5 6',
           inputs: 1,
           outputs: 6,
         ),

@@ -8,6 +8,7 @@ import '../../domain/patcher/patch_node.dart';
 import '../../domain/patcher/patch_node_id.dart';
 import '../../domain/patcher/patch_port.dart';
 import '../../domain/patcher/patch_port_id.dart';
+import '../../domain/patcher/patch_type_name.dart';
 import '../../engine/state/node_type_registry.dart';
 import '../../engine/state/patcher_controller.dart';
 
@@ -17,8 +18,9 @@ import '../../engine/state/patcher_controller.dart';
 /// Two kinds, and the descriptor decides (design §7, issue #379): a type with a
 /// hand-authored GUI body is a [PatchNodeFrame] around that body, and every
 /// other engine object is a [PatchObjectBox] — one bordered line reading
-/// `~sine 440`, no header, no second colour band. The frame's headers only
-/// survive here because the GUI objects have not lost theirs yet (issue #381).
+/// `sine 440` in the DSP blue, no header, no drawn `~`/`.` prefix (issues #379,
+/// #380). The frame's headers only survive here because the GUI objects have
+/// not lost theirs yet (issue #381).
 ///
 /// **Purely visual** where pointers are concerned: select, double-click and
 /// body-drag are all driven by the canvas's raw pointer pipeline, which sees
@@ -98,6 +100,10 @@ class PatcherNodeView extends StatelessWidget {
             if (body == null)
               PatchObjectBox(
                 text: controller.objectLineOf(node.id),
+                // The `~`/`.` the line no longer prints, as its colour
+                // (issue #380) — read off the canonical type id, which is what
+                // the node has always been keyed by.
+                isDsp: PatchTypeName.isDsp(node.type),
                 textKey: objectLineKey(node.id),
                 voice: node.voice,
                 armed: node.armed,

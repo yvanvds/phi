@@ -11,6 +11,7 @@ import '../../domain/patcher/patch_node_id.dart';
 import '../../domain/patcher/patch_port.dart';
 import '../../domain/patcher/patch_port_id.dart';
 import '../../domain/patcher/patch_port_kind.dart';
+import '../../domain/patcher/patch_type_name.dart';
 import '../../domain/project/undo_scope.dart';
 import '../bridge/patch_object_descriptor.dart';
 import '../bridge/patch_pin_compatibility.dart';
@@ -277,12 +278,14 @@ class PatcherController {
       if (p.defaultValue.isNotEmpty) p.defaultValue,
   ].join(' ');
 
-  /// The line an **object box** prints: the object's type followed by its
-  /// creation arguments, the way a Max object box reads — `~sine 440`,
-  /// `.metro 250` (issue #356). Empty for a node the graph does not hold.
+  /// The line an **object box** prints: the object's name followed by its
+  /// creation arguments, the way a Max object box reads — `sine 440`,
+  /// `metro 250` (issue #356). Empty for a node the graph does not hold.
   ///
-  /// Dropping the `~`/`.` prefix and colouring the line by DSP/control is
-  /// issue #380; this is the text as it stands.
+  /// The name is **bare**: the `~`/`.` prefix is not drawn, the box's colour
+  /// says it instead (issue #380, design §12.4). The prefixed id stays the
+  /// canonical one on the node itself, so nothing about typing, completing,
+  /// saving or talking to the gateway changes — only what is read on screen.
   String objectLineOf(PatchNodeId id) {
     final node = graph.nodeById(id);
     if (node == null) return '';
@@ -290,10 +293,13 @@ class PatcherController {
   }
 
   /// [objectLineOf]'s pure form, for the moment before the node exists — node
-  /// creation measures its own box from this.
+  /// creation measures its own box from this. Takes the **canonical** type and
+  /// bares it, so the measurement and the render can never disagree about how
+  /// many characters the line has.
   static String objectLine(String type, String args) {
+    final name = PatchTypeName.bare(type);
     final trimmed = args.trim();
-    return trimmed.isEmpty ? type : '$type $trimmed';
+    return trimmed.isEmpty ? name : '$name $trimmed';
   }
 
   /// Whether a node of [type] renders as an object box rather than as a framed

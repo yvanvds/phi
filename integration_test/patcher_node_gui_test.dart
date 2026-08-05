@@ -54,11 +54,11 @@ void main() {
       isNotEmpty,
     );
 
-    // 2) Double-click the `~sine` object box — one line reading `~sine 440`
-    //    since issue #379, and the only thing left to aim at — to open the
-    //    params dialog. Detected from raw pointer timing, so two quick taps
+    // 2) Double-click the `~sine` object box — one line reading `sine 440`
+    //    since issues #379/#380, and the only thing left to aim at — to open
+    //    the params dialog. Detected from raw pointer timing, so two quick taps
     //    suffice.
-    final sineLine = find.text('~sine 440');
+    final sineLine = find.text('sine 440');
     expect(sineLine, findsOneWidget);
     final at = tester.getCenter(sineLine);
     await tester.tapAt(at);

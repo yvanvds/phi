@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/design/tokens/phi_colors.dart';
 import 'package:phi/design/widgets/patcher/patch_node_frame.dart';
 import 'package:phi/design/widgets/patcher/patch_object_box.dart';
 import 'package:phi/design/widgets/patcher/patch_object_box_metrics.dart';
@@ -12,8 +13,9 @@ import 'package:yse/yse.dart';
 import '../../engine/test_doubles/fake_patcher_gateway.dart';
 
 /// An engine object on the canvas is an **object box** (issue #379): one
-/// bordered line reading `~sine 440`, sized to that line, with no header
-/// saying the same thing again above it.
+/// bordered line reading `sine 440`, sized to that line, with no header
+/// saying the same thing again above it — and, since issue #380, no `~`/`.`
+/// prefix drawn either: the line's colour carries that.
 ///
 /// Driven through [PatcherNodeView] rather than the box alone, because the
 /// binding is the point: which chrome a node gets is the descriptor's decision,
@@ -74,7 +76,7 @@ void main() {
     );
   }
 
-  testWidgets('an unregistered type is a box printing its type and args', (
+  testWidgets('an unregistered type is a box printing its name and args', (
     tester,
   ) async {
     final node = controller.addNode(
@@ -85,31 +87,63 @@ void main() {
 
     expect(find.byType(PatchObjectBox), findsOneWidget);
     expect(find.byType(PatchNodeFrame), findsNothing);
-    expect(find.text('.metro 250'), findsOneWidget);
+    // Bare (issue #380) — the node's type is still the canonical `.metro`.
+    expect(find.text('metro 250'), findsOneWidget);
+    expect(find.text('.metro 250'), findsNothing);
+    expect(node.type, '.metro');
   });
 
-  testWidgets('a type with no arguments prints just its type', (tester) async {
+  testWidgets('a type with no arguments prints just its name', (tester) async {
     final node = controller.addNode(
       desc: boxDesc('.print'),
       position: Offset.zero,
     );
     await pumpNode(tester, node);
 
-    // Not `.print ` with a dangling space, and not an empty box either.
-    expect(find.text('.print'), findsOneWidget);
+    // Not `print ` with a dangling space, and not an empty box either.
+    expect(find.text('print'), findsOneWidget);
   });
 
   testWidgets('the title is not rendered at all', (tester) async {
     // Even a node carrying one — every node does, the field survives for the
-    // GUI frames — must not show it: `~dac` is not `OUT · L/R`.
+    // GUI frames — must not show it: `dac` is not `OUT · L/R`.
     final node = controller.addNode(
       desc: boxDesc(Obj.dDac),
       position: Offset.zero,
     );
     await pumpNode(tester, node);
 
-    expect(find.text('~dac'), findsOneWidget);
+    expect(find.text('dac'), findsOneWidget);
     expect(find.byType(Text), findsOneWidget);
+  });
+
+  testWidgets('the DSP/control domain is the line colour (issue #380)', (
+    tester,
+  ) async {
+    Color lineColor(WidgetTester tester) => tester
+        .widget<Text>(
+          find.descendant(
+            of: find.byType(PatchObjectBox),
+            matching: find.byType(Text),
+          ),
+        )
+        .style!
+        .color!;
+
+    final dsp = controller.addNode(
+      desc: boxDesc(Obj.dSine, args: '440'),
+      position: Offset.zero,
+    );
+    await pumpNode(tester, dsp);
+    expect(find.text('sine 440'), findsOneWidget);
+    expect(lineColor(tester), PhiColors.cool);
+
+    final control = controller.addNode(
+      desc: boxDesc(Obj.gMetro, args: '250'),
+      position: Offset.zero,
+    );
+    await pumpNode(tester, control);
+    expect(lineColor(tester), PhiColors.fg1);
   });
 
   testWidgets('the box is created at the size its line needs', (tester) async {
@@ -120,8 +154,10 @@ void main() {
 
     expect(
       node.size,
+      // Measured from the line it actually prints — the bare one (issue #380),
+      // or the box would be sized for a character it never draws.
       PatchObjectBoxMetrics.sizeFor(
-        text: '.metro 250',
+        text: 'metro 250',
         inputs: node.inputs.length,
         outputs: node.outputs.length,
       ),
@@ -138,27 +174,27 @@ void main() {
       position: Offset.zero,
     );
     await pumpNode(tester, node);
-    expect(find.text('.metro 250'), findsOneWidget);
+    expect(find.text('metro 250'), findsOneWidget);
     final initial = node.size;
 
     // The whole point of issue #356: applying the edit changed what the object
     // does, and the canvas used to keep showing nothing at all.
     controller.applyParams(node.id, '5000000');
     await tester.pump();
-    expect(find.text('.metro 5000000'), findsOneWidget);
-    expect(find.text('.metro 250'), findsNothing);
+    expect(find.text('metro 5000000'), findsOneWidget);
+    expect(find.text('metro 250'), findsNothing);
     // ...and issue #379's half: a longer line gets a longer box.
     expect(node.size.width, greaterThan(initial.width));
     expect(node.size.height, initial.height);
 
     controller.undo();
     await tester.pump();
-    expect(find.text('.metro 250'), findsOneWidget);
+    expect(find.text('metro 250'), findsOneWidget);
     expect(node.size, initial);
 
     controller.redo();
     await tester.pump();
-    expect(find.text('.metro 5000000'), findsOneWidget);
+    expect(find.text('metro 5000000'), findsOneWidget);
   });
 
   testWidgets('a hand-authored GUI body still gets its frame', (tester) async {
