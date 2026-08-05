@@ -15,6 +15,7 @@ import '../surface.dart';
 import 'library/patch_entity_strip.dart';
 import 'palette/patcher_palette.dart';
 import 'params/patch_params_dialog.dart';
+import 'patch_canvas_mode.dart';
 import 'patch_gui_poller.dart';
 import 'patcher_canvas.dart';
 import 'patcher_node_types.dart';
@@ -92,12 +93,33 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   /// selection rather than in the payload or the engine.
   bool _snapToGrid = false;
 
+  /// Whether the canvas is being edited or played (issue #378, design §6).
+  ///
+  /// **Performance state**, so it lives here and nowhere else: per open
+  /// surface, never written to the payload, and therefore a reopened project
+  /// starts in [PatchCanvasMode.edit]. Held above the canvas rather than inside
+  /// it because the placement bar's indicator names the same mode — and because
+  /// the canvas is re-keyed per open patch, while the mode deliberately is not.
+  PatchCanvasMode _mode = PatchCanvasMode.edit;
+
   @override
   void initState() {
     super.initState();
     registerBuiltInPatcherNodes();
     _seedDefaultGraphIfEmpty(widget.engine.patcher);
     _objectTypes = widget.engine.patcher.objectTypes();
+  }
+
+  /// Switch the canvas between editing and playing (issue #378) — from the
+  /// placement bar's toggle or from the canvas's own `Ctrl+E`.
+  ///
+  /// Leaving edit mode drops the selection: a selection is an editing state,
+  /// and a run-mode canvas that cannot select or deselect anything must not
+  /// keep drawing rings around nodes nothing can do anything to.
+  void _setMode(PatchCanvasMode mode) {
+    if (mode == _mode) return;
+    if (mode.isRun) widget.engine.patchLibrary.openEditor?.clearSelection();
+    setState(() => _mode = mode);
   }
 
   void _select(PatchObjectDescriptor desc) => setState(() {
@@ -281,6 +303,8 @@ class _PatcherViewportState extends State<_PatcherViewport> {
                     controller: library,
                     snapToGrid: _snapToGrid,
                     onSnapChanged: (on) => setState(() => _snapToGrid = on),
+                    mode: _mode,
+                    onModeChanged: _setMode,
                   ),
                   Expanded(
                     child: editor == null
@@ -298,6 +322,8 @@ class _PatcherViewportState extends State<_PatcherViewport> {
                               controller: editor,
                               objectTypes: _objectTypes,
                               snapToGrid: _snapToGrid,
+                              mode: _mode,
+                              onToggleMode: () => _setMode(_mode.flipped),
                               onCreateObject: _createObject,
                               onNodeTap: _selectNode,
                               onNodeDoubleTap: _editParams,

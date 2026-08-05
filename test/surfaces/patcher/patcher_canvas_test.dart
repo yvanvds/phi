@@ -20,6 +20,7 @@ import 'package:phi/engine/state/node_type_registry.dart';
 import 'package:phi/engine/state/patcher_controller.dart';
 import 'package:phi/surfaces/patcher/create/patch_inline_object_box.dart';
 import 'package:phi/surfaces/patcher/nodes/number_node_body.dart';
+import 'package:phi/surfaces/patcher/patch_canvas_mode.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
 import 'package:phi/surfaces/patcher/patcher_ghost_cable.dart';
 import 'package:phi/surfaces/patcher/patcher_node_view.dart';
@@ -36,11 +37,7 @@ import '../../engine/test_doubles/fake_patcher_gateway.dart';
 /// the model — rather than "it moved somewhat": nothing may be swallowed by a
 /// recogniser's slop, and nothing may lag behind the pointer at any zoom.
 void main() {
-  NodeDescriptor desc(
-    String type, {
-    Widget? body,
-    bool interactiveBody = false,
-  }) => NodeDescriptor(
+  NodeDescriptor desc(String type, {Widget? body}) => NodeDescriptor(
     type: type,
     title: type,
     defaultSize: const Size(80, 60),
@@ -48,7 +45,6 @@ void main() {
     inputs: const [],
     outputs: const [],
     buildBody: (ctx, node, controller) => body ?? const SizedBox.shrink(),
-    interactiveBody: interactiveBody,
   );
 
   late FakePatcherGateway gateway;
@@ -65,10 +61,21 @@ void main() {
     NodeTypeRegistry.instance.clear();
   });
 
+  /// The mode the canvas is currently pumped in — held outside the widget, the
+  /// way the real surface holds it, so `Ctrl+E` and the toggle can actually
+  /// change it mid-test (issue #378).
+  late PatchCanvasMode mode;
+
+  /// Rebuilds the pumped canvas with a new [mode] — the host's half of the
+  /// toggle, i.e. what the placement bar's button does.
+  late StateSetter setHostState;
+
   Future<void> pumpCanvas(
     WidgetTester tester, {
     List<PatchObjectDescriptor> objectTypes = const [],
     bool snapToGrid = false,
+    PatchCanvasMode initialMode = PatchCanvasMode.edit,
+    bool toggleable = true,
     void Function(
       PatchObjectDescriptor desc,
       Offset canvasPosition, {
@@ -79,21 +86,38 @@ void main() {
     void Function(PatchNode node)? onNodeTap,
     void Function(PatchNode node, Offset globalPosition)? onNodeContextMenu,
   }) async {
+    mode = initialMode;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: PatcherCanvas(
-            controller: controller,
-            objectTypes: objectTypes,
-            snapToGrid: snapToGrid,
-            onCreateObject: onCreateObject,
-            onNodeTap: onNodeTap,
-            onNodeDoubleTap: onNodeDoubleTap,
-            onNodeContextMenu: onNodeContextMenu,
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              setHostState = setState;
+              return PatcherCanvas(
+                controller: controller,
+                objectTypes: objectTypes,
+                snapToGrid: snapToGrid,
+                mode: mode,
+                onToggleMode: toggleable
+                    ? () => setState(() => mode = mode.flipped)
+                    : null,
+                onCreateObject: onCreateObject,
+                onNodeTap: onNodeTap,
+                onNodeDoubleTap: onNodeDoubleTap,
+                onNodeContextMenu: onNodeContextMenu,
+              );
+            },
           ),
         ),
       ),
     );
+    await tester.pump();
+  }
+
+  /// Flip the pumped canvas into [next] from outside, the way the placement
+  /// bar's toggle does (issue #378).
+  Future<void> setMode(WidgetTester tester, PatchCanvasMode next) async {
+    setHostState(() => mode = next);
     await tester.pump();
   }
 
@@ -341,47 +365,10 @@ void main() {
     expect(controller.graph.cables, isEmpty);
   });
 
-  testWidgets('a press on a live GUI body operates the body, never the node', (
-    tester,
-  ) async {
-    var bodyDragged = false;
-    // The canvas renders bodies — and decides what owns a press — from the
-    // registry, so this descriptor has to be registered, not just passed in.
-    final live = desc(
-      Obj.gSlider,
-      interactiveBody: true,
-      body: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onPanStart: (_) => bodyDragged = true,
-        child: const SizedBox.expand(),
-      ),
-    );
-    NodeTypeRegistry.instance.register(live);
-    final slider = controller.addNode(
-      desc: live,
-      position: const Offset(120, 120),
-    );
-    await pumpCanvas(tester);
-
-    // Scene (150, 160) sits in the body, below the 22px header.
-    final g = await tester.startGesture(
-      canvasTL(tester) + const Offset(150, 160),
-    );
-    await tester.pump();
-    await g.moveBy(const Offset(30, 20));
-    await tester.pump();
-    await g.up();
-    await tester.pump();
-
-    expect(bodyDragged, isTrue);
-    expect(slider.position, const Offset(120, 120));
-    expect(controller.graph.selectedNodes, isEmpty);
-  });
-
   // ─── editable bodies keep focus and keys (issue #353) ───────────────────
 
-  /// A real `.f` number node, registered as well as returned: the canvas reads
-  /// both the body and the "this body owns the press" flag from the registry.
+  /// A real `.f` number node, registered as well as returned: the canvas
+  /// renders the body out of the registry, not out of what was passed in.
   NodeDescriptor numberDesc() {
     final d = NodeDescriptor(
       type: Obj.gFloat,
@@ -392,7 +379,6 @@ void main() {
       outputs: const [],
       buildBody: (ctx, node, controller) =>
           NumberNodeBody(node: node, controller: controller),
-      interactiveBody: true,
     );
     NodeTypeRegistry.instance.register(d);
     return d;
@@ -407,7 +393,10 @@ void main() {
       desc: numberDesc(),
       position: const Offset(120, 120),
     );
-    await pumpCanvas(tester);
+    // Run mode: where a body answers a press at all (issue #378). The #353
+    // rules — the field takes the caret, the canvas never takes it back — are
+    // about that mode, since it is the only one in which the field is live.
+    await pumpCanvas(tester, initialMode: PatchCanvasMode.run);
 
     await tester.tapAt(tester.getCenter(find.byType(TextField)));
     await tester.pump();
@@ -418,9 +407,9 @@ void main() {
     expect(controller.graph.selectedNodes, isEmpty);
     expect(number.position, const Offset(120, 120));
 
-    // Scene (126, 146): inside the node's body rect (which starts 22px down,
-    // below the header) but in the padding beside the readout, so no widget
-    // claims it. The canvas must still keep its hands off the caret.
+    // Scene (126, 146): inside the node's body rect but in the padding beside
+    // the readout, so no widget claims it. The canvas must still keep its hands
+    // off the caret.
     await tester.tapAt(canvasTL(tester) + const Offset(126, 146));
     await tester.pump();
     await tester.pump();
@@ -435,14 +424,15 @@ void main() {
       desc: desc(Obj.dSine),
       position: const Offset(320, 120),
     );
+    // Edit mode first: select the sine, so there is something Delete could
+    // wrongly take away once the field holds the keyboard.
     await pumpCanvas(tester);
-
-    // Select the sine — the canvas holds focus and Delete would remove it.
     await tester.tapAt(nodeCenter(tester, sine));
     await tester.pump();
     expect(controller.graph.selectedNodes, {sine.id});
 
-    // Now edit the number box and rub out a digit.
+    // Now run mode, where the field is live — and edit it.
+    await setMode(tester, PatchCanvasMode.run);
     await tester.enterText(find.byType(TextField), '12');
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
@@ -452,11 +442,13 @@ void main() {
       tester.widget<TextField>(find.byType(TextField)).controller!.text,
       '1',
     );
-    // The selection survived untouched: the key belonged to the field.
+    // The graph survived untouched: the key belonged to the field.
     expect(controller.graph.nodes, hasLength(2));
     expect(controller.graph.selectedNodes, {sine.id});
 
-    // And once the canvas has focus again, Delete still removes the selection.
+    // And once the canvas has focus again, back in edit mode, Delete still
+    // removes the selection.
+    await setMode(tester, PatchCanvasMode.edit);
     await tester.tapAt(canvasTL(tester) + const Offset(600, 500));
     await tester.pump();
     await tester.tapAt(nodeCenter(tester, sine));
@@ -466,19 +458,18 @@ void main() {
     expect(controller.graph.nodes, hasLength(1));
   });
 
-  testWidgets('a press on the number node header still selects and drags it', (
-    tester,
-  ) async {
+  testWidgets('in edit mode a press on the number readout selects and drags '
+      'its node instead of taking the caret', (tester) async {
     final number = controller.addNode(
       desc: numberDesc(),
       position: const Offset(120, 120),
     );
     await pumpCanvas(tester);
 
-    // Scene (170, 131): the middle of the 22px header.
-    final g = await tester.startGesture(
-      canvasTL(tester) + const Offset(170, 131),
-    );
+    // Straight onto the readout — which in edit mode is inert chrome like any
+    // other pixel of the box (issue #378).
+    final readout = tester.getCenter(find.byType(TextField));
+    final g = await tester.startGesture(readout);
     await tester.pump();
     await g.moveBy(const Offset(30, 20));
     await tester.pump();
@@ -486,10 +477,12 @@ void main() {
     await tester.pump();
 
     expect(number.position, const Offset(150, 140));
+    expect(fieldFocus(tester).hasPrimaryFocus, isFalse);
 
-    await tester.tapAt(canvasTL(tester) + const Offset(200, 161));
+    await tester.tapAt(nodeCenter(tester, number));
     await tester.pump();
     expect(controller.graph.selectedNodes, {number.id});
+    expect(fieldFocus(tester).hasPrimaryFocus, isFalse);
   });
 
   testWidgets('a compatible cable drop connects; undo disconnects', (
@@ -1653,14 +1646,11 @@ void main() {
       expect(activeCursor(), SystemMouseCursors.basic);
     });
 
-    testWidgets('node chrome takes the move cursor; a live body does not', (
-      tester,
-    ) async {
-      NodeTypeRegistry.instance.register(
-        desc(Obj.gSlider, interactiveBody: true),
-      );
+    testWidgets('in edit mode every node takes the move cursor, GUI body and '
+        'all', (tester) async {
+      NodeTypeRegistry.instance.register(desc(Obj.gSlider));
       final slider = controller.addNode(
-        desc: desc(Obj.gSlider, interactiveBody: true),
+        desc: desc(Obj.gSlider),
         position: const Offset(200, 200),
       );
       final sine = controller.addNode(
@@ -1675,20 +1665,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(activeCursor(), SystemMouseCursors.move);
 
-      // A live body belongs to the widget inside it, which is dragged by its
-      // header — so the body says nothing and the header says move.
+      // ...and so is a GUI node, now that its body is inert (issue #378):
+      // there is no header left to point at instead.
       await g.moveTo(nodeCenter(tester, slider));
-      await tester.pumpAndSettle();
-      expect(activeCursor(), SystemMouseCursors.basic);
-
-      await g.moveTo(
-        canvasTL(tester) +
-            slider.position +
-            Offset(
-              slider.size.width / 2,
-              PatchCanvasConstants.headerHeight / 2,
-            ),
-      );
       await tester.pumpAndSettle();
       expect(activeCursor(), SystemMouseCursors.move);
     });
@@ -2084,11 +2063,16 @@ void main() {
         position: const Offset(320, 120),
       );
       controller.addNode(desc: numberDesc(), position: const Offset(120, 120));
-      await pumpCanvas(tester);
+      // The field is live in run mode (issue #378), which is how it comes to
+      // hold the keyboard at all; the canvas is put back into edit mode
+      // afterwards, so the drag below is the plain marquee it always was.
+      await pumpCanvas(tester, initialMode: PatchCanvasMode.run);
 
       await tester.tapAt(tester.getCenter(find.byType(TextField)));
       await tester.pump();
       await tester.pump();
+      expect(fieldFocus(tester).hasPrimaryFocus, isTrue);
+      await setMode(tester, PatchCanvasMode.edit);
       expect(fieldFocus(tester).hasPrimaryFocus, isTrue);
 
       // The space belongs to the field being typed into (issue #353), so the
@@ -2123,11 +2107,15 @@ void main() {
       // The keyboard moves to the number box while space is still down, so the
       // key-up lands there and the canvas never sees it. Nothing may survive
       // that: the mode has to expire with the key, not with the event.
+      // (Run mode is what makes the field pressable; the canvas goes straight
+      // back to edit, where the drag below is the plain marquee it always was.)
+      await setMode(tester, PatchCanvasMode.run);
       await tester.tapAt(tester.getCenter(find.byType(TextField)));
       await tester.pump();
       await tester.pump();
       expect(fieldFocus(tester).hasPrimaryFocus, isTrue);
       await spaceUp(tester);
+      await setMode(tester, PatchCanvasMode.edit);
 
       final tl = canvasTL(tester);
       final g = await tester.startGesture(tl + const Offset(240, 60));
@@ -2353,7 +2341,10 @@ void main() {
     testWidgets('it stays out of the way while a number field has the '
         'keyboard', (tester) async {
       controller.addNode(desc: numberDesc(), position: const Offset(120, 120));
-      await pumpCanvas(tester);
+      // Run mode, the only one in which a number field can hold the keyboard
+      // at all (issue #378) — and `Ctrl+0` is a navigation key, so it is live
+      // in that mode too, which is exactly what this guards.
+      await pumpCanvas(tester, initialMode: PatchCanvasMode.run);
 
       await tester.tapAt(tester.getCenter(find.byType(TextField)));
       await tester.pump();
@@ -2465,6 +2456,305 @@ void main() {
           MatrixUtils.transformPoint(controller.transform.value, scene);
       expect(after.dx, closeTo(anchor.dx, 1e-6));
       expect(after.dy, closeTo(anchor.dy, 1e-6));
+    });
+  });
+
+  // ─── edit / run mode (issue #378) ────────────────────────────────────────
+  //
+  // The mode is what replaces "drag a GUI node by its header", so the cases
+  // that matter are the ones where the two modes *disagree* about who owns a
+  // press — and the ones where they must agree, because navigating is not
+  // editing.
+
+  group('edit / run mode', () {
+    /// Whether the live body under the pointer saw the gesture at all.
+    late bool bodyDragged;
+    late bool bodyPressed;
+
+    /// A GUI node whose body reports every press it receives. Registered as
+    /// well as returned: the canvas renders bodies out of the registry.
+    NodeDescriptor liveDesc() {
+      final d = desc(
+        Obj.gSlider,
+        body: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (_) => bodyPressed = true,
+          onPanStart: (_) => bodyDragged = true,
+          child: const SizedBox.expand(),
+        ),
+      );
+      NodeTypeRegistry.instance.register(d);
+      return d;
+    }
+
+    setUp(() {
+      bodyDragged = false;
+      bodyPressed = false;
+    });
+
+    /// Give the canvas the keyboard the way a user does — a click on empty
+    /// canvas, which takes focus in both modes so `Ctrl+E` is always reachable.
+    Future<void> focusCanvas(WidgetTester tester) async {
+      await tester.tapAt(canvasTL(tester) + const Offset(600, 500));
+      await tester.pump();
+    }
+
+    /// `Ctrl` + the key in the given *position*, with whatever glyph that
+    /// position reports on the layout being simulated.
+    Future<void> ctrlAt(
+      WidgetTester tester,
+      PhysicalKeyboardKey physical,
+      LogicalKeyboardKey logical,
+    ) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(logical, physicalKey: physical);
+      await tester.sendKeyUpEvent(logical, physicalKey: physical);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+    }
+
+    testWidgets('edit mode: a press on a live GUI body drags its node and '
+        'never reaches the body', (tester) async {
+      final slider = controller.addNode(
+        desc: liveDesc(),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester);
+
+      final g = await tester.startGesture(nodeCenter(tester, slider));
+      await tester.pump();
+      await g.moveBy(const Offset(30, 20));
+      await tester.pump();
+      await g.up();
+      await tester.pump();
+
+      // The whole point of the mode: with no header left to grab, the fader
+      // itself is what the node is dragged by.
+      expect(slider.position, const Offset(150, 140));
+      expect(bodyDragged, isFalse);
+      expect(bodyPressed, isFalse);
+    });
+
+    testWidgets('edit mode: a marquee sweeps a GUI node up like any other', (
+      tester,
+    ) async {
+      final slider = controller.addNode(
+        desc: liveDesc(),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester);
+
+      final tl = canvasTL(tester);
+      final g = await tester.startGesture(tl + const Offset(60, 60));
+      await tester.pump();
+      await g.moveTo(tl + const Offset(300, 300));
+      await tester.pump();
+      await g.up();
+      await tester.pump();
+
+      expect(controller.graph.selectedNodes, {slider.id});
+      expect(bodyDragged, isFalse);
+    });
+
+    testWidgets('run mode: the same press operates the body, and the node '
+        'neither moves nor selects', (tester) async {
+      final slider = controller.addNode(
+        desc: liveDesc(),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester, initialMode: PatchCanvasMode.run);
+
+      final g = await tester.startGesture(nodeCenter(tester, slider));
+      await tester.pump();
+      await g.moveBy(const Offset(30, 20));
+      await tester.pump();
+      await g.up();
+      await tester.pump();
+
+      expect(bodyDragged, isTrue);
+      expect(slider.position, const Offset(120, 120));
+      expect(controller.graph.selectedNodes, isEmpty);
+      expect(controller.undoScope.canUndo, isFalse);
+    });
+
+    testWidgets('run mode: a marquee neither draws nor selects', (
+      tester,
+    ) async {
+      controller.addNode(desc: liveDesc(), position: const Offset(120, 120));
+      await pumpCanvas(tester, initialMode: PatchCanvasMode.run);
+
+      final tl = canvasTL(tester);
+      final g = await tester.startGesture(tl + const Offset(60, 60));
+      await tester.pump();
+      await g.moveTo(tl + const Offset(300, 300));
+      await tester.pump();
+      expect(find.byKey(PatcherCanvas.marqueeKey), findsNothing);
+      await g.up();
+      await tester.pump();
+
+      expect(controller.graph.selectedNodes, isEmpty);
+    });
+
+    testWidgets('run mode: a press on a port starts no cable and a '
+        'right-click opens no menu', (tester) async {
+      final slider = controller.addNode(
+        desc: desc(Obj.gSlider),
+        position: const Offset(100, 120),
+      );
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(320, 120),
+      );
+      PatchNode? menuFor;
+      await pumpCanvas(
+        tester,
+        initialMode: PatchCanvasMode.run,
+        onNodeContextMenu: (n, _) => menuFor = n,
+      );
+
+      final g = await tester.startGesture(
+        portGlobal(tester, slider, PatchPortSide.output, 0),
+      );
+      await tester.pump();
+      expect(controller.graph.dragSourcePort, isNull);
+      await g.moveTo(portGlobal(tester, sine, PatchPortSide.input, 0));
+      await tester.pump();
+      await g.up();
+      await tester.pump();
+      expect(controller.graph.cables, isEmpty);
+
+      await rightClickAt(tester, nodeCenter(tester, sine));
+      expect(menuFor, isNull);
+    });
+
+    testWidgets('run mode: Delete, Ctrl+D and the arrows leave the graph '
+        'alone', (tester) async {
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      // Selected from edit mode, so the keys below have a target — the mode is
+      // what declines them, not an empty selection.
+      await pumpCanvas(tester);
+      await tester.tapAt(nodeCenter(tester, sine));
+      await tester.pump();
+      expect(controller.graph.selectedNodes, {sine.id});
+
+      await setMode(tester, PatchCanvasMode.run);
+      await focusCanvas(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(sine.position, const Offset(120, 120));
+
+      await ctrl(tester, LogicalKeyboardKey.keyD);
+      expect(controller.graph.nodes, hasLength(1));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+      await tester.pump();
+      expect(controller.graph.nodes, hasLength(1));
+
+      // Undo is an edit too: a played patch is not rearranged by a mistyped
+      // chord.
+      controller.placeNode(sine.id, const Offset(200, 200));
+      await tester.pump();
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(sine.position, const Offset(200, 200));
+    });
+
+    testWidgets('run mode: pan, wheel zoom and Ctrl+0 still answer', (
+      tester,
+    ) async {
+      controller.addNode(
+        desc: desc(Obj.dSine),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester, initialMode: PatchCanvasMode.run);
+      await focusCanvas(tester);
+
+      // Middle-drag pans.
+      final g = await tester.startGesture(
+        canvasTL(tester) + const Offset(400, 400),
+        buttons: kMiddleMouseButton,
+      );
+      await tester.pump();
+      await g.moveBy(const Offset(-20, -10));
+      await tester.pump();
+      await g.up();
+      await tester.pump();
+      expect(controller.transform.value.getTranslation().x, -20);
+
+      // The wheel zooms.
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      pointer.hover(canvasTL(tester) + const Offset(400, 300));
+      await tester.sendEventToBinding(pointer.scroll(const Offset(0, -100)));
+      await tester.pump();
+      expect(controller.transform.value.entry(0, 0), closeTo(1.1, 1e-9));
+
+      // And Ctrl+0 frames the patch from wherever that left it.
+      await ctrl(tester, LogicalKeyboardKey.digit0);
+      expect(controller.transform.value.entry(0, 0), 1.0);
+    });
+
+    testWidgets('Ctrl+E flips the mode, read from the key position rather '
+        'than its glyph', (tester) async {
+      final slider = controller.addNode(
+        desc: liveDesc(),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(tester);
+      await focusCanvas(tester);
+      expect(mode, PatchCanvasMode.edit);
+
+      // A layout that reports something else for the key in `E`'s position:
+      // the *position* is the habit, exactly as for `Ctrl+0` (issue #369).
+      await ctrlAt(tester, PhysicalKeyboardKey.keyE, LogicalKeyboardKey.keyJ);
+      expect(mode, PatchCanvasMode.run);
+
+      // ...and the mode really took: the body now owns the press.
+      await tester.tapAt(nodeCenter(tester, slider));
+      await tester.pump();
+      expect(bodyPressed, isTrue);
+      expect(controller.graph.selectedNodes, isEmpty);
+
+      // Back again, this time from the ordinary QWERTY glyph.
+      await focusCanvas(tester);
+      await ctrl(tester, LogicalKeyboardKey.keyE);
+      expect(mode, PatchCanvasMode.edit);
+    });
+
+    testWidgets('Ctrl+E is left unhandled when the host holds no mode', (
+      tester,
+    ) async {
+      await pumpCanvas(tester, toggleable: false);
+      await focusCanvas(tester);
+
+      await ctrl(tester, LogicalKeyboardKey.keyE);
+      expect(mode, PatchCanvasMode.edit);
+    });
+
+    testWidgets('the cursor previews the mode it is in', (tester) async {
+      final slider = controller.addNode(
+        desc: liveDesc(),
+        position: const Offset(200, 200),
+      );
+      await pumpCanvas(tester);
+      final g = await mouse(tester);
+
+      await g.moveTo(nodeCenter(tester, slider));
+      await tester.pumpAndSettle();
+      expect(activeCursor(), SystemMouseCursors.move);
+
+      // In run mode the same pixel plays the object instead of moving it, so
+      // the canvas promises nothing there and leaves the body to say what it
+      // wants from deeper in the tree (design §6).
+      await setMode(tester, PatchCanvasMode.run);
+      await tester.pumpAndSettle();
+      expect(activeCursor(), isNot(SystemMouseCursors.move));
+
+      await setMode(tester, PatchCanvasMode.edit);
+      await tester.pumpAndSettle();
+      expect(activeCursor(), SystemMouseCursors.move);
     });
   });
 }

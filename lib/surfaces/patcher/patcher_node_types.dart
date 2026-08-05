@@ -51,7 +51,6 @@ void registerBuiltInPatcherNodes() {
       outputs: const [PortSpec(kind: PatchPortKind.control)],
       buildBody: (ctx, node, controller) =>
           SliderNodeBody(node: node, controller: controller),
-      interactiveBody: true,
       readsGuiValue: true,
     ),
   );
@@ -72,8 +71,10 @@ void registerBuiltInPatcherNodes() {
   );
 
   // ─── live GUI bodies (issue #223) ──────────────────────────────────────
-  // Interactive control objects operable directly on the canvas. Each writes
-  // through the gateway (`sendFloat` / `sendBang`) and displays via `guiValue`.
+  // Interactive control objects operable directly on the canvas — in **run**
+  // mode, which is where a body answers a press at all (issue #378). Each
+  // writes through the gateway (`sendFloat` / `sendBang`) and displays via
+  // `guiValue`.
 
   registry.register(
     NodeDescriptor(
@@ -85,7 +86,6 @@ void registerBuiltInPatcherNodes() {
       outputs: const [PortSpec(kind: PatchPortKind.control)],
       buildBody: (ctx, node, controller) =>
           ToggleNodeBody(node: node, controller: controller),
-      interactiveBody: true,
       readsGuiValue: true,
     ),
   );
@@ -100,7 +100,6 @@ void registerBuiltInPatcherNodes() {
       outputs: const [PortSpec(kind: PatchPortKind.control)],
       buildBody: (ctx, node, controller) =>
           ButtonNodeBody(node: node, controller: controller),
-      interactiveBody: true,
     ),
   );
 
@@ -114,7 +113,6 @@ void registerBuiltInPatcherNodes() {
       outputs: const [PortSpec(kind: PatchPortKind.control)],
       buildBody: (ctx, node, controller) =>
           NumberNodeBody(node: node, controller: controller),
-      interactiveBody: true,
       readsGuiValue: true,
     ),
   );
@@ -129,7 +127,6 @@ void registerBuiltInPatcherNodes() {
       outputs: const [PortSpec(kind: PatchPortKind.control)],
       buildBody: (ctx, node, controller) =>
           NumberNodeBody(node: node, controller: controller, integer: true),
-      interactiveBody: true,
       readsGuiValue: true,
     ),
   );
@@ -144,7 +141,6 @@ void registerBuiltInPatcherNodes() {
       outputs: const [PortSpec(kind: PatchPortKind.control)],
       buildBody: (ctx, node, controller) =>
           MessageNodeBody(node: node, controller: controller),
-      interactiveBody: true,
     ),
   );
 }

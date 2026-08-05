@@ -7,8 +7,10 @@ import 'package:phi/engine/engine.dart';
 import 'package:phi/engine/state/node_type_registry.dart';
 import 'package:phi/surfaces/patcher/palette/patcher_palette.dart';
 import 'package:phi/surfaces/patcher/params/patch_params_dialog.dart';
+import 'package:phi/surfaces/patcher/patch_canvas_mode.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
 import 'package:phi/surfaces/patcher/patcher_surface.dart';
+import 'package:phi/surfaces/patcher/placement/patch_placement_bar.dart';
 import 'package:phi/surfaces/patcher/reference/patch_reference_panel.dart';
 import 'package:yse/yse.dart';
 
@@ -322,6 +324,75 @@ void main() {
       controller.undo();
       await tester.pump();
       expect(find.text('= 440'), findsOneWidget);
+    });
+
+    // ─── edit / run mode (issue #378) ─────────────────────────────────────
+
+    testWidgets('the placement bar\'s toggle puts the canvas in run mode and '
+        'drops the selection', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: PatcherSurface(engine: engine)),
+        ),
+      );
+      await tester.pump();
+
+      final controller = engine.patcher;
+      PatchCanvasMode canvasMode() =>
+          tester.widget<PatcherCanvas>(find.byType(PatcherCanvas)).mode;
+
+      expect(canvasMode(), PatchCanvasMode.edit);
+
+      final sine = await dropOnCanvas(tester, Obj.dSine);
+      await tester.tap(sine);
+      await tester.pump();
+      expect(controller.graph.selectedNodes, isNotEmpty);
+
+      // The toggle is chrome in a *different widget* from the canvas it
+      // governs, so this is the wire between them.
+      await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+      await tester.pumpAndSettle();
+
+      expect(canvasMode(), PatchCanvasMode.run);
+      // A selection is an editing state: nothing in run mode can act on it, so
+      // nothing in run mode should keep drawing a ring around it.
+      expect(controller.graph.selectedNodes, isEmpty);
+
+      await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+      await tester.pumpAndSettle();
+      expect(canvasMode(), PatchCanvasMode.edit);
+    });
+
+    testWidgets('the mode is performance state — a fresh surface starts in '
+        'edit', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: PatcherSurface(engine: engine)),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<PatcherCanvas>(find.byType(PatcherCanvas)).mode,
+        PatchCanvasMode.run,
+      );
+
+      // Re-mounted from scratch, exactly as a reopened project does it: the
+      // mode is never written anywhere, so it comes back in edit.
+      await tester.pumpWidget(const MaterialApp(home: Scaffold()));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: PatcherSurface(engine: engine)),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        tester.widget<PatcherCanvas>(find.byType(PatcherCanvas)).mode,
+        PatchCanvasMode.edit,
+      );
     });
   });
 }

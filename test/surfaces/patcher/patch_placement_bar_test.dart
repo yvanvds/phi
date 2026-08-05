@@ -7,6 +7,7 @@ import 'package:phi/domain/project/registry_kinds.dart';
 import 'package:phi/engine/state/patch_bus_option.dart';
 import 'package:phi/engine/state/patch_library_controller.dart';
 import 'package:phi/engine/state/patch_reconciler.dart';
+import 'package:phi/surfaces/patcher/patch_canvas_mode.dart';
 import 'package:phi/surfaces/patcher/placement/patch_placement_bar.dart';
 
 import '../../engine/test_doubles/fake_patcher_gateway.dart';
@@ -46,6 +47,7 @@ void main() {
     WidgetTester tester, {
     bool open = true,
     ValueChanged<bool>? onSnapChanged,
+    ValueChanged<PatchCanvasMode>? onModeChanged,
   }) async {
     controller = PatchLibraryController(
       registry: registry,
@@ -57,6 +59,7 @@ void main() {
     );
     if (open) controller.open(patch('src'));
     var snap = false;
+    var mode = PatchCanvasMode.edit;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -69,6 +72,13 @@ void main() {
                   : (on) {
                       onSnapChanged(on);
                       setState(() => snap = on);
+                    },
+              mode: mode,
+              onModeChanged: onModeChanged == null
+                  ? null
+                  : (next) {
+                      onModeChanged(next);
+                      setState(() => mode = next);
                     },
             ),
           ),
@@ -160,6 +170,51 @@ void main() {
     await pumpBar(tester);
 
     expect(find.byKey(PatchPlacementBar.snapKey), findsNothing);
+  });
+
+  // ─── edit / run mode toggle (issue #378) ─────────────────────────────────
+
+  testWidgets('the mode toggle reports each flip and names the mode it is in', (
+    tester,
+  ) async {
+    registry.createEntity(patch('src'), payload: PatchPayload.empty.toJson());
+    final reported = <PatchCanvasMode>[];
+    await pumpBar(tester, onModeChanged: reported.add);
+
+    Color modeColor() => tester
+        .widget<Text>(
+          find.descendant(
+            of: find.byKey(PatchPlacementBar.modeKey),
+            matching: find.byType(Text),
+          ),
+        )
+        .style!
+        .color!;
+
+    // The indicator names the mode it is *in*, not the one it would go to —
+    // there is otherwise nothing on screen to say why a fader stopped moving.
+    expect(find.text('EDIT'), findsOneWidget);
+    final editColor = modeColor();
+
+    await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+    await tester.pumpAndSettle();
+    expect(reported, [PatchCanvasMode.run]);
+    expect(find.text('RUN'), findsOneWidget);
+    expect(find.text('EDIT'), findsNothing);
+    expect(modeColor(), isNot(editColor));
+
+    await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+    await tester.pumpAndSettle();
+    expect(reported, [PatchCanvasMode.run, PatchCanvasMode.edit]);
+    expect(find.text('EDIT'), findsOneWidget);
+    expect(modeColor(), editColor);
+  });
+
+  testWidgets('no mode toggle when nobody is listening for it', (tester) async {
+    registry.createEntity(patch('src'), payload: PatchPayload.empty.toJson());
+    await pumpBar(tester);
+
+    expect(find.byKey(PatchPlacementBar.modeKey), findsNothing);
   });
 
   testWidgets('an unplaced source cannot be started', (tester) async {
