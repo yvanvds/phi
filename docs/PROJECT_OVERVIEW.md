@@ -2671,8 +2671,15 @@ main + app          (orchestration)
 - **Design previews:** `design system/preview/*.html` and
   `design system/ui_kits/phi-workstation/*.jsx` — open these when sketching
   new surfaces in Flutter.
-- **CI:** `.github/workflows/ci.yaml` (analyze + test + coverage),
-  `.github/workflows/sonar.yaml` (SonarCloud).
+- **CI:** `.github/workflows/ci.yaml` (analyze + test + coverage; the Windows
+  build is gated to `main`), `.github/workflows/integration.yaml` (the
+  `integration_test/` suite on windows-latest — nightly on `develop`, on every
+  release PR into `main`, and on manual dispatch), `.github/workflows/sonar.yaml`
+  (SonarCloud).
+- **Integration test driver:** `tool/run_integration_tests.ps1` — runs each
+  `integration_test/*.dart` as its own `flutter test` invocation (a single
+  folder-wide run under-reports on Windows), with `-Shard`/`-Of` sharding.
+  Used both locally and by `integration.yaml`.
 - **SonarCloud:** project key `yvanvds_phi`, organization `yvanvds`.
 - **Issue templates:** `.github/ISSUE_TEMPLATE/`. Labels: see
   [CLAUDE.md](../CLAUDE.md).
