@@ -128,13 +128,16 @@ void main() {
     });
 
     test('telemetry stream emits gateway snapshots while running', () async {
+      engine.start();
+      // After boot, so the device `init()` brought up doesn't overwrite the
+      // snapshot under test — the first telemetry tick lands after this
+      // synchronous setup.
       gateway.cpuLoadValue = 0.42;
       gateway.deviceStallTicksValue = 3;
       gateway.masterPeakValue = 0.6;
       gateway.activeSampleRateValue = 48000;
       gateway.activeBufferSizeValue = 128;
       gateway.activeOutputLatencyValue = 256;
-      engine.start();
 
       final EngineTelemetry first = await engine.telemetry.first.timeout(
         const Duration(seconds: 1),
@@ -150,8 +153,9 @@ void main() {
     });
 
     test('telemetry latencyMs is zero when no device is open', () async {
-      gateway.activeSampleRateValue = 0;
-      gateway.activeOutputLatencyValue = 0;
+      // A machine with no audio hardware: boot finds no platform default to
+      // bring up, so the live state stays empty.
+      gateway.devices = const [];
       engine.start();
 
       final EngineTelemetry first = await engine.telemetry.first.timeout(
