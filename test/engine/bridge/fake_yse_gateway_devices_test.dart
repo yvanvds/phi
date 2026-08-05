@@ -140,18 +140,32 @@ void main() {
       gateway.init();
       gateway
         ..cpuLoadValue = 0.42
-        ..deviceStallTicksValue = 7
         ..masterPeakValue = 0.9
         ..masterPeakOutputs = [0.9, 0.8];
 
       gateway.close();
 
-      // No audio thread means no load, no stall gauge, and no signal.
+      // The device manager zeroes its CPU load average on close, and the
+      // master channel loses the implementation its peaks and output count
+      // are read from.
       expect(gateway.cpuLoad, 0);
-      expect(gateway.deviceStallTicks, 0);
       expect(gateway.masterPeak, 0);
       expect(gateway.masterPeakOutput(0), 0);
       expect(gateway.masterPeakOutput(1), 0);
+      expect(gateway.masterOutputCount, 0);
+    });
+
+    test('close leaves the stall gauge holding its last value', () {
+      // The engine clears `currentlyMissedCallbacks` in `initShared()` and on
+      // any `update()` that sees a callback — never in `close()`. Zeroing it
+      // here would be an over-model, and an over-model is as much a lie as an
+      // under-model. Resetting it on the *init* side is #402.
+      gateway.init();
+      gateway.deviceStallTicksValue = 7;
+
+      gateway.close();
+
+      expect(gateway.deviceStallTicks, 7);
     });
 
     test('close stops MIDI traffic reaching listeners', () async {

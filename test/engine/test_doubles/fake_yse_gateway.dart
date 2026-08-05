@@ -118,12 +118,22 @@ class FakeYseGateway implements YseGateway {
     activeSampleRateValue = 0;
     activeBufferSizeValue = 0;
     activeOutputLatencyValue = 0;
-    // Gauges and meters belong to the running engine: no audio thread means no
-    // load, no stall ticks, and no signal on the master.
+    // Gauges and meters belong to the running engine. `close()` → device
+    // manager close stores `cpuLoadEma = 0`, and dropping the master channel's
+    // implementation makes `getPeakLinearPost()` / `getNumOutputs()` read `0`.
+    //
+    // `deviceStallTicks` is deliberately *not* reset here: the engine clears
+    // `currentlyMissedCallbacks` in `initShared()` and on each `update()` that
+    // sees a callback, never in `close()`, so the gauge keeps its last value
+    // until the next init. Modelling that reset belongs on the init side (#402).
     cpuLoadValue = 0;
-    deviceStallTicksValue = 0;
     masterPeakValue = 0;
-    masterPeakOutputs = List<double>.filled(masterPeakOutputs.length, 0);
+    masterPeakOutputs = List<double>.filled(
+      masterPeakOutputs.length,
+      0,
+      growable: true,
+    );
+    masterOutputCountValue = 0;
     // The test signal goes down with the system that was generating it.
     audioTestOn = false;
     // Left alone, because these record what a *test* asked for rather than

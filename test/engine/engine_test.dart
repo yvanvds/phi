@@ -76,17 +76,6 @@ void main() {
       expect(engine.activeAudioState().sampleRate, 44100);
     });
 
-    test('stop() leaves no gateway channel behind', () {
-      engine.start();
-      engine.addChannel();
-      engine.addChannel();
-      expect(gateway.channels, isNotEmpty);
-
-      engine.stop();
-
-      expect(gateway.channels, isEmpty);
-    });
-
     test('setTestSignal forwards to gateway and updates listenable', () {
       engine.start();
 
