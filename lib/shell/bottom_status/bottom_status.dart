@@ -89,40 +89,56 @@ class BottomStatus extends StatelessWidget {
         initialData: EngineTelemetry.zero,
         builder: (context, snapshot) {
           final t = snapshot.data ?? EngineTelemetry.zero;
-          return Row(
-            children: [
-              const SizedBox(width: PhiSpacing.s3),
-              _LiveDot(session: session),
-              const SizedBox(width: PhiSpacing.s3),
-              PanicButton(onPanic: onPanic),
-              const Spacer(),
-              StatusChip(label: 'CPU', value: formatCpu(t.cpuLoad)),
-              StatusChip(
-                label: 'BUF',
-                value: formatBuffer(t.bufferSize, t.sampleRate),
+          // In a window narrower than the strip's content (issue #400), scroll
+          // horizontally instead of asserting a `RenderFlex overflowed` —
+          // the header pattern from #287 / #299. `IntrinsicWidth` gives the
+          // `Spacer` a bounded width to divide (the row's natural width), while
+          // `minWidth: maxWidth` keeps the row filling — the chips pinned right
+          // — at any normal window size, so the common layout is unchanged.
+          // Only reachable once a device is open: `BUF` / `LAT` carry real
+          // values then, not the `—` placeholder, which is what pushes the row
+          // past a ~768px window.
+          return LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                child: IntrinsicWidth(child: _buildRow(t)),
               ),
-              StatusChip(label: 'LAT', value: formatLatency(t.latencyMs)),
-              // The cumulative *stall event* count, not the engine's raw
-              // device-stall gauge — showing the gauge made this flicker to `1`
-              // once a second on a healthy device (issue #350).
-              StatusChip(label: 'DROPS', value: '${t.audioStalls}'),
-              if (audioHealth != null) ...[
-                const SizedBox(width: PhiSpacing.s2),
-                AudioDeviceChip(health: audioHealth!, onTap: onAudioSettings),
-                const SizedBox(width: PhiSpacing.s2),
-              ],
-              MidiActivityDot(activity: midiActivity),
-              if (logPanel != null) ...[
-                const SizedBox(width: PhiSpacing.s3),
-                LogPanelToggle(controller: logPanel!),
-              ],
-              const SizedBox(width: PhiSpacing.s3),
-            ],
+            ),
           );
         },
       ),
     );
   }
+
+  Widget _buildRow(EngineTelemetry t) => Row(
+    children: [
+      const SizedBox(width: PhiSpacing.s3),
+      _LiveDot(session: session),
+      const SizedBox(width: PhiSpacing.s3),
+      PanicButton(onPanic: onPanic),
+      const Spacer(),
+      StatusChip(label: 'CPU', value: formatCpu(t.cpuLoad)),
+      StatusChip(label: 'BUF', value: formatBuffer(t.bufferSize, t.sampleRate)),
+      StatusChip(label: 'LAT', value: formatLatency(t.latencyMs)),
+      // The cumulative *stall event* count, not the engine's raw
+      // device-stall gauge — showing the gauge made this flicker to `1`
+      // once a second on a healthy device (issue #350).
+      StatusChip(label: 'DROPS', value: '${t.audioStalls}'),
+      if (audioHealth != null) ...[
+        const SizedBox(width: PhiSpacing.s2),
+        AudioDeviceChip(health: audioHealth!, onTap: onAudioSettings),
+        const SizedBox(width: PhiSpacing.s2),
+      ],
+      MidiActivityDot(activity: midiActivity),
+      if (logPanel != null) ...[
+        const SizedBox(width: PhiSpacing.s3),
+        LogPanelToggle(controller: logPanel!),
+      ],
+      const SizedBox(width: PhiSpacing.s3),
+    ],
+  );
 
   @visibleForTesting
   static String formatCpu(double cpuLoad) =>

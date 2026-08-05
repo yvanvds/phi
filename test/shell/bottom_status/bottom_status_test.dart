@@ -154,6 +154,68 @@ void main() {
       expect(find.text('MIDI'), findsOneWidget);
     });
 
+    // Issue #400: with a device open the BUF / LAT chips carry real values
+    // instead of the `—` placeholder, and the strip no longer fits a narrow
+    // window. It must degrade to a horizontal scroll, not assert.
+    testWidgets('scrolls instead of overflowing in a narrow window', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(560, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: BottomStatus.fromStreams(
+              telemetry: telemetry.stream,
+              midiActivity: midi.stream,
+              session: session,
+            ),
+          ),
+        ),
+      );
+      telemetry.add(
+        const EngineTelemetry(
+          cpuLoad: 0.14,
+          audioStalls: 0,
+          deviceStallTicks: 0,
+          peakStallTicks: 0,
+          masterPeak: 0,
+          sampleRate: 44100,
+          bufferSize: 256,
+          latencyMs: 5.8,
+        ),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      // Everything is still mounted — scrolled out of view, not dropped.
+      expect(find.text('256 / 44k'), findsOneWidget);
+      expect(find.text('5.8 ms'), findsOneWidget);
+      expect(find.byType(SingleChildScrollView), findsOneWidget);
+    });
+
+    testWidgets('does not scroll when the window has room', (tester) async {
+      await pump(tester);
+      telemetry.add(
+        const EngineTelemetry(
+          cpuLoad: 0.14,
+          audioStalls: 0,
+          deviceStallTicks: 0,
+          peakStallTicks: 0,
+          masterPeak: 0,
+          sampleRate: 44100,
+          bufferSize: 256,
+          latencyMs: 5.8,
+        ),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      // The row still fills the bar, chips pinned right — the common layout is
+      // unchanged by the scroll wrapper.
+      expect(tester.getSize(find.byType(Row).first).width, 1200);
+    });
+
     testWidgets('the panic button runs onPanic (issue #264)', (tester) async {
       await widenSurface(tester);
       var panicked = 0;
