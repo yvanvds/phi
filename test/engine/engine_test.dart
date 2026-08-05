@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/engine/bridge/audio_device_state.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/engine/state/engine_telemetry.dart';
 
@@ -55,6 +56,35 @@ void main() {
       expect(engine.isStarted, isFalse);
       expect(gateway.initialised, isFalse);
       expect(engine.testSignal.value, isFalse);
+    });
+
+    // The scenario issue #399 named: the fake used to keep reporting the last
+    // opened device after `close()`, so a restart could not be told apart from
+    // a device that never went down. Both halves of the round trip are asserted
+    // on the gateway, because `PhiEngine.activeAudioState()` short-circuits to
+    // `none` while stopped and would pass either way.
+    test('a second start() in one process brings the device back up', () {
+      engine.start();
+      expect(gateway.activeAudioState().sampleRate, 44100);
+
+      engine.stop();
+      expect(gateway.activeAudioState(), AudioDeviceState.none);
+      expect(engine.activeAudioState(), AudioDeviceState.none);
+
+      engine.start();
+      expect(engine.isStarted, isTrue);
+      expect(engine.activeAudioState().sampleRate, 44100);
+    });
+
+    test('stop() leaves no gateway channel behind', () {
+      engine.start();
+      engine.addChannel();
+      engine.addChannel();
+      expect(gateway.channels, isNotEmpty);
+
+      engine.stop();
+
+      expect(gateway.channels, isEmpty);
     });
 
     test('setTestSignal forwards to gateway and updates listenable', () {
