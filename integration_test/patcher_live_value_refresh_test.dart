@@ -91,10 +91,12 @@ void main() {
     driveFromEngine(sine.id, '660');
     await settlePoll();
 
-    // The fader followed: its thumb *and* its readout, from state the body
-    // holds itself, not from a re-read on some unrelated rebuild.
+    // The fader followed — its thumb moved from state the body holds itself,
+    // not from a re-read on some unrelated rebuild. The thumb is the whole of
+    // what it reports now: the numeric readout that used to sit above the track
+    // went with the rest of the chrome (issue #381), and the exact number is
+    // what a number box is for.
     expect(faderValue(), 0.8);
-    expect(find.text('0.80'), findsOneWidget);
     // The object box did not — and must not: `sine 440` is what the object is
     // *set to*, which only a journaled `setParams` changes.
     expect(find.text('sine 440'), findsOneWidget);

@@ -1,8 +1,8 @@
 import 'package:flutter/widgets.dart';
 
 import '../../../design/tokens/phi_colors.dart';
-import '../../../design/tokens/phi_radii.dart';
 import '../../../design/tokens/phi_type.dart';
+import '../../../design/widgets/patcher/patch_message_box.dart';
 import '../../../domain/patcher/patch_node.dart';
 import '../../../engine/state/patcher_controller.dart';
 
@@ -13,6 +13,10 @@ import '../../../engine/state/patcher_controller.dart';
 ///
 /// The message content is the object's creation-argument string (what the
 /// params dialog edits); an empty message shows a dim placeholder.
+///
+/// Since issue #381 the node **is** the message box: no `MESSAGE` header, no
+/// frame, no padding — a [PatchMessageBox] fills the node's rectangle, and its
+/// notched right edge is what says "message" now that no caption does.
 class MessageNodeBody extends StatelessWidget {
   const MessageNodeBody({
     required this.node,
@@ -29,19 +33,15 @@ class MessageNodeBody extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => controller.setControlBang(node.id, inlet: 0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: PhiColors.bg2,
-          borderRadius: PhiRadii.all1,
-          border: Border.all(color: PhiColors.line2),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        alignment: Alignment.centerLeft,
+      child: PatchMessageBox(
         child: Text(
           message.isEmpty ? 'message' : message,
           style: PhiType.monoS().copyWith(
             color: message.isEmpty ? PhiColors.fg3 : PhiColors.fg0,
           ),
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.ellipsis,
         ),
       ),
     );

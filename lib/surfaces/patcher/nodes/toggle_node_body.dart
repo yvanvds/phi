@@ -1,14 +1,20 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../design/widgets/toggle/phi_toggle.dart';
+import '../../../design/widgets/patcher/patch_toggle_square.dart';
 import '../../../domain/patcher/patch_node.dart';
 import '../../../engine/state/patcher_controller.dart';
 import 'gui_value_link.dart';
 
-/// Body for the `.t` (toggle) node — a live [PhiToggle] that pushes `1`/`0`
-/// into the object's hot inlet via [PatcherController.setControlValue]
+/// Body for the `.t` (toggle) node — a live [PatchToggleSquare] that pushes
+/// `1`/`0` into the object's hot inlet via [PatcherController.setControlValue]
 /// (`sendFloat`), so flipping it on the canvas drives the graph (design
 /// `docs/design/patcher.md` §7).
+///
+/// Since issue #381 the node **is** the switch: no header, no frame, no padding
+/// — the square fills the node's rectangle and carries a cross when it is on,
+/// which is what a patcher toggle looks like and what reads across a canvas full
+/// of them. Presentation only: every push, seed and inbound value below is
+/// exactly as it was.
 ///
 /// The on/off state seeds from the object's `guiValue`, so a reopened patch
 /// shows the toggle where it was left, and a [GuiValueLink] keeps it there: an
@@ -81,8 +87,10 @@ class _ToggleNodeBodyState extends State<ToggleNodeBody> {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: PhiToggle(value: _on, onChanged: _flip),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _flip(!_on),
+      child: PatchToggleSquare(value: _on, voice: widget.node.voice),
     );
   }
 }

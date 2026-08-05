@@ -11,7 +11,6 @@ import '../test_doubles/fake_patcher_gateway.dart';
 
 NodeDescriptor _descSine() => NodeDescriptor(
   type: Obj.dSine,
-  title: 'osc · sine',
   defaultSize: const Size(130, 70),
   defaultArgs: '440',
   inputs: const [PortSpec(kind: PatchPortKind.control)],
@@ -21,7 +20,6 @@ NodeDescriptor _descSine() => NodeDescriptor(
 
 NodeDescriptor _descSlider() => NodeDescriptor(
   type: Obj.gSlider,
-  title: 'slider',
   defaultSize: const Size(80, 170),
   defaultArgs: '0 1 0.5',
   inputs: const [],
@@ -31,7 +29,6 @@ NodeDescriptor _descSlider() => NodeDescriptor(
 
 NodeDescriptor _descDac() => NodeDescriptor(
   type: Obj.dDac,
-  title: 'out',
   defaultSize: const Size(110, 60),
   defaultArgs: '',
   inputs: const [PortSpec(kind: PatchPortKind.audio)],

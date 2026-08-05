@@ -17,7 +17,6 @@ class PatchNode extends ChangeNotifier {
   PatchNode({
     required this.id,
     required this.type,
-    required this.title,
     required this.voice,
     required Offset position,
     required Size size,
@@ -33,10 +32,11 @@ class PatchNode extends ChangeNotifier {
 
   /// Object type identifier — one of the `Obj.*` constants from
   /// `package:yse` (e.g. `'~sine'`, `'.slider'`).
+  ///
+  /// The only name a node carries. There used to be a display `title` beside it
+  /// for the node header to print; with no headers anywhere (issues #379, #381)
+  /// nothing rendered it, so it went rather than lingering dead (design §7).
   final String type;
-
-  /// Display title shown in the node header. Uppercase mono.
-  final String title;
 
   /// Voice swatch index in `[1, 6]`.
   final int voice;

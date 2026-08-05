@@ -24,7 +24,6 @@ void main() {
     bool readsGuiValue = false,
   }) => NodeDescriptor(
     type: type,
-    title: type,
     defaultSize: const Size(120, 80),
     defaultArgs: args,
     inputs: const [],

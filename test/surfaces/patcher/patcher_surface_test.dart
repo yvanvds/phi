@@ -2,7 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/widgets/fader/phi_fader.dart';
-import 'package:phi/design/widgets/patcher/patch_node_frame.dart';
+import 'package:phi/design/widgets/patcher/patch_gui_object.dart';
 import 'package:phi/design/widgets/patcher/patch_object_box.dart';
 import 'package:phi/domain/patcher/patch_node.dart';
 import 'package:phi/engine/engine.dart';
@@ -95,10 +95,10 @@ void main() {
       await tester.pump();
 
       expect(find.byType(PatcherNodeView), findsNWidgets(3));
-      // Two of them — `~sine` and `~dac` — are object boxes now; only the
-      // `.slider`'s GUI body still wears a frame, until issue #381 (#379).
+      // Two of them — `~sine` and `~dac` — are object boxes (issue #379); the
+      // `.slider` is a bare fader, a GUI object with no frame at all (#381).
       expect(find.byType(PatchObjectBox), findsNWidgets(2));
-      expect(find.byType(PatchNodeFrame), findsOneWidget);
+      expect(find.byType(PatchGuiObject), findsOneWidget);
       expect(engine.patcher.graph.cables, hasLength(2));
       expect(patcherGateway.cables, hasLength(2));
       // The seed mounts the patcher as a source once a `~dac` exists — the
@@ -173,7 +173,7 @@ void main() {
     /// prints: an object box prints its type and arguments (issue #379), and
     /// the seeded patch already holds a `~sine` and a `~dac` of its own — the
     /// friendly titles that used to tell a dropped node apart are gone with the
-    /// headers. Kind-agnostic, so it names a GUI node's frame just as well.
+    /// headers. Kind-agnostic, so it names a bare GUI control just as well.
     Finder viewOf(PatchNode node) => find.byWidgetPredicate(
       (w) => w is PatcherNodeView && w.node.id == node.id,
     );

@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
 import 'package:phi/design/widgets/patcher/patch_canvas_constants.dart';
-import 'package:phi/design/widgets/patcher/patch_node_frame.dart';
+import 'package:phi/design/widgets/patcher/patch_gui_object.dart';
 import 'package:phi/design/widgets/patcher/patch_object_box.dart';
 import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/engine.dart';
@@ -70,16 +70,17 @@ void main() {
     // that already says it.
     expect(find.text('osc · sine'.toUpperCase()), findsNothing);
     expect(find.text('out · L/R'.toUpperCase()), findsNothing);
-    // The `.slider` keeps its frame until issue #381 — so the frames that are
-    // left are GUI objects only, never an engine object.
-    expect(find.byType(PatchNodeFrame), findsOneWidget);
+    // The `.slider` is the other kind of node — a bare control (issue #381),
+    // never an object box.
+    expect(find.byType(PatchGuiObject), findsOneWidget);
 
     final sineSize = tester.getSize(boxFor('sine 440'));
     final dacSize = tester.getSize(boxFor('dac'));
 
-    // One text line plus padding — half of the ~70px two-row node it replaces,
-    // which is what makes a patch of these take visibly less canvas.
-    expect(sineSize.height, lessThan(2 * PatchCanvasConstants.headerHeight));
+    // One text line plus padding — well under the ~70px two-row node (a 22px
+    // header band over a body) it replaces, which is what makes a patch of
+    // these take visibly less canvas.
+    expect(sineSize.height, lessThan(44));
     expect(dacSize.height, sineSize.height);
 
     // ─── (2) intrinsic width, floored by the port count ───────────────────

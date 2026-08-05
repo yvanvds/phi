@@ -2466,10 +2466,11 @@ main + app          (orchestration)
   straddling the top and bottom edges, and a single ellipsised line. **Which
   chrome a node gets is the descriptor's `buildBody`**: a type with a
   hand-authored GUI body is a `PatchNodeFrame` around it (headers there retire
-  with #381), and every other engine object — including every unregistered one —
-  is an object box. `NodeDescriptor.title` and `defaultSize` become nullable and
-  belong to the framed kind only; `PatchNode.title` stays, because those frames
-  still render it. **The box is measured, not laid out**: a node's rectangle is
+  with #381 below, which deletes the frame), and every other engine object —
+  including every unregistered one — is an object box. `NodeDescriptor.title`
+  and `defaultSize` become nullable and belong to the framed kind only;
+  `PatchNode.title` stays for now, because those frames still render it (it goes
+  with them in #381). **The box is measured, not laid out**: a node's rectangle is
   model state the cable layer reads port centres off, so `PatchObjectBoxMetrics`
   sizes it up front from the line it will print — as wide as its text, floored by
   `minWidthForPorts` (the floor outranks the cap, or dots would hang off the
@@ -2528,6 +2529,48 @@ main + app          (orchestration)
   an end-to-end `patcher_type_colour` integration test through the real app
   (canvas, palette, reference panel and the typed pick, with no `~` rendered
   anywhere on canvas or palette).
+- **GUI objects become bare controls** (issue #381, object-box epic #375, design
+  `docs/design/patcher.md` §7 + §12.2) — **a GUI object is its own control and
+  nothing else.** A bang was a `BUTTON` header over a 40px square captioned
+  `bang` inside a 90×90 frame; a toggle a `TOGGLE` header over a pill; a slider a
+  `SLIDER` header over a fader and a numeric readout. Each loses its frame,
+  header, caption and body padding and becomes only itself. Five new widgets
+  under `lib/design/widgets/patcher/`: `PatchGuiObject` (the counterpart of
+  `PatchObjectBox` — draws *no* chrome at all beyond the #377 port dots on the
+  top and bottom edges and the armed voice glow behind the control),
+  `PatchBangSquare` (square + ring, voiced flash on fire), `PatchToggleSquare`
+  (Max's square-with-a-cross, replacing `PhiToggle` on canvas — the pill belongs
+  in panels, where a label fits beside it), `PatchNumberBox` (the **cut top-right
+  corner** that says "number") and `PatchMessageBox` (the **notched right edge**
+  that says "message"). With no captions left, the outline is what distinguishes
+  the two boxes, so both expose a public `outlineFor(Size)` the painter draws and
+  the tests assert with `Path.contains`. `PatchNodeFrame` is **deleted**, and
+  with it the display title: `PatchNode.title`, `NodeDescriptor.title` and
+  `PatchNodeSpec.title` all go, since nothing renders a caption any more.
+  `defaultSize` shrinks to Max-like values — a `PatchCanvasConstants.guiControlMinSize`
+  square (`2 * firstPortOffset`, the width below which a control would strand its
+  own port dots) for the bang and toggle, and a one-line height *measured* from
+  `PatchObjectBoxMetrics` for the two number boxes and the message box, so a row
+  of mixed nodes sits on one baseline and the readout is guaranteed the height
+  its font needs. `PatcherController._sizeFor` now runs a declared/tuned size
+  through the same port-count floor an object box gets, rather than around it.
+  **Presentation only:** every body keeps its engine wiring untouched —
+  `sendFloat`/`sendBang`, the `guiValue` link and its 30 Hz gated poll (#357),
+  the number box's scrub and focus/commit/revert (#353, #359), the fader's
+  held-thumb suspension. The one behavioural consequence is that a GUI node is
+  now dragged in **edit mode** (#378) from anywhere on the control, there being
+  no chrome left to grab. Covered by widget tests for each new widget (port dots
+  straddling the horizontal edges and the control filling the node with no
+  caption; the bang's voiced flash; the toggle's mark only when on; both
+  outlines' corners and notch, including the one point that tells a number box
+  from a message box), node-view tests (a GUI body is a bare `PatchGuiObject`
+  filling its rectangle, never an object box), surface + body tests adapted to
+  the bare controls, and an end-to-end `patcher_bare_gui_controls` integration
+  test through the real app with real fonts (five controls on the canvas with no
+  caption between them, each filling its own shrunken node, the one-line boxes
+  matching an object box's line height; in run mode each still bangs/pushes and
+  still follows a value arriving from the graph; in edit mode the bang drags from
+  the middle of its own square).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

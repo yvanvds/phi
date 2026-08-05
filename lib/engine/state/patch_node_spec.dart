@@ -6,15 +6,14 @@ import '../../domain/patcher/patch_port.dart';
 /// be undone and a selection can be duplicated.
 ///
 /// It bundles the native creation inputs ([type] + [args]) with the canvas-side
-/// presentation ([title], [voice], [position], [size]) and the reified port
-/// topology ([inputs] / [outputs]), so the controller can rebuild an identical
+/// presentation ([voice], [position], [size]) and the reified port topology
+/// ([inputs] / [outputs]), so the controller can rebuild an identical
 /// [PatchNode] without re-inspecting the gateway. Immutable — [offsetBy] returns
 /// a copy shifted by a grid step for the duplicate gesture.
 class PatchNodeSpec {
   const PatchNodeSpec({
     required this.type,
     required this.args,
-    required this.title,
     required this.voice,
     required this.position,
     required this.size,
@@ -27,9 +26,6 @@ class PatchNodeSpec {
 
   /// The creation-argument string the object was made with.
   final String args;
-
-  /// Header title.
-  final String title;
 
   /// Voice swatch in `[1, 6]`.
   final int voice;
@@ -47,7 +43,6 @@ class PatchNodeSpec {
   PatchNodeSpec offsetBy(Offset delta) => PatchNodeSpec(
     type: type,
     args: args,
-    title: title,
     voice: voice,
     position: position + delta,
     size: size,

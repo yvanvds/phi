@@ -14,7 +14,6 @@ import '../test_doubles/fake_patcher_gateway.dart';
 NodeDescriptor _desc(String type, {Size size = const Size(120, 80)}) =>
     NodeDescriptor(
       type: type,
-      title: type,
       defaultSize: size,
       defaultArgs: '',
       inputs: const [],

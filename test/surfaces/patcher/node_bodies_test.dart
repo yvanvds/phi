@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/widgets/fader/phi_fader.dart';
-import 'package:phi/design/widgets/toggle/phi_toggle.dart';
+import 'package:phi/design/widgets/patcher/patch_toggle_square.dart';
 import 'package:phi/domain/patcher/patch_node.dart';
 import 'package:phi/engine/state/node_type_registry.dart';
 import 'package:phi/engine/state/patcher_controller.dart';
@@ -35,7 +35,6 @@ void main() {
 
   NodeDescriptor desc(String type, {String args = ''}) => NodeDescriptor(
     type: type,
-    title: type,
     defaultSize: const Size(120, 80),
     defaultArgs: args,
     inputs: const [],
@@ -78,11 +77,11 @@ void main() {
     final node = addNode(Obj.gToggle);
     await pumpBody(tester, ToggleNodeBody(node: node, controller: controller));
 
-    await tester.tap(find.byType(PhiToggle));
+    await tester.tap(find.byType(PatchToggleSquare));
     await tester.pump();
     expect(gateway.calls, contains('sendFloat:${handle()}:0:1.000'));
 
-    await tester.tap(find.byType(PhiToggle));
+    await tester.tap(find.byType(PatchToggleSquare));
     await tester.pump();
     expect(gateway.calls, contains('sendFloat:${handle()}:0:0.000'));
   });
@@ -259,9 +258,12 @@ void main() {
     driveFromEngine('0.8');
     await poll(tester);
 
-    // Nobody touched the fader — it followed the graph.
+    // Nobody touched the fader — it followed the graph. Its position is the
+    // whole of what it says now: the numeric readout above the track went with
+    // the rest of the chrome (issue #381), and the exact number is what a
+    // number box is for.
     expect(tester.widget<PhiFader>(find.byType(PhiFader)).value, 0.8);
-    expect(find.text('0.80'), findsOneWidget);
+    expect(find.byType(Text), findsNothing);
   });
 
   testWidgets('an inbound value never yanks the slider out of the hand that '
@@ -291,15 +293,17 @@ void main() {
     final node = addNode(Obj.gToggle);
     await pumpBody(tester, ToggleNodeBody(node: node, controller: controller));
 
-    expect(tester.widget<PhiToggle>(find.byType(PhiToggle)).value, isFalse);
+    bool on() =>
+        tester.widget<PatchToggleSquare>(find.byType(PatchToggleSquare)).value;
+    expect(on(), isFalse);
 
     driveFromEngine('1');
     await poll(tester);
-    expect(tester.widget<PhiToggle>(find.byType(PhiToggle)).value, isTrue);
+    expect(on(), isTrue);
 
     driveFromEngine('0');
     await poll(tester);
-    expect(tester.widget<PhiToggle>(find.byType(PhiToggle)).value, isFalse);
+    expect(on(), isFalse);
   });
 
   testWidgets('a cable-driven value re-renders an idle number box', (
