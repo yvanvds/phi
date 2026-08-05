@@ -155,6 +155,14 @@ void main() {
     });
 
     test('close stops MIDI traffic reaching listeners', () async {
+      final early = <void>[];
+      final earlySub = gateway.midiActivity.listen(early.add);
+      gateway.emitMidiActivity();
+      await Future<void>.delayed(Duration.zero);
+      // Nothing is subscribed to a port before init, so nothing arrives.
+      expect(early, isEmpty);
+      await earlySub.cancel();
+
       gateway.init();
       final received = <void>[];
       final sub = gateway.midiActivity.listen(received.add);

@@ -44,15 +44,15 @@ class FakeYseGateway implements YseGateway {
       StreamController<void>.broadcast();
 
   /// Whether the gateway is currently subscribed to its MIDI inputs, as
-  /// `_openMidiInputs()` / `_closeMidiInputs()` model it on the real gateway.
-  /// A fresh fake is open so it can be used as a bare activity source; [close]
-  /// shuts it, and a later [init] / [initOffline] re-opens it.
-  bool _midiInputsOpen = true;
+  /// `_openMidiInputs()` / `_closeMidiInputs()` model it on the real gateway:
+  /// nothing is subscribed before [init] / [initOffline], and [close] cancels
+  /// what was.
+  bool _midiInputsOpen = false;
 
   /// Push a synthetic MIDI tick — drives listeners as if a hardware port had
-  /// delivered an event. Silent after [close]: the real gateway has cancelled
-  /// its port subscriptions by then, so hardware traffic reaches no listener
-  /// until the engine is initialised again.
+  /// delivered an event. Silent before [init] and after [close], because the
+  /// real gateway holds no port subscriptions then: hardware traffic reaches
+  /// no listener until the engine is (re-)initialised.
   void emitMidiActivity() {
     if (!_midiInputsOpen) return;
     _midiActivity.add(null);

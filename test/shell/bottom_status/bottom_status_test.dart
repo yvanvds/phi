@@ -258,6 +258,10 @@ void main() {
       tester,
     ) async {
       final gateway = FakeYseGateway();
+      // The dot is fed by a *booted* engine in the real app, and the fake only
+      // delivers MIDI traffic while it holds its port subscriptions — as the
+      // real gateway does between `init()` and `close()` (issue #399).
+      gateway.init();
       addTearDown(() async {
         await gateway.dispose();
       });
