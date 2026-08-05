@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,7 +10,10 @@ import 'package:phi/engine/state/node_type_registry.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
 import 'package:phi/surfaces/patcher/nodes/number_node_body.dart';
+import 'package:phi/surfaces/patcher/patch_canvas_mode.dart';
+import 'package:phi/surfaces/patcher/patcher_canvas.dart';
 import 'package:phi/surfaces/patcher/patcher_node_view.dart';
+import 'package:phi/surfaces/patcher/placement/patch_placement_bar.dart';
 import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
@@ -28,9 +32,19 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 ///
 /// The four legs, in one session: clicking the readout takes the caret and
 /// keeps it; typing + Enter pushes through `sendFloat` and shows the engine's
-/// `guiValue` read-back; Backspace edits the text while a node stays selected
-/// (it used to delete the selection); and once the canvas has focus back,
-/// Delete removes the selection again.
+/// `guiValue` read-back; Backspace edits the text rather than reaching the
+/// canvas behind it; and once the canvas has the keyboard back, Delete removes
+/// a selected node again.
+///
+/// **Run mode is the premise** (issue #378). The object-box epic took the node
+/// header away, so a GUI body that owned its own presses would leave a fader
+/// unmovable and un-marquee-able; the canvas resolves that with a mode instead,
+/// and in `edit` every body is switched off at the pointer. A number box is
+/// therefore editable in `run` and inert in `edit` — deliberately — so this test
+/// flips the mode the way a user does, from the placement bar above the canvas,
+/// and flips back for the leg that deletes a node. The first press is spent
+/// proving the inert half, since "the box does not take the caret in edit mode"
+/// is now part of the contract rather than the bug this test was written for.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -78,11 +92,32 @@ void main() {
     expect(field, findsOneWidget);
     TextField box() => tester.widget<TextField>(field);
 
+    PatchCanvasMode mode() =>
+        tester.widget<PatcherCanvas>(find.byType(PatcherCanvas)).mode;
+    Future<void> flipMode() async {
+      await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+      await tester.pumpAndSettle();
+    }
+
+    // ── 0) in edit mode the readout is inert, by design (issue #378) ─────────
+    // The press goes to the canvas, which selects the node it landed on — the
+    // body never sees it, so no caret lands in the field.
+    expect(mode(), PatchCanvasMode.edit);
+    await tester.tapAt(tester.getCenter(field));
+    await tester.pumpAndSettle();
+    expect(box().focusNode!.hasPrimaryFocus, isFalse);
+    expect(patcher.graph.selectedNodes, hasLength(1));
+
+    // Play the patch, and the same pixels are a number box again.
+    await flipMode();
+    expect(mode(), PatchCanvasMode.run);
+
     // ── 1) clicking the readout puts the caret in the field and leaves it ────
     await tester.tapAt(tester.getCenter(field));
     await tester.pumpAndSettle();
     expect(box().focusNode!.hasPrimaryFocus, isTrue);
-    // The press belonged to the body, so the node was not selected by it.
+    // The press belonged to the body, so the canvas started no gesture of its
+    // own — and a run-mode canvas selects nothing in any case.
     expect(patcher.graph.selectedNodes, isEmpty);
 
     // ── 2) type a value and commit with Enter ────────────────────────────────
@@ -97,14 +132,16 @@ void main() {
     // The box shows the value the engine reports back, not a Dart-side echo.
     expect(box().controller!.text, '440');
 
-    // ── 3) Backspace edits the text, never the canvas selection ──────────────
-    // Select the `~dac` first, so a wrongly-routed Backspace would be visible
-    // as a deleted node.
+    // ── 3) Backspace edits the text, never the canvas behind it ──────────────
+    // The canvas's own `Focus` is an *ancestor* of this field, so a Backspace
+    // typed here reaches it first; it declines only because the field holds the
+    // primary focus. Assert the node count with it, so a Backspace that leaked
+    // through would show up as a deleted node rather than silently.
     final nodesBefore = patcher.graph.nodes.length;
-    await tester.tap(dacLine);
-    await tester.pumpAndSettle();
-    expect(patcher.graph.selectedNodes, hasLength(1));
-
+    // Past the double-tap window first: the commit above left the field, and
+    // the press that comes back to it is a fresh click, not the second half of
+    // a pair on the same three characters.
+    await tester.pump(kDoubleTapTimeout);
     await tester.tapAt(tester.getCenter(field));
     await tester.pumpAndSettle();
     expect(box().focusNode!.hasPrimaryFocus, isTrue);
@@ -122,9 +159,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(box().controller!.text, '440');
 
-    // Re-select the dac by clicking it, then Delete removes it as ever.
+    // Back to editing the patch — deleting a node is an edit, and a patch being
+    // played cannot be rearranged (issue #378).
+    await flipMode();
+    expect(mode(), PatchCanvasMode.edit);
+
+    // Select the dac by clicking it, then Delete removes it as ever.
     await tester.tap(dacLine);
     await tester.pumpAndSettle();
+    expect(patcher.graph.selectedNodes, hasLength(1));
     await tester.sendKeyEvent(LogicalKeyboardKey.delete);
     await tester.pumpAndSettle();
     expect(patcher.graph.nodes, hasLength(nodesBefore - 1));

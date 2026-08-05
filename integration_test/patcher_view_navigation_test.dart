@@ -11,8 +11,10 @@ import 'package:phi/engine/state/node_type_registry.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
 import 'package:phi/surfaces/patcher/nodes/number_node_body.dart';
+import 'package:phi/surfaces/patcher/patch_canvas_mode.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
 import 'package:phi/surfaces/patcher/patcher_node_view.dart';
+import 'package:phi/surfaces/patcher/placement/patch_placement_bar.dart';
 import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
@@ -38,6 +40,13 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 /// - The frame is measured against the *real* viewport the canvas was given
 ///   once the rail, the palette and the reference panel have taken their share
 ///   — a number a canvas pumped on its own can only invent.
+///
+/// One leg — the `.f` box swallowing a Space it is being typed into — needs the
+/// box to be a box at all, and since issue #378 that is **run mode**: in `edit`
+/// every GUI body is switched off at the pointer, so a fader stays draggable
+/// with no header left to grab it by. That leg flips the mode from the placement
+/// bar and flips back; navigation itself answers in either mode, because
+/// navigating is not editing.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -215,6 +224,20 @@ void main() {
       matching: find.byType(TextField),
     );
     expect(field, findsOneWidget);
+
+    PatchCanvasMode mode() =>
+        tester.widget<PatcherCanvas>(find.byType(PatcherCanvas)).mode;
+    Future<void> flipMode() async {
+      await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+      await tester.pumpAndSettle();
+    }
+
+    // A number box only takes the caret while the patch is being played
+    // (issue #378) — and taking the caret is the whole premise of this leg.
+    expect(mode(), PatchCanvasMode.edit);
+    await flipMode();
+    expect(mode(), PatchCanvasMode.run);
+
     await tester.tapAt(tester.getCenter(field));
     await tester.pumpAndSettle();
     expect(tester.widget<TextField>(field).focusNode!.hasPrimaryFocus, isTrue);
@@ -234,6 +257,11 @@ void main() {
     // never moved.
     expect(panX(), 0);
     expect(panY(), 0);
+
+    // Back to editing. Navigation answers in either mode, but the rest of this
+    // test is about the canvas a patch is *built* on.
+    await flipMode();
+    expect(mode(), PatchCanvasMode.edit);
 
     // ── 4) Ctrl+0 frames the patch from wherever the view has wandered ───────
     expect(framed(drawn()), isTrue);
