@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../../design/tokens/phi_colors.dart';
+import '../../../design/tokens/phi_radii.dart';
 import '../../../design/tokens/phi_spacing.dart';
 import '../../../design/tokens/phi_type.dart';
 import '../../../design/widgets/select/phi_select.dart';
 import '../../../design/widgets/select/phi_select_option.dart';
 import '../../../domain/project/entity_address.dart';
 import '../../../engine/state/patch_library_controller.dart';
+import '../patch_canvas_mode.dart';
 
 /// The Patcher surface's **source-placement bar** (issue #224, design
 /// `docs/design/patcher.md` §4 role 1) — the thin strip above the canvas that
@@ -23,6 +25,12 @@ import '../../../engine/state/patch_library_controller.dart';
 ///   patcher's only chrome, exactly as the piano roll's snap picker sits in its
 ///   header. A view preference, so it is held by the surface and lost on
 ///   restart rather than written into the patch.
+/// - An **edit / run** toggle, with the current mode named beside it (issue
+///   #378, design §6). The mode has a keyboard route (`Ctrl+E`), but a mode
+///   that changes what every press on the canvas does must also be *visible* —
+///   there is otherwise nothing on screen to explain why a fader has stopped
+///   moving. Performance state like the snap flag: held by the surface, never
+///   persisted, so a reopened project starts in edit.
 ///
 /// A thin, [ChangeNotifier]-bound view of the [PatchLibraryController]. Renders a
 /// low-key hint when no patch is open.
@@ -31,10 +39,19 @@ class PatchPlacementBar extends StatelessWidget {
     required this.controller,
     this.snapToGrid = false,
     this.onSnapChanged,
+    this.mode = PatchCanvasMode.edit,
+    this.onModeChanged,
     super.key,
   });
 
   final PatchLibraryController controller;
+
+  /// The canvas's current interaction mode (issue #378) — named by the
+  /// [modeKey] toggle, which is hidden entirely when [onModeChanged] is null.
+  final PatchCanvasMode mode;
+
+  /// Called with the requested mode when the toggle is tapped.
+  final ValueChanged<PatchCanvasMode>? onModeChanged;
 
   /// Whether the canvas quantises a node drop to the grid. Reflected by the
   /// [snapKey] toggle, which is hidden entirely when [onSnapChanged] is null —
@@ -55,6 +72,9 @@ class PatchPlacementBar extends StatelessWidget {
 
   /// Key on the canvas grid-snap toggle (issue #368).
   static const Key snapKey = Key('PatchPlacementBar.snap');
+
+  /// Key on the edit / run mode toggle (issue #378).
+  static const Key modeKey = Key('PatchPlacementBar.mode');
 
   static const double height = 40;
 
@@ -132,11 +152,66 @@ class PatchPlacementBar extends StatelessWidget {
           enabled: placement != null,
           onTap: () => running ? controller.stop(open) : controller.start(open),
         ),
+        if (onModeChanged != null) ...[
+          const SizedBox(width: PhiSpacing.s2),
+          _ModeButton(mode: mode, onTap: () => onModeChanged!(mode.flipped)),
+        ],
         if (onSnapChanged != null) ...[
           const SizedBox(width: PhiSpacing.s2),
           _SnapButton(on: snapToGrid, onTap: () => onSnapChanged!(!snapToGrid)),
         ],
       ],
+    );
+  }
+}
+
+/// The canvas edit / run toggle (issue #378) — and the mode indicator, because
+/// it names the mode it is *in* rather than the one it would switch to.
+///
+/// Lit in [PhiColors.live] while running, the colour this design system already
+/// spends on "this is sounding", since run mode is exactly the state in which
+/// the patch is played.
+///
+/// Deliberately a **word in a box** rather than the icon-plus-caption its
+/// neighbours use: the bar has to survive a narrow docked pane (issue #287),
+/// and the mode is the one control here whose whole job is to *name* a state —
+/// so the name is the control and the icon would only be a second copy of it.
+class _ModeButton extends StatelessWidget {
+  const _ModeButton({required this.mode, required this.onTap});
+
+  final PatchCanvasMode mode;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final run = mode.isRun;
+    final fg = run ? PhiColors.live : PhiColors.fg1;
+    return Tooltip(
+      message: run
+          ? 'run mode · bodies live, nodes locked · ctrl+e to edit'
+          : 'edit mode · bodies inert, everything drags · ctrl+e to run',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          key: PatchPlacementBar.modeKey,
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: PhiSpacing.s1,
+              vertical: 2,
+            ),
+            decoration: BoxDecoration(
+              border: Border.all(color: fg.withValues(alpha: 0.5)),
+              borderRadius: PhiRadii.all1,
+            ),
+            child: Text(
+              mode.label.toUpperCase(),
+              style: PhiType.caption().copyWith(color: fg),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

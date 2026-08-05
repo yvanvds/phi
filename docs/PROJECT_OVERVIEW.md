@@ -1775,10 +1775,11 @@ main + app          (orchestration)
   ~18px and then discards that distance, so the node lagged the pointer and short
   drags did nothing. The canvas measures **scene-space** deltas from the press point
   (so the zoom scale is already divided out), starts the drag at its own 4px click
-  slop, and only counts *movement-free* presses towards a double-click. Nodes whose
-  descriptor sets `interactiveBody` (fader, number field, message box) keep their
-  own gestures — the canvas ignores presses inside their body, so they are dragged
-  by the header. `PatchGraph` re-broadcasts each `PatchNode`'s own notifications, so
+  slop, and only counts *movement-free* presses towards a double-click. Since issue
+  #378 whether a live GUI body (fader, number field, message box) answers a press at
+  all is the canvas's **mode**, not the node's type: in edit mode every body is inert
+  and a press anywhere on a node drags it; in run mode the bodies own every press and
+  nothing moves. `PatchGraph` re-broadcasts each `PatchNode`'s own notifications, so
   a move (drag preview, undo, redo) actually repaints the canvas and its cables.
   **Typed cables:** a drag from an outlet colours
   the ghost by the outlet's `OutType` (`patchOutletColor`, `lib/surfaces/patcher/`),
@@ -2232,9 +2233,11 @@ main + app          (orchestration)
   `markParamsChanged` uses — for the ones whose value actually changed, so an
   idle patch does no repaint work however long the poll runs. A new
   `NodeDescriptor.readsGuiValue` marks the pollable set (`.slider` · `.t` ·
-  `.i`/`.f` · `~sine`); it is deliberately *not* `interactiveBody`, whose set
-  only overlaps — `~sine` displays a value but owns no gesture, `.b` and `.m`
-  own gestures but display nothing that can change from underneath. A new
+  `.i`/`.f` · `~sine`); it is deliberately narrower than "the body is a live
+  control", whose set only overlaps — `~sine` displays a value but takes no
+  gesture, `.b` and `.m` are operable but display nothing that can change from
+  underneath. (The companion `interactiveBody` flag it was contrasted with is
+  gone since #378 — press ownership is the canvas's mode now.) A new
   `PatchGuiPoller` (`lib/surfaces/patcher/`) wraps the canvas and runs the ask at
   30 Hz behind three gates: the surface is the **visible tab** (the shell now
   hands `active` down to `PatcherSurface`, the milder cousin of the Scene
@@ -2416,6 +2419,41 @@ main + app          (orchestration)
   the composed box's top and bottom edges and a two-inlet object spreads them
   along the top; a cable is authored by dragging out of one box's underside
   into the next box's top, clicked on the painted curve, and undone).
+- **Patcher edit / run mode** (issue #378, object-box epic #375, design
+  `docs/design/patcher.md` §6 + §12.5) — **who owns a press on a live GUI body
+  becomes a mode of the canvas instead of a property of the node type.** Dropping
+  node headers takes away the one piece of neutral chrome a fader could be dragged
+  by, and the old per-node arbitration (`NodeDescriptor.interactiveBody`: "a live
+  body owns its own presses, drag such nodes by the header") then left a slider
+  unmovable and un-marquee-able. A mode resolves it globally — and a
+  live-performance surface wants the split regardless. **Edit mode:** every body is
+  switched off by an `IgnorePointer` in `PatcherNodeView` (`bodyLive`), so a press
+  anywhere on a node drags it, a marquee sweeps GUI nodes like any others, and
+  `Delete` / `Ctrl+D` / the arrow nudges all live; the hover cursor says `move` over
+  every node, GUI or not. **Run mode:** the canvas starts no gesture of its own — no
+  cable, no drag, no marquee, no context menu, and the editing shortcuts (including
+  undo/redo) are declined — while the bodies own every press; only navigation
+  answers, because navigating is not editing, so middle/space pan, the wheel zoom
+  and `Ctrl+0` all still work and the cursor promises nothing the mode cannot
+  deliver. A press on *empty* canvas still takes the keyboard even in run mode, or
+  `Ctrl+E` would have no way home. **`Ctrl+E` flips it**, matched on the *physical*
+  `E` key as well as the logical one, the same AZERTY-proofing `Ctrl+0` uses (#369);
+  the toggle also sits in `PatchPlacementBar` as a named indicator (`EDIT` / `RUN`,
+  lit in `PhiColors.live` while running) since a mode that changes what every press
+  does must be visible. The mode is **performance state**: a new `PatchCanvasMode`
+  enum held by `_PatcherViewportState` beside the snap flag, never written to the
+  payload, so a reopened project starts in edit — and entering run mode drops the
+  selection, an editing state nothing in run mode can act on. `interactiveBody` is
+  removed from `NodeDescriptor` with its documentation; `readsGuiValue` (the poll
+  set, #357) is unaffected. Covered by canvas widget tests (edit-mode body drag +
+  marquee, run-mode body press with the node pinned, run-mode marquee / ports /
+  right-click all silent, run-mode `Delete`+`Ctrl+D`+arrows+undo declined, run-mode
+  pan/wheel/`Ctrl+0` still answering, `Ctrl+E` by key position and by glyph, `Ctrl+E`
+  unhandled with no host listening, the cursor tracking the mode), placement-bar
+  tests (the toggle reports each flip and names the mode; hidden with no listener),
+  surface tests (the bar's toggle reaches the canvas and drops the selection; a
+  fresh surface starts in edit), and an end-to-end `patcher_edit_run_mode`
+  integration test through the real app.
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

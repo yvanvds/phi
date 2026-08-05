@@ -20,15 +20,18 @@ import 'nodes/patch_args_body.dart';
 /// [GestureDetector] here would put the node back in the arena and reintroduce
 /// exactly that lag.
 ///
-/// A live GUI body (fader, number field, message box) still owns its own
-/// gestures — it sits deeper in the tree and the canvas deliberately ignores
-/// presses that land inside a body whose descriptor is
-/// [NodeDescriptor.interactiveBody].
+/// Whether a live GUI body (fader, number field, message box) answers a press
+/// at all is the canvas's **mode**, not the node's type (issue #378): with the
+/// header gone there is no neutral chrome left to drag a fader by, so in edit
+/// mode every body is switched off here and the canvas drags the node from
+/// anywhere on it. In run mode the bodies are live and own every press — they
+/// sit deeper in the tree, and the canvas starts no gesture of its own.
 class PatcherNodeView extends StatelessWidget {
   const PatcherNodeView({
     required this.node,
     required this.controller,
     this.selected = false,
+    this.bodyLive = false,
     super.key,
   });
 
@@ -37,6 +40,14 @@ class PatcherNodeView extends StatelessWidget {
 
   /// Whether this node is part of the current selection — draws a bright ring.
   final bool selected;
+
+  /// Whether the body takes pointers — true only in run mode (issue #378).
+  ///
+  /// Switched off with an [IgnorePointer] rather than by handing each body an
+  /// "inert" flag of its own: the rule is the canvas's, it must hold for every
+  /// body ever registered, and a body that has to remember to obey it is a body
+  /// that will one day forget.
+  final bool bodyLive;
 
   @override
   Widget build(BuildContext context) {
@@ -83,9 +94,12 @@ class PatcherNodeView extends StatelessWidget {
               outputVoices: [for (final p in node.outputs) p.voice],
               body: Padding(
                 padding: const EdgeInsets.all(8),
-                child:
-                    desc?.buildBody(context, node, controller) ??
-                    PatchArgsBody(node: node, controller: controller),
+                child: IgnorePointer(
+                  ignoring: !bodyLive,
+                  child:
+                      desc?.buildBody(context, node, controller) ??
+                      PatchArgsBody(node: node, controller: controller),
+                ),
               ),
             ),
           ],

@@ -37,7 +37,6 @@ class NodeDescriptor {
     required this.inputs,
     required this.outputs,
     required this.buildBody,
-    this.interactiveBody = false,
     this.readsGuiValue = false,
   });
 
@@ -61,23 +60,22 @@ class NodeDescriptor {
   /// Builds the body widget shown below the node header.
   final NodeBodyBuilder buildBody;
 
-  /// Whether the body owns its own pointer gestures — a fader, a number
-  /// field, a clickable message box. The canvas leaves presses inside such a
-  /// body to the widget, so operating a control never drags (or re-selects)
-  /// its node; those nodes are dragged by their header (issue #352).
-  final bool interactiveBody;
-
   /// Whether the body **displays the engine's `guiValue`** — a fader readout, a
   /// number box, a toggle's on/off, the `~sine` freq line. Only these nodes are
   /// polled by the surface's gated refresh, so an idle patch of plain objects
   /// costs nothing (issue #357).
   ///
-  /// Deliberately **not** [interactiveBody]: the two sets only overlap. `~sine`
-  /// displays a `guiValue` but owns no gesture, while `.b` (a momentary bang)
-  /// and `.m` (which renders its creation args) own gestures but have no
-  /// display value to re-read. Polling by "is it interactive" would therefore
-  /// both miss the very node the cable-driven bug was reported against and burn
-  /// reads on two bodies that can never change from underneath.
+  /// Deliberately narrower than "the body is a live control": `~sine` displays
+  /// a `guiValue` but takes no gesture, while `.b` (a momentary bang) and `.m`
+  /// (which renders its creation args) are operable but have no display value
+  /// to re-read. Polling by "is it interactive" would therefore both miss the
+  /// very node the cable-driven bug was reported against and burn reads on two
+  /// bodies that can never change from underneath.
+  ///
+  /// There is no companion "the body owns its presses" flag any more: since
+  /// issue #378 that is the canvas's **mode**, not the type's — in edit mode
+  /// every body is inert so the node can be dragged from anywhere on it, and in
+  /// run mode every body is live.
   final bool readsGuiValue;
 }
 

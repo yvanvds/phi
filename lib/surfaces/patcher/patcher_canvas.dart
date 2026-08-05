@@ -18,10 +18,10 @@ import '../../domain/patcher/patch_port.dart';
 import '../../domain/patcher/patch_port_id.dart';
 import '../../domain/patcher/patch_port_kind.dart';
 import '../../engine/bridge/patch_object_descriptor.dart';
-import '../../engine/state/node_type_registry.dart';
 import '../../engine/state/patcher_controller.dart';
 import 'create/patch_inline_object_box.dart';
 import 'patch_cable_colors.dart';
+import 'patch_canvas_mode.dart';
 import 'patcher_cable_layer.dart';
 import 'patcher_ghost_cable.dart';
 import 'patcher_node_view.dart';
@@ -45,7 +45,14 @@ import 'patcher_node_view.dart';
 ///
 /// Canvas interactions (design `docs/design/patcher.md` §6):
 /// - **Body drag** moves the node (and the rest of the selection) as one
-///   journaled step.
+///   journaled step — from anywhere on the node, GUI control or not, because
+///   in [PatchCanvasMode.edit] the bodies are inert (issue #378).
+/// - **Edit / run mode** decides who owns a press at all. In edit mode this
+///   canvas owns every one of them and the bodies are switched off; in
+///   [PatchCanvasMode.run] the bodies own every press and the canvas keeps only
+///   its navigation — the pan, the wheel zoom and `Ctrl+0` — because navigating
+///   is not editing. `Ctrl+E` flips the mode, matched on the key's *position*
+///   like `Ctrl+0` so it survives AZERTY.
 /// - **Cables** drag from *either* end — an outlet forwards or an inlet
 ///   backwards (issue #359); the ghost colours by the anchored port's type,
 ///   compatible ports on the opposite side light up, incompatible drops reject
@@ -88,6 +95,8 @@ class PatcherCanvas extends StatefulWidget {
     required this.controller,
     this.objectTypes = const [],
     this.snapToGrid = false,
+    this.mode = PatchCanvasMode.edit,
+    this.onToggleMode,
     this.onCreateObject,
     this.onNodeTap,
     this.onNodeDoubleTap,
@@ -96,6 +105,20 @@ class PatcherCanvas extends StatefulWidget {
   });
 
   final PatcherController controller;
+
+  /// Whether the canvas is being edited or played (issue #378, design §6).
+  ///
+  /// In [PatchCanvasMode.edit] the node bodies are inert and this canvas owns
+  /// every press; in [PatchCanvasMode.run] it owns none of them but its own
+  /// navigation. Held by the surface, not here — it is performance state shared
+  /// with the placement bar's indicator, and the canvas is re-keyed per open
+  /// patch while the mode is not.
+  final PatchCanvasMode mode;
+
+  /// Called when `Ctrl+E` asks for the other mode. Null leaves the shortcut
+  /// unhandled — a canvas whose host holds no mode of its own must not pretend
+  /// to flip one.
+  final VoidCallback? onToggleMode;
 
   /// Whether a node **drop** — the release of a body drag, or the release of an
   /// arrow-key nudge — lands the moved set on the canvas's minor grid (issue
@@ -178,12 +201,13 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   Offset _nodeDragScene = Offset.zero;
   bool _draggingNode = false;
 
-  // Whether the press currently in flight landed on a body that runs its own
-  // gestures. Such a press belongs to the widget underneath, so the canvas
-  // neither drags the node nor claims keyboard focus on release — an editable
-  // body (a `.i`/`.f` number field) has just taken focus for its caret and must
-  // keep it (issue #353).
-  bool _pressOnInteractiveBody = false;
+  // Whether the press currently in flight belongs to a widget under the canvas
+  // rather than to the canvas itself — the open inline object box, or (since
+  // issue #378) any node body while the canvas is in run mode. The canvas
+  // neither starts a gesture for such a press nor claims keyboard focus on its
+  // release: an editable body (a `.i`/`.f` number field) has just taken focus
+  // for its caret and must keep it (issue #353).
+  bool _pressBelongsToWidget = false;
 
   // Cable-endpoint grab (issue #359). Armed by a press near one end of an
   // existing cable and only *detached* once the pointer clears `_clickSlop`, so
@@ -289,6 +313,15 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
 
   void _onFocusChanged() {
     if (!_focus.hasFocus) _commitNudge();
+  }
+
+  @override
+  void didUpdateWidget(PatcherCanvas oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The cursor is a preview of what a press would do, so it has to tell the
+    // truth about the *mode* it is previewing (design §6, issue #378) — and a
+    // mode flipped from the placement bar moves no pointer that would ask.
+    if (oldWidget.mode != widget.mode) _restoreCursor();
   }
 
   @override
@@ -414,6 +447,9 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
               node: n,
               controller: _controller,
               selected: graph.isNodeSelected(n.id),
+              // Bodies are live only in run mode: in edit mode they are inert
+              // so a press anywhere on a fader drags its node (issue #378).
+              bodyLive: widget.mode.isRun,
             ),
           ),
         // The port under the pointer, ringed so the (otherwise invisible) hit
@@ -503,6 +539,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
         _releaseSpace();
         return KeyEventResult.handled;
       }
+      if (widget.mode.isRun) return KeyEventResult.ignored;
       if (_nudgeStep(key) == null) return KeyEventResult.ignored;
       _commitNudge();
       return KeyEventResult.handled;
@@ -523,6 +560,16 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
         _resetView();
         return KeyEventResult.handled;
       }
+      // `Ctrl+E` flips edit ↔ run (issue #378), read the same way and for the
+      // same reason: the mode has to be reachable from whatever layout is
+      // plugged in, and it is the *key in that position* that is the habit.
+      // Lives above the run-mode gate below — the shortcut out of a mode is no
+      // use if the mode disables it.
+      if (_isModeKey(event)) return _toggleMode();
+      // Everything left in this switch edits the graph, and run mode edits
+      // nothing (design §6): undo, redo and duplicate are all declined, so a
+      // patch being played cannot be rearranged by a mistyped chord.
+      if (widget.mode.isRun) return KeyEventResult.ignored;
       switch (key) {
         case LogicalKeyboardKey.keyZ:
           HardwareKeyboard.instance.isShiftPressed
@@ -547,6 +594,9 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       _armSpace();
       return KeyEventResult.handled;
     }
+    // Past here every shortcut moves, deletes or deselects something, and run
+    // mode does none of those (issue #378).
+    if (widget.mode.isRun) return KeyEventResult.ignored;
     final step = _nudgeStep(key);
     if (step != null) return _nudge(step);
     switch (key) {
@@ -703,6 +753,31 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       event.logicalKey == LogicalKeyboardKey.digit0 ||
       event.logicalKey == LogicalKeyboardKey.numpad0;
 
+  /// Whether [event] is the `Ctrl+E` that flips edit ↔ run (issue #378).
+  ///
+  /// Matched on the key's **position** first, like `Ctrl+0` — the physical
+  /// `E` key — with the logical key accepted as well so a layout that remaps
+  /// the position still answers to the glyph the user sees on the cap.
+  bool _isModeKey(KeyEvent event) =>
+      event.physicalKey == PhysicalKeyboardKey.keyE ||
+      event.logicalKey == LogicalKeyboardKey.keyE;
+
+  /// Ask the host for the other mode. Unhandled when no host is listening, so
+  /// the chord can go on to mean something else somewhere else.
+  KeyEventResult _toggleMode() {
+    final toggle = widget.onToggleMode;
+    if (toggle == null) return KeyEventResult.ignored;
+    // A mode change re-reads what every pixel of the canvas would do, so
+    // whatever the keyboard or the pointer had half-open is closed first: a
+    // nudge burst is journaled rather than stranded, and a marquee or node
+    // drag in flight is dropped rather than surviving into a mode that has no
+    // such gesture.
+    _commitNudge();
+    _resetGesture();
+    toggle();
+    return KeyEventResult.handled;
+  }
+
   /// Bring the whole patch back into view (`Ctrl+0`, issue #369).
   ///
   /// The issue left the choice between "reset to 1:1" and "zoom to fit" open.
@@ -766,14 +841,14 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // overwritten by the drag this press is about to start, and its move would
     // never reach the journal (issue #368).
     _commitNudge();
-    _pressOnInteractiveBody = false;
+    _pressBelongsToWidget = false;
     if (_inlineCreateAt != null) {
       // A press inside the open inline object box belongs to its field — the
       // same rule an editable node body gets (issue #353): the canvas starts no
       // gesture here and does not take the keyboard back on release, so the
       // caret lands where it was clicked.
       if (_pressInsideInlineBox(event.position)) {
-        _pressOnInteractiveBody = true;
+        _pressBelongsToWidget = true;
         return;
       }
       // A press anywhere else abandons the box, exactly as Escape does — the
@@ -798,12 +873,26 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     }
     if (_controller.graph.dragSourcePort != null) return;
 
-    if (event.buttons == kSecondaryMouseButton) {
-      _onSecondaryPress(event.position, _toScene(event.localPosition));
+    final scene = _toScene(event.localPosition);
+    // Run mode: the bodies own every press and the canvas owns none of them
+    // (issue #378). Checked after the pan gestures, which are navigation and
+    // therefore live in both modes, and before every scene hit-test below —
+    // no cable is dragged, no node moved or selected, no menu opened.
+    //
+    // A press on empty canvas still takes the keyboard on release, because
+    // `Ctrl+E` is the way back out of the mode and the canvas has to be
+    // holding the keyboard to hear it. A press on a *node* does not: the body
+    // underneath may have just taken focus for its caret (issue #353).
+    if (widget.mode.isRun) {
+      _pressBelongsToWidget = _nodeAt(scene) != null;
       return;
     }
 
-    final scene = _toScene(event.localPosition);
+    if (event.buttons == kSecondaryMouseButton) {
+      _onSecondaryPress(event.position, scene);
+      return;
+    }
+
     // A press on a **port of either side** starts a cable drag: from an outlet
     // forwards, from an inlet backwards, Max-style (issue #359). Checked first
     // so a port just past a node's edge wins over the node itself; the press
@@ -830,13 +919,11 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     }
     final node = _nodeAt(scene);
     if (node != null) {
-      // A live GUI body owns its own gestures and sits deeper in the tree:
-      // leave the press to it entirely, so operating a control neither drags
-      // nor re-selects its node. Such nodes are dragged by the header.
-      if (_onInteractiveBody(node, scene)) {
-        _pressOnInteractiveBody = true;
-        return;
-      }
+      // Every node, GUI control or not: in edit mode the bodies are inert
+      // (`PatcherNodeView` switches their pointers off), so a press anywhere on
+      // a fader drags it exactly as a press on an object box does — which is
+      // what having no header left to grab requires (issue #378).
+      //
       // Arm a node drag-or-click. The drag itself only starts once the pointer
       // clears `_clickSlop`, so a plain click still selects.
       _pressNode = node.id;
@@ -924,8 +1011,8 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // Never on a press that landed on a self-driven body: the `.i`/`.f` field
     // underneath has just taken focus to place its caret, and taking it back
     // here is precisely what made number boxes uneditable (issue #353).
-    final onBody = _pressOnInteractiveBody;
-    _pressOnInteractiveBody = false;
+    final onBody = _pressBelongsToWidget;
+    _pressBelongsToWidget = false;
     if (!onBody) _focus.requestFocus();
     if (_panning) {
       // A pan is a gesture in its own right, and it moves the scene under the
@@ -1191,7 +1278,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       // that could be cancelled starts — but this path exists precisely so no
       // transient depends on being reached the way it was expected to (#355).
       _nudging = false;
-      _pressOnInteractiveBody = false;
+      _pressBelongsToWidget = false;
       _pressCable = null;
       _pressCableAnchor = null;
       _pressCableScene = Offset.zero;
@@ -1259,6 +1346,14 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       _showSpaceCursor();
       return;
     }
+    // Run mode promises nothing: a press here plays whatever it lands on, and
+    // the body says so with its own cursor from deeper in the tree. Offering a
+    // move cursor over a node that cannot move would be the cursor lying about
+    // the mode it is previewing (design §6, issue #378).
+    if (widget.mode.isRun) {
+      _setHover(SystemMouseCursors.basic, null);
+      return;
+    }
     if (_controller.graph.dragSourcePort != null) {
       // Mid-drag the pointer means one thing only: where this cable will land.
       _setHover(SystemMouseCursors.precise, null);
@@ -1274,16 +1369,10 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       _setHover(SystemMouseCursors.grab, null);
       return;
     }
-    final node = _nodeAt(scene);
-    if (node != null) {
-      // A body that runs its own gestures is not draggable from here, and sets
-      // whatever cursor it wants from deeper in the tree.
-      _setHover(
-        _onInteractiveBody(node, scene)
-            ? SystemMouseCursors.basic
-            : SystemMouseCursors.move,
-        null,
-      );
+    // In edit mode every node is draggable from every pixel of it, GUI control
+    // or not — the bodies are switched off (issue #378).
+    if (_nodeAt(scene) != null) {
+      _setHover(SystemMouseCursors.move, null);
       return;
     }
     _setHover(
@@ -1362,25 +1451,6 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       if (r.contains(scene)) return n;
     }
     return null;
-  }
-
-  /// Whether [scene] lands on a node body that runs its own gestures (fader,
-  /// number field, message box). Measured against the node's exact body rect —
-  /// [_nodeAt]'s halo and the header stay draggable.
-  ///
-  /// The single notion of "the widget owns this press": it decides both that no
-  /// node drag starts here (issue #352) and that the canvas leaves keyboard
-  /// focus alone on release (issue #353).
-  bool _onInteractiveBody(PatchNode node, Offset scene) {
-    if (NodeTypeRegistry.instance.find(node.type)?.interactiveBody != true) {
-      return false;
-    }
-    return Rect.fromLTWH(
-      node.position.dx,
-      node.position.dy + PatchCanvasConstants.headerHeight,
-      node.size.width,
-      node.size.height - PatchCanvasConstants.headerHeight,
-    ).contains(scene);
   }
 
   /// Every port centre in the scene, rebuilt only when the graph reports a
