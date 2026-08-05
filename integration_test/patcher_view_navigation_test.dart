@@ -262,6 +262,69 @@ void main() {
     expect(find.byType(PatchNodeFrame), findsNWidgets(2));
     expect(patcher.graph.nodeById(sine.id), isNotNull);
 
+    // ── 5) the wheel zooms, and the zoom-out floor really bites (#373) ───────
+    //
+    // A composition question rather than a canvas one: a pointer *signal* is
+    // offered to every scrollable on the hit-test path before the canvas sees
+    // it, and the patcher sits inside panes, a palette list and a reference
+    // panel that all have one. Only the real stack can say the notch arrived —
+    // and only the real render tree can say how big the patch is left drawn,
+    // which is the whole complaint in the issue.
+    patcher.transform.value = Matrix4.identity();
+    await tester.pumpAndSettle();
+
+    /// Where each drawn node's corner sits on screen.
+    List<Offset> corners() => [
+      for (final e in find.byType(PatchNodeFrame).evaluate())
+        (e.renderObject! as RenderBox).localToGlobal(Offset.zero),
+    ];
+
+    /// The on-screen distance between the two nodes — the one measure that
+    /// scales *exactly* with the view, since a frame's own box is laid out at
+    /// its model size and only the transform above it shrinks.
+    double spread() {
+      final c = corners();
+      return (c[1] - c[0]).distance;
+    }
+
+    final unzoomed = spread();
+
+    /// The view's zoom off the x basis — never `getMaxScaleOnAxis`, which
+    /// reports 1.0 for every zoomed-out 2-D view and is the bug itself.
+    double zoom() => patcher.transform.value.entry(0, 0);
+
+    final wheel = TestPointer(9, PointerDeviceKind.mouse);
+    wheel.hover(empty);
+    Future<void> notch(double dy, {int times = 1}) async {
+      for (var i = 0; i < times; i++) {
+        await tester.sendEventToBinding(wheel.scroll(Offset(0, dy)));
+        await tester.pump();
+      }
+    }
+
+    await notch(-100);
+    expect(
+      zoom(),
+      closeTo(1.1, 1e-9),
+      reason: 'a wheel notch must reach the canvas through the whole shell',
+    );
+
+    // Far past the 15 notches that reach the floor from 1:1.
+    await notch(100, times: 40);
+    expect(zoom(), closeTo(0.25, 1e-9));
+
+    // The patch is still a patch — a quarter size, not wheeled away to a dot.
+    expect(spread(), closeTo(unzoomed * 0.25, 0.5));
+    // And still on screen, at the size a quarter zoom leaves it.
+    expect(find.byType(PatchNodeFrame), findsNWidgets(2));
+    for (final c in corners()) {
+      expect(canvas.contains(c), isTrue);
+    }
+
+    // And the way back is stepped from where the view really is.
+    await notch(-100, times: 3);
+    expect(zoom(), closeTo(0.25 * 1.1 * 1.1 * 1.1, 1e-9));
+
     session.dispose();
     await engine.dispose();
   });

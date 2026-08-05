@@ -1524,15 +1524,29 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     _zoomBy(dy < 0 ? 1.1 : 1 / 1.1, event.localPosition);
   }
 
+  /// The view's zoom, read as the length of the transform's x basis vector.
+  ///
+  /// Deliberately **not** [Matrix4.getMaxScaleOnAxis]: the canvas only ever
+  /// scales x and y, so the z column stays unit and maxing over all three axes
+  /// reports `1.0` for every view that is zoomed *out*. Read that way the
+  /// [_minScale] floor never bit — each wheel-down divided a reported `1.0`
+  /// again, so a patch could be shrunk away to nothing (issue #373).
+  double _viewScale(Matrix4 m) =>
+      math.sqrt(m.entry(0, 0) * m.entry(0, 0) + m.entry(1, 0) * m.entry(1, 0));
+
   /// Scale the view by [factor] about the viewport point [focal], clamped to
   /// the same range the [InteractiveViewer] would have enforced.
   void _zoomBy(double factor, Offset focal) {
     final scene = _toScene(focal);
     final current = _controller.transform.value;
-    final scale = current.getMaxScaleOnAxis();
+    final scale = _viewScale(current);
+    if (scale == 0) return;
     final clamped = (scale * factor).clamp(_minScale, _maxScale);
     final applied = clamped / scale;
-    if (applied == 1.0) return;
+    // Tolerant rather than `== 1.0`: at the floor `clamped / scale` is a hair
+    // off unity from the rounding of the step that landed there, and an exact
+    // test would let every further wheel-down rewrite the view for nothing.
+    if ((applied - 1).abs() < 1e-9) return;
     _controller.transform.value = current.clone()
       ..translateByDouble(scene.dx, scene.dy, 0, 1)
       ..scaleByDouble(applied, applied, 1, 1)
