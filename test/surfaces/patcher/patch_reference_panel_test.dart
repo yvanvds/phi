@@ -60,8 +60,14 @@ void main() {
   testWidgets('renders a type\'s full engine metadata', (tester) async {
     await pumpPanel(tester, sine);
 
-    // Header + description.
+    // Header + description. The heading keeps the **canonical** id, prefix and
+    // all (issue #380): this is the reference, and the prefixed id is what you
+    // type when a bare name is ambiguous.
     expect(find.text('~sine'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.text('~sine')).style!.color,
+      const Color(0xFF6FD5FF), // PhiColors.cool — the same blue as the box
+    );
     expect(find.text('sine oscillator'), findsOneWidget);
     expect(find.text('dsp'), findsOneWidget);
 

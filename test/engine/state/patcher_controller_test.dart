@@ -70,6 +70,27 @@ void main() {
       expect(n.outputs.single.kind, PatchPortKind.audio);
     });
 
+    test('the object line is bare, while the node keeps the canonical id', () {
+      // Issue #380: the `~`/`.` prefix stops being *drawn* — the canvas box
+      // colours the line instead — but nothing else about the id moves. The
+      // node, the gateway call and everything saved still say `~sine`.
+      final n = controller.addNode(
+        desc: _descSine(),
+        position: const Offset(40, 60),
+      );
+
+      expect(controller.objectLineOf(n.id), 'sine 440');
+      expect(n.type, '~sine');
+      expect(gateway.calls, contains('createObject:1:~sine:440'));
+
+      // The pure form the box is measured with agrees, prefix by prefix.
+      expect(PatcherController.objectLine('~sine', '440'), 'sine 440');
+      expect(PatcherController.objectLine('.metro', '250'), 'metro 250');
+      expect(PatcherController.objectLine('~*', '2'), '* 2');
+      // No arguments, no dangling space.
+      expect(PatcherController.objectLine('~dac', ''), 'dac');
+    });
+
     test('moveNode applies delta and persists to gateway', () {
       final n = controller.addNode(
         desc: _descSine(),

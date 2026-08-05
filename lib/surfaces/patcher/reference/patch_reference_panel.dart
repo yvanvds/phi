@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../../../design/tokens/phi_colors.dart';
 import '../../../design/tokens/phi_spacing.dart';
 import '../../../design/tokens/phi_type.dart';
+import '../../../design/widgets/patcher/patch_type_style.dart';
 import '../../../domain/patcher/patch_args.dart';
 import '../../../engine/bridge/patch_object_descriptor.dart';
 
@@ -76,7 +77,10 @@ class _Reference extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final d = descriptor;
-    final accent = d.isDsp ? PhiColors.cool : PhiColors.fg0;
+    // Coloured like the box and the palette row (issue #380) — but the heading
+    // keeps the **canonical** `~sine` / `.metro`, prefix and all. This is the
+    // reference: it is where you look the exact name up in order to type it.
+    final accent = PatchTypeStyle.color(d.isDsp);
     // Positional, exactly as `setParams` reads them, so the nth value lines up
     // with the nth documented parameter. A palette tap documents a type and
     // supplies none.

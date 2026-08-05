@@ -64,8 +64,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // ─── (1) one line, and the title is gone ──────────────────────────────
-    expect(boxFor('~sine 440'), findsOneWidget);
-    expect(boxFor('~dac'), findsOneWidget);
+    expect(boxFor('sine 440'), findsOneWidget);
+    expect(boxFor('dac'), findsOneWidget);
     // Not `OUT · L/R` over an empty body, and not `OSC · SINE` over the line
     // that already says it.
     expect(find.text('osc · sine'.toUpperCase()), findsNothing);
@@ -74,8 +74,8 @@ void main() {
     // left are GUI objects only, never an engine object.
     expect(find.byType(PatchNodeFrame), findsOneWidget);
 
-    final sineSize = tester.getSize(boxFor('~sine 440'));
-    final dacSize = tester.getSize(boxFor('~dac'));
+    final sineSize = tester.getSize(boxFor('sine 440'));
+    final dacSize = tester.getSize(boxFor('dac'));
 
     // One text line plus padding — half of the ~70px two-row node it replaces,
     // which is what makes a patch of these take visibly less canvas.
@@ -94,7 +94,7 @@ void main() {
     // ─── (3) an argument edit re-measures the box ─────────────────────────
     // Double-click the box itself: there is no header to aim at any more.
     // Detected from raw pointer timing, so two quick taps suffice.
-    final at = tester.getCenter(boxFor('~sine 440'));
+    final at = tester.getCenter(boxFor('sine 440'));
     await tester.tapAt(at);
     await tester.pump(const Duration(milliseconds: 40));
     await tester.tapAt(at);
@@ -111,20 +111,20 @@ void main() {
       (n) => n.type == Obj.dSine,
     );
     expect(engine.patcher.argsOf(sine.id), '1234.5678');
-    expect(boxFor('~sine 1234.5678'), findsOneWidget);
-    expect(boxFor('~sine 440'), findsNothing);
+    expect(boxFor('sine 1234.5678'), findsOneWidget);
+    expect(boxFor('sine 440'), findsNothing);
     // A longer line needs a longer box — and it got one, without a reload.
-    final grown = tester.getSize(boxFor('~sine 1234.5678'));
+    final grown = tester.getSize(boxFor('sine 1234.5678'));
     expect(grown.width, greaterThan(sineSize.width));
     expect(grown.height, sineSize.height);
 
     // ─── (4) …and the box round-trips with the edit under Ctrl+Z / Ctrl+Y ──
     await ctrl(tester, LogicalKeyboardKey.keyZ);
-    expect(boxFor('~sine 440'), findsOneWidget);
-    expect(tester.getSize(boxFor('~sine 440')), sineSize);
+    expect(boxFor('sine 440'), findsOneWidget);
+    expect(tester.getSize(boxFor('sine 440')), sineSize);
 
     await ctrl(tester, LogicalKeyboardKey.keyY);
-    expect(boxFor('~sine 1234.5678'), findsOneWidget);
+    expect(boxFor('sine 1234.5678'), findsOneWidget);
 
     session.dispose();
     await engine.dispose();

@@ -40,6 +40,10 @@ void main() {
     desc('~saw', description: 'sawtooth oscillator', isDsp: true),
     desc('.slider', description: 'horizontal slider'),
     desc('~dac', description: 'audio output', isDsp: true),
+    // The collision issue #380 has to answer for: two objects, one bare name.
+    // Neither description matches any query the other tests type.
+    desc('.*', description: 'multiply'),
+    desc('~*', description: 'multiply audio', isDsp: true),
   ];
 
   PatchObjectDescriptor? created;
@@ -130,6 +134,26 @@ void main() {
     expect(row('~sine'), findsOneWidget);
   });
 
+  testWidgets('rows read bare, in the colour that says which domain', (
+    tester,
+  ) async {
+    await pumpBox(tester);
+    await type(tester, 'si');
+
+    Text nameOf(String type) => tester.widget<Text>(
+      find.descendant(of: row(type), matching: find.byType(Text)).first,
+    );
+
+    // The name only — the `~` and the leading dot are both gone (issue #380).
+    expect(nameOf('~sine').data, 'sine');
+    expect(find.text('~sine'), findsNothing);
+    expect(nameOf('~sine').style!.color, const Color(0xFF6FD5FF)); // cool
+
+    await type(tester, 'slider');
+    expect(nameOf('.slider').data, 'slider');
+    expect(nameOf('.slider').style!.color, const Color(0xFFC1C7CD)); // fg1
+  });
+
   testWidgets('the description is completed against too', (tester) async {
     await pumpBox(tester);
     await type(tester, 'sawtooth');
@@ -215,6 +239,85 @@ void main() {
     await press(tester, LogicalKeyboardKey.enter);
 
     expect(created?.type, '~saw');
+  });
+
+  group('a bare name two objects answer to is not guessed at (issue #380)', () {
+    testWidgets('Enter refuses, names both candidates, and keeps the list', (
+      tester,
+    ) async {
+      await pumpBox(tester);
+      await type(tester, '*');
+
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(created, isNull);
+      expect(find.byKey(PatchInlineObjectBox.rejectKey), findsOneWidget);
+      // Named by their canonical ids — those are what you would type to skip
+      // this question entirely.
+      expect(find.text('pick one · .* or ~*'), findsOneWidget);
+      // And both are still on screen, in the two colours that tell them apart.
+      expect(row('.*'), findsOneWidget);
+      expect(row('~*'), findsOneWidget);
+    });
+
+    testWidgets('a second Enter takes the highlighted one', (tester) async {
+      await pumpBox(tester);
+      await type(tester, '*');
+      await press(tester, LogicalKeyboardKey.enter);
+
+      await press(tester, LogicalKeyboardKey.enter);
+
+      // The choice was visible before it was taken, which is the whole point.
+      expect(created?.type, '.*');
+    });
+
+    testWidgets('an arrow picks the other one', (tester) async {
+      await pumpBox(tester);
+      await type(tester, '*');
+      await press(tester, LogicalKeyboardKey.enter);
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(created?.type, '~*');
+    });
+
+    testWidgets('the prefixed id typed in full never asks', (tester) async {
+      await pumpBox(tester);
+      await type(tester, '~*');
+
+      await press(tester, LogicalKeyboardKey.enter);
+
+      // The canonical id stays exactly what it was: type it and get it.
+      expect(created?.type, '~*');
+      expect(find.byKey(PatchInlineObjectBox.rejectKey), findsNothing);
+    });
+
+    testWidgets('an unambiguous bare name still resolves straight through', (
+      tester,
+    ) async {
+      await pumpBox(tester);
+      await type(tester, 'saw');
+
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(created?.type, '~saw');
+    });
+
+    testWidgets('retyping the name asks again', (tester) async {
+      await pumpBox(tester);
+      await type(tester, '*');
+      await press(tester, LogicalKeyboardKey.enter);
+      expect(created, isNull);
+
+      // A new name is a new question — the previous refusal must not licence
+      // the next Enter.
+      await type(tester, '* 2');
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(created, isNull);
+      expect(find.text('pick one · .* or ~*'), findsOneWidget);
+    });
   });
 
   testWidgets('one Enter creates one object', (tester) async {

@@ -2481,8 +2481,8 @@ main + app          (orchestration)
   edit; a GUI node keeps its tuned size and still only grows wider. `~sine` and
   `~dac` lose their hand-authored bodies with this (`SineNodeBody`,
   `PatchArgsBody` deleted), so the `guiValue` poll set (#357) narrows to the
-  bodies that actually display one. The rendered text is still `~sine 440` —
-  dropping the prefix and colouring the line by DSP/control is #380. Covered by
+  bodies that actually display one. (The line rendered as `~sine 440` until
+  #380 below dropped the prefix in favour of colour.) Covered by
   widget tests (`PatchObjectBox`: one line and no second `Text`, ellipsis, the
   neutral vs. armed border + glow, dots on the horizontal edges),
   `PatchObjectBoxMetrics` unit tests (intrinsic width, port floor, cap, floor
@@ -2495,6 +2495,39 @@ main + app          (orchestration)
   seeded `~sine`/`~dac` render as single lines with no title anywhere, sized to
   their own text and floored by their ports, and a params edit grows the box
   in place and round-trips under Ctrl+Z / Ctrl+Y).
+- **Colour instead of glyphs** (issue #380, object-box epic #375, design
+  `docs/design/patcher.md` §5 + §12.4) — **the `~` / `.` prefix is no longer
+  drawn; the text colour says it.** DSP objects read in `PhiColors.cool` (the
+  blue the cables and the overview already carry), control objects in `fg1`.
+  Two new one-fact helpers keep it from being restated five times: pure-Dart
+  `PatchTypeName` (`lib/domain/patcher/`, `bare` / `isDsp`) and
+  `PatchTypeStyle` (`lib/design/widgets/patcher/`, `color(isDsp)`).
+  `PatcherController.objectLine` now bares the type it is handed, so the box is
+  *measured* from the line it actually prints; `PatchObjectBox` takes an `isDsp`
+  and colours its line with it. The palette and the inline create box's
+  completion rows lose their leading DSP/control **dot** as well as the prefix
+  (the dot said the same thing a third time) and stop brightening the selected
+  row to `fg0` — with the glyphs gone, colour is the only thing left carrying
+  the distinction, and selection is already shown by the row's fill and voiced
+  border. The **canonical prefixed id is untouched** everywhere it is not
+  *drawn*: the node's `type`, the `createObject` call, the payload, the palette
+  search, the completion matcher, and the reference panel's heading (which
+  keeps `~sine`, since that is where the exact name is looked up — it is now
+  coloured like everything else instead of `fg0`). **Ambiguity rule:** four
+  pairs share a bare name (`.+ ~+`, `.- ~-`, `.* ~*`, `./ ~/`), so an Enter on
+  a bare name two objects answer to refuses with `pick one · .* or ~*` and
+  leaves the completion list up in the two colours; an arrow moves the
+  highlight and a second Enter takes it (a `_chosen` flag, cleared by the next
+  keystroke, also set by Tab and by a row tap). Typing the id in full is exact
+  and never asks; an unambiguous bare name resolves straight through. Covered
+  by `PatchTypeName` unit tests, box + node-view widget tests (bare line, DSP
+  blue vs control grey), palette tests (bare entries, one `Text` per row, the
+  selected row keeping its colour), inline-box tests (bare coloured rows and
+  the whole ambiguity path), controller tests (bare line, canonical node type
+  and gateway call), a reference-panel test (canonical heading, coloured), and
+  an end-to-end `patcher_type_colour` integration test through the real app
+  (canvas, palette, reference panel and the typed pick, with no `~` rendered
+  anywhere on canvas or palette).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

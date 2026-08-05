@@ -113,6 +113,15 @@ live-code control).
   list still match on it; it is simply not something you have to read on
   every entry. The palette's leading DSP/control dot goes with it, being
   the same fact said twice (§12.4).
+- **An ambiguous bare name is picked, never guessed.** Four pairs share
+  one — `.+ ~+`, `.- ~-`, `.* ~*`, `./ ~/` — so an Enter on `*` in the
+  inline create box refuses, names both candidates (`pick one · .* or
+  ~*`) and leaves the completion list up in their two colours. One more
+  keystroke settles it: an arrow moves the highlight, a second Enter
+  takes what is highlighted. The prefixed id typed in full is exact and
+  never asks, and an unambiguous bare name (`sine`) resolves straight
+  through as it always did. The **reference panel keeps the canonical
+  id** in its heading — it is where you look the exact name up.
 
   > *Superseded 2026-08-05 (#376, decision §12.4):* "DSP objects (`~`
   > prefix) visually distinct from control objects (`.` prefix) in the

@@ -95,10 +95,10 @@ void main() {
     // holds itself, not from a re-read on some unrelated rebuild.
     expect(faderValue(), 0.8);
     expect(find.text('0.80'), findsOneWidget);
-    // The object box did not — and must not: `~sine 440` is what the object is
+    // The object box did not — and must not: `sine 440` is what the object is
     // *set to*, which only a journaled `setParams` changes.
-    expect(find.text('~sine 440'), findsOneWidget);
-    expect(find.text('~sine 660'), findsNothing);
+    expect(find.text('sine 440'), findsOneWidget);
+    expect(find.text('sine 660'), findsNothing);
 
     // 2) Park the Patcher behind another surface. It stays mounted — its
     //    selection, pan and zoom survive a tab switch — but it must stop asking

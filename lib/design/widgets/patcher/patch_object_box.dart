@@ -5,6 +5,7 @@ import '../../tokens/phi_voices.dart';
 import 'patch_canvas_constants.dart';
 import 'patch_object_box_metrics.dart';
 import 'patch_port_dot.dart';
+import 'patch_type_style.dart';
 
 /// An engine object on the canvas: **one bordered line of mono text**, and
 /// nothing else (design §7, §12.2, issue #379).
@@ -14,6 +15,12 @@ import 'patch_port_dot.dart';
 /// arguments (`~sine 440`) — two rows and ~70px of canvas for one line's worth
 /// of information. The object *is* the box now: the title is not rendered at
 /// all, because `~sine 440` names itself.
+///
+/// The line is the object's **bare** name and its arguments — `sine 440`, not
+/// `~sine 440` — with the `~`/`.` domain carried by the text colour instead
+/// (issue #380): [PhiColors.cool] for DSP, the ordinary foreground for control.
+/// The prefixed id stays canonical everywhere it is *typed*; it is simply not
+/// something to read on every box.
 ///
 /// The chrome that survives is the chrome that says something the text cannot:
 /// a 1px border that goes voiced and glows while the node is armed, and the
@@ -31,6 +38,7 @@ import 'patch_port_dot.dart';
 class PatchObjectBox extends StatelessWidget {
   const PatchObjectBox({
     required this.text,
+    required this.isDsp,
     required this.voice,
     required this.armed,
     required this.inputPortXs,
@@ -41,10 +49,14 @@ class PatchObjectBox extends StatelessWidget {
     super.key,
   });
 
-  /// The object's line — display-ready, `~sine 440` style. Dropping the type
-  /// prefix and colouring the line by DSP/control is issue #380; this widget
-  /// prints what it is handed.
+  /// The object's line — display-ready and **bare**, `sine 440` style. This
+  /// widget prints what it is handed; stripping the prefix is the controller's
+  /// job (`PatcherController.objectLineOf`).
   final String text;
+
+  /// Whether the object is a DSP one, which is the whole of what the dropped
+  /// `~`/`.` prefix used to say — drawn as the line's colour (issue #380).
+  final bool isDsp;
 
   /// Voice index in `[1, 6]` used for the armed border + glow.
   final int voice;
@@ -101,7 +113,7 @@ class PatchObjectBox extends StatelessWidget {
                 // The very style the box was measured with — see
                 // [PatchObjectBoxMetrics.lineStyle].
                 style: PatchObjectBoxMetrics.lineStyle().copyWith(
-                  color: PhiColors.fg1,
+                  color: PatchTypeStyle.color(isDsp),
                 ),
                 maxLines: 1,
                 softWrap: false,

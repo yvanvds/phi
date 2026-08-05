@@ -4,13 +4,20 @@ import '../../../design/tokens/phi_colors.dart';
 import '../../../design/tokens/phi_radii.dart';
 import '../../../design/tokens/phi_spacing.dart';
 import '../../../design/tokens/phi_type.dart';
+import '../../../design/widgets/patcher/patch_type_style.dart';
+import '../../../domain/patcher/patch_type_name.dart';
 import '../../../engine/bridge/patch_object_descriptor.dart';
 
 /// The patcher's **object palette** (design `docs/design/patcher.md` §5) — the
 /// engine's whole object catalogue, grouped into [PatchObjectCategory] sections,
-/// narrowed by a search box over name + description, with DSP (`~`) objects
-/// visually distinct from control (`.`) objects. Each entry is draggable onto
-/// the canvas (drag-to-create) and tappable to show its reference.
+/// narrowed by a search box over name + description. Each entry is draggable
+/// onto the canvas (drag-to-create) and tappable to show its reference.
+///
+/// Entries read **bare** — `sine`, `metro`, `*` — with DSP told from control by
+/// colour alone (issue #380): the search still matches the canonical `~`/`.` id,
+/// and the id is still what lands on the canvas, but neither the prefix nor the
+/// leading DSP dot this palette used to draw is on screen any more. Both were
+/// saying the one thing the colour says.
 ///
 /// Pure presentation: the catalogue and current selection are passed in, so the
 /// palette renders identically off the real gateway and a fake in tests. The
@@ -222,8 +229,14 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// One draggable, tappable catalogue entry. DSP objects wear the cool accent
-/// (matching the audio-cable colouring); control objects stay foreground-grey.
+/// One draggable, tappable catalogue entry: the object's bare name, in the cool
+/// accent for DSP (matching the audio-cable colouring) or the ordinary
+/// foreground for control.
+///
+/// The selected entry keeps that colour rather than brightening to `fg0`: with
+/// the prefix and the dot gone, colour is the *only* thing left saying which
+/// domain the entry belongs to, and the row already shows its selection with a
+/// filled background and a voiced left border.
 class _PaletteEntry extends StatelessWidget {
   const _PaletteEntry({
     required this.descriptor,
@@ -237,7 +250,7 @@ class _PaletteEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = descriptor.isDsp ? PhiColors.cool : PhiColors.fg1;
+    final accent = PatchTypeStyle.color(descriptor.isDsp);
     final row = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onSelect,
@@ -253,20 +266,11 @@ class _PaletteEntry extends StatelessWidget {
                 )
               : null,
         ),
-        child: Row(
-          children: [
-            _DspBadge(isDsp: descriptor.isDsp),
-            const SizedBox(width: PhiSpacing.s2),
-            Expanded(
-              child: Text(
-                descriptor.type,
-                overflow: TextOverflow.ellipsis,
-                style: PhiType.monoS().copyWith(
-                  color: selected ? PhiColors.fg0 : accent,
-                ),
-              ),
-            ),
-          ],
+        alignment: Alignment.centerLeft,
+        child: Text(
+          PatchTypeName.bare(descriptor.type),
+          overflow: TextOverflow.ellipsis,
+          style: PhiType.monoS().copyWith(color: accent),
         ),
       ),
     );
@@ -279,27 +283,9 @@ class _PaletteEntry extends StatelessWidget {
   }
 }
 
-/// The `~` / `.` prefix already distinguishes DSP from control in the type id;
-/// this coloured dot reinforces it at a glance (audio-cool vs control-grey).
-class _DspBadge extends StatelessWidget {
-  const _DspBadge({required this.isDsp});
-
-  final bool isDsp;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 6,
-      height: 6,
-      decoration: BoxDecoration(
-        color: isDsp ? PhiColors.cool : PhiColors.fg3,
-        shape: BoxShape.circle,
-      ),
-    );
-  }
-}
-
-/// The floating chip shown under the pointer while dragging an entry.
+/// The floating chip shown under the pointer while dragging an entry — the same
+/// bare name in the same colour, so what is being dragged reads exactly as it
+/// will once it lands.
 class _DragChip extends StatelessWidget {
   const _DragChip({required this.descriptor});
 
@@ -320,9 +306,9 @@ class _DragChip extends StatelessWidget {
           borderRadius: PhiRadii.all1,
         ),
         child: Text(
-          descriptor.type,
+          PatchTypeName.bare(descriptor.type),
           style: PhiType.monoS().copyWith(
-            color: descriptor.isDsp ? PhiColors.cool : PhiColors.fg0,
+            color: PatchTypeStyle.color(descriptor.isDsp),
           ),
         ),
       ),

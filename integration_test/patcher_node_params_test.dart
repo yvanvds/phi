@@ -122,12 +122,12 @@ void main() {
 
     // Seeded with the documented default and saying so — this used to be an
     // empty box that told the user nothing at all.
-    expect(bodyText('.metro 250'), findsOneWidget);
+    expect(bodyText('metro 250'), findsOneWidget);
 
     // ─── (2) right-click → edit parameters… reaches the dialog ────────────
     // On the box itself: there is no header left to aim at (issue #379).
     final rightClick = await tester.startGesture(
-      tester.getCenter(bodyText('.metro 250')),
+      tester.getCenter(bodyText('metro 250')),
       kind: PointerDeviceKind.mouse,
       buttons: kSecondaryMouseButton,
     );
@@ -156,17 +156,17 @@ void main() {
     await tester.pumpAndSettle();
 
     // ─── (4) canvas and panel both follow the apply, immediately ──────────
-    expect(bodyText('.metro 500'), findsOneWidget);
-    expect(bodyText('.metro 250'), findsNothing);
+    expect(bodyText('metro 500'), findsOneWidget);
+    expect(bodyText('metro 250'), findsNothing);
     expect(find.text('= 500'), findsOneWidget);
 
     // ─── (5) …and both round-trip under Ctrl+Z / Ctrl+Y ───────────────────
     await ctrl(tester, LogicalKeyboardKey.keyZ);
-    expect(bodyText('.metro 250'), findsOneWidget);
+    expect(bodyText('metro 250'), findsOneWidget);
     expect(find.text('= 250'), findsOneWidget);
 
     await ctrl(tester, LogicalKeyboardKey.keyY);
-    expect(bodyText('.metro 500'), findsOneWidget);
+    expect(bodyText('metro 500'), findsOneWidget);
     expect(find.text('= 500'), findsOneWidget);
 
     session.dispose();

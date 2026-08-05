@@ -10,12 +10,16 @@ import 'package:phi/design/widgets/patcher/patch_port_dot.dart';
 /// no header at all, its ports straddling the top and bottom edges exactly as
 /// the frame it replaces drew them (issue #377), and the armed voice border +
 /// glow carried over unchanged.
+///
+/// Since issue #380 the line is also the one thing saying DSP or control, in
+/// colour rather than in a `~`/`.` glyph.
 void main() {
   const boxSize = Size(120, 26);
 
   Future<void> pumpBox(
     WidgetTester tester, {
-    String text = '~sine 440',
+    String text = 'sine 440',
+    bool isDsp = true,
     bool armed = false,
     int voice = 1,
     List<double> inputXs = const [],
@@ -30,6 +34,7 @@ void main() {
             size: size,
             child: PatchObjectBox(
               text: text,
+              isDsp: isDsp,
               voice: voice,
               armed: armed,
               inputPortXs: inputXs,
@@ -60,15 +65,31 @@ void main() {
   ) async {
     await pumpBox(tester);
 
-    expect(find.text('~sine 440'), findsOneWidget);
+    expect(find.text('sine 440'), findsOneWidget);
     // The whole node is one Text: a header would be a second one.
     expect(find.byType(Text), findsOneWidget);
+  });
+
+  testWidgets('the domain is the line colour, not a drawn prefix', (
+    tester,
+  ) async {
+    Color lineColor() => tester.widget<Text>(find.byType(Text)).style!.color!;
+
+    await pumpBox(tester, text: 'sine 440');
+    expect(lineColor(), PhiColors.cool);
+
+    await pumpBox(tester, text: 'metro 250', isDsp: false);
+    expect(lineColor(), PhiColors.fg1);
+
+    // And nothing prints the glyph the colour replaced.
+    expect(find.textContaining('~'), findsNothing);
+    expect(find.text('.metro 250'), findsNothing);
   });
 
   testWidgets('the line is a single ellipsised one, never wrapped', (
     tester,
   ) async {
-    await pumpBox(tester, text: '.metro 250 with a very long argument list');
+    await pumpBox(tester, text: 'metro 250 with a very long argument list');
 
     final line = tester.widget<Text>(find.byType(Text));
     expect(line.maxLines, 1);

@@ -87,6 +87,30 @@ void main() {
     expect(find.text('no objects match'), findsOneWidget);
   });
 
+  testWidgets('entries read bare — no prefix, no dot (issue #380)', (
+    tester,
+  ) async {
+    await pumpPalette(tester);
+
+    expect(find.text('sine'), findsOneWidget);
+    expect(find.text('slider'), findsOneWidget);
+    expect(find.text('dac'), findsOneWidget);
+    // The glyph is gone from the entry it used to lead...
+    expect(find.text(Obj.dSine), findsNothing);
+    expect(find.text(Obj.gSlider), findsNothing);
+    // ...and so is the coloured dot that said the same thing a second time:
+    // every entry is now exactly one Text and no decoration beside it.
+    for (final type in [Obj.dSine, Obj.gSlider, Obj.dDac]) {
+      expect(
+        find.descendant(
+          of: find.byKey(PatcherPalette.entryKey(type)),
+          matching: find.byType(Text),
+        ),
+        findsOneWidget,
+      );
+    }
+  });
+
   testWidgets('DSP objects are drawn in the cool accent, control in grey', (
     tester,
   ) async {
@@ -96,7 +120,7 @@ void main() {
       final text = tester.widget<Text>(
         find.descendant(
           of: find.byKey(PatcherPalette.entryKey(type)),
-          matching: find.text(type),
+          matching: find.byType(Text),
         ),
       );
       return text.style!.color!;
@@ -104,6 +128,24 @@ void main() {
 
     expect(labelColor(Obj.dSine), const Color(0xFF6FD5FF)); // PhiColors.cool
     expect(labelColor(Obj.gSlider), const Color(0xFFC1C7CD)); // PhiColors.fg1
+  });
+
+  testWidgets('the selected entry keeps its domain colour', (tester) async {
+    // With the prefix and the dot gone, colour is the only thing left saying
+    // DSP — brightening the selected row to `fg0` would erase it exactly when
+    // the eye is on it.
+    await pumpPalette(
+      tester,
+      selected: catalogue.firstWhere((d) => d.type == Obj.dSine),
+    );
+
+    final text = tester.widget<Text>(
+      find.descendant(
+        of: find.byKey(PatcherPalette.entryKey(Obj.dSine)),
+        matching: find.byType(Text),
+      ),
+    );
+    expect(text.style!.color, const Color(0xFF6FD5FF)); // PhiColors.cool
   });
 
   testWidgets('tapping an entry reports it as the selection', (tester) async {

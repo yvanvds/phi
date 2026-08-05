@@ -7,6 +7,8 @@ import '../../../design/tokens/phi_colors.dart';
 import '../../../design/tokens/phi_radii.dart';
 import '../../../design/tokens/phi_spacing.dart';
 import '../../../design/tokens/phi_type.dart';
+import '../../../design/widgets/patcher/patch_type_style.dart';
+import '../../../domain/patcher/patch_type_name.dart';
 import '../../../engine/bridge/patch_creation_args.dart';
 import '../../../engine/bridge/patch_object_descriptor.dart';
 
@@ -26,6 +28,14 @@ import '../../../engine/bridge/patch_object_descriptor.dart';
 ///   using the typed name when it is already an exact type, and the highlighted
 ///   completion when it isn't. So `sine 220` + Enter makes a `~sine 220` without
 ///   ever pressing Tab.
+/// - **A bare name shared by two objects is not resolved for you** (issue
+///   #380). Four pairs collide once the prefix stops being drawn — `.+ ~+`,
+///   `.- ~-`, `.* ~*`, `./ ~/`, among the most-used objects there are — so an
+///   Enter on `*` refuses, names both candidates, and leaves the list up in
+///   their two colours. One more keystroke settles it: an arrow moves the
+///   highlight, a second Enter takes what is highlighted. Typing `~*` in full
+///   is always exact and never asks. (An unambiguous bare name like `sine`
+///   resolves straight through, as it always did.)
 /// - **Anything after the first token is the argument string**, checked against
 ///   the type's documented [PatchParamDescriptor]s ([PatchCreationArgs]) before
 ///   anything is created — the engine crashes on arguments an object never
@@ -89,6 +99,13 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
   /// the box never argues with what is now on screen.
   String? _reject;
 
+  /// Whether the user has *chosen* a candidate for the name typed so far —
+  /// arrowed the highlight onto one, tapped a row, Tab-inserted one, or been
+  /// shown the two an ambiguous bare name matches. Until then a bare name that
+  /// two objects answer to is refused rather than guessed at (issue #380).
+  /// Cleared by the next keystroke, which makes the name a new question.
+  bool _chosen = false;
+
   /// Whether an Enter has already been honoured. Enter arrives twice on a
   /// desktop text field — once as a key event this widget's own binding claims,
   /// once as the platform's submit action — and creating the object twice off
@@ -149,7 +166,7 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
     final ranked = <(int, PatchObjectDescriptor)>[];
     for (final d in widget.objectTypes) {
       final type = d.type.toLowerCase();
-      final bare = _bare(type);
+      final bare = PatchTypeName.bare(type);
       if (type == q || bare == q) {
         ranked.add((0, d));
       } else if (type.startsWith(q) || bare.startsWith(q)) {
@@ -164,15 +181,30 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
     return [for (final r in ranked) r.$2];
   }
 
-  /// A type id without its `~` (DSP) or `.` (control) prefix.
-  static String _bare(String type) =>
-      type.startsWith('~') || type.startsWith('.') ? type.substring(1) : type;
+  /// Every catalogue entry a *bare* [name] answers to — one for `sine`, two for
+  /// `*` (`.*` and `~*`). The ambiguity set of issue #380.
+  List<PatchObjectDescriptor> _bareCandidates(String name) {
+    final q = name.toLowerCase();
+    return [
+      for (final d in widget.objectTypes)
+        if (PatchTypeName.bare(d.type.toLowerCase()) == q) d,
+    ];
+  }
+
+  /// The catalogue entry whose id was typed out in full, or null.
+  PatchObjectDescriptor? _exact(String name) {
+    for (final d in widget.objectTypes) {
+      if (d.type == name) return d;
+    }
+    return null;
+  }
 
   void _onChanged(String _) {
     setState(() {
       _matches = _matchesFor(_name);
       _index = 0;
       _reject = null;
+      _chosen = false;
     });
     if (_scroll.hasClients) _scroll.jumpTo(0);
   }
@@ -182,6 +214,7 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
     setState(() {
       _index = (_index + delta) % _matches.length;
       if (_index < 0) _index += _matches.length;
+      _chosen = true;
     });
     _revealSelected();
   }
@@ -207,9 +240,8 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
   PatchObjectDescriptor? get _resolved {
     final name = _name;
     if (name.isEmpty) return null;
-    for (final d in widget.objectTypes) {
-      if (d.type == name) return d;
-    }
+    final exact = _exact(name);
+    if (exact != null) return exact;
     if (_matches.isEmpty) return null;
     return _matches[_index.clamp(0, _matches.length - 1)];
   }
@@ -229,6 +261,7 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
       _matches = _matchesFor(desc.type);
       _index = 0;
       _reject = null;
+      _chosen = true;
     });
   }
 
@@ -236,9 +269,26 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
   /// inline and stay open.
   void _submit() {
     if (_created) return;
-    if (_name.isEmpty) {
+    final name = _name;
+    if (name.isEmpty) {
       setState(() => _reject = 'type an object name');
       return;
+    }
+    // A bare name two objects answer to is not guessed at (issue #380). The
+    // list is already showing both, in the two colours that tell them apart;
+    // this refusal is what makes you look at it. An arrow (or a second Enter,
+    // taking the highlight) then decides, and typing the id out in full never
+    // gets here at all.
+    if (!_chosen && _exact(name) == null) {
+      final candidates = _bareCandidates(name);
+      if (candidates.length > 1) {
+        setState(() {
+          _chosen = true;
+          _reject =
+              'pick one · ${[for (final d in candidates) d.type].join(' or ')}';
+        });
+        return;
+      }
     }
     final desc = _resolved;
     if (desc == null) {
@@ -356,9 +406,14 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
   }
 }
 
-/// One catalogue row: the DSP/control dot, the type id, and the engine's own
-/// one-line description — the same data the reference panel documents, so the
-/// completion answers "which one is that?" without leaving the keyboard.
+/// One catalogue row: the object's **bare** name in its domain colour, and the
+/// engine's own one-line description — the same data the reference panel
+/// documents, so the completion answers "which one is that?" without leaving
+/// the keyboard.
+///
+/// The leading DSP/control dot is gone with the prefix (issue #380); the name's
+/// colour says it, and the description says the rest. Two rows reading `*` in
+/// two colours is exactly the picture an ambiguous name needs.
 class _CompletionRow extends StatelessWidget {
   const _CompletionRow({
     required this.descriptor,
@@ -372,7 +427,7 @@ class _CompletionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = descriptor.isDsp ? PhiColors.cool : PhiColors.fg1;
+    final accent = PatchTypeStyle.color(descriptor.isDsp);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -382,20 +437,9 @@ class _CompletionRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: PhiSpacing.s2),
         child: Row(
           children: [
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                color: descriptor.isDsp ? PhiColors.cool : PhiColors.fg3,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: PhiSpacing.s2),
             Text(
-              descriptor.type,
-              style: PhiType.monoS().copyWith(
-                color: selected ? PhiColors.fg0 : accent,
-              ),
+              PatchTypeName.bare(descriptor.type),
+              style: PhiType.monoS().copyWith(color: accent),
             ),
             const SizedBox(width: PhiSpacing.s2),
             Expanded(
