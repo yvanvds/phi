@@ -26,6 +26,7 @@ import 'patcher_commands/delete_patch_nodes_command.dart';
 import 'patcher_commands/duplicate_patch_selection_command.dart';
 import 'patcher_commands/move_patch_nodes_command.dart';
 import 'patcher_commands/reroute_cable_command.dart';
+import 'patcher_commands/retype_patch_object_command.dart';
 import 'patcher_commands/set_patch_params_command.dart';
 
 /// Engine-side mediator between user gestures and the native patcher.
@@ -880,6 +881,45 @@ class PatcherController {
     undoScope.run(SetPatchParamsCommand(this, id, args));
   }
 
+  /// Commit what was typed into an object box — the one entry point Enter comes
+  /// through, whichever of the two edits it turns out to be (design §7).
+  ///
+  /// The box hands back a resolved catalogue entry and a checked argument
+  /// string, and the *type* decides which edit this is:
+  /// - **Same type** — new arguments for the object that is there: one journaled
+  ///   [applyParams], unchanged since issue #382, and a no-op when the arguments
+  ///   did not move either.
+  /// - **A different type** (issue #383) — typing `saw 300` over a `sine 300`.
+  ///   The engine cannot turn one object into another, so the native object is
+  ///   replaced; the node keeps its id, its position and its selection, and
+  ///   carries over every cable the new object still has room for
+  ///   ([retypeNodePrimitive]). One journaled step, so a single `Ctrl+Z` puts
+  ///   the old object *and* every dropped cable back.
+  ///
+  /// Returns how many connections the retype could not carry — zero for an
+  /// argument edit, and what the canvas says out loud when it is not, since a
+  /// retype that silently drops two cables is discovered an hour later.
+  int applyBoxEdit(
+    PatchNodeId id, {
+    required PatchObjectDescriptor desc,
+    required String args,
+  }) {
+    final node = graph.nodeById(id);
+    if (node == null) return 0;
+    if (node.type == desc.type) {
+      applyParams(id, args);
+      return 0;
+    }
+    final command = RetypePatchObjectCommand(
+      this,
+      id: id,
+      desc: desc,
+      args: args,
+    );
+    undoScope.run(command);
+    return command.droppedCount;
+  }
+
   void undo() => undoScope.undo();
 
   void redo() => undoScope.redo();
@@ -1084,6 +1124,77 @@ class PatcherController {
     _argsByNode[id] = spec.args;
     _gateway.setNodePosition(instanceId, native, spec.position);
     graph.addNode(_nodeFromSpec(id, spec));
+  }
+
+  /// Replace the object at [id] with a fresh one of [type]/[args], under the
+  /// **same** logical id and at the same position — the retype primitive
+  /// (issue #383). Author through [applyBoxEdit] so the change is undoable.
+  ///
+  /// The engine has no verb that turns one object into another, so this deletes
+  /// the native object and mints the new one. Everything the canvas knows the
+  /// node by is deliberately kept: the logical id (so cables and lower undo
+  /// commands that named it stay valid), the position, the voice, and — because
+  /// the node is *replaced* in the graph rather than removed and re-added — the
+  /// selection ring it was carrying.
+  ///
+  /// **Cables are carried over where they still land.** Every cable touching the
+  /// node is unwired first (the native object is about to go), then re-wired one
+  /// by one against the new topology through the very same [canConnect] the
+  /// authoring gesture asks: the port index has to still exist on the same side
+  /// and the types still have to accept each other. The ones that do not are
+  /// returned rather than silently forgotten, so the command can wire them back
+  /// on undo and the canvas can say how many were lost.
+  List<PatchCable> retypeNodePrimitive(
+    PatchNodeId id, {
+    required String type,
+    required String args,
+  }) {
+    final node = graph.nodeById(id);
+    if (node == null) return const [];
+    final touching = cablesTouching({id});
+    for (final cable in touching) {
+      removeCablePrimitive(cable);
+    }
+    final previous = _nativeByNode[id];
+    if (previous != null) _gateway.deleteObject(instanceId, previous);
+    final native = _gateway.createObject(instanceId, type, args: args);
+    _nativeByNode[id] = native;
+    _argsByNode[id] = args;
+    // The new object has a display value of its own (or none at all); the one
+    // the poll last read belonged to the object that just went.
+    _guiValueByNode.remove(id);
+    _gateway.setNodePosition(instanceId, native, node.position);
+    final snapshot = _gateway.inspect(instanceId, native);
+    graph.addNode(
+      PatchNode(
+        id: id,
+        type: type,
+        voice: node.voice,
+        position: node.position,
+        size: _sizeFor(
+          type: type,
+          args: args,
+          inputs: snapshot.inputs,
+          outputs: snapshot.outputs,
+        ),
+        inputs: _portsFrom(snapshot, PatchPortSide.input, node.voice),
+        outputs: _portsFrom(snapshot, PatchPortSide.output, node.voice),
+      ),
+    );
+    final dropped = <PatchCable>[];
+    for (final cable in touching) {
+      // Rebuilt rather than re-added: the cable's kind is its *source outlet's*
+      // kind, and a retype of that end may well have changed it.
+      final carried = canConnect(cable.source, cable.target)
+          ? _cableFor(cable.source, cable.target)
+          : null;
+      if (carried == null) {
+        dropped.add(cable);
+        continue;
+      }
+      addCablePrimitive(carried);
+    }
+    return dropped;
   }
 
   /// Create a *new* node from [spec] under a fresh logical id — the duplicate

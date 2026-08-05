@@ -1795,7 +1795,8 @@ main + app          (orchestration)
   duplicates the selection (objects + intra-selection cables, offset one grid step).
   Every mutation is a `ProjectCommand` on the controller's per-surface `undoScope`
   (`lib/engine/state/patcher_commands/` — move / connect / delete-cable /
-  delete-nodes / duplicate), so `Ctrl+Z/Y` walk them; a delete's undo restores each
+  delete-nodes / duplicate / set-params / reroute-cable / create-object /
+  retype-object), so `Ctrl+Z/Y` walk them; a delete's undo restores each
   object under its **same logical id** (the controller decouples `PatchNodeId` from
   the churning native handle via an id map), keeping cables and lower undo commands
   valid. The canvas hosts the scene in a plain pan/zoom `Transform` (not an
@@ -2584,9 +2585,9 @@ main + app          (orchestration)
   **object's own name is never ambiguous** — a bare `*` over a `~*` is not the
   #380 collision asking to be settled, it is this object's name unchanged, so it
   resolves straight back to the object (moving the highlight makes it a question
-  again). And **a different type is refused inline** with a reason that says so:
-  retyping replaces the native object and has to carry its cables across, which
-  is issue #383 — that single refusal is the whole seam it will replace. Enter
+  again). And **a different type was refused inline** with a reason that said
+  so, retyping being issue #383 — *that single refusal was the whole seam, and
+  #383 has since replaced it with the retype path (below).* Enter
   applies through the existing journaled `PatcherController.applyParams`, so the
   edit is one `setParams` under one `Ctrl+Z` and the box reprints and re-measures
   through `markParamsChanged` / `_resyncShape`; an unchanged line journals
@@ -2602,13 +2603,48 @@ main + app          (orchestration)
   value beside the box being typed into. Covered by widget tests on the box
   (opens holding its line selected; commits new args against the same type; its
   own bare name never asks; an out-of-range value refused in place; a different
-  type refused with the retype reason; arrowing onto the other candidate is a
-  retype; Escape commits nothing), on the canvas (Enter → `applyParams` + one
+  type commits that type (#383); arrowing onto the other candidate retypes to
+  it; Escape commits nothing), on the canvas (Enter → `applyParams` + one
   Ctrl+Z; unchanged line journals nothing; Escape and a press elsewhere change
   nothing; a refusal keeps the box open; a GUI object opens nothing; run mode
   opens nothing) and on the surface (double-click reaches the editor, no
   `edit parameters…` in the menu), plus the end-to-end
   `patcher_edit_object_box` integration test through the real app.
+- **Retype an object in place** (issue #383, object-box epic #375 — its **final
+  slice**, design `docs/design/patcher.md` §7 + §12.3) — typing `saw 300` over a
+  `sine 300` now *replaces the object*, the way Max does, instead of being
+  refused. The engine has no verb that turns one object into another, so the
+  native object is deleted and a new one minted; what makes it an **edit** rather
+  than a delete-and-create is everything carried across.
+  `PatcherController.retypeNodePrimitive` keeps the node's **logical
+  `PatchNodeId`**, its position, its voice and its **selection** (the node is
+  *replaced* in the `PatchGraph` rather than removed and re-added, so the
+  selection set is never touched), and re-wires every cable whose endpoint still
+  exists on the new object — asked through the very same `canConnect` the
+  authoring gesture uses (index still in range on the same side, `accepts` mask /
+  `isDspInput` still compatible), each carried cable **rebuilt** so it takes the
+  new outlet's kind. `RetypePatchObjectCommand` (`patcher_commands/`) journals it
+  as one step: `revert` retypes back — which carries the survivors home by itself
+  — and re-wires only the cables the apply had to drop, so one `Ctrl+Z` restores
+  the old object, its arguments *and* every lost connection. The box's #382 seam
+  is **gone**: `PatchInlineObjectBox` checks the typed arguments against the
+  *typed* type and commits, so an unknown name or a failing argument is still
+  refused inline with the object untouched, and the canvas routes the commit
+  through the single `PatcherController.applyBoxEdit` (same type → `applyParams`;
+  different type → the retype command), re-points the reference panel at the new
+  type via `onNodeTap`, and **says what was lost**: the transient banner is now a
+  `_NoticeBanner` carrying either the cable rejection or `retyped · N cables
+  dropped`, keyed `PatcherCanvas.retypeNoticeKey` for the latter. Covered by
+  controller unit tests (id/position/selection survive, the native object really
+  is swapped, cables carried, a carried cable takes the new outlet kind, dropped
+  cables counted, one undo restores object + args + cables, an unchanged type is
+  an argument edit, an unchanged line records nothing, unknown-node tolerance),
+  canvas widget tests (retype keeps the cables and undoes whole; a stranding
+  retype raises the banner and undo brings the cables back; the panel is
+  re-pointed; an unknown name changes nothing) and the end-to-end
+  `patcher_retype_object` integration test through the real app (`sine 440` →
+  `saw 300` keeps both cables and the reference panel follows; retyping to a
+  `.slider` drops both and names them; `Ctrl+Z` puts it all back).
 - Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
   workflow (waiting on SONAR_TOKEN)
 

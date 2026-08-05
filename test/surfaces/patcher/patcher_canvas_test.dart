@@ -1779,6 +1779,186 @@ void main() {
     });
   });
 
+  // ─── retyping an object box in place (issue #383) ────────────────────────
+  //
+  // The same gesture, one token further: typing a different *name* replaces the
+  // object rather than reconfiguring it. These drive the canvas half — that the
+  // commit goes through `applyBoxEdit`, that the node survives it whole, and
+  // that what could not be carried is said out loud.
+
+  group('retyping an object box in place', () {
+    /// A second oscillator to retype into — same shape as `~sine`, so a retype
+    /// between them keeps both cables.
+    const saw = PatchObjectDescriptor(
+      type: '~saw',
+      description: 'sawtooth oscillator',
+      category: PatchObjectCategory.oscillator,
+      isDsp: true,
+      inlets: [
+        PatchInletDescriptor(
+          label: 'freq',
+          doc: 'frequency in Hz',
+          range: '0..20000',
+          accepts: {PatchInletAccept.buffer, PatchInletAccept.float},
+        ),
+      ],
+      outlets: [
+        PatchOutletDescriptor(
+          label: 'out',
+          doc: 'signal',
+          range: '',
+          type: PatchOutletType.buffer,
+        ),
+      ],
+      params: [
+        PatchParamDescriptor(
+          name: 'frequency',
+          doc: 'initial frequency',
+          defaultValue: '440',
+          range: '0..20000',
+        ),
+      ],
+    );
+
+    Finder field() => find.byKey(PatchInlineObjectBox.fieldKey);
+
+    Future<void> doubleClickAt(WidgetTester tester, Offset at) async {
+      await tester.tapAt(at);
+      await tester.pump();
+      await tester.tapAt(at);
+      await tester.pump();
+    }
+
+    /// `slider → sine → dac` with the editor open on the `~sine` in the middle
+    /// — the patch a retype has something to carry across.
+    Future<({PatchNode slider, PatchNode sine, PatchNode dac})> openOnSine(
+      WidgetTester tester, {
+      void Function(PatchNode node)? onNodeTap,
+    }) async {
+      gateway.objectTypesCatalogue = [
+        ...FakePatcherGateway.defaultCatalogue,
+        saw,
+      ];
+      gateway.topologyOverrides['~saw'] = const PatcherNodeSnapshot(
+        inputs: 1,
+        outputs: 1,
+        inputKinds: [PatchPortKind.control],
+        outputKinds: [PatchPortKind.audio],
+      );
+      final slider = controller.addNode(
+        desc: desc(Obj.gSlider),
+        position: const Offset(60, 40),
+      );
+      final sine = controller.addNode(
+        desc: desc(Obj.dSine, args: '440'),
+        position: const Offset(220, 180),
+      );
+      final dac = controller.addNode(
+        desc: desc(Obj.dDac),
+        position: const Offset(380, 320),
+      );
+      controller.connect(out(slider, 0), inp(sine, 0));
+      controller.connect(out(sine, 0), inp(dac, 0));
+      await pumpCanvas(tester, objectTypes: catalogue(), onNodeTap: onNodeTap);
+      await doubleClickAt(tester, nodeCenter(tester, sine));
+      return (slider: slider, sine: sine, dac: dac);
+    }
+
+    testWidgets('typing another name replaces the object and keeps its cables', (
+      tester,
+    ) async {
+      final p = await openOnSine(tester);
+      final id = p.sine.id;
+
+      await tester.enterText(field(), 'saw 300');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      expect(editBox(), findsNothing);
+      // A different object under the same id, in the same place, still selected
+      // — and printing what it now is.
+      final node = controller.graph.nodeById(id)!;
+      expect(node.type, '~saw');
+      expect(node.position, const Offset(220, 180));
+      expect(controller.graph.selectedNodes, {id});
+      expect(controller.objectLineOf(id), 'saw 300');
+      expect(find.text('saw 300'), findsOneWidget);
+      // Both cables still make sense on the new type, so both were carried.
+      expect(controller.graph.cables, hasLength(2));
+      expect(gateway.cables, hasLength(2));
+      // Nothing was lost, so the canvas says nothing.
+      expect(find.byKey(PatcherCanvas.retypeNoticeKey), findsNothing);
+
+      // One step — and the keyboard is already back on the canvas to undo it.
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(controller.graph.nodeById(id)!.type, Obj.dSine);
+      expect(controller.argsOf(id), '440');
+      expect(controller.graph.cables, hasLength(2));
+    });
+
+    testWidgets('a retype that strands cables says how many, and undo brings '
+        'them back', (tester) async {
+      final p = await openOnSine(tester);
+      final id = p.sine.id;
+
+      // A `.slider` has no inlet at all and emits a float: neither cable has
+      // anywhere left to go.
+      await tester.enterText(field(), 'slider');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      expect(controller.graph.nodeById(id)!.type, Obj.gSlider);
+      expect(controller.graph.cables, isEmpty);
+      // Absence is exactly what the eye on the box does not notice, so the
+      // canvas names it — through the same banner a refused wiring uses.
+      expect(find.byKey(PatcherCanvas.retypeNoticeKey), findsOneWidget);
+      expect(find.text('RETYPED · 2 CABLES DROPPED'), findsOneWidget);
+
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(controller.graph.nodeById(id)!.type, Obj.dSine);
+      expect(controller.graph.cables, hasLength(2));
+    });
+
+    testWidgets('the reference panel is re-pointed at the new type', (
+      tester,
+    ) async {
+      final tapped = <String>[];
+      final p = await openOnSine(tester, onNodeTap: (n) => tapped.add(n.type));
+      expect(tapped.last, Obj.dSine); // the clicks that opened the box
+
+      await tester.enterText(field(), 'saw 300');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      // The object under the box is not the one that was selected a moment
+      // ago, so the host is told again — otherwise the panel keeps documenting
+      // a type that is no longer there.
+      expect(tapped.last, '~saw');
+      expect(controller.graph.nodeById(p.sine.id)!.type, '~saw');
+    });
+
+    testWidgets('an unknown name changes nothing at all', (tester) async {
+      final p = await openOnSine(tester);
+
+      await tester.enterText(field(), 'zzzz 300');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      // Refused in the box, so the object was never touched: same type, same
+      // arguments, same cables, and nothing on the undo stack.
+      expect(editBox(), findsOneWidget);
+      expect(find.byKey(PatchInlineObjectBox.rejectKey), findsOneWidget);
+      expect(controller.graph.nodeById(p.sine.id)!.type, Obj.dSine);
+      expect(controller.argsOf(p.sine.id), '440');
+      expect(controller.graph.cables, hasLength(2));
+      expect(controller.undoScope.canUndo, isFalse);
+    });
+  });
+
   // ─── cursors + hover affordances (issue #359) ───────────────────────────
   // The canvas's hit zones were invisible: 8px port dots with nothing to say
   // they were ports, and node chrome that gave no sign it could be dragged.

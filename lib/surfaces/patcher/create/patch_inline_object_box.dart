@@ -51,19 +51,20 @@ import '../../../engine/bridge/patch_object_descriptor.dart';
 ///   corrected in place rather than costing the whole gesture. **Escape**
 ///   dismisses and leaves the canvas exactly as it was.
 ///
-/// **Editing in place** ([editing] non-null, issue #382) changes two answers
-/// and nothing else:
+/// **Editing in place** ([editing] non-null, issue #382) changes exactly one
+/// answer:
 /// - **The object's own name is never ambiguous.** A `~*` opens reading `* 2`,
 ///   and that bare `*` is not the collision of issue #380 asking to be settled
 ///   — it is this object's name, unchanged. So the name the box opened with
 ///   resolves straight back to the object it opened on, and only *moving* the
 ///   highlight makes it a question again.
-/// - **A different type is refused, for now.** Retyping an object — `~sine`
-///   becoming `~saw` — is a different edit: the native object is replaced and
-///   its cables have to survive it. That is issue #383; until it lands this
-///   box says so inline rather than silently applying the arguments to the old
-///   type. The refusal is the whole seam: #383 replaces it with the retype
-///   path, and everything above stays as it is.
+///
+/// **A different type commits like any other line** (issue #383): typing `saw`
+/// over a `sine 440` resolves `~saw`, checks the arguments against *that* type
+/// and hands it to [onCommit], which replaces the object and carries over the
+/// cables the new one still has room for. This box neither knows nor needs to
+/// know which of the two edits it just committed — the type it returns says it,
+/// and the one refusal that used to stand here (issue #382's seam) is gone.
 ///
 /// Keys are owned *here* rather than on the canvas: the canvas deliberately
 /// ignores every key while a descendant holds focus (issue #353), so — exactly
@@ -94,7 +95,9 @@ class PatchInlineObjectBox extends StatefulWidget {
   final String initialText;
 
   /// Called when Enter resolved a type and its arguments passed the check — to
-  /// create the object, or to apply the arguments to the one being [editing].
+  /// create the object, or, when [editing], to apply the line to that one: the
+  /// arguments alone if the type came back unchanged, a **retype** if it did not
+  /// (issue #383).
   final void Function(PatchObjectDescriptor desc, String args) onCommit;
 
   /// Called when the box gives up the gesture (Escape). The canvas — and the
@@ -356,19 +359,10 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
       setState(() => _reject = 'unknown object · $_name');
       return;
     }
-    // Retyping an object in place is issue #383: the native object is replaced,
-    // not reconfigured, and its cables have to survive that. Refusing here
-    // keeps this slice honest — the alternative is applying the arguments to
-    // the old type and silently ignoring the name that was typed.
-    final editing = widget.editing;
-    if (editing != null && desc.type != editing.type) {
-      setState(
-        () => _reject =
-            'retyping is not supported yet · '
-            'still ${PatchTypeName.bare(editing.type)}',
-      );
-      return;
-    }
+    // A **different** type is a retype (issue #383) and commits like any other
+    // line: the arguments are checked against the type that was *typed*, not
+    // against the one that is there, and the host replaces the object. Nothing
+    // here has to know that — which is why the seam was one refusal.
     final checked = PatchCreationArgs.check(desc, _typedArgs);
     final problem = checked.problem;
     if (problem != null) {
