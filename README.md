@@ -78,8 +78,12 @@ pwsh tool/run_integration_tests.ps1 -Shard 2 -Of 4    # the slice CI runs
 
 It keeps going after a failure, prints the log of every file that failed, and
 exits non-zero if any did. No `libyse.dll` is needed — the suite injects
-`FakeYseGateway` throughout. CI runs the same script nightly and on release PRs
-into `main`; see [.github/workflows/integration.yaml](.github/workflows/integration.yaml).
+`FakeYseGateway` throughout.
+
+CI runs the same script nightly on `develop` and on every release PR into
+`main`. A feature PR into `develop` skips it to stay cheap — label such a PR
+`ci:integration` to run the sweep on it anyway. See
+[.github/workflows/integration.yaml](.github/workflows/integration.yaml).
 
 ### Design tokens
 

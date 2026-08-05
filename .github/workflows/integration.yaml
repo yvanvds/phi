@@ -13,7 +13,8 @@ name: Integration tests
 # (same tier as the `build-windows` job in ci.yaml), drift is caught within a
 # day by the nightly, and nothing can reach `main` without a green end-to-end
 # sweep. The gap this accepts: an e2e break can sit on `develop` for up to
-# 24 hours. Use the manual dispatch below to close that gap on demand.
+# 24 hours. Two ways to close it on demand: label a develop PR `ci:integration`,
+# or dispatch this workflow manually.
 #
 # Two mechanics worth knowing:
 #   * One `flutter test integration_test` run does NOT reliably drive the whole
@@ -28,8 +29,12 @@ on:
     # 03:17 UTC nightly. Scheduled runs always use the default branch (develop).
     - cron: '17 3 * * *'
   pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened]
+    # Every PR into main runs it. A PR into develop only runs it when labelled
+    # `ci:integration` — the opt-in for work that changes this plumbing or
+    # touches an end-to-end path you don't want to wait a night to check.
+    # `labeled` is in the list so adding the label starts a run immediately.
+    branches: [main, develop]
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main]
   workflow_dispatch:
@@ -46,8 +51,13 @@ concurrency:
 jobs:
   integration:
     name: integration ${{ matrix.shard }}/4
-    # Don't burn a fork's minutes on the inherited nightly cron.
-    if: ${{ github.event_name != 'schedule' || github.repository == 'yvanvds/phi' }}
+    # Skip the inherited nightly cron on forks, and skip develop PRs that did
+    # not ask for the sweep. A skipped job costs nothing.
+    if: >-
+      ${{ (github.event_name != 'schedule' || github.repository == 'yvanvds/phi')
+          && (github.event_name != 'pull_request'
+              || github.base_ref == 'main'
+              || contains(github.event.pull_request.labels.*.name, 'ci:integration')) }}
     runs-on: windows-latest
     timeout-minutes: 75
     strategy:
