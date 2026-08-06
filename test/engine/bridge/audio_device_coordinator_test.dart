@@ -1,3 +1,4 @@
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/project/app_settings/audio_settings.dart';
 import 'package:phi/domain/project/app_settings/speaker_layout.dart';
@@ -19,13 +20,32 @@ void main() {
   late List<AudioDeviceNotice> notices;
   late AudioDeviceCoordinator coordinator;
 
+  /// The retry cadence the coordinator's recovery runs on in these tests — three
+  /// attempts one second apart, so a whole run (including the give-up) fits in a
+  /// `fakeAsync` elapse instead of the shipped two minutes.
+  const recoverySchedule = <Duration>[
+    Duration(seconds: 1),
+    Duration(seconds: 1),
+    Duration(seconds: 1),
+  ];
+
   setUp(() {
     gateway = FakeYseGateway();
     notices = [];
-    coordinator = AudioDeviceCoordinator(gateway, onNotice: notices.add);
+    coordinator = AudioDeviceCoordinator(
+      gateway,
+      onNotice: notices.add,
+      recoverySchedule: recoverySchedule,
+    );
   });
 
-  tearDown(() => gateway.dispose());
+  tearDown(() {
+    // The coordinator owns a retry timer since issue #410 — leaving it armed
+    // fails the test with a pending timer, which is exactly the signal we want
+    // if a path ever forgets to stand recovery down.
+    coordinator.dispose();
+    return gateway.dispose();
+  });
 
   /// The launch sequence `PhiApp` + `Workstation._startProject` run: engine up
   /// on the platform default, then the just-loaded [stored] settings applied.
@@ -35,21 +55,30 @@ void main() {
   }
 
   group('boot', () {
-    test('opens the platform default via init(), enables auto-reconnect', () {
-      coordinator.boot();
+    test(
+      'opens the platform default via init(), engine auto-reconnect off',
+      () {
+        coordinator.boot();
 
-      expect(gateway.calls, contains('init'));
-      expect(gateway.calls.any((c) => c.startsWith('initOffline')), isFalse);
-      expect(
-        gateway.calls.any((c) => c.startsWith('openAudioDevice')),
-        isFalse,
-      );
-      expect(gateway.autoReconnectOn, isTrue);
-      expect(gateway.autoReconnectDelayMs, 1000);
-      expect(gateway.calls, contains('setAutoReconnect:true:1000'));
-      expect(coordinator.current, const AudioSettings());
-      expect(notices, isEmpty);
-    });
+        expect(gateway.calls, contains('init'));
+        expect(gateway.calls.any((c) => c.startsWith('initOffline')), isFalse);
+        expect(
+          gateway.calls.any((c) => c.startsWith('openAudioDevice')),
+          isFalse,
+        );
+        // Design §4 used to arm the engine's own auto-reconnect here. It is off
+        // since issue #410: measured against libyse, it reopens
+        // `Pa_GetDefaultOutputDevice()` rather than the device that was lost,
+        // drops the chosen buffer size, and once armed retries on every 16 ms
+        // control tick forever. Phi supervises recovery instead, bounded and
+        // observable — so a silent migration onto the built-in speakers can no
+        // longer happen behind `current`'s back.
+        expect(gateway.autoReconnectOn, isFalse);
+        expect(coordinator.current, const AudioSettings());
+        expect(coordinator.recovery.retrying, isFalse);
+        expect(notices, isEmpty);
+      },
+    );
 
     test(
       'takes no settings — the stored device cannot be resolved yet (#405)',
@@ -84,7 +113,6 @@ void main() {
       // The ASIO entry (not the WASAPI namesake) is the one that opened.
       expect(gateway.openedDevice, gateway.devices[1]);
       expect(gateway.openLayout, SpeakerLayout.quad);
-      expect(gateway.autoReconnectOn, isTrue);
       expect(notices, isEmpty);
       expect(coordinator.current?.outputDevice, 'Fake Interface');
       expect(coordinator.current?.outputHost, 'ASIO');
@@ -500,6 +528,303 @@ void main() {
 
       expect(coordinator.current, isNull);
       expect(gateway.activeAudioState(), AudioDeviceState.none);
+    });
+  });
+
+  group('recovery from a total loss (issue #410)', () {
+    // Nothing used to retry after a total loss. libyse's `setAutoReconnect` was
+    // credited with it in design §4, but what it really does is reopen
+    // `Pa_GetDefaultOutputDevice()` — not the device that went away — on every
+    // control tick with no backoff, which is a worse outcome than silence: the
+    // set would migrate onto the built-in speakers with `current` none the wiser.
+    // So boot turns it off and the coordinator supervises: a bounded run of real
+    // re-opens through the gateway, standing down the moment audio is back.
+    const alpha = AudioDeviceDescriptor(
+      name: 'Alpha',
+      hostName: 'WASAPI',
+      sampleRates: [48000.0],
+      bufferSizes: [256],
+      defaultBufferSize: 256,
+      outputLatency: 256,
+    );
+    const beta = AudioDeviceDescriptor(
+      name: 'Beta',
+      hostName: 'ASIO',
+      sampleRates: [48000.0],
+      bufferSizes: [128],
+      defaultBufferSize: 128,
+      outputLatency: 128,
+    );
+    const storedAlpha = AudioSettings(
+      outputHost: 'WASAPI',
+      outputDevice: 'Alpha',
+    );
+
+    /// Boots onto Alpha, then loses every device the way the machine does: the
+    /// switch to Beta closes Alpha, Beta refuses, and the revert finds Alpha
+    /// unplugged. Leaves the coordinator in a total loss with a run armed.
+    void loseEverything() {
+      gateway.devices = const [alpha, beta];
+      coordinator.boot();
+      coordinator.switchTo(storedAlpha);
+      expect(coordinator.current?.outputDevice, 'Alpha');
+
+      gateway.unopenableDeviceNames.add('Beta');
+      gateway.devices = const [beta];
+      coordinator.switchTo(
+        const AudioSettings(outputHost: 'ASIO', outputDevice: 'Beta'),
+      );
+      expect(coordinator.current, isNull);
+      notices.clear();
+    }
+
+    test('a total loss arms a bounded run rather than sitting silent', () {
+      fakeAsync((async) {
+        loseEverything();
+
+        expect(coordinator.recovery.retrying, isTrue);
+        expect(coordinator.recovery.limit, recoverySchedule.length);
+        expect(coordinator.recovery.gaveUp, isFalse);
+
+        // …and it really does stop. Three attempts, then a notice that says
+        // recovery is the performer's move now — not an unbounded background
+        // loop nobody can see.
+        async.elapse(const Duration(seconds: 10));
+
+        expect(coordinator.recovery.retrying, isFalse);
+        expect(coordinator.recovery.gaveUp, isTrue);
+        expect(coordinator.recovery.attempts, recoverySchedule.length);
+        expect(notices.single.kind, AudioNoticeKind.noAudioDevice);
+        expect(notices.single.message, contains('3 attempts'));
+        expect(notices.single.message, contains('Settings'));
+
+        // Nothing keeps firing after the budget is spent.
+        final callsAfterGivingUp = gateway.calls.length;
+        async.elapse(const Duration(minutes: 5));
+        expect(gateway.calls, hasLength(callsAfterGivingUp));
+
+        coordinator.dispose();
+      });
+    });
+
+    test('the hardware coming back reopens the device that was asked for and '
+        'audio resumes — no manual step', () {
+      fakeAsync((async) {
+        loseEverything();
+
+        // Beta is what the performer last chose, so Beta is what recovery
+        // reaches for; it starts working again between attempts.
+        gateway.unopenableDeviceNames.clear();
+        gateway.devices = const [alpha, beta];
+
+        async.elapse(const Duration(seconds: 2));
+
+        // A stream is genuinely open again — asserted on the engine's own live
+        // state, not on "a retry happened".
+        expect(gateway.activeAudioState().sampleRate, 48000);
+        expect(gateway.activeAudioState(), isNot(AudioDeviceState.none));
+        // And it is the chosen device, not whatever the platform default is.
+        expect(coordinator.current?.outputDevice, 'Beta');
+        expect(coordinator.current?.outputHost, 'ASIO');
+        expect(gateway.openedDevice, beta);
+        // The run stood down, quietly — recovery is not a thing to toast about.
+        expect(coordinator.recovery.retrying, isFalse);
+        expect(coordinator.recovery.gaveUp, isFalse);
+        expect(notices, isEmpty);
+
+        // No further attempts once audio is back.
+        final callsAfterRecovery = gateway.calls.length;
+        async.elapse(const Duration(minutes: 5));
+        expect(gateway.calls, hasLength(callsAfterRecovery));
+
+        coordinator.dispose();
+      });
+    });
+
+    test('it settles for the platform default when the chosen device stays '
+        'missing', () {
+      fakeAsync((async) {
+        loseEverything();
+
+        // Beta — the chosen device — stays refused, but Alpha is plugged back
+        // in and is what the platform default now resolves to. Audio matters
+        // more than the preference, and the stored choice is untouched, so the
+        // performer can go back to Beta whenever it behaves again.
+        gateway.devices = const [alpha];
+        async.elapse(const Duration(seconds: 2));
+
+        expect(gateway.activeAudioState().sampleRate, 48000);
+        expect(gateway.openedDevice, alpha);
+        expect(coordinator.current, isNotNull);
+        expect(coordinator.current?.outputDevice, isNull); // the default
+        expect(coordinator.recovery.retrying, isFalse);
+
+        coordinator.dispose();
+      });
+    });
+
+    test('a boot with no hardware at all starts trying', () {
+      fakeAsync((async) {
+        gateway.devices = const [];
+
+        coordinator.boot();
+
+        expect(coordinator.current, isNull);
+        expect(coordinator.recovery.retrying, isTrue);
+
+        // An interface finishes enumerating a moment after login — the ordinary
+        // cause of a device-less boot — and Phi picks it up on its own.
+        gateway.devices = const [alpha];
+        async.elapse(const Duration(seconds: 2));
+
+        expect(gateway.activeAudioState().sampleRate, 48000);
+        expect(coordinator.current, isNotNull);
+
+        coordinator.dispose();
+      });
+    });
+
+    test('a manual pick that fails re-arms with a fresh budget', () {
+      fakeAsync((async) {
+        loseEverything();
+        async.elapse(const Duration(seconds: 10)); // budget spent
+        expect(coordinator.recovery.gaveUp, isTrue);
+        notices.clear();
+
+        // The performer tries a device by hand from the settings window. It
+        // fails too — but a deliberate act deserves another go, so the run is
+        // armed again from attempt one rather than staying given up.
+        coordinator.switchTo(
+          const AudioSettings(outputHost: 'ASIO', outputDevice: 'Ghost'),
+        );
+
+        expect(coordinator.recovery.retrying, isTrue);
+        expect(coordinator.recovery.gaveUp, isFalse);
+        expect(coordinator.recovery.attempts, 0);
+
+        // And it is bounded again, not endless.
+        async.elapse(const Duration(seconds: 10));
+        expect(coordinator.recovery.gaveUp, isTrue);
+
+        coordinator.dispose();
+      });
+    });
+
+    test('a device open by hand stands the run down', () {
+      fakeAsync((async) {
+        loseEverything();
+        expect(coordinator.recovery.retrying, isTrue);
+
+        gateway.unopenableDeviceNames.clear();
+        gateway.devices = const [alpha, beta];
+        final ok = coordinator.switchTo(storedAlpha);
+
+        expect(ok, isTrue);
+        expect(coordinator.recovery.retrying, isFalse);
+        expect(coordinator.recovery.attempts, 0);
+
+        // The supervisor does not keep poking a device the performer just fixed.
+        final callsAfterFix = gateway.calls.length;
+        async.elapse(const Duration(minutes: 5));
+        expect(gateway.calls, hasLength(callsAfterFix));
+
+        coordinator.dispose();
+      });
+    });
+
+    test('an interface unplugged mid-set is noticed on the tick and recovered', () {
+      fakeAsync((async) {
+        gateway.devices = const [alpha, beta];
+        coordinator.boot();
+        coordinator.switchTo(storedAlpha);
+        expect(coordinator.current?.outputDevice, 'Alpha');
+        notices.clear();
+
+        // The cable comes out. Nothing calls `switchTo` — this is the loss the
+        // performer actually has, and before issue #410 nothing looked for it:
+        // libyse has no device-change event, so the telemetry tick is the only
+        // place it can be seen.
+        gateway.devices = const [];
+        expect(gateway.activeAudioState(), AudioDeviceState.none);
+
+        coordinator.observeLiveState();
+
+        expect(coordinator.current, isNull);
+        expect(coordinator.recovery.retrying, isTrue);
+        expect(notices.single.kind, AudioNoticeKind.noAudioDevice);
+
+        // A standing loss re-arms nothing — the tick runs sixty times a second.
+        notices.clear();
+        for (var i = 0; i < 20; i++) {
+          coordinator.observeLiveState();
+        }
+        expect(notices, isEmpty);
+        expect(coordinator.recovery.attempts, 0);
+
+        // Plugged back in: the run brings Alpha back with no manual step.
+        gateway.devices = const [alpha, beta];
+        async.elapse(const Duration(seconds: 2));
+
+        expect(gateway.activeAudioState().sampleRate, 48000);
+        expect(coordinator.current?.outputDevice, 'Alpha');
+        expect(coordinator.recovery.retrying, isFalse);
+
+        // …and the watch is live again for the next unplug.
+        gateway.devices = const [];
+        coordinator.observeLiveState();
+        expect(coordinator.recovery.retrying, isTrue);
+
+        coordinator.dispose();
+      });
+    });
+
+    test('the tick says nothing while a device is happily open', () {
+      gateway.devices = const [alpha];
+      coordinator.boot();
+      notices.clear();
+
+      for (var i = 0; i < 20; i++) {
+        coordinator.observeLiveState();
+      }
+
+      expect(notices, isEmpty);
+      expect(coordinator.recovery.retrying, isFalse);
+      expect(coordinator.current, isNotNull);
+    });
+
+    test('a recovery attempt raises no rate / buffer notices', () {
+      fakeAsync((async) {
+        gateway.devices = const [alpha];
+        coordinator.boot();
+        // A stored rate this device does not support: the switch says so once…
+        coordinator.switchTo(
+          const AudioSettings(
+            outputHost: 'WASAPI',
+            outputDevice: 'Alpha',
+            sampleRate: 96000,
+          ),
+        );
+        expect(
+          notices.map((n) => n.kind),
+          contains(AudioNoticeKind.unsupportedSampleRate),
+        );
+
+        gateway.devices = const [];
+        coordinator.switchTo(const AudioSettings(outputDevice: 'Ghost'));
+        notices.clear();
+        gateway.devices = const [alpha];
+
+        async.elapse(const Duration(seconds: 10));
+
+        // …and the retries that follow say it no more times. Eight repetitions
+        // of a rate warning would bury the one message that matters.
+        expect(
+          notices.map((n) => n.kind),
+          isNot(contains(AudioNoticeKind.unsupportedSampleRate)),
+        );
+
+        coordinator.dispose();
+      });
     });
   });
 }

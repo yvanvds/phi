@@ -6,6 +6,7 @@ import 'package:phi/domain/log/log_store.dart';
 import 'package:phi/domain/project/app_settings/audio_settings.dart';
 import 'package:phi/domain/project/app_settings/speaker_layout.dart';
 import 'package:phi/engine/bridge/audio_device_descriptor.dart';
+import 'package:phi/engine/bridge/audio_recovery_status.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/shell/diagnostics/diagnostics_report.dart';
 
@@ -152,6 +153,52 @@ void main() {
     expect(
       DiagnosticsReport.describeDevice(
         const AudioSettings(outputHost: 'WASAPI', outputDevice: 'Alpha'),
+      ),
+      'Alpha · WASAPI',
+    );
+  });
+
+  test('describeDevice says whether recovery is still trying (#410)', () {
+    // The pasted bug report is where the history of a loss survives. "No device
+    // open" alone leaves the reader guessing whether Phi ever tried; these two
+    // readings answer it, and they are the difference between "wait a moment"
+    // and "go pick a device".
+    expect(
+      DiagnosticsReport.describeDevice(
+        null,
+        recovery: const AudioRecoveryStatus(
+          retrying: true,
+          gaveUp: false,
+          attempts: 2,
+          limit: 8,
+        ),
+      ),
+      '${DiagnosticsReport.noDevice} (retrying — attempt 3 of 8)',
+    );
+    expect(
+      DiagnosticsReport.describeDevice(
+        null,
+        recovery: const AudioRecoveryStatus(
+          retrying: false,
+          gaveUp: true,
+          attempts: 8,
+          limit: 8,
+        ),
+      ),
+      '${DiagnosticsReport.noDevice} (gave up after 8 attempts — choose one in '
+      'Settings › Audio)',
+    );
+    // A device that *is* open never carries a recovery clause, whatever the
+    // supervisor last did.
+    expect(
+      DiagnosticsReport.describeDevice(
+        const AudioSettings(outputHost: 'WASAPI', outputDevice: 'Alpha'),
+        recovery: const AudioRecoveryStatus(
+          retrying: false,
+          gaveUp: true,
+          attempts: 8,
+          limit: 8,
+        ),
       ),
       'Alpha · WASAPI',
     );

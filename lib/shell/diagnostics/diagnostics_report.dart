@@ -2,6 +2,7 @@ import '../../core/app_version.dart';
 import '../../domain/log/diagnostics_bundle.dart';
 import '../../domain/log/log_store.dart';
 import '../../domain/project/app_settings/audio_settings.dart';
+import '../../engine/bridge/audio_recovery_status.dart';
 import '../../engine/engine.dart';
 
 /// Gathers the live diagnostics facts into a paste-ready [DiagnosticsBundle]
@@ -59,7 +60,7 @@ class DiagnosticsReport {
       appVersion: appVersion,
       engineVersion: engine.engineVersion,
       libraryPath: engine.engineLibraryPath ?? pathUnset,
-      device: describeDevice(settings),
+      device: describeDevice(settings, recovery: engine.audioRecovery),
       sampleRate: audio.sampleRate,
       bufferSize: audio.bufferSize,
       outputLatencyMs: audio.outputLatencyMs,
@@ -79,11 +80,34 @@ class DiagnosticsReport {
   /// `device · host`, the bare device when the host is unknown, `System default`
   /// when a device is open but none was chosen, and [noDevice] when [audio] is
   /// `null`, i.e. nothing is open at all (issue #408).
-  static String describeDevice(AudioSettings? audio) {
-    if (audio == null) return noDevice;
+  ///
+  /// When nothing is open, [recovery] adds *why it is still nothing* (issue
+  /// #410) — mid-retry, or out of attempts. That is the difference between a
+  /// bug report that reads "audio just stopped" and one that says whether Phi
+  /// tried, how often, and gave up: the line a performer pastes is the only
+  /// place that history survives.
+  static String describeDevice(
+    AudioSettings? audio, {
+    AudioRecoveryStatus recovery = AudioRecoveryStatus.idle,
+  }) {
+    if (audio == null) return '$noDevice${_recoveryNote(recovery)}';
     final device = audio.outputDevice;
     if (device == null) return 'System default';
     final host = audio.outputHost;
     return host == null ? device : '$device · $host';
+  }
+
+  /// The parenthesised recovery clause appended to [noDevice], or an empty
+  /// string when the supervisor has nothing to say.
+  static String _recoveryNote(AudioRecoveryStatus recovery) {
+    if (recovery.retrying) {
+      return ' (retrying — attempt ${recovery.attempts + 1} of '
+          '${recovery.limit})';
+    }
+    if (recovery.gaveUp) {
+      return ' (gave up after ${recovery.attempts} attempts — choose one in '
+          'Settings › Audio)';
+    }
+    return '';
   }
 }

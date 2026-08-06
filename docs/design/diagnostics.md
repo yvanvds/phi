@@ -62,6 +62,13 @@ command; `Ctrl+J`-style shortcut via the command registry):
 - **Audio-device chip:** ok · reconnecting · lost — fed by
   `activeAudioState()` polling on the existing telemetry tick plus
   device-change notices; click opens settings AUDIO.
+  **reconnecting** means Phi's recovery supervisor still has attempts left
+  (settings-and-devices §5, issue #410); **lost** means it has given up and
+  the next move is the performer's. Keeping those apart is the point —
+  otherwise NO AUDIO means both "wait" and "your move", and a performer
+  mid-set cannot tell which. The give-up notice names the attempt count and
+  points at Settings › Audio; the DIAGNOSTICS row and the pasted bundle
+  carry the same clause beside "no audio device open" (§6).
 - The CPU / drops chips stay; the **log toggle badges** the count of
   error-level entries since the panel was last open; click opens the
   drawer filtered to errors.
@@ -81,7 +88,9 @@ command; `Ctrl+J`-style shortcut via the command registry):
 
 ## 7. Out of scope
 
-- **Engine watchdog / auto-restart** — auto-reconnect covers devices;
+- **Engine watchdog / auto-restart** — the bounded device-recovery run
+  covers devices (settings-and-devices §5; the engine's own auto-reconnect
+  turned out not to, issue #410);
   the audio-stall count is visible (the interpreted `DROPS` metric of
   issue #350, not the engine's raw gauge); anything more is speculative.
 - **Python `print()` capture** — the embedded interpreter's stdout is

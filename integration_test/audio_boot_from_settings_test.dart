@@ -74,8 +74,11 @@ void main() {
     expect(gateway.openedDevice?.hostName, 'ASIO');
     expect(engine.activeAudioSettings?.outputDevice, 'Fake Interface');
     expect(engine.lastAudioNotice.value, isNull);
-    // … auto-reconnect is enabled at boot (design §4) …
-    expect(gateway.autoReconnectOn, isTrue);
+    // … the engine's own auto-reconnect is left off (issue #410 — it reopens the
+    // platform default rather than the lost device; Phi supervises recovery),
+    // with nothing to recover from here …
+    expect(gateway.autoReconnectOn, isFalse);
+    expect(engine.audioRecovery.retrying, isFalse);
     // … and nothing rewrote the settings file.
     expect(settingsStore.saveCount, 0);
 

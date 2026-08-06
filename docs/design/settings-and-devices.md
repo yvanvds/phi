@@ -110,9 +110,36 @@ Confirmed against the bridge; no engine work is required for v1:
 - **Live state:** `activeSampleRate`, `activeBufferSize`, output latency
   in samples — the diagnostics section reads these, not the stored
   settings (they can legitimately differ).
-- **Resilience:** `setAutoReconnect(on:, delayMs:)` — the engine re-opens
-  a device that disappears. Enabled always (1 s delay), not exposed as a
-  setting in v1; revisit only if it misbehaves.
+- **Resilience:** `setAutoReconnect(on:, delayMs:)` is **off**, and Phi
+  supervises recovery itself (issue #410). This entry used to read "the
+  engine re-opens a device that disappears. Enabled always (1 s delay)".
+  Measured against the engine sources, it does something else:
+  `system::update()` counts control ticks with no audio callback and, past
+  the threshold, runs `pause()` + `resume()` — which is
+  `managerObject::close()` followed by `addCallback()`, and `addCallback()`
+  hardcodes `Pa_GetDefaultOutputDevice()`. So it reopens the *platform
+  default*, not the device that was lost, dropping the chosen buffer size
+  and channel count; the counter is reset only by a callback that arrives,
+  never by an attempt, so once armed it retries on **every 16 ms tick with
+  no backoff, indefinitely**; and `delayMs` is compared against a tick
+  count, making the specified 1 s really ~16 s. A silent migration onto the
+  built-in output is exactly the lie #408 closed, so it stays off
+  (dart-yse #54).
+- **No device-change signal at all.** There is no add/remove event on any
+  desktop backend (`serviceReconnect()` is a no-op outside Oboe), and
+  `System.devices` is a cache filled inside `init()` — `closeCurrentDevice()`
+  leaves it untouched, and since `Pa_Terminate()` is never called before
+  process exit even `close()` + `init()` re-reads PortAudio's original
+  snapshot. Recovery therefore **polls**: `activeSampleRate == 0` is the
+  engine's documented "nothing is open" sentinel, read on Phi's telemetry
+  tick. (One consequence for the dropdown: a device removed or added
+  mid-session is invisible to enumeration — issue #412, dart-yse #51.)
+- **Recovery is cheap, re-init is not.** `closeCurrentDevice()` tears down
+  only the stream — PortAudio stays initialised, and every channel, sound
+  and clock survives — so `openDevice` right afterwards is the designed
+  flow and the one recovery libyse genuinely supports from a closed engine.
+  `System.close()` is a different animal (it joins the worker pools and
+  destroys every channel), so recovery never goes near it.
 - **MIDI:** input/output device counts + names by index
   (`midiInDeviceName` / `midiOutDeviceName`); `MidiIn.open` /
   `MidiOut.open` take the index — Phi resolves stored *names* to current
@@ -123,7 +150,8 @@ Confirmed against the bridge; no engine work is required for v1:
 **Boot.** Two steps, in this order, because the engine gives no other:
 
 1. `PhiEngine.start()` → `init()`, which opens the platform default and is
-   the *only* call that enumerates hardware (§4). Auto-reconnect on.
+   the *only* call that enumerates hardware (§4). Engine auto-reconnect
+   off; Phi's own recovery supervisor takes over (below).
 2. Once the settings store has loaded, the shell
    (`Workstation._startProject`) applies `audio` as a **live switch** —
    `switchAudioDevice(stored)`, resolving host+name against `devices` and
@@ -158,6 +186,34 @@ immediately (`closeCurrentDevice` + `openDevice`) through that same
 selecting a device in a dropdown *is* the deliberate act, no separate Apply
 button. Failure reverts to the previous working device, raises a notice,
 and updates the stored choice only on success.
+
+**Device loss and recovery** (issue #410). Any moment Phi ends up with *no*
+device open — an interface unplugged mid-set, a switch whose target refused
+and whose revert found the previous device gone, or a boot on a machine
+that came up device-less — it arms a **bounded recovery run**:
+
+- **Trigger.** The telemetry tick (`AudioDeviceCoordinator.observeLiveState`)
+  watches for `activeAudioState()` going empty while `current` still names a
+  device — the only detection available (§4) — and the failure exits of
+  `switchTo` arm it directly. A failed manual pick re-arms with a *fresh*
+  budget: a deliberate act deserves another go.
+- **Cadence.** Eight attempts at 1 s, 2 s, 4 s, 8 s, 15 s, 30 s, 30 s, 30 s
+  — about two minutes. Each attempt re-opens through the gateway: the
+  device the performer asked for first, the platform default second.
+  Attempts are silent about rate/buffer fallbacks; eight repetitions of a
+  warning would bury the one message that matters.
+- **Giving up.** When the budget is spent it **stops** and raises a
+  `noAudioDevice` notice naming the attempt count and pointing at Settings ›
+  Audio. A retry loop nobody can see and nothing can stop is its own bug.
+- **What the performer sees.** The status chip reads **RECONNECTING** while
+  a run is live and **NO AUDIO** only once it has given up, so NO AUDIO has
+  exactly one meaning: recovery is manual now. The DIAGNOSTICS row and the
+  pasted report say the same in words — "(retrying — attempt 3 of 8)" or
+  "(gave up after 8 attempts — choose one in Settings › Audio)".
+- **What it does not do.** Once recovery has settled for the platform
+  default, it does not keep watching for the preferred interface to come
+  back; the stored preference is untouched, so re-picking it is one click
+  (issue #413).
 
 **MIDI.** The chosen output port replaces the hard-coded port 0 in
 `EngineMidiController`; stored name resolves to an index each time the

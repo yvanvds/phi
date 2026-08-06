@@ -64,6 +64,13 @@ void main() {
     final engine = PhiEngine(
       gateway,
       telemetryInterval: const Duration(milliseconds: 20),
+      // A two-attempt run 50 ms apart: this test is about what the surfaces say
+      // once recovery has *finished*, so the budget is spent almost immediately
+      // and the readings settle on the manual-recovery state (issue #410).
+      audioRecoverySchedule: const [
+        Duration(milliseconds: 50),
+        Duration(milliseconds: 50),
+      ],
     );
     final session = SessionState();
     final settingsStore = FakeAppSettingsStore(
@@ -154,6 +161,13 @@ void main() {
     expect(settings.value.audio.outputDevice, 'Alpha');
     expect(settingsStore.saveCount, 0);
 
+    // Phi retried on its own (issue #410) and, with both devices still gone,
+    // ran out of attempts — which is what makes the readings below the *final*
+    // word rather than a snapshot of something still in flight.
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+    expect(engine.audioRecovery.gaveUp, isTrue);
+
     // ── the DIAGNOSTICS row ─────────────────────────────────────────────────
     await tester.tap(sectionTile('DIAGNOSTICS'));
     await tester.pumpAndSettle();
@@ -164,6 +178,9 @@ void main() {
     // away, nor claim the platform default is carrying the audio.
     expect(find.textContaining('Alpha · WASAPI'), findsNothing);
     expect(find.textContaining('System default'), findsNothing);
+    // …and it records that Phi tried and stopped (issue #410), so the row
+    // answers the next question a reader has: is this still going to fix itself?
+    expect(find.textContaining('gave up after 2 attempts'), findsOneWidget);
 
     // ── the pasted report ───────────────────────────────────────────────────
     await tester.tap(find.text('copy for bug report'));

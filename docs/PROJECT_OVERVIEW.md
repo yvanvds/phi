@@ -144,6 +144,20 @@ main + app          (orchestration)
     "no device" through the one shared `DiagnosticsReport.describeDevice`, so the
     DIAGNOSTICS row and the pasted bundle can never name an output the engine is
     not on.
+  - **Device-loss recovery** (issue #410, `audio_device_recovery.dart` +
+    `audio_recovery_status.dart` in `lib/engine/bridge/`): the engine's own
+    `setAutoReconnect` is now **off** — measured, it reopens
+    `Pa_GetDefaultOutputDevice()` rather than the lost device, on every 16 ms
+    control tick with no backoff. `AudioDeviceCoordinator` supervises instead. It
+    watches for the loss on the telemetry tick (`observeLiveState` — libyse has no
+    device-change event, so `activeSampleRate == 0` is the only signal) as well as
+    on the failure exits of `switchTo`, then runs a **bounded** `AudioDeviceRecovery`:
+    eight `openAudioDevice` attempts over about two minutes, the performer's device
+    first and the platform default second, standing down the moment a stream comes
+    up and raising a give-up notice when the budget is spent. `PhiEngine.audioRecovery`
+    publishes the run as an `AudioRecoveryStatus`, which is what lets the status
+    chip mean two different things: **RECONNECTING** while attempts remain,
+    **NO AUDIO** only once recovery is manual.
   - **MIDI** (`midi_settings_section.dart`): an output-port `PhiSelect` (stored by
     name) and an input-port `PhiChecklistRow` list with a per-port `MidiActivityDot`.
     Changes persist through `AppSettings.withMidi` and push to `PhiEngine.applyMidiSettings`,
