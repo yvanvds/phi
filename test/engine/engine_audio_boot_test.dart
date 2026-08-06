@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/project/app_settings/audio_settings.dart';
 import 'package:phi/engine/bridge/audio_device_notice.dart';
+import 'package:phi/engine/bridge/audio_recovery_status.dart';
 import 'package:phi/engine/engine.dart';
 
 import 'test_doubles/fake_yse_gateway.dart';
@@ -35,8 +36,17 @@ void main() {
     expect(gateway.calls.any((c) => c.startsWith('initOffline')), isFalse);
     expect(engine.activeAudioSettings, const AudioSettings());
     expect(engine.lastAudioNotice.value, isNull);
-    // Auto-reconnect is on at boot regardless (design §4).
-    expect(gateway.autoReconnectOn, isTrue);
+    // The engine's own auto-reconnect is off since issue #410 — it reopens the
+    // platform default rather than the lost device, on every control tick with
+    // no backoff. Phi supervises recovery instead, and has nothing to recover
+    // from here.
+    expect(gateway.autoReconnectOn, isFalse);
+    expect(engine.audioRecovery.retrying, isFalse);
+    expect(engine.audioRecovery.gaveUp, isFalse);
+    // Before `start()` there is no supervisor to ask at all.
+    final unstarted = FakeYseGateway();
+    addTearDown(unstarted.dispose);
+    expect(PhiEngine(unstarted).audioRecovery, AudioRecoveryStatus.idle);
   });
 
   test('the launch sequence opens the stored device', () {

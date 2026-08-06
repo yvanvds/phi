@@ -23,9 +23,19 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 
 /// End-to-end proof of the status-bar audio-device chip (issue #271, design
 /// `docs/design/diagnostics.md` §5) driven through the real [PhiApp]: the chip
-/// walks ok → reconnecting → lost → ok as the fake gateway loses and regains a
+/// walks ok → reconnecting → ok → lost as the fake gateway loses and regains a
 /// device, each transition lands a paired log entry through the notice channel,
 /// and clicking the chip opens the settings dialog's AUDIO section.
+///
+/// Since issue #410 the recovery leg is the point of the test. It used to be
+/// faked — the test assigned `gateway.activeSampleRateValue` and the chip
+/// obligingly went green, modelling a recovery from a *closed* engine that
+/// libyse cannot perform. Here nothing touches the live state: the hardware comes
+/// back, Phi's own bounded supervisor re-opens a device through
+/// `openAudioDevice`, and the stream that comes up is the engine's answer, not
+/// the test's. The last leg then lets the budget run out with the hardware still
+/// gone, which is the only thing that now reads as **NO AUDIO** — the state where
+/// recovery really is the performer's move.
 const _alpha = AudioDeviceDescriptor(
   name: 'Alpha',
   hostName: 'WASAPI',
@@ -55,6 +65,15 @@ void main() {
     final engine = PhiEngine(
       gateway,
       telemetryInterval: const Duration(milliseconds: 20),
+      // Four attempts 100 ms apart instead of the shipped eight over two
+      // minutes: the *policy* is pinned in the unit tests, what this one needs
+      // is a run short enough to watch both endings inside a widget test.
+      audioRecoverySchedule: const [
+        Duration(milliseconds: 300),
+        Duration(milliseconds: 300),
+        Duration(milliseconds: 300),
+        Duration(milliseconds: 300),
+      ],
     );
     final session = SessionState();
     // Store a device so the app ends up on it, giving a real live-device
@@ -111,30 +130,58 @@ void main() {
     expect(find.byKey(AudioDeviceChip.chipKey), findsOneWidget);
     expect(find.text('AUDIO'), findsOneWidget);
 
-    // ── reconnecting ──────────────────────────────────────────────────────────
-    // The device falls away with no loss notice — the auto-reconnect window.
-    gateway.activeSampleRateValue = 0;
+    // ── the loss, and Phi trying ────────────────────────────────────────────
+    // The interface is pulled out of the machine. Note what is *not* here: no
+    // `switchAudioDevice`, because an unplugged cable involves no switch —
+    // reassigning the fake's hardware takes the open stream down with it, the
+    // way PortAudio errors the stream out and libyse closes it. Phi notices on
+    // its telemetry tick and arms a bounded run, so the chip reads RECONNECTING
+    // (issue #410): nothing is open, but something is trying.
+    gateway.devices = const [];
     await tick();
+    expect(engine.activeAudioState().sampleRate, 0);
+    expect(engine.activeAudioSettings, isNull);
+    expect(engine.audioRecovery.retrying, isTrue);
     expect(find.text('RECONNECTING'), findsOneWidget);
     expect(logged('reconnecting', LogLevel.warning), isTrue);
+    // NO AUDIO is held back for the state where nothing is trying any more.
+    expect(logged('lost', LogLevel.error), isFalse);
 
-    // ── lost ────────────────────────────────────────────────────────────────
-    // Every device vanishes; a switch attempt exhausts every fallback and the
-    // engine raises `noAudioDevice`, so the chip reads a total loss.
-    gateway.devices = const [];
-    engine.switchAudioDevice(const AudioSettings());
-    await tick();
-    expect(find.text('NO AUDIO'), findsOneWidget);
-    expect(logged('lost', LogLevel.error), isTrue);
-
-    // ── ok (recovery) ─────────────────────────────────────────────────────────
-    // The hardware comes back; the chip returns to healthy and recovery logs a
-    // quiet info trace.
+    // ── ok (a real recovery) ────────────────────────────────────────────────
+    // The interface is plugged back in. Nothing here touches the live state —
+    // the next scheduled attempt calls `openAudioDevice` through the gateway and
+    // a stream genuinely comes up, which is what turns the chip green. This is
+    // the leg that used to be faked by assigning `activeSampleRateValue`.
     gateway.devices = const [_alpha, _beta];
-    gateway.activeSampleRateValue = 48000;
+    await tester.pump(const Duration(milliseconds: 600));
     await tick();
+
+    expect(engine.activeAudioState().sampleRate, greaterThan(0));
+    // And it came back on *Alpha*, the device the performer stored — recovery
+    // reaches for what was asked for before it settles for anything else.
+    expect(engine.activeAudioSettings?.outputDevice, 'Alpha');
+    expect(engine.audioRecovery.retrying, isFalse);
     expect(find.text('AUDIO'), findsOneWidget);
     expect(logged('recovered', LogLevel.info), isTrue);
+
+    // ── lost (the budget runs out) ──────────────────────────────────────────
+    // This time the hardware stays gone. Phi tries its four attempts, gives up,
+    // and says so — and only then does the chip read NO AUDIO, which now carries
+    // exactly one meaning: recovery is manual from here.
+    gateway.devices = const [];
+    await tick();
+    expect(find.text('RECONNECTING'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 1800));
+    await tick();
+
+    expect(engine.audioRecovery.gaveUp, isTrue);
+    expect(engine.audioRecovery.attempts, 4);
+    expect(find.text('NO AUDIO'), findsOneWidget);
+    expect(logged('lost', LogLevel.error), isTrue);
+    // The give-up says how hard it tried and where to go next.
+    expect(logged('4 attempts', LogLevel.error), isTrue);
+    expect(logged('Settings', LogLevel.error), isTrue);
 
     // ── click-through ─────────────────────────────────────────────────────────
     // Clicking the chip opens the settings dialog straight to its AUDIO section.

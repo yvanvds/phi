@@ -333,6 +333,7 @@ class _WorkstationState extends State<Workstation> {
       tick: widget.engine.telemetry,
       readState: widget.engine.activeAudioState,
       lastNotice: widget.engine.lastAudioNotice,
+      readRecovery: () => widget.engine.audioRecovery,
       notices: _noticeCenter,
     );
     // Retrofit sweep (design §3, §8 decision 3): the shipped ad-hoc notice

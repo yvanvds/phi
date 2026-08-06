@@ -47,9 +47,12 @@ class DiagnosticsSettingsSection extends StatelessWidget {
 
   /// The device actually open, formatted by the reporter so this row and the
   /// pasted bundle always agree — including the "no device open" reading after a
-  /// total loss, where the engine is on nothing at all (issue #408).
-  String get _activeDevice =>
-      DiagnosticsReport.describeDevice(engine.activeAudioSettings);
+  /// total loss, where the engine is on nothing at all (issue #408), and whether
+  /// recovery is still trying for it (issue #410).
+  String get _activeDevice => DiagnosticsReport.describeDevice(
+    engine.activeAudioSettings,
+    recovery: engine.audioRecovery,
+  );
 
   /// The paste-ready block the copy button writes to the clipboard.
   String _report(int drops) =>

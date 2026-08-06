@@ -40,7 +40,9 @@ import '../domain/time_domains/time_domain_registry.dart';
 import 'bridge/audio_device_coordinator.dart';
 import 'bridge/audio_device_descriptor.dart';
 import 'bridge/audio_device_notice.dart';
+import 'bridge/audio_device_recovery.dart';
 import 'bridge/audio_device_state.dart';
+import 'bridge/audio_recovery_status.dart';
 import 'bridge/bus_tap.dart';
 import 'bridge/code_evaluator.dart';
 import 'bridge/control_plane_dispatcher.dart';
@@ -108,6 +110,7 @@ class PhiEngine {
     BusTap busTap = const NoOpBusTap(),
     EngineLogSource engineLogSource = const NoOpEngineLogSource(),
     Duration telemetryInterval = const Duration(milliseconds: 50),
+    List<Duration> audioRecoverySchedule = AudioDeviceRecovery.defaultSchedule,
   }) : _sceneRenderer = sceneRenderer,
        _patcherGateway = patcherGateway,
        _midiGateway = midiGateway,
@@ -116,7 +119,8 @@ class PhiEngine {
        _mirrorBinder = RegistryMirrorBinder(registryMirror),
        _busTap = busTap,
        _engineLogSource = engineLogSource,
-       _telemetryInterval = telemetryInterval {
+       _telemetryInterval = telemetryInterval,
+       _audioRecoverySchedule = audioRecoverySchedule {
     // The registry is the source of truth for the channel set (design §8): the
     // engine materialises its `MixerChannel`s from `mix.` entities and re-syncs
     // whenever the tree changes. Until [bindProject] points it at the project's
@@ -196,6 +200,12 @@ class PhiEngine {
   final EngineLogSource _engineLogSource;
   final Duration _telemetryInterval;
 
+  /// The delay before each audio-device recovery attempt, and by its length the
+  /// attempt budget (issue #410). Injected so a test can drive a whole run —
+  /// including the give-up — in milliseconds instead of the two real minutes the
+  /// shipped schedule takes.
+  final List<Duration> _audioRecoverySchedule;
+
   /// The period Phi drives the engine's control tick (`system::update`) at.
   ///
   /// Shared deliberately with [_stallTracker]: the engine's device-stall gauge
@@ -238,12 +248,13 @@ class PhiEngine {
   /// downstream routing before the engine work arrives (design §9 step 1).
   Stream<BusTapFrame> tapBus(String prefix) => _busTap.subscribe(prefix);
 
-  /// Coordinates the boot-from-settings and live-switch device rules (design §5,
-  /// §9.3) over the gateway. Lazily built so [start] can boot from stored
-  /// [AudioSettings]; its notices flow into [_lastAudioNotice].
+  /// Coordinates the boot and live-switch device rules (design §5, §9.3) over
+  /// the gateway, and supervises recovery from a total loss (issue #410). Its
+  /// notices flow into [_lastAudioNotice].
   late final AudioDeviceCoordinator _audio = AudioDeviceCoordinator(
     _gateway,
     onNotice: (notice) => _lastAudioNotice.value = notice,
+    recoverySchedule: _audioRecoverySchedule,
   );
 
   final ValueNotifier<AudioDeviceNotice?> _lastAudioNotice =
@@ -964,8 +975,9 @@ class PhiEngine {
 
   /// Initialise the engine, start the update loop, begin emitting telemetry.
   ///
-  /// Brings audio up on the platform default with auto-reconnect enabled
-  /// (design §4, §5). It takes **no settings**: the stored device is applied
+  /// Brings audio up on the platform default (design §4, §5), with Phi — not the
+  /// engine — supervising recovery if it ever goes away (issue #410). It takes
+  /// **no settings**: the stored device is applied
   /// afterwards through [switchAudioDevice], once the settings store has loaded
   /// — that is what the shell does (`Workstation._startProject`) and the only
   /// sequence the engine supports, because it enumerates its hardware solely
@@ -1244,6 +1256,9 @@ class PhiEngine {
   void stop() {
     _telemetryTimer?.cancel();
     _telemetryTimer = null;
+    // Nothing to recover once the engine is down — a pending retry would reopen
+    // a device on a closed session (issue #410).
+    _audio.stopRecovery();
     if (_started) {
       // Tear the control plane down first (issue #334): cancel its tap
       // subscription so no late `phi.ctl` frame routes into a half-disposed
@@ -1648,6 +1663,16 @@ class PhiEngine {
   /// Retained (not a stream) so a consumer that binds after boot still sees a
   /// launch-time fallback.
   ValueListenable<AudioDeviceNotice?> get lastAudioNotice => _lastAudioNotice;
+
+  /// What Phi's audio-device supervisor is doing (issue #410): retrying after a
+  /// loss, or given up and waiting for the performer. [AudioRecoveryStatus.idle]
+  /// before [start] and whenever a device is open.
+  ///
+  /// The status-bar chip reads it to tell RECONNECTING (Phi is still trying)
+  /// from NO AUDIO (the budget is spent, recovery is manual now), and the
+  /// diagnostics row / pasted report say the same thing in words.
+  AudioRecoveryStatus get audioRecovery =>
+      _started ? _audio.recovery : AudioRecoveryStatus.idle;
 
   /// Applies a live audio-device change (design §5 "Live change", §9.3): swaps to
   /// [desired], reverting to the previous working device (with a
@@ -2731,6 +2756,11 @@ class PhiEngine {
 
   void _emit(Timer _) {
     if (!_started) return;
+    // The device-loss watch (issue #410). libyse offers no device-change event,
+    // so this tick is the only place an interface pulled mid-set can be noticed
+    // — and an unplugged cable goes through no `switchAudioDevice`, so without
+    // it the commonest loss of all would be the one nothing retried.
+    _audio.observeLiveState();
     final sampleRate = _gateway.activeSampleRate;
     final latencyMs = sampleRate > 0
         ? (_gateway.activeOutputLatency / sampleRate) * 1000
@@ -2777,6 +2807,8 @@ class PhiEngine {
   /// is permanently torn down (e.g. app dispose).
   Future<void> dispose() async {
     stop();
+    // Releases the recovery timer for good (issue #410).
+    _audio.dispose();
     _mirrorBinder.dispose();
     _mixRegistry.removeListener(_syncChannelsFromRegistry);
     if (_ownsMixRegistry) _mixRegistry.dispose();

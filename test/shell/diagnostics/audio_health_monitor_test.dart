@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/log/log_level.dart';
 import 'package:phi/domain/log/log_source.dart';
 import 'package:phi/engine/bridge/audio_device_notice.dart';
+import 'package:phi/engine/bridge/audio_recovery_status.dart';
 import 'package:phi/shell/diagnostics/audio_device_health.dart';
 import 'package:phi/shell/diagnostics/audio_health_monitor.dart';
 import 'package:phi/shell/diagnostics/notice_center.dart';
@@ -22,6 +23,10 @@ void main() {
   late NoticeCenter notices;
   late AudioHealthMonitor monitor;
 
+  /// What the supervisor reports on the next tick — idle unless a test is
+  /// exercising the recovery window (issue #410).
+  late AudioRecoveryStatus recovery;
+
   setUp(() {
     gateway = FakeYseGateway();
     // Start with a device open (as the engine boots): sampleRate > 0.
@@ -30,10 +35,12 @@ void main() {
     tick = StreamController<void>.broadcast();
     lastNotice = ValueNotifier<AudioDeviceNotice?>(null);
     notices = NoticeCenter.build();
+    recovery = AudioRecoveryStatus.idle;
     monitor = AudioHealthMonitor(
       tick: tick.stream,
       readState: gateway.activeAudioState,
       lastNotice: lastNotice,
+      readRecovery: () => recovery,
       notices: notices,
     );
   });
@@ -96,6 +103,90 @@ void main() {
     },
   );
 
+  group('the recovery window (issue #410)', () {
+    // A total loss now arms Phi's own bounded retry, so the standing
+    // `noAudioDevice` notice is no longer enough to call it lost: while the
+    // supervisor has attempts left the chip must keep saying RECONNECTING, and
+    // only settle on NO AUDIO once the budget is spent. Otherwise NO AUDIO means
+    // two different things — "wait" and "your move" — and the performer cannot
+    // tell which one they are looking at.
+    const standing = AudioDeviceNotice(
+      AudioNoticeKind.noAudioDevice,
+      'No audio output device could be opened.',
+    );
+
+    test('a total loss reads as reconnecting while retries remain', () async {
+      gateway.activeSampleRateValue = 0;
+      lastNotice.value = standing;
+      recovery = const AudioRecoveryStatus(
+        retrying: true,
+        gaveUp: false,
+        attempts: 1,
+        limit: 8,
+      );
+      fireTick();
+      await settle();
+
+      expect(monitor.health.value, AudioDeviceHealth.reconnecting);
+      // The louder "lost" wording is held back until it is actually true.
+      expect(notices.log.entries.single.level, LogLevel.warning);
+      expect(notices.log.entries.single.text, contains('reconnecting'));
+    });
+
+    test('it becomes lost the moment the supervisor gives up', () async {
+      gateway.activeSampleRateValue = 0;
+      lastNotice.value = standing;
+      recovery = const AudioRecoveryStatus(
+        retrying: true,
+        gaveUp: false,
+        attempts: 3,
+        limit: 8,
+      );
+      fireTick();
+      await settle();
+      expect(monitor.health.value, AudioDeviceHealth.reconnecting);
+
+      // The budget runs out — nothing is trying any more.
+      recovery = const AudioRecoveryStatus(
+        retrying: false,
+        gaveUp: true,
+        attempts: 8,
+        limit: 8,
+      );
+      fireTick();
+      await settle();
+
+      expect(monitor.health.value, AudioDeviceHealth.lost);
+      expect(notices.log.entries.last.level, LogLevel.error);
+      expect(notices.log.entries.last.text, contains('lost'));
+    });
+
+    test('a recovery that succeeds mid-run returns the chip to ok', () async {
+      gateway.activeSampleRateValue = 0;
+      lastNotice.value = standing;
+      recovery = const AudioRecoveryStatus(
+        retrying: true,
+        gaveUp: false,
+        attempts: 2,
+        limit: 8,
+      );
+      fireTick();
+      await settle();
+      expect(monitor.health.value, AudioDeviceHealth.reconnecting);
+
+      // An attempt lands: a device is open again and the run stands down.
+      gateway.activeSampleRateValue = 48000;
+      recovery = AudioRecoveryStatus.idle;
+      fireTick();
+      await settle();
+
+      expect(monitor.health.value, AudioDeviceHealth.ok);
+      expect(notices.log.entries.last.text, contains('recovered'));
+      // Only the drop toasted — the recovery is a quiet trace.
+      expect(notices.toasts.visible, hasLength(1));
+    });
+  });
+
   test('recovery to ok logs at info without a toast', () async {
     // Drop → reconnecting (one toast, one log), then recover.
     gateway.activeSampleRateValue = 0;
@@ -110,9 +201,9 @@ void main() {
     expect(monitor.health.value, AudioDeviceHealth.ok);
     // Recovery is a quiet info trace — no *new* toast beyond the reconnect one.
     expect(notices.toasts.visible, hasLength(1));
-    final recovery = notices.log.entries.last;
-    expect(recovery.level, LogLevel.info);
-    expect(recovery.text, contains('recovered'));
+    final recovered = notices.log.entries.last;
+    expect(recovered.level, LogLevel.info);
+    expect(recovered.text, contains('recovered'));
   });
 
   test('walks ok → reconnecting → lost → ok with paired log entries', () async {
