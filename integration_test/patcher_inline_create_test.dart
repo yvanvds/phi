@@ -31,9 +31,10 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 ///
 /// The legs, in one session: the box opens where the grid was double-clicked;
 /// completion narrows as the name is typed; Enter instantiates a `~sine` with
-/// the typed argument at that exact point; Ctrl+Z un-creates it; an unknown
-/// name is refused without costing the gesture; and Escape leaves the canvas
-/// exactly as it was.
+/// the typed argument at that exact point; Ctrl+Z un-creates it; `dac` creates
+/// a `~dac` like any other type — the seeded one blocks nothing (issue #434);
+/// an unknown name is refused without costing the gesture; and Escape leaves
+/// the canvas exactly as it was.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -147,7 +148,20 @@ void main() {
     expect(patcher.graph.nodes, hasLength(seeded));
     expect(patcher.graph.nodeById(made.id), isNull);
 
-    // ── 5) an unknown name is refused inline, and the box stays open ─────────
+    // ── 5) `dac` creates like any other type (issue #434) ────────────────────
+    // The bare name resolves to the canonical `~dac`, and the ~dac the surface
+    // seeded does not block a second one.
+    await doubleClick();
+    await type('dac');
+    await press(LogicalKeyboardKey.enter);
+
+    expect(box(), findsNothing);
+    expect(patcher.graph.nodes, hasLength(seeded + 1));
+    expect(patcher.graph.nodes.last.type, Obj.dDac);
+    await ctrlZ();
+    expect(patcher.graph.nodes, hasLength(seeded));
+
+    // ── 6) an unknown name is refused inline, and the box stays open ─────────
     await doubleClick();
     await type('zzzz');
     await press(LogicalKeyboardKey.enter);
@@ -164,7 +178,7 @@ void main() {
     await ctrlZ();
     expect(patcher.graph.nodes, hasLength(seeded));
 
-    // ── 6) Escape leaves the canvas exactly as it was ────────────────────────
+    // ── 7) Escape leaves the canvas exactly as it was ────────────────────────
     await doubleClick();
     await type('sine 220');
     await press(LogicalKeyboardKey.escape);
