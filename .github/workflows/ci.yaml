@@ -1,5 +1,24 @@
 name: CI
 
+# Supply-chain rules for every workflow in this folder (issue #396):
+#
+#   * Every `uses:` is pinned to a full 40-char commit SHA, with the human
+#     version in a trailing comment. A tag like `@v4` is a moving pointer the
+#     upstream owner can repoint at any commit; these jobs hold SONAR_TOKEN and
+#     a GITHUB_TOKEN, so an unreviewed retag would run with our secrets. The
+#     comment is what you read; the SHA is what runs. First-party `actions/*`
+#     are pinned on the same terms — being first-party changes who would have
+#     to be compromised, not what a compromise could do.
+#     To bump one: `gh api repos/<owner>/<repo>/git/ref/tags/<tag>` (deref
+#     annotated tags via `git/tags/<sha>`), then update SHA *and* comment
+#     together.
+#   * phi's own resolve runs `flutter pub get --enforce-lockfile`, so a PR whose
+#     `pubspec.yaml` moved without a regenerated `pubspec.lock` fails here
+#     (exit 65, "Unable to satisfy `pubspec.yaml` using `pubspec.lock`")
+#     instead of silently building against a set of versions nobody reviewed.
+#     phi commits `pubspec.lock`; dart-yse gitignores its own, so the sibling
+#     `dart pub get` below stays unenforced until that repo commits one.
+
 on:
   push:
     branches: [main, develop]
@@ -20,32 +39,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout phi
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: phi
           fetch-depth: 0
 
       - name: Checkout dart-yse (path dep sibling)
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: yvanvds/dart-yse
           path: dart-yse
           ref: main
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: '3.38.3'
           channel: stable
           cache: true
 
+      # Unenforced on purpose: dart-yse gitignores its `pubspec.lock`, so there
+      # is nothing to enforce against. Give that repo a committed lockfile and
+      # this becomes `dart pub get --enforce-lockfile` too.
       - name: Resolve dart-yse deps
         working-directory: dart-yse
         run: dart pub get
 
+      # --enforce-lockfile makes the committed `pubspec.lock` the contract:
+      # pub resolves to exactly those versions and exits 65 if `pubspec.yaml`
+      # asks for anything the lockfile cannot satisfy. A PR that edits
+      # `pubspec.yaml` without regenerating the lock fails right here.
       - name: Resolve phi deps
         working-directory: phi
-        run: flutter pub get
+        run: flutter pub get --enforce-lockfile
 
       - name: Format check
         working-directory: phi
@@ -60,7 +86,7 @@ jobs:
         run: flutter test --coverage
 
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: coverage
           path: phi/coverage/lcov.info
@@ -68,7 +94,7 @@ jobs:
           retention-days: 7
 
       - name: SonarCloud scan
-        uses: SonarSource/sonarcloud-github-action@v3
+        uses: SonarSource/sonarcloud-github-action@383f7e52eae3ab0510c3cb0e7d9d150bbaeab838 # v3.1.0
         with:
           projectBaseDir: phi
         env:
@@ -94,31 +120,38 @@ jobs:
       YSE_ENGINE_VERSION: v2.2.0
     steps:
       - name: Checkout phi
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: phi
 
       - name: Checkout dart-yse (path dep sibling)
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: yvanvds/dart-yse
           path: dart-yse
           ref: main
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: '3.38.3'
           channel: stable
           cache: true
 
+      # Unenforced on purpose: dart-yse gitignores its `pubspec.lock`, so there
+      # is nothing to enforce against. Give that repo a committed lockfile and
+      # this becomes `dart pub get --enforce-lockfile` too.
       - name: Resolve dart-yse deps
         working-directory: dart-yse
         run: dart pub get
 
+      # --enforce-lockfile makes the committed `pubspec.lock` the contract:
+      # pub resolves to exactly those versions and exits 65 if `pubspec.yaml`
+      # asks for anything the lockfile cannot satisfy. A PR that edits
+      # `pubspec.yaml` without regenerating the lock fails right here.
       - name: Resolve phi deps
         working-directory: phi
-        run: flutter pub get
+        run: flutter pub get --enforce-lockfile
 
       - name: Build Windows app (release)
         working-directory: phi
@@ -154,7 +187,7 @@ jobs:
           Get-ChildItem "$bundle\*.dll" | Select-Object -ExpandProperty Name
 
       - name: Upload Windows build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: phi-windows-x64
           path: phi/build/windows/x64/runner/Release
