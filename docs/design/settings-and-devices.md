@@ -91,11 +91,22 @@ Confirmed against the bridge; no engine work is required for v1:
 
 - **Enumeration:** `System.devices` → `Device` descriptors: name, host
   name, input/output channel names, supported sample rates and buffer
-  sizes, default buffer size, latencies.
+  sizes, default buffer size, latencies. **Only `init()` enumerates** —
+  the engine builds the list while opening a device and never on its own,
+  so `System.devices` is empty for the whole of an `initOffline()` session
+  (measured against libyse 2.4.0: 0 devices offline, 19 after `init()` —
+  issue #403, dart-yse #51).
 - **Open/close:** `System.initOffline()` boots the engine with *no*
-  device; `openDevice(DeviceSetup, layout:)` opens a chosen one;
-  `closeCurrentDevice()` + `openDevice` swaps live — no engine restart.
-  `System.defaultDevice` names the platform default.
+  device — and, per the point above, no device *list* either, so it is a
+  headless-rendering path, not a boot path; `openDevice(DeviceSetup,
+  layout:)` opens a chosen one; `closeCurrentDevice()` + `openDevice`
+  swaps live — no engine restart. `System.defaultDevice` names the
+  platform default.
+- **Two engine limits to design around** (both measured, both filed):
+  a refused `openDevice` is reported as a log line, not a status, so the
+  bridge confirms an open by reading back the live state (dart-yse #52);
+  and the session sample rate is locked at `init()`, so a stored rate
+  override cannot reach the device (dart-yse #53).
 - **Live state:** `activeSampleRate`, `activeBufferSize`, output latency
   in samples — the diagnostics section reads these, not the stored
   settings (they can legitimately differ).
@@ -109,13 +120,23 @@ Confirmed against the bridge; no engine work is required for v1:
 
 ## 5. Apply semantics
 
-**Boot.** If `audio.outputDevice` is set: `initOffline()` → resolve the
-stored host+name against `devices` → `openDevice` with overrides and
-layout. If unset: `init()` (platform default), as today. If the stored
-device is **missing or fails to open**: fall back to the default device,
-show a non-blocking notice, and **keep the stored preference intact** — a
-performer whose interface wasn't plugged in yet must not lose their
-configuration to a helpful fallback.
+**Boot.** Always `init()` first. If `audio.outputDevice` is set, then:
+resolve the stored host+name against `devices` → `openDevice` with
+overrides and layout. If unset: nothing further — `init()` already opened
+the platform default, as today. If the stored device is **missing or fails
+to open**: fall back to the default device, show a non-blocking notice, and
+**keep the stored preference intact** — a performer whose interface wasn't
+plugged in yet must not lose their configuration to a helpful fallback.
+
+> This originally read `initOffline()` → resolve → `openDevice`, so that
+> boot never opened a device the performer didn't ask for. It cannot work:
+> an offline engine has no device list to resolve against (§4), so *every*
+> stored device fell through to "not available" and then to "no audio" —
+> the stored-device boot was silent on real hardware while green in every
+> test (#403). The cost of `init()` first is that the platform default is
+> open for a moment before the swap; nothing is playing at boot, so it is
+> inaudible. Revisit if the engine grows an enumerate-without-opening call
+> (dart-yse #51).
 
 **Live change.** Picking a device / rate / buffer in the window applies
 immediately (`closeCurrentDevice` + `openDevice`). A brief audio dropout
@@ -218,9 +239,9 @@ Roughly seven issues, in dependency order:
 3. Gateway device surface: pure audio-device descriptors +
    `openAudioDevice` + active state on `YseGateway` (Real/Fake); MIDI
    input enumeration/open on `MidiGateway`.
-4. Boot-from-settings in `PhiEngine`: stored device → `initOffline` +
-   `openDevice`, fallback + notice, auto-reconnect on; keep-preference
-   rule tested.
+4. Boot-from-settings in `PhiEngine`: stored device → `init` +
+   `openDevice` (see the §5 note on why not `initOffline`), fallback +
+   notice, auto-reconnect on; keep-preference rule tested.
 5. Design system: `PhiSelect` dropdown + checklist row, token-first.
 6. Settings dialog shell + AUDIO section (device/rate/buffer/layout,
    live read-back, immediate apply).

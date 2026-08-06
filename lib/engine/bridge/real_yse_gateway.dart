@@ -131,6 +131,19 @@ class RealYseGateway implements YseGateway {
     try {
       _system.closeCurrentDevice();
       _system.openDevice(setup, layout: _channelType(layout));
+      // The engine reports a refused open as a log line, not a status: an
+      // `openDevice` that hit a locked session rate, an unusable target, or a
+      // PortAudio error returns `YSE_OK` all the same (dart-yse #52, measured
+      // against libyse 2.4.0). `activeSampleRate` is written from the stream's
+      // own `open` flag, so it is the one honest answer to "did a device come
+      // up?" — a zero here means nothing did, and the caller's documented
+      // fallback (design §5) must run instead of the app booting silent.
+      if (_system.activeSampleRate == 0) {
+        throw AudioDeviceException(
+          'engine reported no open device after opening "${device.name}" on '
+          '"${device.hostName}" — it refused the device without an error',
+        );
+      }
     } on YseException catch (e) {
       // Keep the FFI exception type inside the bridge (project boundary): the
       // caller only ever sees the bridge-level failure.

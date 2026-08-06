@@ -11,12 +11,18 @@ import 'audio_device_state.dart';
 /// the production implementation.
 abstract interface class YseGateway {
   /// Initialise the audio engine and open the default device.
+  ///
+  /// This is also what enumerates the hardware: [audioDevices] is empty until an
+  /// `init()` has run (issue #403), so every boot path goes through here.
   void init();
 
-  /// Initialise the engine **without** opening any audio device — the boot path
-  /// (design `docs/design/settings-and-devices.md` §5) taken when a stored
-  /// device must be resolved and opened explicitly. Enumerate with
-  /// [audioDevices] and open one with [openAudioDevice].
+  /// Initialise the engine **without** opening any audio device — headless
+  /// rendering and benchmarks.
+  ///
+  /// **Not a boot path.** An offline session sees **no devices at all**:
+  /// [audioDevices] returns an empty list, and the engine refuses to open one
+  /// (measured against libyse 2.4.0 — issue #403, dart-yse #51). A later [init]
+  /// does not repair it either; the engine ignores a second init until [close].
   void initOffline();
 
   /// Shut the engine down.
@@ -34,7 +40,9 @@ abstract interface class YseGateway {
 
   /// The audio devices the engine can currently see, as pure FFI-free
   /// [AudioDeviceDescriptor]s (design §4) — the list the settings window builds
-  /// its output-device dropdown from. Available after [init] / [initOffline].
+  /// its output-device dropdown from. Empty until [init] has run — the engine
+  /// enumerates as part of opening a device, never on its own, so an
+  /// [initOffline] session sees nothing (issue #403).
   List<AudioDeviceDescriptor> audioDevices();
 
   /// Open an audio device, or live-swap to it if one is already open
@@ -47,6 +55,9 @@ abstract interface class YseGateway {
   /// device or the engine refuses to open it — the caller reverts to the
   /// previous working device and shows a notice (design §5). The stored
   /// preference is the caller's concern, never dropped by a failed open.
+  /// "Refuses" includes the engine's *silent* refusals: it reports a failed open
+  /// as a log line rather than a status (dart-yse #52), so an implementation
+  /// must confirm a device actually came up before returning normally.
   void openAudioDevice(
     AudioDeviceDescriptor? descriptor, {
     double? rate,

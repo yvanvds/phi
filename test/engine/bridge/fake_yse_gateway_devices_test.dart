@@ -15,18 +15,76 @@ void main() {
   setUp(() => gateway = FakeYseGateway());
   tearDown(() => gateway.dispose());
 
+  // Enumeration is a side effect of *opening* a device: the engine's device
+  // manager only runs `updateDeviceList()` on the `init(true)` path, and the
+  // accessor behind `System.devices` has no lazy refresh (issue #403). Measured
+  // against libyse 2.4.0 on Windows — `initOffline()` → 0 devices, `init()` →
+  // 19 on the same machine. `real_yse_gateway_enumeration_contract_test.dart`
+  // holds the engine itself to this; these hold the fake to the same shape, so
+  // the two cannot drift apart the way they did before this issue.
   group('enumeration', () {
-    test('audioDevices returns the fabricated list', () {
+    test('audioDevices is empty before the engine has been initialised', () {
+      expect(gateway.audioDevices(), isEmpty);
+    });
+
+    test('init enumerates the hardware', () {
+      gateway.init();
+
       final devices = gateway.audioDevices();
       expect(devices, hasLength(2));
       expect(devices.map((d) => d.hostName), ['WASAPI', 'ASIO']);
       expect(devices.first.sampleRates, contains(48000.0));
     });
 
-    test('initOffline records the offline boot path and initialises', () {
+    test('initOffline enumerates nothing — an offline session sees no '
+        'hardware at all', () {
       gateway.initOffline();
+
       expect(gateway.calls, contains('initOffline'));
       expect(gateway.initialised, isTrue);
+      expect(gateway.audioDevices(), isEmpty);
+      // …and the fabricated hardware is still there to be enumerated later —
+      // it is the engine that has not looked, not the machine that is bare.
+      expect(gateway.devices, hasLength(2));
+    });
+
+    test('an offline session cannot open a device either', () {
+      gateway.initOffline();
+
+      // Nothing to resolve against, so even the platform default is refused —
+      // which is exactly how the stored-device boot path used to end in
+      // silence (issue #403).
+      expect(
+        () => gateway.openAudioDevice(null),
+        throwsA(isA<AudioDeviceException>()),
+      );
+      expect(
+        () => gateway.openAudioDevice(gateway.devices.first),
+        throwsA(isA<AudioDeviceException>()),
+      );
+    });
+
+    test('a second init does not repair an offline session', () {
+      // `system::initShared()` early-returns on `Global().active`, so the
+      // engine ignores an `init()` that follows an `initOffline()` — measured:
+      // the list stays at 0. Only a `close()` first re-enumerates.
+      gateway.initOffline();
+      gateway.init();
+
+      expect(gateway.audioDevices(), isEmpty);
+    });
+
+    test('the enumerated list survives close and a later offline session', () {
+      // Measured: after one `init()` the engine's device vector stays filled
+      // across `close()` and a subsequent `initOffline()` in the same process.
+      // That is why the defect never showed in an in-process restart — only a
+      // cold boot went silent.
+      gateway.init();
+      gateway.close();
+      expect(gateway.audioDevices(), hasLength(2));
+
+      gateway.initOffline();
+      expect(gateway.audioDevices(), hasLength(2));
     });
   });
 
@@ -88,7 +146,7 @@ void main() {
     });
 
     test('close releases an explicitly opened device too', () {
-      gateway.initOffline();
+      gateway.init();
       gateway.openAudioDevice(gateway.devices[1], rate: 96000, buffer: 256);
       expect(gateway.activeAudioState().sampleRate, 96000);
 
@@ -211,14 +269,14 @@ void main() {
     });
 
     test('close leaves the call record and the opened-device record alone', () {
-      gateway.initOffline();
+      gateway.init();
       gateway.openAudioDevice(gateway.devices.first);
       gateway.close();
 
       // These record what a *test* asked for, not live engine state.
       expect(gateway.openedDevice, gateway.devices.first);
       expect(gateway.calls.last, 'close');
-      expect(gateway.calls, contains('initOffline'));
+      expect(gateway.calls, contains('init'));
     });
 
     test('init after close brings the default device back up', () {
@@ -247,6 +305,10 @@ void main() {
   });
 
   group('openAudioDevice — success', () {
+    // Every open runs on an enumerated engine, because that is the only kind
+    // there is: the device list exists because `init()` opened one (#403).
+    setUp(() => gateway.init());
+
     test('a null descriptor opens the platform default (first device)', () {
       gateway.openAudioDevice(null);
       expect(gateway.openedDevice, gateway.devices.first);
@@ -286,6 +348,8 @@ void main() {
   });
 
   group('openAudioDevice — failure paths', () {
+    setUp(() => gateway.init());
+
     test('an unknown descriptor throws (device unplugged / renamed)', () {
       const missing = AudioDeviceDescriptor(name: 'Ghost', hostName: 'ASIO');
       expect(
