@@ -302,6 +302,8 @@ class AudioDeviceCoordinator {
   /// actually wants, then settle for the platform default. Quiet by design — a
   /// run makes up to eight of these, and eight "unsupported sample rate" toasts
   /// while the audio is already gone would bury the one message that matters.
+  /// The one exception is the settle itself: landing on the default while a
+  /// *named* device is still wanted says so, once (issue #413, below).
   ///
   /// Returns `true` as soon as a device is open, which is what ends the run.
   /// "Open" here is the engine's own answer: [_open] only reports success once
@@ -314,6 +316,22 @@ class AudioDeviceCoordinator {
     // be missing while the built-in output is perfectly available. Skipped when
     // it *is* what was asked for, so an attempt is never spent twice.
     if (intended != const AudioSettings() && _reopen(const AudioSettings())) {
+      // Settled for the default while a *named* device is still wanted: the run
+      // stands down here and nothing keeps watching for that interface (design
+      // §5, issue #413), so this notice is the only thing standing between the
+      // performer and a set finished on the built-in speakers under a green
+      // chip. Said once, at the settle — never per attempt. A `null` name means
+      // the default (with or without overrides) was all that was ever asked
+      // for, in which case landing on it is the intended outcome, not a
+      // substitution worth announcing.
+      final wanted = intended?.outputDevice;
+      if (wanted != null) {
+        _notify(
+          AudioNoticeKind.recoveredOnDefault,
+          'Audio came back on the default device — "$wanted" is still '
+          'unavailable. Re-pick it in Settings › Audio once it returns.',
+        );
+      }
       return true;
     }
     return false;

@@ -647,7 +647,7 @@ void main() {
     });
 
     test('it settles for the platform default when the chosen device stays '
-        'missing', () {
+        'missing — and says so once (#413)', () {
       fakeAsync((async) {
         loseEverything();
 
@@ -663,6 +663,47 @@ void main() {
         expect(coordinator.current, isNotNull);
         expect(coordinator.current?.outputDevice, isNull); // the default
         expect(coordinator.recovery.retrying, isFalse);
+
+        // The settle is announced (issue #413): the run stands down here and
+        // nothing keeps watching for Beta, so without this one notice the chip
+        // would go green and the set would finish on the wrong output with
+        // nobody told. It names the device that is still missing and points at
+        // the one-click way back.
+        expect(notices.single.kind, AudioNoticeKind.recoveredOnDefault);
+        expect(notices.single.message, contains('default device'));
+        expect(notices.single.message, contains('"Beta"'));
+        expect(notices.single.message, contains('Settings'));
+
+        // Said once, at the settle — not again on later ticks or runs.
+        async.elapse(const Duration(minutes: 5));
+        expect(notices, hasLength(1));
+
+        coordinator.dispose();
+      });
+    });
+
+    test('settling for the default when only the default was ever wanted is '
+        'the intended outcome — no notice (#413)', () {
+      fakeAsync((async) {
+        // The default device is enumerated but held by another process at
+        // boot, so the engine comes up device-less and a run is armed with
+        // nothing named as intended. When the default frees up, landing on it
+        // is exactly what was wanted — announcing a substitution would be
+        // noise.
+        gateway.devices = const [alpha];
+        gateway.unopenableDeviceNames.add('Alpha');
+        coordinator.boot();
+        expect(coordinator.current, isNull);
+        expect(coordinator.recovery.retrying, isTrue);
+        notices.clear();
+
+        gateway.unopenableDeviceNames.clear();
+        async.elapse(const Duration(seconds: 2));
+
+        expect(gateway.activeAudioState().sampleRate, 48000);
+        expect(coordinator.current, const AudioSettings());
+        expect(coordinator.recovery.retrying, isFalse);
+        expect(notices, isEmpty);
 
         coordinator.dispose();
       });

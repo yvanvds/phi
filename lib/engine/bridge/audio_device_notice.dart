@@ -54,4 +54,13 @@ enum AudioNoticeKind {
   /// No audio device could be opened at all, not even the platform default — the
   /// engine is running without audio output.
   noAudioDevice,
+
+  /// A recovery run brought audio back on the **platform default** while the
+  /// device the performer chose is still missing (issue #413). Raised exactly
+  /// once, when the run settles: recovery stands down at that point and nothing
+  /// keeps watching for the preferred interface (design §5), so without this
+  /// notice the chip would simply go green and a set could finish on the
+  /// built-in speakers with nobody told. The stored preference is untouched —
+  /// re-picking the device in Settings › Audio once it returns is the way back.
+  recoveredOnDefault,
 }

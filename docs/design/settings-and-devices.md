@@ -228,8 +228,13 @@ that came up device-less — it arms a **bounded recovery run**:
   "(gave up after 8 attempts — choose one in Settings › Audio)".
 - **What it does not do.** Once recovery has settled for the platform
   default, it does not keep watching for the preferred interface to come
-  back; the stored preference is untouched, so re-picking it is one click
-  (issue #413).
+  back — a background poll that hot-swaps the output would mean an
+  unannounced dropout mid-set. Instead it **says so, once**: settling on
+  the default while a named device is still wanted raises a
+  `recoveredOnDefault` notice ("Audio came back on the default device —
+  "Alpha" is still unavailable…"), so the green chip never hides a set
+  finishing on the wrong output (issue #413). The stored preference is
+  untouched, so re-picking the device is one click in Settings › Audio.
 - **What it cannot do.** Reach a device the engine never enumerated
   (§4, issue #412). Attempts re-open *cached* descriptors, so recovery
   covers the case that matters — an interface that was there at startup,
