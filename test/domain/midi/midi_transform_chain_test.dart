@@ -148,9 +148,36 @@ void main() {
       expect(chain.transforms[0].label, 'b');
       expect(notifications, 2);
 
-      chain.reorder(0, 2);
+      chain.reorder(0, 1);
       expect(chain.transforms.map((t) => t.label), ['c', 'b']);
       expect(notifications, 3);
+    });
+
+    test('reorder takes the final index, post-removal (issue #427)', () {
+      // `to` speaks `onReorderItem`'s contract: the index the item ends up at
+      // in the resulting list, already adjusted for the removal at `from`.
+      final chain = MidiTransformChain(
+        source: _clip(const []),
+        transforms: const [
+          TransposeTransform(semitones: 1, label: 'a'),
+          TransposeTransform(semitones: 2, label: 'b'),
+          TransposeTransform(semitones: 3, label: 'c'),
+        ],
+      );
+
+      // Move the head to the tail — the classic drag-down-past-the-removed-
+      // slot case: no caller-side `- 1` adjustment.
+      chain.reorder(0, 2);
+      expect(chain.transforms.map((t) => t.label), ['b', 'c', 'a']);
+
+      // Move the tail back to the head (upward moves need no adjustment in
+      // either contract).
+      chain.reorder(2, 0);
+      expect(chain.transforms.map((t) => t.label), ['a', 'b', 'c']);
+
+      // An out-of-range target clamps to the end rather than throwing.
+      chain.reorder(0, 99);
+      expect(chain.transforms.map((t) => t.label), ['b', 'c', 'a']);
     });
 
     test('inversion + spectral mapping slot into the chain and compose', () {

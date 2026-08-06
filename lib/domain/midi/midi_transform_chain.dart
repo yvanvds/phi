@@ -104,11 +104,15 @@ class MidiTransformChain extends ChangeNotifier {
     _bump();
   }
 
+  /// Moves the transform at [from] so it ends up at index [to] in the
+  /// resulting list — [to] is the item's **final position**, already adjusted
+  /// for the removal at [from]. This matches `ReorderableListView.onReorderItem`
+  /// (Flutter ≥ 3.44), so the sidebar wires the callback straight through
+  /// (issue #427). [to] is clamped to `[0, length - 1]`.
   void reorder(int from, int to) {
     if (from == to) return;
     final t = _transforms.removeAt(from);
-    final target = to > from ? to - 1 : to;
-    _transforms.insert(target, t);
+    _transforms.insert(to.clamp(0, _transforms.length), t);
     _bump();
   }
 
