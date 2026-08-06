@@ -236,6 +236,38 @@ void main() {
       controller.dispose();
     });
 
+    test('disabling releases a still-sounding click voice (#432)', () {
+      final synthGateway = FakeSynthGateway();
+      final synth = synthGateway.materialiseSynth(
+        const SineSynth(),
+        channel: MetronomeController.clickSynthChannel,
+      );
+      final controller = MetronomeController(
+        gateway: gateway,
+        domains: () => registry,
+        sessionTempo: () => 120,
+        domainName: 'drum',
+        clickSynth: () => synth,
+      );
+
+      controller.setEnabled(true);
+      // A click note-on has been dispatched to the voice, its note-off still
+      // pending — the mid-click state a stop can land in.
+      synth.noteOn(84, velocity: 0.6);
+      final fake = synth as FakeMaterialisedSynth;
+      expect(fake.heldNotes, isNotEmpty);
+
+      controller.setEnabled(false);
+      expect(
+        fake.heldNotes,
+        isEmpty,
+        reason: 'disabling must release the sounding click voice',
+      );
+      expect(fake.noteLog, contains('allNotesOff'));
+
+      controller.dispose();
+    });
+
     test('toggle flips enabled and notifies', () {
       final controller = build(domainName: 'drum');
       var notifications = 0;

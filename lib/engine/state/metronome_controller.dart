@@ -201,6 +201,14 @@ class MetronomeController extends ChangeNotifier {
 
   void _stopClick() {
     _transport?.stop();
+    // Stopping the transport halts dispatch, but a click note-on already
+    // delivered keeps its voice sounding when the pending note-off never
+    // arrives (issue #432). Release every held click voice — the same
+    // all-notes-off safety net panic uses (issue #264) — before dropping the
+    // connection, so disabling the metronome silences it immediately no matter
+    // where in the click pattern the stop lands. Guarded on [_connected] so a
+    // never-materialised click synth is not minted just to be silenced.
+    if (_connected) _clickSynth?.call()?.allNotesOff();
     _disconnectSynth();
   }
 

@@ -16,6 +16,7 @@ import '../test/domain/project/test_doubles/fake_journal_store.dart';
 import '../test/domain/project/test_doubles/fake_project_directory_picker.dart';
 import '../test/domain/project/test_doubles/fake_project_store.dart';
 import '../test/engine/test_doubles/fake_midi_gateway.dart';
+import '../test/engine/test_doubles/fake_synth_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
 
 /// End-to-end proof of the metronome (issue #262) through the real workstation.
@@ -32,9 +33,11 @@ void main() {
     tester,
   ) async {
     final midiGateway = FakeMidiGateway();
+    final synthGateway = FakeSynthGateway();
     final engine = PhiEngine(
       FakeYseGateway(),
       midiGateway: midiGateway,
+      synthGateway: synthGateway,
       telemetryInterval: const Duration(milliseconds: 20),
     );
     final session = SessionState();
@@ -101,13 +104,24 @@ void main() {
     expect(click.loopBeats, 3);
     expect(click.events, hasLength(3));
 
-    // Dismiss the popover, then turn the click off — the session stops.
+    // Dismiss the popover, then turn the click off — the session stops. The
+    // stop lands mid-click: a click note-on has reached the reserved click
+    // voice and its note-off is still pending (issue #432).
     await tester.tapAt(const Offset(20, 400));
     await tester.pumpAndSettle();
+    final clickSynth = synthGateway.synths.singleWhere(
+      (s) => s.channel == MetronomeController.clickSynthChannel,
+    );
+    clickSynth.noteOn(84, velocity: 0.6);
     await tester.tap(find.byKey(MetronomeControl.toggleKey));
     await tester.pumpAndSettle();
     expect(metronome().enabled, isFalse);
     expect(click.isPlaying, isFalse);
+    expect(
+      clickSynth.heldNotes,
+      isEmpty,
+      reason: 'toggling the metronome off must silence a sounding click',
+    );
 
     session.dispose();
     await engine.dispose();
