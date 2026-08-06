@@ -1,20 +1,26 @@
 name: Integration tests
 
 # Why this is a separate workflow, and why it is *not* on every develop PR
-# (issue #391, cost rationale from issue #12):
+# (issue #391, cost rationale from issue #12, post-merge model from issue #417):
 #
 # `integration_test/` is format-checked and analyzed by ci.yaml, but nothing
 # there ever executes it — `flutter test` only walks `test/`. The suite also
 # needs a real Flutter device (`-d windows`), so it cannot be bolted onto the
 # ubuntu-latest analyze job; it needs windows-latest, which GitHub bills at 2x.
 #
-# The trade-off chosen: a nightly run on `develop` plus every release PR into
-# `main`, instead of every PR. Everyday feature PRs to `develop` stay cheap
-# (same tier as the `build-windows` job in ci.yaml), drift is caught within a
-# day by the nightly, and nothing can reach `main` without a green end-to-end
-# sweep. The gap this accepts: an e2e break can sit on `develop` for up to
-# 24 hours. Two ways to close it on demand: label a develop PR `ci:integration`,
-# or dispatch this workflow manually.
+# The trade-off chosen (#417): the sweep runs on every *push to develop* —
+# i.e. right after each merge — instead of blocking the PR that caused it.
+# Feature PRs stay at ci.yaml's cheap gate; the full sweep happens minutes
+# later in the background, and because merges land sequentially, a red sweep
+# indicts exactly one merge. Nobody consumes develop yet (#417), so a red
+# develop for an hour is information, not an outage. Nothing can reach `main`
+# without a green pre-merge sweep on the release PR.
+#
+# On-demand pre-merge coverage still exists: label a develop PR
+# `ci:integration` (worth it when the PR rewires this plumbing itself), or
+# dispatch the workflow manually. The nightly cron stays for one narrow job:
+# catching breaks where the world moved and the code didn't (runner image,
+# toolchain) — a push-triggered sweep never sees those.
 #
 # Two mechanics worth knowing:
 #   * One `flutter test integration_test` run does NOT reliably drive the whole
@@ -40,7 +46,9 @@ on:
     branches: [main, develop]
     types: [opened, synchronize, reopened, labeled]
   push:
-    branches: [main]
+    # develop: the post-merge sweep (#417) — every merge gets the full suite
+    # without ever blocking a PR. main: belt-and-braces on release.
+    branches: [main, develop]
   workflow_dispatch:
     inputs:
       filter:
@@ -49,8 +57,11 @@ on:
         default: '*'
 
 concurrency:
-  group: integration-${{ github.ref }}
-  cancel-in-progress: true
+  # PRs: a superseded commit cancels its older run. Pushes: every merge's
+  # sweep gets its own group (keyed by sha) and runs to completion —
+  # cancelling one would erase the only run that can indict its merge (#417).
+  group: integration-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   integration:
