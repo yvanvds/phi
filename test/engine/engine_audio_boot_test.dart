@@ -44,7 +44,9 @@ void main() {
     expect(engine.audioRecovery.retrying, isFalse);
     expect(engine.audioRecovery.gaveUp, isFalse);
     // Before `start()` there is no supervisor to ask at all.
-    expect(PhiEngine(FakeYseGateway()).audioRecovery, AudioRecoveryStatus.idle);
+    final unstarted = FakeYseGateway();
+    addTearDown(unstarted.dispose);
+    expect(PhiEngine(unstarted).audioRecovery, AudioRecoveryStatus.idle);
   });
 
   test('the launch sequence opens the stored device', () {
