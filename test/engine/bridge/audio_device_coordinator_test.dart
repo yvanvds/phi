@@ -348,6 +348,54 @@ void main() {
       expect(notices.single.kind, AudioNoticeKind.switchReverted);
     });
 
+    test('a missing target with the open device just gone asks the engine — '
+        'neither current nor the notice names a device that is not there '
+        '(#416)', () {
+      const alpha = AudioDeviceDescriptor(
+        name: 'Alpha',
+        hostName: 'WASAPI',
+        sampleRates: [48000.0],
+        bufferSizes: [256],
+        defaultBufferSize: 256,
+        outputLatency: 256,
+      );
+      gateway.devices = const [alpha];
+      applyStored(
+        const AudioSettings(outputHost: 'WASAPI', outputDevice: 'Alpha'),
+      );
+      expect(coordinator.current?.outputDevice, 'Alpha');
+      notices.clear();
+
+      // Alpha is pulled out *between telemetry ticks*: the engine is already on
+      // nothing, but no `observeLiveState` has run yet, so [current] still
+      // names Alpha — the one moment where the two disagree.
+      gateway.devices = const [];
+      expect(gateway.activeAudioState(), AudioDeviceState.none);
+
+      // A switch to a device that was never enumerated — a hand-edited
+      // settings file, or a preference carried over from another machine —
+      // takes the missing-target exit before any open is attempted.
+      final ok = coordinator.switchTo(
+        const AudioSettings(outputHost: 'ASIO', outputDevice: 'Ghost'),
+      );
+
+      expect(ok, isFalse);
+      // The lie issue #408 closed on the failed-open exit, in the branch it
+      // didn't touch: "staying on Alpha" while the engine is on nothing. The
+      // exit re-reads the live state first, so message and [current] follow
+      // the engine rather than the stale cache.
+      expect(coordinator.current, isNull);
+      expect(notices.single.kind, AudioNoticeKind.switchReverted);
+      expect(
+        notices.single.message,
+        contains('no audio output device is open'),
+      );
+      expect(notices.single.message, isNot(contains('Alpha')));
+      // …and having learned nothing is open, it arms recovery now instead of
+      // leaving the loss for the next tick to discover.
+      expect(coordinator.recovery.retrying, isTrue);
+    });
+
     test('a failed open reverts to the previous working device (§9.3)', () {
       gateway.devices = const [
         AudioDeviceDescriptor(

@@ -162,6 +162,17 @@ class AudioDeviceCoordinator {
     // launch, where "the current device" is the platform default the engine came
     // up on and the performer has picked nothing yet (issue #405).
     if (desired.outputDevice != null && descriptor == null) {
+      // [current] can be one tick stale: the open device may have vanished
+      // since the last telemetry pass, and `observeLiveState` won't have
+      // corrected it yet. This exit — unlike its failed-open sibling below —
+      // used to trust the cache anyway, so the notice said "staying on Alpha"
+      // while the engine was on nothing: the exact lie issue #408 closed, in
+      // the one branch it didn't touch (issue #416). Ask the engine first, so
+      // the message and [current] cannot disagree with it.
+      if (_current != null &&
+          _gateway.activeAudioState() == AudioDeviceState.none) {
+        _current = null;
+      }
       final current = _current;
       _notify(
         AudioNoticeKind.switchReverted,
