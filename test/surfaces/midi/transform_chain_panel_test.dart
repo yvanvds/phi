@@ -219,6 +219,61 @@ void main() {
 
       chain.dispose();
     });
+
+    testWidgets('dragging down past the removed slot has no off-by-one', (
+      tester,
+    ) async {
+      // The classic `onReorderItem` migration trap (issue #427): dropping the
+      // first chip below the last reports a raw drop slot of 3, which the
+      // framework adjusts to the post-removal final index 2 before calling
+      // `chain.reorder`. A stale pre-removal contract would land the chip one
+      // slot short (['b', 'a', 'c']).
+      final chain = oneNoteChain(
+        transforms: const [
+          TransposeTransform(semitones: 1, label: 'a'),
+          TransposeTransform(semitones: 2, label: 'b'),
+          TransposeTransform(semitones: 3, label: 'c'),
+        ],
+      );
+      await pump(tester, chain);
+
+      final handles = find.byIcon(Icons.drag_indicator);
+      final rowExtent =
+          tester.getCenter(handles.at(1)).dy -
+          tester.getCenter(handles.at(0)).dy;
+
+      await tester.drag(handles.first, Offset(0, rowExtent * 4));
+      await tester.pumpAndSettle();
+
+      expect(chain.transforms.map((t) => t.label), ['b', 'c', 'a']);
+
+      chain.dispose();
+    });
+
+    testWidgets('dragging a chip up needs no index adjustment', (tester) async {
+      // Upward moves report the same index under both contracts — a shim that
+      // blindly adjusted every move would break this direction.
+      final chain = oneNoteChain(
+        transforms: const [
+          TransposeTransform(semitones: 1, label: 'a'),
+          TransposeTransform(semitones: 2, label: 'b'),
+          TransposeTransform(semitones: 3, label: 'c'),
+        ],
+      );
+      await pump(tester, chain);
+
+      final handles = find.byIcon(Icons.drag_indicator);
+      final rowExtent =
+          tester.getCenter(handles.at(1)).dy -
+          tester.getCenter(handles.at(0)).dy;
+
+      await tester.drag(handles.at(2), Offset(0, -rowExtent * 4));
+      await tester.pumpAndSettle();
+
+      expect(chain.transforms.map((t) => t.label), ['c', 'a', 'b']);
+
+      chain.dispose();
+    });
   });
 
   group('chip context menu', () {
