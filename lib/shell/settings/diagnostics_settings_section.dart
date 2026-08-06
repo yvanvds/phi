@@ -9,6 +9,7 @@ import '../../design/tokens/phi_spacing.dart';
 import '../../design/tokens/phi_type.dart';
 import '../../engine/engine.dart';
 import '../../engine/state/engine_telemetry.dart';
+import '../diagnostics/diagnostics_report.dart';
 
 /// The DIAGNOSTICS section of the settings dialog (design
 /// `docs/design/settings-and-devices.md` §6): read-only rows the performer can
@@ -44,13 +45,11 @@ class DiagnosticsSettingsSection extends StatelessWidget {
 
   String get _libraryPath => engine.engineLibraryPath ?? _pathUnset;
 
-  String get _activeDevice {
-    final audio = engine.activeAudioSettings;
-    final device = audio.outputDevice;
-    if (device == null) return 'System default';
-    final host = audio.outputHost;
-    return host == null ? device : '$device · $host';
-  }
+  /// The device actually open, formatted by the reporter so this row and the
+  /// pasted bundle always agree — including the "no device open" reading after a
+  /// total loss, where the engine is on nothing at all (issue #408).
+  String get _activeDevice =>
+      DiagnosticsReport.describeDevice(engine.activeAudioSettings);
 
   /// The paste-ready block the copy button writes to the clipboard.
   String _report(int drops) =>

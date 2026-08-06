@@ -1621,7 +1621,12 @@ class PhiEngine {
   /// The audio settings describing the device currently open — what a failed
   /// live switch reverts to. Reads the coordinator's live state, not the stored
   /// preference (they can differ after a boot fallback, design §5).
-  AudioSettings get activeAudioSettings => _audio.current;
+  ///
+  /// `null` when **no device is open at all** (issue #408): a total loss where
+  /// the switch and its revert both failed, or a boot on a machine whose engine
+  /// came up device-less. Render it as "no device" — never fall back to the last
+  /// known name, which is the stale reading this nullability exists to prevent.
+  AudioSettings? get activeAudioSettings => _audio.current;
 
   /// The audio devices the engine can currently see, as pure FFI-free
   /// [AudioDeviceDescriptor]s (design §4) — the list the settings dialog's AUDIO

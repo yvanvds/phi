@@ -136,7 +136,14 @@ main + app          (orchestration)
     single `AppSettingsController` (§7), on failure the coordinator reverts to the
     previous working device and the picker snaps back (§9.3). `PhiEngine` exposes
     `audioDevices()` / `activeAudioState()` so the dialog reaches the device
-    surface without touching the gateway.
+    surface without touching the gateway. `activeAudioSettings` is **nullable**
+    (issue #408): `null` means *no device is open at all* — the total loss where a
+    switch and its revert both failed, or a boot on a machine whose engine came up
+    device-less — and is deliberately not spelled as an empty `AudioSettings`,
+    which already means "the platform default is open". Every reader renders it as
+    "no device" through the one shared `DiagnosticsReport.describeDevice`, so the
+    DIAGNOSTICS row and the pasted bundle can never name an output the engine is
+    not on.
   - **MIDI** (`midi_settings_section.dart`): an output-port `PhiSelect` (stored by
     name) and an input-port `PhiChecklistRow` list with a per-port `MidiActivityDot`.
     Changes persist through `AppSettings.withMidi` and push to `PhiEngine.applyMidiSettings`,

@@ -2,6 +2,7 @@ import '../../domain/project/app_settings/audio_settings.dart';
 import 'audio_device_descriptor.dart';
 import 'audio_device_exception.dart';
 import 'audio_device_notice.dart';
+import 'audio_device_state.dart';
 import 'yse_gateway.dart';
 
 /// Drives the device rules (design `docs/design/settings-and-devices.md` §5,
@@ -14,9 +15,10 @@ import 'yse_gateway.dart';
 /// Pure orchestration — it never touches `package:yse` or Flutter, so every
 /// fallback path is unit-tested end to end against the fake gateway. It holds a
 /// single piece of state, [current]: the settings that describe whichever device
-/// is open right now, which a failed live switch reverts to. It **never writes
-/// the stored preference** — that stays the caller's (`AppSettingsController`'s)
-/// job, so an interface that wasn't plugged in yet can't erase its configuration.
+/// is open right now — or `null` when none is (issue #408) — which a failed live
+/// switch reverts to. It **never writes the stored preference** — that stays the
+/// caller's (`AppSettingsController`'s) job, so an interface that wasn't plugged
+/// in yet can't erase its configuration.
 class AudioDeviceCoordinator {
   /// Binds the coordinator to its [gateway]. [onNotice] receives every
   /// non-blocking notice raised by a fallback (design §5) — `null` drops them.
@@ -32,13 +34,22 @@ class AudioDeviceCoordinator {
   /// re-opens a device that disappears. Not a setting in v1.
   static const int _reconnectDelayMs = 1000;
 
-  AudioSettings _current = const AudioSettings();
+  AudioSettings? _current;
 
   /// The settings describing the device currently open — what a failed live
   /// switch reverts to (design §9.3). Its stored rate / buffer are normalised to
   /// what the device actually accepted (an unsupported override reads back as
   /// `null`, i.e. the device default).
-  AudioSettings get current => _current;
+  ///
+  /// **`null` means no device is open at all** (issue #408) — the total loss a
+  /// [AudioNoticeKind.noAudioDevice] notice announces, or a [boot] on a machine
+  /// whose engine came up without a device. It is deliberately *not* spelled as
+  /// an empty [AudioSettings]: that value already means "the platform default is
+  /// open", which is exactly the state a reader would confuse it with. Readers
+  /// must render "no device" rather than a name — the diagnostics rows and the
+  /// pasted report are where a performer goes to find out what happened, and a
+  /// stale name there is the one lie that costs a debugging session.
+  AudioSettings? get current => _current;
 
   /// Brings audio up on the platform default: `init()` plus 1 s engine
   /// auto-reconnect (design §4, §5). Takes no settings — the stored device is
@@ -61,7 +72,13 @@ class AudioDeviceCoordinator {
   /// (dart-yse #51); until then there is one boot path and the app runs it.
   void boot() {
     _gateway.init();
-    _current = const AudioSettings();
+    // `init()` brings the platform default up with it — but only on a machine
+    // that *has* one. Ask the engine what actually came up rather than assuming,
+    // so [current] never claims the default device on a box with no audio
+    // hardware (issue #408).
+    _current = _gateway.activeAudioState() == AudioDeviceState.none
+        ? null
+        : const AudioSettings();
     _gateway.setAutoReconnect(on: true, delayMs: _reconnectDelayMs);
   }
 
@@ -74,6 +91,10 @@ class AudioDeviceCoordinator {
   /// knows **not** to persist [desired] — the stored choice updates only on
   /// success. Returns `true` when [desired] is open (including a no-op when it is
   /// already the current device).
+  ///
+  /// When the revert fails too — every device gone — a
+  /// [AudioNoticeKind.noAudioDevice] notice is raised and [current] becomes
+  /// `null`, because at that point the engine is on nothing (issue #408).
   bool switchTo(AudioSettings desired) {
     final descriptor = desired.outputDevice == null
         ? null
@@ -85,10 +106,14 @@ class AudioDeviceCoordinator {
     // launch, where "the current device" is the platform default the engine came
     // up on and the performer has picked nothing yet (issue #405).
     if (desired.outputDevice != null && descriptor == null) {
+      final current = _current;
       _notify(
         AudioNoticeKind.switchReverted,
-        'Audio device "${desired.outputDevice}" is not available — staying on '
-        '$_currentName.',
+        current == null
+            ? 'Audio device "${desired.outputDevice}" is not available — no '
+                  'audio output device is open.'
+            : 'Audio device "${desired.outputDevice}" is not available — '
+                  'staying on ${_nameOf(current)}.',
       );
       return false;
     }
@@ -100,16 +125,40 @@ class AudioDeviceCoordinator {
     final previous = _current;
     if (_open(descriptor, desired)) return true;
 
-    // The open closed the previous device before it failed, so reopen it to
-    // honour "revert to the previous working device" (design §9.3).
+    // A failed open normally leaves the machine device-less: the gateway closes
+    // the running device before it attempts the new one (`closeCurrentDevice()`
+    // + `openDevice()`). Not always, though — a target that resolves to no
+    // device at all is refused before the close. So ask the engine what is
+    // actually running instead of assuming, and let [current] follow it: the two
+    // can then never disagree (issue #408).
+    _current = _gateway.activeAudioState() == AudioDeviceState.none
+        ? null
+        : previous;
+
+    if (previous == null) {
+      // Nothing was open to revert to: a retry that failed while the machine was
+      // already in a total loss. There is no "previous working device" to name.
+      _notify(
+        AudioNoticeKind.noAudioDevice,
+        'No audio output device could be opened.',
+      );
+      return false;
+    }
+
+    // Reopen what was running to honour "revert to the previous working device"
+    // (design §9.3).
     _notify(
       AudioNoticeKind.switchReverted,
       'Audio device "${desired.outputDevice ?? 'default'}" could not be opened — '
-      'reverting to $_currentName.',
+      'reverting to ${_nameOf(previous)}.',
     );
     if (_reopen(previous)) {
       _current = previous;
     } else {
+      // Both gone — the total loss. [current] goes to `null`: reporting
+      // `previous` here is what made the diagnostics section name a device the
+      // engine was not on (issue #408).
+      _current = null;
       _notify(
         AudioNoticeKind.noAudioDevice,
         'No audio output device could be opened.',
@@ -207,10 +256,12 @@ class AudioDeviceCoordinator {
     return null;
   }
 
-  /// How the open device reads in a notice — its name, or "the default device"
-  /// when nothing was chosen (the state `boot` leaves behind).
-  String get _currentName => _current.outputDevice != null
-      ? '"${_current.outputDevice}"'
+  /// How an open device reads in a notice — its name, or "the default device"
+  /// when nothing was chosen (the state `boot` leaves behind). Only ever called
+  /// with settings that describe a device that *is* open; "no device" is spelled
+  /// out by the caller, because it changes the whole sentence.
+  String _nameOf(AudioSettings settings) => settings.outputDevice != null
+      ? '"${settings.outputDevice}"'
       : 'the default device';
 
   void _notify(AudioNoticeKind kind, String message) =>

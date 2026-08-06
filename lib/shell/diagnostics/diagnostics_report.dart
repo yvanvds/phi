@@ -42,6 +42,13 @@ class DiagnosticsReport {
   /// `YSE_DLL_PATH`.
   static const String pathUnset = '(not set — bundled library)';
 
+  /// What the device row and the bundle both say when the engine has **no**
+  /// device open (issue #408) — a total loss, where naming the last device the
+  /// engine was on is precisely the lie a performer pastes into a bug report.
+  /// Deliberately distinct from `System default`, which means a device *is* open
+  /// and it is the platform's own.
+  static const String noDevice = 'none — no audio device open';
+
   /// Composes the bundle from a fresh read of every live source and renders it.
   /// Called at the moment of the copy so the drop counter and log tail are
   /// current.
@@ -56,7 +63,10 @@ class DiagnosticsReport {
       sampleRate: audio.sampleRate,
       bufferSize: audio.bufferSize,
       outputLatencyMs: audio.outputLatencyMs,
-      layout: settings.layout.wireName,
+      // No open device means no layout in effect either. The bundle only prints
+      // the layout beside a live rate, so this reads as the same "no device
+      // open" line rather than a leftover from the device that went away.
+      layout: settings?.layout.wireName ?? noDevice,
       audioStalls: engine.audioStalls,
       peakStallTicks: engine.peakStallTicks,
       projectPath: projectPath?.call(),
@@ -64,10 +74,13 @@ class DiagnosticsReport {
     ).render();
   }
 
-  /// Formats the active device the same way the DIAGNOSTICS section's read-back
-  /// row does: `device · host`, the bare device when the host is unknown, or
-  /// `System default` when none is chosen.
-  static String describeDevice(AudioSettings audio) {
+  /// Formats the active device for both the bundle and the DIAGNOSTICS section's
+  /// read-back row — the two share this one function so they can never drift:
+  /// `device · host`, the bare device when the host is unknown, `System default`
+  /// when a device is open but none was chosen, and [noDevice] when [audio] is
+  /// `null`, i.e. nothing is open at all (issue #408).
+  static String describeDevice(AudioSettings? audio) {
+    if (audio == null) return noDevice;
     final device = audio.outputDevice;
     if (device == null) return 'System default';
     final host = audio.outputHost;

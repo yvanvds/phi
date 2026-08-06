@@ -4,6 +4,7 @@ import 'package:phi/domain/project/app_settings/speaker_layout.dart';
 import 'package:phi/engine/bridge/audio_device_coordinator.dart';
 import 'package:phi/engine/bridge/audio_device_descriptor.dart';
 import 'package:phi/engine/bridge/audio_device_notice.dart';
+import 'package:phi/engine/bridge/audio_device_state.dart';
 
 import '../test_doubles/fake_yse_gateway.dart';
 
@@ -62,7 +63,7 @@ void main() {
         coordinator.boot();
 
         expect(gateway.openedDevice, isNull);
-        expect(coordinator.current.outputDevice, isNull);
+        expect(coordinator.current, const AudioSettings());
         // …but it has enumerated, so the very next switch can resolve a name.
         expect(gateway.audioDevices(), isNotEmpty);
       },
@@ -85,8 +86,8 @@ void main() {
       expect(gateway.openLayout, SpeakerLayout.quad);
       expect(gateway.autoReconnectOn, isTrue);
       expect(notices, isEmpty);
-      expect(coordinator.current.outputDevice, 'Fake Interface');
-      expect(coordinator.current.outputHost, 'ASIO');
+      expect(coordinator.current?.outputDevice, 'Fake Interface');
+      expect(coordinator.current?.outputHost, 'ASIO');
     });
 
     test('runs through init(), never initOffline() — an offline engine '
@@ -178,7 +179,9 @@ void main() {
         gateway.activeSampleRateValue,
         gateway.devices.first.sampleRates.first,
       );
-      expect(coordinator.current.outputDevice, isNull);
+      // A device *is* open — the unnamed platform default — which reads as an
+      // empty [AudioSettings], never as the `null` that means nothing is open.
+      expect(coordinator.current, const AudioSettings());
       expect(notices.single.kind, AudioNoticeKind.switchReverted);
       // Keep-preference: the coordinator never rewrote the stored value.
       expect(stored.outputDevice, 'Ghost Device');
@@ -211,11 +214,17 @@ void main() {
       expect(ok, isFalse);
       // The failed open closed the default first, so it was reopened (§9.3).
       expect(gateway.openedDevice?.name, 'Default Card');
-      expect(coordinator.current.outputDevice, isNull);
+      expect(coordinator.current, const AudioSettings());
+      // The revert put a device back, so the live state is honest again — the
+      // fake zeroes it while the open is failing, as `closeCurrentDevice()` does.
+      expect(gateway.activeAudioState().sampleRate, 48000);
       expect(notices.single.kind, AudioNoticeKind.switchReverted);
     });
 
-    test('no devices at all — switch reverted, then a no-audio notice', () {
+    test('no devices at all — the switch fails and nothing is open', () {
+      // A machine with no audio hardware: `init()` brings no device up, so the
+      // boot itself leaves [current] `null` (issue #408) and the stored device
+      // has nothing to resolve against.
       gateway.devices = const [];
 
       final ok = applyStored(
@@ -224,7 +233,12 @@ void main() {
 
       expect(ok, isFalse);
       expect(notices.single.kind, AudioNoticeKind.switchReverted);
-      expect(coordinator.current, const AudioSettings());
+      expect(
+        notices.single.message,
+        contains('no audio output device is open'),
+      );
+      expect(coordinator.current, isNull);
+      expect(gateway.activeAudioState(), AudioDeviceState.none);
     });
 
     test('a stored layout without a device still reaches the engine', () {
@@ -258,8 +272,8 @@ void main() {
 
       expect(ok, isTrue);
       expect(gateway.openedDevice, gateway.devices[1]);
-      expect(coordinator.current.outputDevice, 'Fake Interface');
-      expect(coordinator.current.outputHost, 'ASIO');
+      expect(coordinator.current?.outputDevice, 'Fake Interface');
+      expect(coordinator.current?.outputHost, 'ASIO');
     });
 
     test('re-applying the current target is a no-op (no dropout)', () {
@@ -323,7 +337,7 @@ void main() {
       applyStored(
         const AudioSettings(outputHost: 'WASAPI', outputDevice: 'Working'),
       );
-      expect(coordinator.current.outputDevice, 'Working');
+      expect(coordinator.current?.outputDevice, 'Working');
 
       final ok = coordinator.switchTo(
         const AudioSettings(outputHost: 'ASIO', outputDevice: 'Refuses'),
@@ -333,7 +347,7 @@ void main() {
       // The engine closed 'Working' before the failed open, so the coordinator
       // reopened it — the last working device wins.
       expect(gateway.openedDevice?.name, 'Working');
-      expect(coordinator.current.outputDevice, 'Working');
+      expect(coordinator.current?.outputDevice, 'Working');
       expect(notices.last.kind, AudioNoticeKind.switchReverted);
     });
 
@@ -341,9 +355,11 @@ void main() {
       applyStored(
         const AudioSettings(outputHost: 'ASIO', outputDevice: 'Fake Interface'),
       );
-      // Every device disappears mid-session: the target cannot be resolved, so
-      // the switch keeps the (now dead) current device and reports failure.
+      // Every device disappears mid-session — and the open one goes with it, as
+      // it does natively: PortAudio errors the stream out and libyse closes it,
+      // so `activeAudioState()` reads zero before the switch is even attempted.
       gateway.devices = const [];
+      expect(gateway.activeAudioState(), AudioDeviceState.none);
       notices.clear();
 
       final ok = coordinator.switchTo(const AudioSettings());
@@ -356,11 +372,134 @@ void main() {
           AudioNoticeKind.noAudioDevice,
         ]),
       );
-      // [current] still names the last device that opened cleanly — the
-      // coordinator reports what it last had, and the standing `noAudioDevice`
-      // notice (plus a dead `activeAudioState`) is what tells the shell the
-      // hardware is gone (the status chip reads both).
-      expect(coordinator.current.outputDevice, 'Fake Interface');
+      // Nothing is open any more, so [current] is `null` rather than the name of
+      // the device that went away (issue #408) — and it agrees with the engine.
+      expect(coordinator.current, isNull);
+      expect(gateway.activeAudioState(), AudioDeviceState.none);
+    });
+  });
+
+  group('total loss — nothing is open', () {
+    // The one exit where every fallback is exhausted: a switch whose target
+    // refuses to open (the engine having already closed the running device) and
+    // whose revert finds the previous device gone too. Before issue #408 the
+    // coordinator kept naming that previous device, so `activeAudioSettings` —
+    // and with it the DIAGNOSTICS row and the pasted report — claimed an output
+    // the engine was not on, right next to a live rate of 0.
+    const alpha = AudioDeviceDescriptor(
+      name: 'Alpha',
+      hostName: 'WASAPI',
+      sampleRates: [48000.0],
+      bufferSizes: [256],
+      defaultBufferSize: 256,
+      outputLatency: 256,
+    );
+    const beta = AudioDeviceDescriptor(
+      name: 'Beta',
+      hostName: 'ASIO',
+      sampleRates: [48000.0],
+      bufferSizes: [128],
+      defaultBufferSize: 128,
+      outputLatency: 128,
+    );
+
+    /// Drives the loss: boot onto Alpha, then switch to Beta while Beta refuses
+    /// and Alpha is unplugged. Faithful to libyse — `openAudioDevice` closes the
+    /// running device before it attempts the new one, so the refusal genuinely
+    /// leaves the machine device-less, and the revert has nothing to resolve.
+    void loseEveryDevice() {
+      gateway.devices = const [alpha, beta];
+      applyStored(
+        const AudioSettings(outputHost: 'WASAPI', outputDevice: 'Alpha'),
+      );
+      expect(coordinator.current?.outputDevice, 'Alpha');
+      notices.clear();
+
+      gateway.unopenableDeviceNames.add('Beta');
+      gateway.devices = const [beta]; // Alpha pulled mid-switch
+      final ok = coordinator.switchTo(
+        const AudioSettings(outputHost: 'ASIO', outputDevice: 'Beta'),
+      );
+      expect(ok, isFalse);
+    }
+
+    test('current reports no device, not the one that went away', () {
+      loseEveryDevice();
+
+      expect(coordinator.current, isNull);
+      // …and the engine really is on nothing, so no reader can be right by
+      // reading `current` and wrong by reading the live state, or vice versa.
+      expect(gateway.activeAudioState(), AudioDeviceState.none);
+      expect(notices.last.kind, AudioNoticeKind.noAudioDevice);
+    });
+
+    test('the notice names the device that was lost, then the loss', () {
+      loseEveryDevice();
+
+      expect(notices.first.kind, AudioNoticeKind.switchReverted);
+      expect(notices.first.message, contains('reverting to "Alpha"'));
+      expect(notices.last.message, contains('No audio output device'));
+    });
+
+    test('a retry while nothing is open cannot revert to a phantom', () {
+      loseEveryDevice();
+
+      // Beta is visible again but still refuses. There is no previous working
+      // device to revert to, so the coordinator says so once and stays honest
+      // instead of inventing one.
+      notices.clear();
+      final ok = coordinator.switchTo(
+        const AudioSettings(outputHost: 'ASIO', outputDevice: 'Beta'),
+      );
+
+      expect(ok, isFalse);
+      expect(coordinator.current, isNull);
+      expect(notices.map((n) => n.kind), [AudioNoticeKind.noAudioDevice]);
+    });
+
+    test('a target that is not even listed reports the loss, not a device', () {
+      loseEveryDevice();
+      notices.clear();
+
+      final ok = coordinator.switchTo(
+        const AudioSettings(outputHost: 'ASIO', outputDevice: 'Ghost'),
+      );
+
+      expect(ok, isFalse);
+      expect(coordinator.current, isNull);
+      // The "staying on X" phrasing would name a device that is not open.
+      expect(
+        notices.single.message,
+        contains('no audio output device is open'),
+      );
+      expect(notices.single.message, isNot(contains('Alpha')));
+    });
+
+    test('hardware coming back reopens and current names it again', () {
+      loseEveryDevice();
+      gateway.unopenableDeviceNames.clear();
+      gateway.devices = const [alpha, beta];
+      notices.clear();
+
+      final ok = coordinator.switchTo(
+        const AudioSettings(outputHost: 'WASAPI', outputDevice: 'Alpha'),
+      );
+
+      expect(ok, isTrue);
+      expect(coordinator.current?.outputDevice, 'Alpha');
+      expect(gateway.activeAudioState().sampleRate, 48000);
+      expect(notices, isEmpty);
+    });
+
+    test('a boot that opens nothing does not claim the default device', () {
+      // A machine with no audio hardware at all: `init()` enumerates nothing and
+      // brings no device up, so there is nothing for [current] to describe.
+      gateway.devices = const [];
+
+      coordinator.boot();
+
+      expect(coordinator.current, isNull);
+      expect(gateway.activeAudioState(), AudioDeviceState.none);
     });
   });
 }
