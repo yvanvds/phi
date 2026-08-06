@@ -167,7 +167,8 @@ main + app          (orchestration)
     which sets the player's output-port *name* (`EngineMidiController` resolves it to
     a device index each open, so a replug keeps working — replacing the old hard-coded
     port 0) and opens the enabled input ports. `PhiEngine` exposes `midiOutputPorts()` /
-    `midiInputPorts()` / `midiInputActivity`.
+    `midiInputPorts()` / `midiInputActivity`; the chosen output port is read back off
+    `EngineMidiController.outputPortName` (issue #407 dropped the façade's duplicate).
   - **PROJECTS** (`projects_settings_section.dart`): an autosave-cadence field
     (`0` disables; `AppSettings.withAutosaveInterval`, applied on the next timer arm —
     `ProjectController` re-arms/disables) and recents management — per-entry remove,
@@ -1759,8 +1760,9 @@ main + app          (orchestration)
   wired to a new `ProjectController.onBeforeSave` hook the shell sets to
   `PhiEngine.flushPatchPayloads` — so save/autosave captures the *live* patch, not
   the last-loaded one, with dirty-tracking carried by the gesture commands (the
-  surface epic applies them). `PhiEngine` exposes `patches` / `patchesOrNull`,
-  `startPatchSource` / `stopPatchSource` / `flushPatchPayloads`, and `lastPatchNotice`;
+  surface epic applies them). `PhiEngine` exposes `patches` (an inspection handle —
+  surfaces drive the reconciler through `PatchLibraryController.start` / `.stop`,
+  issue #407), `flushPatchPayloads`, and `lastPatchNotice`;
   the reconciler is created on `start`, synced at the tail of the channel sync (bus
   ids resolve first), and torn down on project swap / stop. Covered by unit tests
   (`patch_reconciler_test` — open/edit/save round-trips, mount/unmount/start/stop,
@@ -2047,7 +2049,7 @@ main + app          (orchestration)
   an end-to-end fake flow. The Python emission side is unchanged (already shipped +
   tested by #230's `test_verbs.py`).
   **Production activation** (issue #334): `PhiEngine.start` now constructs the
-  dispatcher over the engine's own `tapBus` seam with the **real** ports — `state`
+  dispatcher over the engine's own injected `BusTap` with the **real** ports — `state`
   via `StateMachineControlPort(stateTriggers)`, `var` via
   `RuntimeVariableControlPort` over the runtime registry, `domain tempo` via
   `DomainTempoControlPort` (the same live-override seam a fired state's tempos

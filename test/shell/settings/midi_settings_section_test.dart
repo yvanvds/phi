@@ -77,7 +77,7 @@ void main() {
 
     // Persisted through the single owner and pushed to the engine.
     expect(settings.value.midi.outputPort, 'loopMIDI Port');
-    expect(engine.midiOutputPort, 'loopMIDI Port');
+    expect(engine.midiOrNull?.outputPortName, 'loopMIDI Port');
     expect(store.saveCount, greaterThan(before));
   });
 

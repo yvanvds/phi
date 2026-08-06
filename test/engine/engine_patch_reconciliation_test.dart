@@ -95,7 +95,7 @@ void main() {
     expect(engine.patches.isRunning(patch('src')), isFalse);
     expect(patcher.mounted, isFalse);
 
-    final started = engine.startPatchSource(patch('src'));
+    final started = engine.patchLibrary.start(patch('src'));
     expect(started, isTrue);
     expect(engine.patches.isRunning(patch('src')), isTrue);
     expect(patcher.mounted, isTrue);
@@ -103,7 +103,7 @@ void main() {
     final instanceId = engine.patches.instanceIdOf(patch('src'));
     expect(patcher.instances[instanceId]!.mountedBus, isNotNull);
 
-    engine.stopPatchSource(patch('src'));
+    engine.patchLibrary.stop(patch('src'));
     expect(engine.patches.isRunning(patch('src')), isFalse);
     expect(patcher.mounted, isFalse);
   });
@@ -135,7 +135,7 @@ void main() {
     addTearDown(registry.dispose);
     engine.bindProject(registry);
 
-    final started = engine.startPatchSource(patch('src'));
+    final started = engine.patchLibrary.start(patch('src'));
 
     expect(started, isFalse);
     expect(engine.patches.isRunning(patch('src')), isFalse);

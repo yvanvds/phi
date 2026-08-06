@@ -85,7 +85,7 @@ void main() {
     final savedVolume = session1.masterVolume.value;
     expect(savedVolume, lessThan(0.5)); // dragged down the track
     // The engine's audio master followed the session (mirrored by the shell).
-    expect(engine1.masterVolume.value, closeTo(savedVolume, 1e-9));
+    expect(engine1.masterChannel.volume, closeTo(savedVolume, 1e-9));
     expect(gateway1.masterVolumeValue, closeTo(savedVolume, 1e-9));
     expect(controller1.isDirty.value, isTrue);
 
@@ -139,7 +139,7 @@ void main() {
 
     // The restored master volume matches what was saved — not the unity default.
     expect(session2.masterVolume.value, closeTo(savedVolume, 1e-6));
-    expect(engine2.masterVolume.value, closeTo(savedVolume, 1e-6));
+    expect(engine2.masterChannel.volume, closeTo(savedVolume, 1e-6));
     // And the engine is *applying* it, not merely reporting it (issue #402).
     // `masterVolume` on the gateway is a cache of the last write, which after a
     // restart can disagree with the gain the master channel actually has; this

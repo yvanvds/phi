@@ -221,7 +221,7 @@ class PhiEngine {
   );
 
   /// The live-coding **control plane** (issue #334): decodes `phi.ctl.*` frames
-  /// off the engine's [tapBus] seam and routes each to its owning controller —
+  /// off the injected [BusTap] and routes each to its owning controller —
   /// the production activation of the dispatcher issue #233 built. Constructed
   /// on [start] once every owning controller exists and disposed on [stop].
   /// Silent in production until the tap C API lands (the default [NoOpBusTap]
@@ -235,18 +235,6 @@ class PhiEngine {
   /// subscribing replaces yse's own file sink. yse carries no per-message level,
   /// so the level is classified downstream.
   Stream<String> get engineLogMessages => _engineLogSource.messages;
-
-  /// Subscribe to the engine's **host bus tap** for every publish whose address
-  /// falls under [prefix] (design `docs/design/live-coding.md` §4). The
-  /// live-coding control plane taps `phi.ctl` here and routes each frame to the
-  /// owning controller.
-  ///
-  /// The seam is present now but silent in production — the tap C API is an
-  /// engine dependency not yet landed (`yvanvds/yse-soundengine#389`,
-  /// `yvanvds/dart-yse#43`), so the default [NoOpBusTap] yields an empty stream.
-  /// Tests inject a `FakeBusTap` and drive publishes through to prove the
-  /// downstream routing before the engine work arrives (design §9 step 1).
-  Stream<BusTapFrame> tapBus(String prefix) => _busTap.subscribe(prefix);
 
   /// Coordinates the boot and live-switch device rules (design §5, §9.3) over
   /// the gateway, and supervises recovery from a total loss (issue #410). Its
@@ -292,8 +280,7 @@ class PhiEngine {
   /// The patcher entity strip's controller — the source of truth for which
   /// `patch.` entity is open, the entity affordances (new / duplicate / rename /
   /// delete / group), and source placement (issue #224). Created on [start] when
-  /// a patcher gateway was injected. Use [patchLibraryOrNull] for the nullable
-  /// variant.
+  /// a patcher gateway was injected; throws before that.
   PatchLibraryController get patchLibrary {
     final l = _patchLibrary;
     if (l == null) {
@@ -304,14 +291,15 @@ class PhiEngine {
     return l;
   }
 
-  /// Nullable variant of [patchLibrary] — `null` before [start] *or* when no
-  /// patcher gateway was injected.
-  PatchLibraryController? get patchLibraryOrNull => _patchLibrary;
-
   /// The placeable mix buses a patch source can mount onto — master, plus every
   /// materialised user strip / group bus / return (issue #224, design §4 role 1).
   /// The patcher placement picker renders these; the reconciler resolves the
   /// chosen [PatchBusOption.address] back to a live channel id.
+  ///
+  /// No surface calls this by name: [start] hands it to [PatchLibraryController]
+  /// as a tear-off and the placement bar reads it back through
+  /// [PatchLibraryController.busOptions]. It is live production code reached by
+  /// injection, not a dead accessor (issue #407).
   List<PatchBusOption> patchBusOptions() => [
     PatchBusOption(address: _masterAddress, label: 'master'),
     for (final entry in _channelsByAddress.entries)
@@ -321,7 +309,15 @@ class PhiEngine {
   /// The per-entity patch reconciler — the source of truth for which `patch.`
   /// entities are open, their placement, and their running state (issue #220).
   /// Created on [start] when a patcher gateway was injected; throws before that or
-  /// when none was wired. Use [patchesOrNull] for the nullable variant.
+  /// when none was wired.
+  ///
+  /// **An inspection handle, deliberately** (issue #407): the surfaces never
+  /// touch the reconciler directly — the placement bar drives it through
+  /// [PatchLibraryController.place] / [PatchLibraryController.start] /
+  /// [PatchLibraryController.stop], and the engine itself calls it on every
+  /// registry sync. This getter is how the engine's own tests read the native
+  /// instance ids and open/running state that no surface needs to see. Keep it
+  /// zero-logic so there is nothing here to rot.
   PatchReconciler get patches {
     final p = _patchReconciler;
     if (p == null) {
@@ -332,27 +328,11 @@ class PhiEngine {
     return p;
   }
 
-  /// Nullable variant of [patches] — `null` before [start] *or* when no patcher
-  /// gateway was injected.
-  PatchReconciler? get patchesOrNull => _patchReconciler;
-
   /// The last patch source-placement degradation, or `null`. A placement naming a
   /// bus no longer in the mix leaves the patch unplaced and raises one of these
   /// (design §4, §8); the shell surfaces it like an [lastAudioNotice].
   ValueListenable<PatchPlacementNotice?> get lastPatchNotice =>
       _lastPatchNotice;
-
-  /// Start the `patch.` entity at [address] as a source — mount it as a `Sound`
-  /// on its placement bus and begin sounding (design §4 role 1; issue #220).
-  /// Returns whether it started; a no-op when the patch is not open, is unplaced,
-  /// or its placement bus is stale (which surfaces a [lastPatchNotice]).
-  bool startPatchSource(EntityAddress address) =>
-      _patchReconciler?.start(address) ?? false;
-
-  /// Stop the source at [address] — unmount its `Sound`, silencing it. A no-op
-  /// when the patch is not open or not running.
-  void stopPatchSource(EntityAddress address) =>
-      _patchReconciler?.stop(address);
 
   /// Refresh every open patch's entity payload from its live native dump — the
   /// dump-to-payload step the shell wires to the project's save / autosave hook
@@ -366,6 +346,11 @@ class PhiEngine {
   /// The state-machine subsystem. Pure Dart — no gateway, no native
   /// counterpart. Created on [start], disposed on [stop]. Throws before
   /// [start]; use [stateMachineOrNull] for the nullable variant.
+  ///
+  /// The **assertive** half of the pair (issue #407): the shell always takes the
+  /// `OrNull` half because it has to render a fallback, so only callers that
+  /// know the engine is started reach for this one. Kept because it is
+  /// zero-logic sugar over the same field, not a second code path.
   StateMachineController get stateMachine {
     final s = _stateMachine;
     if (s == null) {
@@ -382,8 +367,13 @@ class PhiEngine {
   /// The transition trigger behaviour (design state-graph §5, issue #244):
   /// timed schedules on reserved domain-paced clocks, variable watchers on
   /// the runtime registry, and the code-fire seam (`fireTo`). Created on
-  /// [start], torn down on [stop]. Throws before [start]; use
-  /// [stateTriggersOrNull] for the nullable variant.
+  /// [start], torn down on [stop]. Throws before [start].
+  ///
+  /// **An inspection handle, deliberately** (issue #407): nothing above the
+  /// engine drives the scheduler by hand — the engine arms it on every state
+  /// entry / move and the live-coding control plane fires through
+  /// [StateMachineControlPort]. This getter is how the state end-to-end tests
+  /// read back what production armed. Keep it zero-logic.
   StateTriggerScheduler get stateTriggers {
     final s = _stateTriggers;
     if (s == null) {
@@ -391,9 +381,6 @@ class PhiEngine {
     }
     return s;
   }
-
-  /// Nullable variant of [stateTriggers] — `null` before [start].
-  StateTriggerScheduler? get stateTriggersOrNull => _stateTriggers;
 
   /// The journal-free state application engine (design state-graph §4, issue
   /// #243) — applies an entered state's captured slices through the owning
@@ -447,7 +434,8 @@ class PhiEngine {
   /// The runtime-variable registry — the store backing the MIDI graph's
   /// `var · name = value` edge guards (issue #78). Pure Dart, like the state
   /// machine; created on [start], disposed on [stop]. Throws before [start];
-  /// use [runtimeVariablesOrNull] for the nullable variant.
+  /// use [runtimeVariablesOrNull] for the nullable variant — the assertive half
+  /// of the pair, kept for the same reason as [stateMachine] (issue #407).
   RuntimeVariableRegistry get runtimeVariables {
     final r = _runtimeVariables;
     if (r == null) {
@@ -465,7 +453,8 @@ class PhiEngine {
   /// playback playhead. Created on [start] when a [MidiGateway] was injected;
   /// throws before [start] or when no gateway was wired (tests that don't
   /// exercise MIDI playback). Use [midiOrNull] when the caller needs a
-  /// fallback.
+  /// fallback — the assertive half of the pair, kept for the same reason as
+  /// [stateMachine] (issue #407).
   EngineMidiController get midi {
     final m = _midi;
     if (m == null) {
@@ -490,7 +479,8 @@ class PhiEngine {
   /// The metronome — the click session on a chosen time domain (issue #262).
   /// Created on [start] alongside the MIDI subsystem; throws before [start] or
   /// when no [MidiGateway] was wired. Use [metronomeOrNull] for the nullable
-  /// variant.
+  /// variant — the assertive half of the pair, kept for the same reason as
+  /// [stateMachine] (issue #407).
   MetronomeController get metronome {
     final m = _metronome;
     if (m == null) {
@@ -549,8 +539,12 @@ class PhiEngine {
   final StreamController<EngineTelemetry> _telemetry =
       StreamController<EngineTelemetry>.broadcast();
   final ValueNotifier<bool> _testSignal = ValueNotifier<bool>(false);
-  final ValueNotifier<double> _masterVolume = ValueNotifier<double>(1);
-  final ValueNotifier<bool> _masterMuted = ValueNotifier<bool>(false);
+
+  /// The master strip's user-set level and mute. Plain fields, not notifiers:
+  /// the shell holds the truth in [SessionState] and pushes it down here, so
+  /// nothing above the façade observes the engine's own copy (issue #407).
+  double _masterVolume = 1;
+  bool _masterMuted = false;
 
   final MixerChannel _masterChannel = MixerChannel.master();
 
@@ -667,18 +661,6 @@ class PhiEngine {
 
   /// Test-signal toggle. Observable so widgets can reflect the armed state.
   ValueListenable<bool> get testSignal => _testSignal;
-
-  /// Master-channel volume in `[0.0, 1.0]`. Observable so faders can bind
-  /// directly. Drives the engine's master channel via [setMasterVolume]. Reports
-  /// the user-set value even while master mute collapses the *effective* gateway
-  /// volume to zero.
-  ValueListenable<double> get masterVolume => _masterVolume;
-
-  /// Whether the master channel is muted. Observable so a mute control can bind.
-  /// Master is not a registry entity, so this state persists in the project
-  /// manifest (design `docs/design/mix.md` §3) — the shell mirrors it through
-  /// [SessionState] like the master volume.
-  ValueListenable<bool> get masterMuted => _masterMuted;
 
   /// The master mixer channel. Always present, never destroyed. Mute and
   /// solo on the master are no-ops by design — there is nothing to mix
@@ -1737,14 +1719,6 @@ class PhiEngine {
   /// dialog's input checklist. Empty when no MIDI gateway was wired.
   List<String> midiInputPorts() => _midiGateway?.inputDeviceNames() ?? const [];
 
-  /// The names of the MIDI input ports currently open. Empty when none are open
-  /// or no MIDI gateway was wired.
-  List<String> openMidiInputs() => _midiGateway?.openInputNames ?? const [];
-
-  /// The chosen MIDI output port's name, or `null` for the default (first port).
-  /// `null` before [start] or when no MIDI gateway was wired.
-  String? get midiOutputPort => _midi?.outputPortName;
-
   /// Broadcast of the **port name** on every MIDI message received on an open
   /// input port — the settings dialog flashes that port's activity dot (design
   /// §6). An empty stream when no MIDI gateway was wired.
@@ -1780,25 +1754,19 @@ class PhiEngine {
   /// [AudioStallTracker] for why the engine's raw gauge can't be shown directly.
   int get audioStalls => _started ? _stallTracker.stalls : 0;
 
-  /// The engine's raw device-stall gauge as of the last telemetry tick — the
-  /// number of *consecutive* control ticks that saw no audio callback. Resets
-  /// itself whenever a callback lands, so a healthy device reads `0` or `1`
-  /// here. Diagnostics detail behind [audioStalls]; `0` before [start].
-  int get deviceStallTicks => _started ? _stallTracker.ticks : 0;
-
-  /// The worst [deviceStallTicks] seen this session — the "how bad did it get"
-  /// companion to [audioStalls] carried in the diagnostics bundle. `0` before
-  /// [start].
+  /// The worst raw device-stall reading seen this session — the "how bad did it
+  /// get" companion to [audioStalls] carried in the diagnostics bundle (the
+  /// instantaneous gauge itself rides the telemetry tick as
+  /// [EngineTelemetry.deviceStallTicks]). `0` before [start].
   int get peakStallTicks => _started ? _stallTracker.peakTicks : 0;
 
   /// Set the master-channel volume. Clamped to `[0.0, 1.0]`. No-op before
   /// [start]. When master mute is engaged the *effective* gateway volume stays
-  /// zero, but the user value is still remembered (and reported by
-  /// [masterVolume]).
+  /// zero, but the user value is still remembered — unmuting restores it.
   void setMasterVolume(double value) {
     if (!_started) return;
     final clamped = value.clamp(0.0, 1.0);
-    _masterVolume.value = clamped;
+    _masterVolume = clamped;
     _masterChannel.applyVolume(clamped);
     _pushMasterEffective();
   }
@@ -1808,7 +1776,7 @@ class PhiEngine {
   /// through the manifest like [setMasterVolume].
   void setMasterMuted({required bool muted}) {
     if (!_started) return;
-    _masterMuted.value = muted;
+    _masterMuted = muted;
     _masterChannel.applyMuted(muted);
     _pushMasterEffective();
   }
@@ -1816,7 +1784,7 @@ class PhiEngine {
   /// Pushes the master channel's *effective* volume (zero while muted) to the
   /// gateway — the master counterpart of the per-channel mute collapse.
   void _pushMasterEffective() {
-    _gateway.masterVolume = _masterMuted.value ? 0.0 : _masterVolume.value;
+    _gateway.masterVolume = _masterMuted ? 0.0 : _masterVolume;
   }
 
   /// Adds a user channel by creating a `mix.` entity in the registry — the
@@ -2099,6 +2067,10 @@ class PhiEngine {
   /// replay lands on the authored levels, and the next save persists what was
   /// *authored*, not what a fired state dialled in. A no-op for an address
   /// with no materialised channel (master is implicit and never captured).
+  ///
+  /// No surface calls this by name: [start] hands it to
+  /// [EngineStateSliceApplier] as the `mixLevel` tear-off. Live production code
+  /// reached by injection, not a dead accessor (issue #407).
   void applyLiveBusLevel(
     EntityAddress bus, {
     required double volume,
@@ -2833,8 +2805,9 @@ class PhiEngine {
     );
   }
 
-  /// Release stream + notifier resources. Call when the host widget tree
-  /// is permanently torn down (e.g. app dispose).
+  /// Release stream + notifier resources — [stop] plus everything [start] does
+  /// not own. Called when the host widget tree is permanently torn down: the
+  /// app's own `dispose` when it owns the engine, and every test tear-down.
   Future<void> dispose() async {
     stop();
     // Releases the recovery timer for good (issue #410).
@@ -2843,8 +2816,6 @@ class PhiEngine {
     _mixRegistry.removeListener(_syncChannelsFromRegistry);
     if (_ownsMixRegistry) _mixRegistry.dispose();
     _testSignal.dispose();
-    _masterVolume.dispose();
-    _masterMuted.dispose();
     _masterChannel.dispose();
     _channels.dispose();
     _mixTree.dispose();
