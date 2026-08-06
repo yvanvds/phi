@@ -6,9 +6,14 @@ import '../../../engine/state/patcher_controller.dart';
 import 'gui_value_link.dart';
 
 /// Body for the `.t` (toggle) node — a live [PatchToggleSquare] that pushes
-/// `1`/`0` into the object's hot inlet via [PatcherController.setControlValue]
-/// (`sendFloat`), so flipping it on the canvas drives the graph (design
-/// `docs/design/patcher.md` §7).
+/// `1`/`0` into the object's hot inlet via [PatcherController.setControlInt]
+/// (`sendInt`), so flipping it on the canvas drives the graph (design
+/// `docs/design/patcher.md` §7). An **int**, deliberately: the engine's
+/// `gToggle` registers int and bang handlers on inlet 0 but no float one, and
+/// its inlet dispatch never coerces — the float this body used to send was
+/// silently dropped, so the canvas switch drove nothing and snapped back off
+/// on the next poll (issue #439). With the int it is a working on/off switch
+/// for anything int-driven — `.metro`'s start/stop above all.
 ///
 /// Since issue #381 the node **is** the switch: no header, no frame, no padding
 /// — the square fills the node's rectangle and carries a cross when it is on,
@@ -73,15 +78,22 @@ class _ToggleNodeBodyState extends State<ToggleNodeBody> {
     setState(() => _on = on);
   }
 
-  /// Anything non-zero is on; an object that has never reported a value is off.
-  static bool _parse(String raw) => (double.tryParse(raw) ?? 0) != 0;
+  /// The engine's `gToggle` reports its state as `on`/`off` (issue #439);
+  /// a numeric report — from a fake, or a differently-shaped object — keeps
+  /// the "anything non-zero is on" reading. An object that has never reported
+  /// a value is off.
+  static bool _parse(String raw) {
+    if (raw == 'on') return true;
+    if (raw == 'off') return false;
+    return (double.tryParse(raw) ?? 0) != 0;
+  }
 
   void _flip(bool value) {
     setState(() => _on = value);
-    widget.controller.setControlValue(
+    widget.controller.setControlInt(
       widget.node.id,
       inlet: 0,
-      value: value ? 1.0 : 0.0,
+      value: value ? 1 : 0,
     );
   }
 

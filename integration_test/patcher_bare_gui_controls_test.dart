@@ -161,7 +161,9 @@ void main() {
     patcherGateway.calls.clear();
     await tester.tap(find.byType(PatchToggleSquare));
     await tester.pumpAndSettle();
-    expect(callsLike('sendFloat').single, endsWith(':0:1.000'));
+    // An int, not a float — the engine's `gToggle` has no float handler, so a
+    // float here drove nothing at all (issue #439).
+    expect(callsLike('sendInt').single, endsWith(':0:1'));
     // ...and the switch shows it, with its cross rather than with a caption.
     expect(
       tester.widget<PatchToggleSquare>(find.byType(PatchToggleSquare)).value,
@@ -187,7 +189,8 @@ void main() {
     final toggleHandle = patcherGateway.nodes.entries
         .firstWhere((e) => e.value.type == Obj.gToggle)
         .key;
-    patcherGateway.nodes[toggleHandle]!.guiValue = '0';
+    // `off` is the string the real `gToggle` reports (issue #439).
+    patcherGateway.nodes[toggleHandle]!.guiValue = 'off';
     patcher.refreshGuiValues();
     await tester.pumpAndSettle();
     expect(

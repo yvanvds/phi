@@ -539,7 +539,17 @@ class PatcherController {
     _gateway.sendFloat(instanceId, native, inlet, value);
   }
 
-  /// Bang a node's inlet — used by trigger-style control bodies (`.b`, `.t`,
+  /// Drop an **integer** control value into a node's inlet — used by the
+  /// bodies whose engine object registers an int handler on the inlet but no
+  /// float one (`.t`, issue #439). The engine's inlet dispatch never coerces,
+  /// so pushing such a state through [setControlValue] reaches nothing at all.
+  void setControlInt(PatchNodeId id, {required int inlet, required int value}) {
+    final native = _nativeByNode[id];
+    if (native == null) return;
+    _gateway.sendInt(instanceId, native, inlet, value);
+  }
+
+  /// Bang a node's inlet — used by trigger-style control bodies (`.b`,
   /// message) to fire into the graph. The `sendBang` companion to
   /// [setControlValue].
   void setControlBang(PatchNodeId id, {required int inlet}) {

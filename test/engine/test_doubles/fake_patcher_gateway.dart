@@ -225,11 +225,31 @@ class FakePatcherGateway implements PatcherGateway {
     calls.add('sendFloat:$handleId:$inlet:${value.toStringAsFixed(3)}');
     final node = _inst(instanceId).nodes[handleId];
     if (node == null) return;
+    // Model the engine's uncoerced inlet dispatch (issue #439): `gToggle`
+    // registers int and bang handlers but **no float one**, so a float sent at
+    // it lands nowhere — the real engine drops it silently. The fake dropping
+    // it too is what lets a test catch a body pushing through the wrong verb.
+    if (node.type == Obj.gToggle) return;
     node.lastValueByInlet[inlet] = value;
-    // A control object's "hot" inlet (0) drives its display value — a slider,
-    // number or toggle reflects the last value set into it, exactly what the
-    // native side reports back through `guiValue`.
+    // A control object's "hot" inlet (0) drives its display value — a slider
+    // or number reflects the last value set into it, exactly what the native
+    // side reports back through `guiValue`.
     if (inlet == 0) node.guiValue = _formatGui(value);
+  }
+
+  @override
+  void sendInt(int instanceId, int handleId, int inlet, int value) {
+    calls.add('sendInt:$handleId:$inlet:$value');
+    final node = _inst(instanceId).nodes[handleId];
+    if (node == null) return;
+    node.lastValueByInlet[inlet] = value.toDouble();
+    if (inlet != 0) return;
+    // The engine's `gToggle` displays its state as `on`/`off`, not as a
+    // number (issue #439) — the fake reports the same strings so a body that
+    // only parses digits fails here the way it fails against libyse.
+    node.guiValue = node.type == Obj.gToggle
+        ? (value != 0 ? 'on' : 'off')
+        : '$value';
   }
 
   @override

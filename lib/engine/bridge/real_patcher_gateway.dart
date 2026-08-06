@@ -209,6 +209,11 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
   }
 
   @override
+  void sendInt(int instanceId, int handleId, int inlet, int value) {
+    _inst(instanceId).handles[handleId]?.sendInt(inlet, value);
+  }
+
+  @override
   void sendBang(int instanceId, int handleId, int inlet) {
     _inst(instanceId).handles[handleId]?.sendBang(inlet);
   }
