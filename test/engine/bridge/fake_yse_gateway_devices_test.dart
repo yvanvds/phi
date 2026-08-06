@@ -393,6 +393,107 @@ void main() {
     });
   });
 
+  // ── What a re-init resets, and what it does not (issue #402) ──────────────
+  // `system::initShared()` returns early on an already-active engine; past that
+  // guard it blanks exactly three things before the device manager comes up:
+  //
+  //     currentlyMissedCallbacks = 0;
+  //     doAutoReconnect = false;
+  //     reconnectDelay = 0;
+  //
+  // and then re-creates the master channel's implementation, which is born at
+  // unity. `close()` touches none of them — which is why these are init-side
+  // tests and the close group above deliberately asserts the opposite.
+  group('init-side resets', () {
+    test('init clears the stall gauge a previous session left behind', () {
+      gateway.init();
+      gateway.deviceStallTicksValue = 7;
+      gateway.close();
+      expect(gateway.deviceStallTicks, 7); // close leaves it alone …
+
+      gateway.init();
+
+      expect(gateway.deviceStallTicks, 0); // … initShared() blanks it
+    });
+
+    test('initOffline clears it too — the reset is on the shared path', () {
+      gateway.init();
+      gateway.deviceStallTicksValue = 5;
+      gateway.close();
+
+      gateway.initOffline();
+
+      expect(gateway.deviceStallTicks, 0);
+    });
+
+    test('a second init on a live engine resets nothing', () {
+      gateway.init();
+      gateway.deviceStallTicksValue = 4;
+      gateway.setAutoReconnect(on: true, delayMs: 250);
+
+      gateway.init(); // "You're trying to initialize more than once!"
+
+      expect(gateway.deviceStallTicks, 4);
+      expect(gateway.autoReconnectOn, isTrue);
+    });
+
+    test('init disarms auto-reconnect the previous session configured', () {
+      gateway.init();
+      gateway.setAutoReconnect(on: true, delayMs: 250);
+      gateway.close();
+
+      gateway.init();
+
+      // The engine forgets; `AudioDeviceCoordinator.boot()` re-asserting it
+      // right after `init()` is load-bearing, not belt-and-braces (issue #410).
+      expect(gateway.autoReconnectOn, isNull);
+      expect(gateway.autoReconnectDelayMs, isNull);
+    });
+  });
+
+  group('master volume across a restart', () {
+    test('close leaves the reported volume alone', () {
+      gateway.init();
+      gateway.masterVolume = 0.3;
+
+      gateway.close();
+
+      // `Channel.master.volume` is an interface field on a process-lifetime
+      // object. `System::close()` destroys the implementation and nulls
+      // `pimpl`; it never touches this.
+      expect(gateway.masterVolume, closeTo(0.3, 1e-9));
+    });
+
+    test('init resets the gain applied while the getter stays stale', () {
+      gateway.init();
+      gateway.masterVolume = 0.3;
+      expect(gateway.appliedMasterVolume, closeTo(0.3, 1e-9));
+
+      gateway.close();
+      gateway.init();
+
+      // The divergence in one place: the master is *mixing* at unity again
+      // (fresh implementation, `newVolume(1.f)`, no VOLUME message replayed),
+      // while the getter still answers the last value written. A consumer that
+      // seeds itself from the getter after a restart believes a gain the engine
+      // is not applying (issue #402).
+      expect(gateway.masterVolume, closeTo(0.3, 1e-9));
+      expect(gateway.appliedMasterVolume, closeTo(1.0, 1e-9));
+    });
+
+    test('writing the volume again re-converges the two', () {
+      gateway.init();
+      gateway.masterVolume = 0.3;
+      gateway.close();
+      gateway.init();
+
+      gateway.masterVolume = 0.3; // what PhiEngine.start() now does
+
+      expect(gateway.masterVolume, closeTo(0.3, 1e-9));
+      expect(gateway.appliedMasterVolume, closeTo(0.3, 1e-9));
+    });
+  });
+
   group('openAudioDevice — success', () {
     // Every open runs on an enumerated engine, because that is the only kind
     // there is: the device list exists because `init()` opened one (#403).

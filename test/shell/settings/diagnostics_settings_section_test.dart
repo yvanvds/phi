@@ -35,10 +35,7 @@ void main() {
       // Beta *resolves* and then refuses to open.
       ..devices = const [_alpha, _beta]
       ..engineVersionValue = 'yse-test 9.9.1'
-      ..libraryPathValue = r'C:\engine\yse\bin'
-      // A sustained stall — past the 3-tick floor for Alpha's 256 frames @
-      // 48 kHz, so one telemetry tick latches a single stall event.
-      ..deviceStallTicksValue = 8;
+      ..libraryPathValue = r'C:\engine\yse\bin';
     // A far-future telemetry interval keeps `pumpAndSettle` from spinning on the
     // rebuild; [tick] fires exactly one telemetry emission when a test wants it.
     engine = PhiEngine(gateway, telemetryInterval: const Duration(days: 1));
@@ -57,6 +54,14 @@ void main() {
     // Started inside the test body, so the telemetry timer lives in the same
     // fake-async zone [tick] drives (a timer created in `setUp` is real).
     engine.start();
+    // A sustained stall — past the 3-tick floor for Alpha's 256 frames @
+    // 48 kHz, so one telemetry tick latches a single stall event.
+    //
+    // Seeded *after* start, because `initShared()` zeroes
+    // `currentlyMissedCallbacks` (issue #402): the engine cannot boot into a
+    // stall, so a fake that let one be seeded before `init()` was describing a
+    // machine the app never meets.
+    gateway.deviceStallTicksValue = 8;
     engine.switchAudioDevice(
       const AudioSettings(outputHost: 'WASAPI', outputDevice: 'Alpha'),
     );

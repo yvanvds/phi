@@ -42,15 +42,20 @@ void main() {
       // be in it for the total-loss test below to run the path it describes.
       ..devices = const [_alpha, _beta]
       ..engineVersionValue = 'yse-test 9.9.1'
-      ..libraryPathValue = r'C:\engine\yse\bin'
-      // A sustained stall: well past the 3-tick floor for Alpha's 256 frames
-      // @ 48 kHz, so the first telemetry tick latches one stall event.
-      ..deviceStallTicksValue = 7;
+      ..libraryPathValue = r'C:\engine\yse\bin';
     engine = PhiEngine(
       gateway,
       telemetryInterval: const Duration(milliseconds: 5),
     );
     engine.start();
+    // A sustained stall: well past the 3-tick floor for Alpha's 256 frames
+    // @ 48 kHz, so the first telemetry tick latches one stall event.
+    //
+    // Seeded *after* start, because `initShared()` zeroes
+    // `currentlyMissedCallbacks` (issue #402) — an engine cannot come up
+    // already stalled, and a stall the app can ever see is one that accrued
+    // during a running session.
+    gateway.deviceStallTicksValue = 7;
     engine.switchAudioDevice(
       const AudioSettings(
         outputHost: 'WASAPI',

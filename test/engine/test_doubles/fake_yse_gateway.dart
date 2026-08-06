@@ -91,6 +91,7 @@ class FakeYseGateway implements YseGateway {
     if (initialised) return;
     initialised = true;
     _midiInputsOpen = true;
+    _resetPerSessionGauges();
     // Enumeration is a side effect of *opening* a device, not of initialising:
     // the engine's device manager only calls `updateDeviceList()` on the
     // `init(true)` path (issue #403). So this is the call that makes hardware
@@ -112,12 +113,54 @@ class FakeYseGateway implements YseGateway {
     if (initialised) return; // same one-init-per-session rule as [init]
     initialised = true;
     _midiInputsOpen = true;
+    _resetPerSessionGauges();
     // Deliberately *no* enumeration: an offline session sees no hardware at
     // all (issue #403). Measured against libyse 2.4.0 on Windows —
     // `initOffline()` then `System.devices` is empty, where `init()` reports
     // 19 devices on the same machine. The engine skips `Pa_Initialize()` and
     // `updateDeviceList()` when it is not opening a device, and there is no
     // lazy refresh behind the accessor.
+  }
+
+  /// Everything `system::initShared()` blanks once it is past the
+  /// "more than once" guard, and *only* what it blanks (issue #402). Measured
+  /// against the engine source: the guard returns first, then
+  ///
+  /// ```cpp
+  /// INTERNAL::Global().init();
+  /// currentlyMissedCallbacks = 0;
+  /// doAutoReconnect = false;
+  /// reconnectDelay = 0;
+  /// ```
+  ///
+  /// runs before the device manager comes up, on both the `init()` and the
+  /// [initOffline] path. So these are *init-side* resets, not close-side ones:
+  /// [close] deliberately leaves them alone, because the native `close()` does
+  /// too — a session that ends stalled keeps its stall count until something
+  /// starts a new one.
+  void _resetPerSessionGauges() {
+    // The stall gauge is per-session. `close()` never touches
+    // `currentlyMissedCallbacks`; `initShared()` zeroes it, and `update()`
+    // clears it again on any tick that saw a callback. A fake that carried the
+    // previous session's stall run into a fresh engine would hand
+    // `AudioStallTracker` a device that boots already unhealthy.
+    deviceStallTicksValue = 0;
+    // Auto-reconnect is engine state, not a preference: `initShared()` resets
+    // `doAutoReconnect` / `reconnectDelay` to off, so a re-init silently
+    // disarms whatever the last session configured. `AudioDeviceCoordinator`
+    // re-asserts it right after `init()` (deliberately off — issue #410), and
+    // that call is only *load-bearing* because the engine forgets.
+    autoReconnectOn = null;
+    autoReconnectDelayMs = null;
+    // The master channel's *impl* is destroyed by `System::close()`
+    // (`CHANNEL::Manager().destroy()` clears `implementations`) and re-created
+    // by `init()` through `master().createGlobal()`. The fresh impl is born at
+    // unity — `implementationObject::implementationObject` hard-codes
+    // `newVolume(1.f), lastVolume(1.f)` — and nothing replays a VOLUME message,
+    // so the gain the engine actually applies is 1.0 again. See
+    // [appliedMasterVolume] for why that is *not* the same as what
+    // [masterVolume] reports.
+    appliedMasterVolume = 1.0;
   }
 
   /// Brings the platform default (the first entry of [devices]) up in the live
@@ -176,7 +219,8 @@ class FakeYseGateway implements YseGateway {
     // `deviceStallTicks` is deliberately *not* reset here: the engine clears
     // `currentlyMissedCallbacks` in `initShared()` and on each `update()` that
     // sees a callback, never in `close()`, so the gauge keeps its last value
-    // until the next init. Modelling that reset belongs on the init side (#402).
+    // until the next init — where [_resetPerSessionGauges] now models it,
+    // alongside the two other init-side resets `initShared()` performs (#402).
     cpuLoadValue = 0;
     masterPeakValue = 0;
     masterPeakOutputs = List<double>.filled(
@@ -189,10 +233,15 @@ class FakeYseGateway implements YseGateway {
     audioTestOn = false;
     // Left alone, because these record what a *test* asked for rather than
     // live engine state: [calls], [openedDevice] / [openLayout] (the explicit
-    // opens the device rules are asserted through), [devices],
-    // [autoReconnectOn], [masterVolumeValue], and the diagnostics facts
-    // ([engineVersionValue], [libraryPathValue]) which the engine reports
-    // without a device open.
+    // opens the device rules are asserted through), [devices], and the
+    // diagnostics facts ([engineVersionValue], [libraryPathValue]) which the
+    // engine reports without a device open.
+    //
+    // Also left alone, but for the opposite reason — the engine leaves them
+    // alone too: [masterVolumeValue] (a process-lifetime interface field; see
+    // its doc for why the *applied* gain nonetheless goes back to unity),
+    // [autoReconnectOn] and [deviceStallTicksValue]. All three are cleared by
+    // the next `init()`, not by this call — see [_resetPerSessionGauges].
   }
 
   @override
@@ -426,7 +475,34 @@ class FakeYseGateway implements YseGateway {
     audioTestOn = on;
   }
 
+  /// What the gateway *reports* for the master volume — `Channel.master.volume`
+  /// on the real side, which is the interface-side mirror `YSE::channel::volume`
+  /// (`setVolume()` writes it "only used for getVolume").
+  ///
+  /// It has **process** lifetime, not session lifetime. The master channel is a
+  /// plain member of the Meyers-singleton `CHANNEL::managerObject`, so its
+  /// interface object outlives every init/close cycle; `System::close()` only
+  /// destroys the *implementation* (which nulls `pimpl`), and `createGlobal()`
+  /// on the next `init()` touches no interface field. Nothing anywhere resets
+  /// `volume`. So this deliberately survives [close] — matching the engine.
   double masterVolumeValue = 1.0;
+
+  /// What the master channel is *actually mixing at* — the impl-side
+  /// `newVolume` / `lastVolume` that `adjustVolume()` ramps to.
+  ///
+  /// **This is the honest one, and it diverges from [masterVolumeValue] across a
+  /// restart** (issue #402). Set 0.3, `close()`, `init()`: the engine renders at
+  /// **1.0** (fresh impl, born at unity, no VOLUME message replayed) while
+  /// `Channel.master.volume` still answers **0.3**. Neither value is wrong on
+  /// its own; the getter is simply not a reading of the engine, it is a cache of
+  /// the last write, and after a re-init it is a cache of a write that no longer
+  /// applies to anything.
+  ///
+  /// The fake exposes both because a consumer that *seeds* itself from
+  /// [masterVolume] — as `PhiEngine.start()` used to — reads back a value the
+  /// engine is not honouring, and no single-valued fake can catch that. Assert
+  /// on this to ask "is the master actually at the gain I think it is?".
+  double appliedMasterVolume = 1.0;
 
   @override
   double get masterVolume => masterVolumeValue;
@@ -434,7 +510,11 @@ class FakeYseGateway implements YseGateway {
   @override
   set masterVolume(double value) {
     calls.add('masterVolume:${value.toStringAsFixed(3)}');
+    // One write, both sides: `setVolume()` posts a VOLUME message to the impl
+    // *and* caches the value on the interface. They only drift apart when the
+    // impl is replaced underneath the cache — see [appliedMasterVolume].
     masterVolumeValue = value;
+    appliedMasterVolume = value;
   }
 
   double masterPeakValue = 0;
@@ -485,7 +565,43 @@ class FakeYseGateway implements YseGateway {
   @override
   void destroyChannel(int channelId) {
     calls.add('destroyChannel:$channelId');
-    channels.remove(channelId);
+    final gone = channels.remove(channelId);
+    if (gone == null) return;
+    // Destroying a channel is not a leaf operation (issue #402). `dispose()` is
+    // documented only as "destroy the underlying native channel", but the engine
+    // rewires *both* kinds of edge that pointed at the dying channel, and does
+    // it on the audio thread at the `OBJECT_RELEASE → OBJECT_DELETE` transition,
+    // before the impl can be freed — so nothing is ever left dangling.
+    //
+    // 1. **Children and attached sounds move up one level, to the destroyed
+    //    channel's parent — not to master.** `childrenToParent()` walks
+    //    `children` and then `sounds`, calling `parent->connect()` on each, and
+    //    `parent` there is the dying channel's own parent. A strip three levels
+    //    deep therefore lands two levels deep; only a child of a top-level group
+    //    lands on master. The engine's tutorial states the contract outright:
+    //    "Deleting a custom channel reparents its sounds and subchannels to the
+    //    parent automatically." A fake that dropped the entry and left
+    //    `parentId` pointing at a destroyed id let a test believe a whole subtree
+    //    went silent with its group, when in fact it keeps playing one level up.
+    //
+    // 2. **Every send still aimed at it is severed.** `detachSends()` walks the
+    //    return's `sendRegistry` and nulls `s->target` on each *sender's* slot,
+    //    then clears the registry, so the slot stops contributing and is free to
+    //    be re-wired. (The dying channel's own outgoing sends are unlinked from
+    //    their targets in the same pass; here they simply go with the entry.)
+    //    Modelled as removing the slot, because that is the effective state:
+    //    the sender's interface-side mirror does keep a stale target id, but it
+    //    is a graph key that is never dereferenced, and no gateway call reads
+    //    it. Leaving a [FakeSend] in place with a `returnId` resolving to
+    //    nothing let a test assert a send the engine had already disconnected.
+    //
+    // Note what is *not* here: no reference count, and no refusal. Destroying a
+    // channel that still owns children, sounds and incoming sends is legal and
+    // is the designed path.
+    for (final ch in channels.values) {
+      if (ch.parentId == channelId) ch.parentId = gone.parentId;
+      ch.sends.removeWhere((_, send) => send.returnId == channelId);
+    }
   }
 
   @override
