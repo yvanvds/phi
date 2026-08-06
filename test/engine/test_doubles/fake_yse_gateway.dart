@@ -12,8 +12,15 @@ import 'package:phi/engine/bridge/yse_gateway.dart';
 /// without touching `package:yse` or its native library. Fabricates an audio
 /// device list ([devices]) so the settings window is fully drivable without
 /// hardware; [init] and [openAudioDevice] reflect what the engine opened into
-/// the active-state fields, and [unopenableDeviceNames] simulates a device that
+/// the active-state fields, [close] tears that state back down the way
+/// `System::close()` does, and [unopenableDeviceNames] simulates a device that
 /// is present but refuses to open (the design §5 fallback path).
+///
+/// The rule this double is held to: a call with an *observable state effect* on
+/// the real gateway must reproduce that effect here, not merely append to
+/// [calls]. A fake that records without transitioning tells consumers a lie
+/// that no unit test can catch, because every test is reading the same lie
+/// (issues #398, #399).
 class FakeYseGateway implements YseGateway {
   final List<String> calls = [];
   bool initialised = false;
@@ -36,9 +43,20 @@ class FakeYseGateway implements YseGateway {
   final StreamController<void> _midiActivity =
       StreamController<void>.broadcast();
 
-  /// Push a synthetic MIDI tick — drives listeners as if a hardware port
-  /// had delivered an event.
-  void emitMidiActivity() => _midiActivity.add(null);
+  /// Whether the gateway is currently subscribed to its MIDI inputs, as
+  /// `_openMidiInputs()` / `_closeMidiInputs()` model it on the real gateway:
+  /// nothing is subscribed before [init] / [initOffline], and [close] cancels
+  /// what was.
+  bool _midiInputsOpen = false;
+
+  /// Push a synthetic MIDI tick — drives listeners as if a hardware port had
+  /// delivered an event. Silent before [init] and after [close], because the
+  /// real gateway holds no port subscriptions then: hardware traffic reaches
+  /// no listener until the engine is (re-)initialised.
+  void emitMidiActivity() {
+    if (!_midiInputsOpen) return;
+    _midiActivity.add(null);
+  }
 
   @override
   Stream<void> get midiActivity => _midiActivity.stream;
@@ -47,6 +65,7 @@ class FakeYseGateway implements YseGateway {
   void init() {
     calls.add('init');
     initialised = true;
+    _midiInputsOpen = true;
     // The native `System::init()` brings the platform-default device up with
     // it — only `initOffline()` comes up device-less. Reflect that here, or a
     // fake that booted the default device reads back as "no device open" and
@@ -59,6 +78,7 @@ class FakeYseGateway implements YseGateway {
   void initOffline() {
     calls.add('initOffline');
     initialised = true;
+    _midiInputsOpen = true;
   }
 
   /// Brings the platform default (the first entry of [devices]) up in the live
@@ -81,6 +101,47 @@ class FakeYseGateway implements YseGateway {
   void close() {
     calls.add('close');
     initialised = false;
+    // `close()` is not a recording — it tears the engine down. The real one
+    // closes the MIDI inputs, destroys every channel it minted, and calls
+    // `System::close()`, which releases the audio device (the engine's own
+    // docs: active rate / buffer / latency read `0` "pre-init, after close, or
+    // [initOffline] path"). A fake that only flips [initialised] keeps
+    // reporting the last opened device's rate and every channel the engine
+    // ever created, so anything reading state after a close — an engine
+    // restart, a second `start()` in one process, the diagnostics bundle —
+    // sees a device that is not there (issue #399).
+    _midiInputsOpen = false;
+    channels.clear();
+    // Deliberately *not* reset: `_nextChannelId`. `RealYseGateway` keeps
+    // counting up across a close, so an id is never recycled onto a different
+    // channel; a fake that restarted at 1 would hide a stale-id bug.
+    activeSampleRateValue = 0;
+    activeBufferSizeValue = 0;
+    activeOutputLatencyValue = 0;
+    // Gauges and meters belong to the running engine. `close()` → device
+    // manager close stores `cpuLoadEma = 0`, and dropping the master channel's
+    // implementation makes `getPeakLinearPost()` / `getNumOutputs()` read `0`.
+    //
+    // `deviceStallTicks` is deliberately *not* reset here: the engine clears
+    // `currentlyMissedCallbacks` in `initShared()` and on each `update()` that
+    // sees a callback, never in `close()`, so the gauge keeps its last value
+    // until the next init. Modelling that reset belongs on the init side (#402).
+    cpuLoadValue = 0;
+    masterPeakValue = 0;
+    masterPeakOutputs = List<double>.filled(
+      masterPeakOutputs.length,
+      0,
+      growable: true,
+    );
+    masterOutputCountValue = 0;
+    // The test signal goes down with the system that was generating it.
+    audioTestOn = false;
+    // Left alone, because these record what a *test* asked for rather than
+    // live engine state: [calls], [openedDevice] / [openLayout] (the explicit
+    // opens the device rules are asserted through), [devices],
+    // [autoReconnectOn], [masterVolumeValue], and the diagnostics facts
+    // ([engineVersionValue], [libraryPathValue]) which the engine reports
+    // without a device open.
   }
 
   @override
