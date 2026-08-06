@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/widgets/fader/phi_fader.dart';
 import 'package:phi/design/widgets/patcher/patch_gui_object.dart';
@@ -211,6 +212,104 @@ void main() {
       // The reference now documents the tapped node's engine metadata.
       expect(find.byKey(PatchReferencePanel.emptyKey), findsNothing);
       expect(find.text('audio output'), findsOneWidget);
+    });
+
+    // ─── the reference panel follows the object being created (issue #437) ─
+
+    testWidgets(
+      'dropping a palette entry re-points the reference panel at it',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(body: PatcherSurface(engine: engine)),
+          ),
+        );
+        await tester.pump();
+
+        expect(find.byKey(PatchReferencePanel.emptyKey), findsOneWidget);
+
+        await dropOnCanvas(tester, Obj.dDac);
+
+        // No tap on anything: the drop alone is what selected it, so the
+        // object's documentation is on screen the moment the object is.
+        expect(find.byKey(PatchReferencePanel.emptyKey), findsNothing);
+        expect(
+          find.descendant(
+            of: find.byType(PatchReferencePanel),
+            matching: find.text('audio output'),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('typing an unambiguous name in the inline box switches the '
+        'reference panel before Enter', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: PatcherSurface(engine: engine)),
+        ),
+      );
+      await tester.pump();
+
+      // Double-click a patch of empty grid, well below the seeded chain.
+      final canvas = find.byType(PatcherCanvas);
+      final at = tester.getBottomRight(canvas) - const Offset(40, 40);
+      await tester.tapAt(at);
+      await tester.pump();
+      await tester.tapAt(at);
+      await tester.pumpAndSettle();
+      expect(find.byKey(PatcherCanvas.inlineCreateKey), findsOneWidget);
+
+      await tester.enterText(find.byKey(PatchInlineObjectBox.fieldKey), 'sine');
+      await tester.pump();
+
+      // Nothing has been created yet — the box is still open — but the panel
+      // already documents `~sine`, arguments and all, which is how the
+      // arguments are learned while there is still time to type them.
+      expect(find.byKey(PatcherCanvas.inlineCreateKey), findsOneWidget);
+      final panel = find.byType(PatchReferencePanel);
+      expect(
+        find.descendant(of: panel, matching: find.text('sine oscillator')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: panel, matching: find.text('frequency')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('creating from the inline box selects the created node, values '
+        'showing', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: PatcherSurface(engine: engine)),
+        ),
+      );
+      await tester.pump();
+
+      final canvas = find.byType(PatcherCanvas);
+      final at = tester.getBottomRight(canvas) - const Offset(40, 40);
+      await tester.tapAt(at);
+      await tester.pump();
+      await tester.tapAt(at);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(PatchInlineObjectBox.fieldKey),
+        'sine 220',
+      );
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      // The panel now documents the *instance*: the argument just typed sits
+      // beside the parameter it set.
+      expect(
+        find.byKey(PatchReferencePanel.valueKey('frequency')),
+        findsOneWidget,
+      );
+      expect(find.text('= 220'), findsOneWidget);
     });
 
     // ─── node context menu + live param values (issue #356) ───────────────

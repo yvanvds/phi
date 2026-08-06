@@ -111,6 +111,7 @@ class PatcherCanvas extends StatefulWidget {
     this.onCreateObject,
     this.onNodeTap,
     this.onNodeContextMenu,
+    this.onTypeResolved,
     super.key,
   });
 
@@ -166,6 +167,12 @@ class PatcherCanvas extends StatefulWidget {
   /// would sit in the arena against the primary-button gestures the canvas
   /// already owns, which is exactly the competition issue #352 removed.
   final void Function(PatchNode node, Offset globalPosition)? onNodeContextMenu;
+
+  /// Called while the inline object box is open, each time its typed name comes
+  /// to unambiguously name one catalogue type — so the reference panel can
+  /// switch to the object being created (or retyped) while its arguments are
+  /// still being typed (issue #437). Null ignores the settling name.
+  final void Function(PatchObjectDescriptor desc)? onTypeResolved;
 
   /// Key on the transient banner shown when a cable drop is incompatible.
   static const Key rejectKey = Key('PatcherCanvas.reject');
@@ -1242,6 +1249,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
         initialText: editing == null ? '' : _controller.objectLineOf(id!),
         onCommit: _commitInline,
         onDismiss: _closeInline,
+        onResolve: widget.onTypeResolved,
       ),
     );
   }

@@ -79,6 +79,18 @@ void main() {
       isTrue,
     );
 
+    // The reference panel followed the drop (issue #437): it now documents the
+    // slider that just landed, not the `~sine` the palette tap left it on.
+    final panel = find.byType(PatchReferencePanel);
+    expect(
+      find.descendant(of: panel, matching: find.text('horizontal slider')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: panel, matching: find.text('sine oscillator')),
+      findsNothing,
+    );
+
     session.dispose();
     await engine.dispose();
   });

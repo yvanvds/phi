@@ -9,6 +9,7 @@ import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
 import 'package:phi/surfaces/patcher/create/patch_inline_object_box.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
+import 'package:phi/surfaces/patcher/reference/patch_reference_panel.dart';
 import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
@@ -126,6 +127,19 @@ void main() {
     expect(find.byKey(PatchInlineObjectBox.rowKey(Obj.dSine)), findsOneWidget);
     expect(find.byKey(PatchInlineObjectBox.rowKey(Obj.gSlider)), findsNothing);
 
+    // The name is now unambiguous, so the reference panel has already switched
+    // to `~sine` — the arguments are documented while there is still time to
+    // type them, with the box still open (issue #437).
+    final panel = find.byType(PatchReferencePanel);
+    expect(
+      find.descendant(of: panel, matching: find.text('sine oscillator')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: panel, matching: find.text('frequency')),
+      findsOneWidget,
+    );
+
     // ── 3) Enter instantiates it, with the typed creation argument ───────────
     await type('sine 220');
     await press(LogicalKeyboardKey.enter);
@@ -142,6 +156,13 @@ void main() {
     // The fresh object is the selection, so the hand that typed it can go
     // straight on to move or delete it.
     expect(patcher.graph.selectedNodes, {made.id});
+    // And the panel now documents the *instance*: the argument just typed sits
+    // beside the parameter it set (issue #437).
+    expect(
+      find.byKey(PatchReferencePanel.valueKey('frequency')),
+      findsOneWidget,
+    );
+    expect(find.text('= 220'), findsOneWidget);
 
     // ── 4) Ctrl+Z un-creates it, with no click in between ────────────────────
     await ctrlZ();
