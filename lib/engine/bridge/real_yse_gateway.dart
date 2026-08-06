@@ -111,8 +111,18 @@ class RealYseGateway implements YseGateway {
     int? buffer,
     SpeakerLayout layout = SpeakerLayout.auto,
   }) {
-    // Resolve the target against the *current* device list by name + host, so a
-    // stored choice follows the hardware across a replug/reindex (design §3).
+    // Resolve the target by name + host rather than by index, because indices
+    // are only meaningful within the run that enumerated them: a stored choice
+    // has to find its device again in a *new* process, where the hardware may
+    // well have been replugged and renumbered (design §3).
+    //
+    // Within one process there is nothing to follow — the list is the frozen
+    // enumeration cache `init()` took, not a view of the machine (issue #412).
+    // So this resolves an unplugged interface just as happily as a present one,
+    // and the `openDevice` below is what fails. That is by design: it is the
+    // only way Phi finds out a device went away, and it is what keeps recovery
+    // able to reach for the device the performer actually asked for.
+    //
     // A null descriptor means the platform default.
     final device = descriptor == null
         ? _defaultDevice()
@@ -167,8 +177,14 @@ class RealYseGateway implements YseGateway {
   void setAutoReconnect({required bool on, int delayMs = 1000}) =>
       _system.setAutoReconnect(on: on, delayMs: delayMs);
 
-  /// The engine [Device] matching [name] + [hostName] in the current device
-  /// list, or `null` when none does (unplugged, renamed).
+  /// The engine [Device] matching [name] + [hostName] in the enumeration cache,
+  /// or `null` when none does.
+  ///
+  /// Note what `null` does **not** mean: unplugged. The cache is filled once
+  /// inside `init()` and never refreshed (issue #412), so an interface pulled
+  /// out of the machine still matches here — only the open that follows fails.
+  /// This returns `null` for a device that was not in the machine when the
+  /// engine started, which in-process is the same thing as never.
   Device? _findDevice(String name, String hostName) {
     for (final device in _system.devices) {
       if (device.name == name && device.hostName == hostName) return device;
