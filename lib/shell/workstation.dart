@@ -484,7 +484,8 @@ class _WorkstationState extends State<Workstation> {
 
   /// Surfaces the engine's latest audio-device fallback through the notice
   /// channel (design §3 retrofit): a lost-all-output notice is an error, every
-  /// other fallback (unplugged device, unsupported rate/buffer, reverted switch)
+  /// other fallback (unplugged device, unsupported rate/buffer, reverted
+  /// switch, recovery settling on the default instead of the chosen device)
   /// a warning — a set carries on, just degraded.
   void _onAudioNotice() {
     final notice = widget.engine.lastAudioNotice.value;
