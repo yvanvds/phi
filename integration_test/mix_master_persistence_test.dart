@@ -140,6 +140,11 @@ void main() {
     // The restored master volume matches what was saved — not the unity default.
     expect(session2.masterVolume.value, closeTo(savedVolume, 1e-6));
     expect(engine2.masterVolume.value, closeTo(savedVolume, 1e-6));
+    // And the engine is *applying* it, not merely reporting it (issue #402).
+    // `masterVolume` on the gateway is a cache of the last write, which after a
+    // restart can disagree with the gain the master channel actually has; this
+    // asserts the audible half, end to end from the reopened project.
+    expect(gateway2.appliedMasterVolume, closeTo(savedVolume, 1e-6));
 
     await engine2.dispose();
     await gateway2.dispose();

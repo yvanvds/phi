@@ -95,12 +95,51 @@ void main() {
       expect(engine.testSignal.value, isFalse);
     });
 
-    test('start() seeds masterVolume listenable from gateway', () {
-      gateway.masterVolumeValue = 0.7;
+    test('start() re-asserts the master gain instead of reading it back', () {
+      // The gateway's *reported* master volume is a stale process-lifetime
+      // mirror that survives a close, while the gain the engine applies goes
+      // back to unity on every `init()` (issue #402). So a start must never seed
+      // itself from the getter — it must push what Phi knows.
+      gateway.masterVolumeValue = 0.7; // as if a previous session had set it
       engine.start();
 
-      expect(engine.masterVolume.value, closeTo(0.7, 1e-9));
+      expect(engine.masterVolume.value, closeTo(1.0, 1e-9));
+      expect(gateway.appliedMasterVolume, closeTo(1.0, 1e-9));
     });
+
+    test('a restart restores the master gain the engine forgot', () {
+      engine.start();
+      engine.setMasterVolume(0.3);
+      expect(gateway.appliedMasterVolume, closeTo(0.3, 1e-9));
+
+      engine.stop();
+      engine.start();
+
+      // `init()` reset the engine's own gain to unity and the getter still
+      // reports 0.3 — the exact divergence that made the old read-back look
+      // right. What matters is that the master is *audibly* back at 0.3.
+      expect(gateway.masterVolumeValue, closeTo(0.3, 1e-9));
+      expect(engine.masterVolume.value, closeTo(0.3, 1e-9));
+      expect(gateway.appliedMasterVolume, closeTo(0.3, 1e-9));
+    });
+
+    test(
+      'a restart while muted keeps the master silent, volume remembered',
+      () {
+        engine.start();
+        engine.setMasterVolume(0.6);
+        engine.setMasterMuted(muted: true);
+
+        engine.stop();
+        engine.start();
+
+        // Reading the *effective* volume back would have written 0.0 over the
+        // remembered user volume; pushing preserves both halves.
+        expect(engine.masterVolume.value, closeTo(0.6, 1e-9));
+        expect(engine.masterMuted.value, isTrue);
+        expect(gateway.appliedMasterVolume, 0.0);
+      },
+    );
 
     test('setMasterVolume clamps to [0, 1] and updates listenable', () {
       engine.start();
@@ -190,6 +229,11 @@ void main() {
     // The engine's raw gauge counts consecutive control ticks that saw no audio
     // callback, so a healthy device at a 16 ms tick reads `1` routinely. The
     // engine must publish the *interpreted* drop count, never the gauge.
+    //
+    // Every gauge below is seeded *after* `start()`, never before: `initShared()`
+    // zeroes `currentlyMissedCallbacks`, so the engine cannot come up already
+    // stalling (issue #402). A stall the app can ever observe is one that accrued
+    // while the session was running.
 
     test('drives the control tick at the interval the threshold assumes', () {
       engine.start();
@@ -205,8 +249,8 @@ void main() {
     test('a flickering stall gauge never registers a drop', () async {
       gateway.activeSampleRateValue = 48000;
       gateway.activeBufferSizeValue = 1024;
-      gateway.deviceStallTicksValue = 1; // the idle flicker
       engine.start();
+      gateway.deviceStallTicksValue = 1; // the idle flicker
 
       final samples = await engine.telemetry
           .take(4)
@@ -222,8 +266,8 @@ void main() {
     test('a sustained stall registers exactly one drop', () async {
       gateway.activeSampleRateValue = 48000;
       gateway.activeBufferSizeValue = 1024;
-      gateway.deviceStallTicksValue = 12; // well past the 3-tick threshold
       engine.start();
+      gateway.deviceStallTicksValue = 12; // well past the 3-tick threshold
 
       final samples = await engine.telemetry
           .take(4)
@@ -239,15 +283,17 @@ void main() {
     test('the drop count is scoped to the running session', () async {
       gateway.activeSampleRateValue = 48000;
       gateway.activeBufferSizeValue = 1024;
-      gateway.deviceStallTicksValue = 12;
       engine.start();
+      gateway.deviceStallTicksValue = 12;
       await engine.telemetry.first.timeout(const Duration(seconds: 1));
       expect(engine.audioStalls, 1);
 
       engine.stop();
       expect(engine.audioStalls, 0); // nothing to report while stopped
 
-      gateway.deviceStallTicksValue = 0;
+      // No manual reset of the gauge here: `close()` leaves
+      // `currentlyMissedCallbacks` alone and the next `initShared()` zeroes it,
+      // so the fresh session starts from a clean gauge on its own (issue #402).
       engine.start();
       await engine.telemetry.first.timeout(const Duration(seconds: 1));
       expect(engine.audioStalls, 0);

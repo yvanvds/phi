@@ -1184,7 +1184,30 @@ class PhiEngine {
     // it has seeded a `~dac`.
     _telemetryTimer = Timer.periodic(_telemetryInterval, _emit);
     _started = true;
-    _masterVolume.value = _gateway.masterVolume;
+    // Push the master gain down; never read it back (issue #402).
+    //
+    // `RealYseGateway.masterVolume` reads `Channel.master.volume`, which is the
+    // *interface-side* mirror `YSE::channel::volume` — written only by
+    // `setVolume()` ("only used for getVolume"), on an object with **process**
+    // lifetime, because the master channel is a plain member of the singleton
+    // `CHANNEL::managerObject`. Nothing in `System::close()`, `init()` or
+    // `createGlobal()` ever resets it.
+    //
+    // The gain that is actually applied lives on the *implementation*, which
+    // `close()` destroys and `init()` re-creates at unity
+    // (`newVolume(1.f), lastVolume(1.f)`) with no VOLUME message replayed. So
+    // across a stop → start the engine mixes at 1.0 while the getter still
+    // answers the last value set: seeding the listenable from it produced a
+    // fader that agreed with neither the performer nor the engine, and left the
+    // master silently back at full. Worse, the getter reports the *effective*
+    // volume, so restarting while master-muted would have written 0.0 into the
+    // remembered user volume and lost it.
+    //
+    // Phi already holds the truth — `_masterVolume` / `_masterMuted` survive a
+    // stop, and the project restores them — so re-assert it onto the fresh
+    // master channel instead. On a first start this writes the unity the engine
+    // was already at, which is exactly right.
+    _pushMasterEffective();
     // Materialise any channels the bound registry already holds (e.g. a project
     // restored before start, or a re-start after stop). No-op for the default
     // empty registry.

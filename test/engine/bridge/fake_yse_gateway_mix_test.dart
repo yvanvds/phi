@@ -52,6 +52,106 @@ void main() {
     });
   });
 
+  // ── destroyChannel knock-on effects (issue #402) ──────────────────────────
+  // `Channel.dispose()` is documented only as "destroy the underlying native
+  // channel", but the engine rewires every edge that pointed at it, on the audio
+  // thread, before the implementation can be freed. Both directions below are
+  // read off `childrenToParent()` / `detachSends()` in libyse, not guessed.
+  group('destroyChannel knock-on effects', () {
+    test('children are re-parented to the parent, not destroyed', () {
+      final group = gateway.createChannel('drums');
+      final kick = gateway.createChannel('kick', parentId: group);
+      final snare = gateway.createChannel('snare', parentId: group);
+
+      gateway.destroyChannel(group);
+
+      // The subtree survives — it just moves up one level (here, to master).
+      expect(gateway.channels.containsKey(kick), isTrue);
+      expect(gateway.channels.containsKey(snare), isTrue);
+      expect(gateway.channels[kick]!.parentId, isNull);
+      expect(gateway.channels[snare]!.parentId, isNull);
+    });
+
+    test('re-parenting goes one level up, not to master', () {
+      final outer = gateway.createChannel('band');
+      final inner = gateway.createChannel('drums', parentId: outer);
+      final kick = gateway.createChannel('kick', parentId: inner);
+
+      gateway.destroyChannel(inner);
+
+      // `childrenToParent()` connects to *this* channel's parent — so a strip
+      // two levels deep lands one level deep, still inside `band`.
+      expect(gateway.channels[kick]!.parentId, outer);
+    });
+
+    test('destroying a return severs every send aimed at it', () {
+      final kick = gateway.createChannel('kick');
+      final snare = gateway.createChannel('snare');
+      final verb = gateway.createReturnChannel('verb');
+      gateway.setSend(kick, 0, verb, 0.4, false);
+      gateway.setSend(snare, 2, verb, 0.6, true);
+
+      gateway.destroyChannel(verb);
+
+      // `detachSends()` walks the return's registry nulling each sender's
+      // target: the slots stop contributing and are free again. Leaving them
+      // wired to a dead id let a test assert a send the engine had dropped.
+      expect(gateway.channels[kick]!.sends, isEmpty);
+      expect(gateway.channels[snare]!.sends, isEmpty);
+    });
+
+    test('a severed slot can be re-wired to a new return', () {
+      final kick = gateway.createChannel('kick');
+      final verb = gateway.createReturnChannel('verb');
+      gateway.setSend(kick, 0, verb, 0.4, false);
+
+      gateway.destroyChannel(verb);
+      final delay = gateway.createReturnChannel('delay');
+      gateway.setSend(kick, 0, delay, 0.5, false);
+
+      expect(gateway.channels[kick]!.sends[0]!.returnId, delay);
+      expect(gateway.channels[kick]!.sends[0]!.level, 0.5);
+    });
+
+    test('sends targeting other returns are left alone', () {
+      final kick = gateway.createChannel('kick');
+      final verb = gateway.createReturnChannel('verb');
+      final delay = gateway.createReturnChannel('delay');
+      gateway.setSend(kick, 0, verb, 0.4, false);
+      gateway.setSend(kick, 1, delay, 0.2, false);
+
+      gateway.destroyChannel(verb);
+
+      expect(gateway.channels[kick]!.sends.containsKey(0), isFalse);
+      expect(gateway.channels[kick]!.sends[1]!.returnId, delay);
+    });
+
+    test('a return that sends onward drops its own edges with it', () {
+      final verb = gateway.createReturnChannel('verb');
+      final delay = gateway.createReturnChannel('delay');
+      gateway.setSend(delay, 0, verb, 0.3, false);
+
+      gateway.destroyChannel(delay);
+
+      // Nothing is left pointing at `verb` from the dead return, and `verb`
+      // itself is untouched — the cycle check must see a consistent graph.
+      expect(gateway.channels.containsKey(delay), isFalse);
+      expect(gateway.channels[verb]!.sends, isEmpty);
+      final kick = gateway.createChannel('kick');
+      gateway.setSend(kick, 0, verb, 0.5, false);
+      expect(gateway.channels[kick]!.sends[0]!.returnId, verb);
+    });
+
+    test('destroying an unknown id changes nothing', () {
+      final group = gateway.createChannel('drums');
+      final kick = gateway.createChannel('kick', parentId: group);
+
+      gateway.destroyChannel(999);
+
+      expect(gateway.channels[kick]!.parentId, group);
+    });
+  });
+
   group('return buses', () {
     test('createReturnChannel marks a return with the default four slots', () {
       final id = gateway.createReturnChannel('verb');
