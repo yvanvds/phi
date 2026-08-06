@@ -22,13 +22,13 @@ planned (Scene · Patcher · Code · State · MIDI · Mix); only Mix has a stub.
 
 - **Engine:** [yse-soundengine](https://github.com/yvanvds/yse-soundengine) (C++).
 - **FFI bridge:** [dart-yse](https://github.com/yvanvds/dart-yse) — package name `yse`.
-- **UI:** Flutter ≥ 3.38, Windows desktop only for now.
+- **UI:** Flutter ≥ 3.44, Windows desktop only for now.
 - **Design system:** [`design system/`](design%20system/) — colors, type, motion,
   components. Source-of-truth for the Dart token files under `lib/design/tokens/`.
 
 ## Build
 
-Requires Windows, [Flutter](https://docs.flutter.dev/get-started/install) ≥ 3.38,
+Requires Windows, [Flutter](https://docs.flutter.dev/get-started/install) ≥ 3.44,
 and the `yse-soundengine` build toolchain (MSYS2 Clang64 + CMake).
 
 ```powershell

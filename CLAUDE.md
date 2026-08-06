@@ -41,7 +41,7 @@ maintainer-applied.
 
 ## Running locally
 
-Requires Windows, Flutter ≥ 3.38, and `libyse.dll` discoverable via
+Requires Windows, Flutter ≥ 3.44, and `libyse.dll` discoverable via
 `YSE_DLL_PATH` or sitting next to the executable. See [README.md](README.md)
 for the build recipe.
 

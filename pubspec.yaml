@@ -4,8 +4,8 @@ publish_to: 'none'
 version: 0.1.0+1
 
 environment:
-  sdk: ^3.10.1
-  flutter: ">=3.38.0"
+  sdk: ^3.12.0
+  flutter: ">=3.44.0"
 
 dependencies:
   flutter:
@@ -48,17 +48,6 @@ dev_dependencies:
   # Ambient clock the MIDI transport fake integrates beats from, so its
   # engine-clock model advances with `fakeAsync` time and wall time alike (#103).
   clock: ^1.1.1
-
-dependency_overrides:
-  # macbear_3d 0.9.2 pins `image: ^4.9.1`, whose only match (4.9.1) depends on
-  # `xml ^7.0.1` and so requires Dart >= 3.11 (Flutter 3.44+) — above this
-  # project's Flutter 3.38 floor, which breaks `pub get` on CI. `image` 4.8.0 is
-  # the last release on the Dart-3.10-compatible `xml ^6.x`, and macbear only
-  # uses `image` for texture decoding (which Phi's Scene doesn't exercise — it
-  # draws solid-colour spheres). We cap it here rather than asking the fork to
-  # hold back `image` for our floor; drop this once Phi raises its Flutter floor
-  # to 3.44+.
-  image: '>=4.5.4 <4.9.0'
 
 flutter:
   uses-material-design: true

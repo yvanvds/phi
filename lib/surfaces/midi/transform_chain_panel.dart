@@ -142,10 +142,10 @@ class _TransformChainPanelState extends State<TransformChainPanel> {
             child: ReorderableListView(
               padding: const EdgeInsets.all(6),
               buildDefaultDragHandles: false,
-              // `onReorder` is deprecated on Flutter 3.44 (local) in favour of
-              // `onReorderItem`, but CI pins 3.38.3 where that replacement does
-              // not exist yet. `chain.reorder` matches `onReorder`'s pre-removal
-              // insertion-index contract exactly, so keep it until CI moves up.
+              // `onReorder` is deprecated on Flutter 3.44 in favour of
+              // `onReorderItem`, whose index contract differs: `chain.reorder`
+              // matches `onReorder`'s pre-removal insertion-index contract
+              // exactly, so the migration is not a rename. Tracked in #427.
               // ignore: deprecated_member_use
               onReorder: widget.chain.reorder,
               children: [
