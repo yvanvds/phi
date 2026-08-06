@@ -107,7 +107,7 @@ void main() {
     // ── ok ──────────────────────────────────────────────────────────────────
     // Boot opened Alpha, so the chip reads healthy.
     await tick();
-    expect(engine.activeAudioSettings.outputDevice, 'Alpha');
+    expect(engine.activeAudioSettings?.outputDevice, 'Alpha');
     expect(find.byKey(AudioDeviceChip.chipKey), findsOneWidget);
     expect(find.text('AUDIO'), findsOneWidget);
 

@@ -76,7 +76,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Boot opened the stored Alpha device (design §5).
-    expect(engine.activeAudioSettings.outputDevice, 'Alpha');
+    expect(engine.activeAudioSettings?.outputDevice, 'Alpha');
 
     // Open the File menu and pick Settings…
     await tester.tap(find.byIcon(Icons.expand_more));
@@ -99,7 +99,7 @@ void main() {
     // was persisted through the single settings owner.
     expect(gateway.openedDevice?.name, 'Beta');
     expect(gateway.openedDevice?.hostName, 'ASIO');
-    expect(engine.activeAudioSettings.outputDevice, 'Beta');
+    expect(engine.activeAudioSettings?.outputDevice, 'Beta');
     expect(settings.value.audio.outputDevice, 'Beta');
     expect(settingsStore.current.audio.outputDevice, 'Beta');
     expect(find.textContaining('48000 Hz'), findsOneWidget);

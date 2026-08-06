@@ -108,8 +108,11 @@ class _AudioSettingsSectionState extends State<AudioSettingsSection> {
   /// pickers snap back, and nothing is written.
   void _apply(AudioSettings desired) {
     final ok = widget.engine.switchAudioDevice(desired);
-    if (ok) {
-      final applied = widget.engine.activeAudioSettings;
+    // A successful switch always leaves a device open, so `applied` is non-null
+    // here; the guard keeps a "no device open" reading (issue #408) from ever
+    // being persisted as the stored preference.
+    final applied = widget.engine.activeAudioSettings;
+    if (ok && applied != null) {
       setState(() => _selected = applied);
       unawaited(
         widget.settings.update(widget.settings.value.withAudio(applied)),

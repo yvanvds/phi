@@ -72,7 +72,7 @@ void main() {
     // The stored ASIO device (not its WASAPI namesake) was opened …
     expect(gateway.openedDevice?.name, 'Fake Interface');
     expect(gateway.openedDevice?.hostName, 'ASIO');
-    expect(engine.activeAudioSettings.outputDevice, 'Fake Interface');
+    expect(engine.activeAudioSettings?.outputDevice, 'Fake Interface');
     expect(engine.lastAudioNotice.value, isNull);
     // … auto-reconnect is enabled at boot (design §4) …
     expect(gateway.autoReconnectOn, isTrue);
@@ -117,8 +117,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // No stored device was opened; the engine stayed on the default …
-    expect(engine.activeAudioSettings.outputDevice, isNull);
+    // No stored device was opened; the engine stayed on the default — which is
+    // an open device with no chosen name, not the `null` that means the engine
+    // is on nothing (issue #408).
+    expect(engine.activeAudioSettings, const AudioSettings());
     expect(engine.lastAudioNotice.value?.kind, AudioNoticeKind.switchReverted);
     // … and the stored preference survives an unplugged interface (design §5).
     expect(settingsStore.saveCount, 0);

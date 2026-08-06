@@ -55,7 +55,7 @@ void main() {
     expect(gateway.calls, contains('init'));
     expect(gateway.calls.any((c) => c.startsWith('initOffline')), isFalse);
     expect(gateway.openedDevice, gateway.devices[1]);
-    expect(engine.activeAudioSettings.outputDevice, 'Fake Interface');
+    expect(engine.activeAudioSettings?.outputDevice, 'Fake Interface');
     expect(engine.lastAudioNotice.value, isNull);
   });
 
@@ -68,8 +68,10 @@ void main() {
     final ok = engine.switchAudioDevice(stored);
 
     expect(ok, isFalse);
-    // Stayed on the platform default `start()` opened …
-    expect(engine.activeAudioSettings.outputDevice, isNull);
+    // Stayed on the platform default `start()` opened — a device *is* open, it
+    // just has no chosen name, which is not the same as the `null` that means
+    // nothing is open (issue #408).
+    expect(engine.activeAudioSettings, const AudioSettings());
     expect(engine.lastAudioNotice.value?.kind, AudioNoticeKind.switchReverted);
     // … while the stored preference (an immutable value) is untouched.
     expect(stored.outputDevice, 'Ghost Device');
@@ -92,7 +94,7 @@ void main() {
     );
 
     expect(ok, isTrue);
-    expect(engine.activeAudioSettings.outputDevice, 'Fake Interface');
+    expect(engine.activeAudioSettings?.outputDevice, 'Fake Interface');
     expect(gateway.openedDevice, gateway.devices[1]);
   });
 
@@ -105,6 +107,7 @@ void main() {
 
     expect(ok, isFalse);
     expect(engine.lastAudioNotice.value?.kind, AudioNoticeKind.switchReverted);
-    expect(engine.activeAudioSettings.outputDevice, isNull);
+    // The platform default is still open — "no device chosen", not "no device".
+    expect(engine.activeAudioSettings, const AudioSettings());
   });
 }

@@ -15,6 +15,13 @@ const _alpha = AudioDeviceDescriptor(
   bufferSizes: [256],
   defaultBufferSize: 256,
 );
+const _beta = AudioDeviceDescriptor(
+  name: 'Beta',
+  hostName: 'ASIO',
+  sampleRates: [48000.0],
+  bufferSizes: [128],
+  defaultBufferSize: 128,
+);
 
 void main() {
   late FakeYseGateway gateway;
@@ -41,6 +48,7 @@ void main() {
   Future<void> pumpSection(
     WidgetTester tester, {
     String Function()? report,
+    void Function()? afterStart,
   }) async {
     // Started inside the test body, so the telemetry timer lives in the same
     // fake-async zone [tick] drives (a timer created in `setUp` is real).
@@ -48,6 +56,7 @@ void main() {
     engine.switchAudioDevice(
       const AudioSettings(outputHost: 'WASAPI', outputDevice: 'Alpha'),
     );
+    afterStart?.call();
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -133,6 +142,38 @@ void main() {
     expect(copied, contains(r'YSE_DLL_PATH: C:\engine\yse\bin'));
     expect(copied, contains('Active device: Alpha · WASAPI'));
     expect(copied, contains('Audio stalls: 1'));
+    stopEngine();
+  });
+
+  /// Drives a total device loss the way the coordinator meets one: the chosen
+  /// target refuses to open — the engine having already closed Alpha to try it —
+  /// and Alpha is gone by the time the revert goes looking for it. The engine
+  /// ends up on nothing, and `activeAudioSettings` reads `null` (issue #408).
+  void loseEveryDevice() {
+    gateway.unopenableDeviceNames.add('Beta');
+    gateway.devices = const [_beta];
+    engine.switchAudioDevice(
+      const AudioSettings(outputHost: 'ASIO', outputDevice: 'Beta'),
+    );
+  }
+
+  testWidgets('after a total loss the device row names no device', (
+    tester,
+  ) async {
+    await pumpSection(tester, afterStart: loseEveryDevice);
+
+    // The row a performer reads when their audio has just vanished must not
+    // name the interface the engine is no longer on (issue #408).
+    expect(engine.activeAudioSettings, isNull);
+    expect(find.text('ACTIVE DEVICE'), findsOneWidget);
+    expect(find.textContaining('none — no audio device open'), findsOneWidget);
+    expect(find.textContaining('Alpha'), findsNothing);
+    expect(find.textContaining('WASAPI'), findsNothing);
+
+    // …and the block they paste says the same thing.
+    final copied = await captureCopy(tester);
+    expect(copied, contains('Active device: none — no audio device open'));
+    expect(copied, isNot(contains('Alpha')));
     stopEngine();
   });
 

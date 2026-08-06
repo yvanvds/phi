@@ -18,6 +18,13 @@ const _alpha = AudioDeviceDescriptor(
   bufferSizes: [256],
   defaultBufferSize: 256,
 );
+const _beta = AudioDeviceDescriptor(
+  name: 'Beta',
+  hostName: 'ASIO',
+  sampleRates: [48000.0],
+  bufferSizes: [128],
+  defaultBufferSize: 128,
+);
 
 /// The shell reporter that gathers live diagnostics facts into the bundle (design
 /// §6, issue #272): drives the real engine façade (over the fake gateway) plus a
@@ -112,5 +119,41 @@ void main() {
   test('a null project resolver reads as no project open', () {
     final report = DiagnosticsReport(engine: engine, log: log).compose();
     expect(report, contains('Open project: (no project open)'));
+  });
+
+  test('after a total device loss the report names no device', () {
+    // The exact moment issue #408 is about: the switch target refuses to open —
+    // the engine having already closed Alpha to try it — and Alpha is gone by
+    // the time the revert looks for it, so nothing is open at all. The report is
+    // what the performer pastes into the bug report, and it used to read
+    // "Active device: Alpha · WASAPI" beside a live rate of 0.
+    gateway.unopenableDeviceNames.add('Beta');
+    gateway.devices = const [_beta];
+    engine.switchAudioDevice(
+      const AudioSettings(outputHost: 'ASIO', outputDevice: 'Beta'),
+    );
+
+    final report = DiagnosticsReport(engine: engine, log: log).compose();
+
+    expect(engine.activeAudioSettings, isNull);
+    expect(report, contains('Active device: none — no audio device open'));
+    expect(report, contains('Active state: no device open'));
+    expect(report, isNot(contains('Alpha')));
+  });
+
+  test('describeDevice spells the three readings apart', () {
+    // "System default" means a device *is* open and it is the platform's own —
+    // never the same string as "nothing is open" (issue #408).
+    expect(DiagnosticsReport.describeDevice(null), DiagnosticsReport.noDevice);
+    expect(
+      DiagnosticsReport.describeDevice(const AudioSettings()),
+      'System default',
+    );
+    expect(
+      DiagnosticsReport.describeDevice(
+        const AudioSettings(outputHost: 'WASAPI', outputDevice: 'Alpha'),
+      ),
+      'Alpha · WASAPI',
+    );
   });
 }

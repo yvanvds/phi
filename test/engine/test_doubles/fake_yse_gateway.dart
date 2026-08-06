@@ -15,7 +15,9 @@ import 'package:phi/engine/bridge/yse_gateway.dart';
 /// [init] and [openAudioDevice] reflect what the engine opened into the
 /// active-state fields, [close] tears that state back down the way
 /// `System::close()` does, and [unopenableDeviceNames] simulates a device that
-/// is present but refuses to open (the design §5 fallback path).
+/// is present but refuses to open (the design §5 fallback path) — which, once
+/// the target has resolved, leaves the machine device-less, because the real
+/// gateway closes the running device before it attempts the new one.
 ///
 /// The rule this double is held to: a call with an *observable state effect* on
 /// the real gateway must reproduce that effect here, not merely append to
@@ -110,11 +112,23 @@ class FakeYseGateway implements YseGateway {
     if (visible.isEmpty) return;
     final target = visible.first;
     if (unopenableDeviceNames.contains(target.name)) return;
+    _liveDevice = target;
     activeSampleRateValue = target.sampleRates.isNotEmpty
         ? target.sampleRates.first
         : 0;
     activeBufferSizeValue = target.defaultBufferSize;
     activeOutputLatencyValue = target.outputLatency;
+  }
+
+  /// Drops the live device state to "nothing is open", as
+  /// `DEVICE::managerObject::close()` does natively: the open flag goes false
+  /// (so `getActiveSampleRate()` reads 0) and the active buffer / latency are
+  /// stored as 0. Shared by [close] and the failed-open path.
+  void _closeDeviceState() {
+    _liveDevice = null;
+    activeSampleRateValue = 0;
+    activeBufferSizeValue = 0;
+    activeOutputLatencyValue = 0;
   }
 
   @override
@@ -135,9 +149,7 @@ class FakeYseGateway implements YseGateway {
     // Deliberately *not* reset: `_nextChannelId`. `RealYseGateway` keeps
     // counting up across a close, so an id is never recycled onto a different
     // channel; a fake that restarted at 1 would hide a stale-id bug.
-    activeSampleRateValue = 0;
-    activeBufferSizeValue = 0;
-    activeOutputLatencyValue = 0;
+    _closeDeviceState();
     // Gauges and meters belong to the running engine. `close()` → device
     // manager close stores `cpuLoadEma = 0`, and dropping the master channel's
     // implementation makes `getPeakLinearPost()` / `getNumOutputs()` read `0`.
@@ -184,7 +196,36 @@ class FakeYseGateway implements YseGateway {
   /// §3). Reassign to model other hardware (or an empty list); a test that
   /// needs the list readable without booting can call [init] first, exactly as
   /// the app does.
-  List<AudioDeviceDescriptor> devices = const [
+  ///
+  /// Reassigning is how a test unplugs an interface, so it carries the
+  /// consequence: hardware that disappears takes its open stream with it. When
+  /// the device that is live no longer appears in the new list, the active
+  /// state drops to "nothing is open", the way PortAudio errors the stream out
+  /// and libyse's device manager closes it (`open = false`, active buffer /
+  /// latency stored as `0`) before auto-reconnect goes looking. A fake that let
+  /// a test lose every device while `activeAudioState()` still reported audio
+  /// flowing would hand the health monitor — and anything cross-checking
+  /// `current` against the live state — a machine that is silent and healthy at
+  /// the same time (issues #398, #399, #408).
+  List<AudioDeviceDescriptor> get devices => _devices;
+
+  set devices(List<AudioDeviceDescriptor> value) {
+    _devices = value;
+    final live = _liveDevice;
+    if (live == null) return;
+    final stillThere = value.any(
+      (d) => d.name == live.name && d.hostName == live.hostName,
+    );
+    if (!stillThere) _closeDeviceState();
+  }
+
+  /// The device the fake currently has "open" — whatever [init] or
+  /// [openAudioDevice] last brought up, cleared whenever the live state is torn
+  /// down. Distinct from [openedDevice], which records *explicit* opens for
+  /// tests to assert on and survives a close.
+  AudioDeviceDescriptor? _liveDevice;
+
+  List<AudioDeviceDescriptor> _devices = const [
     AudioDeviceDescriptor(
       name: 'Fake Interface',
       hostName: 'WASAPI',
@@ -260,6 +301,17 @@ class FakeYseGateway implements YseGateway {
       target = match;
     }
     if (unopenableDeviceNames.contains(target.name)) {
+      // A resolved target means `RealYseGateway` already ran
+      // `closeCurrentDevice()` — the engine tears the running stream down
+      // *before* it tries the new one — so a refused open leaves the machine
+      // with no device at all: `open` goes false and the device manager stores
+      // `activeBufferSize = 0` / `activeOutputLatency = 0`, with
+      // `getActiveSampleRate()` gated on the same flag (libyse 2.4.0,
+      // `portaudioDeviceManager.cpp`). A fake that kept reporting the previous
+      // device's rate here would tell the health monitor the audio is fine
+      // through a total loss, and would let `current` be checked against a live
+      // state that agrees with it (issues #398, #399, #408).
+      _closeDeviceState();
       throw AudioDeviceException('engine failed to open "${target.name}"');
     }
     calls.add(
@@ -269,6 +321,7 @@ class FakeYseGateway implements YseGateway {
     );
     openedDevice = target;
     openLayout = layout;
+    _liveDevice = target;
     // Reflect the choice into the live state so activeAudioState() reads back
     // what was opened — overrides win, else the device's own defaults.
     activeSampleRateValue =
