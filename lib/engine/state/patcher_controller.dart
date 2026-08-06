@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../../design/widgets/patcher/patch_canvas_constants.dart';
+import '../../design/widgets/patcher/patch_note_box.dart';
 import '../../design/widgets/patcher/patch_object_box_metrics.dart';
 import '../../domain/patcher/patch_cable.dart';
 import '../../domain/patcher/patch_graph.dart';
@@ -317,6 +318,20 @@ class PatcherController {
     return trimmed.isEmpty ? name : '$name $trimmed';
   }
 
+  /// The line a node of [type] actually **renders** — which is what its box
+  /// is measured from.
+  ///
+  /// For every ordinary object that is [objectLine] (`sine 440`). The note
+  /// (issue #436) renders its content *alone* — a comment reading
+  /// `text warm pad` would defeat the point of looking like a note — so it is
+  /// measured from [PatchNoteBox.displayText] instead. [objectLine] stays what
+  /// the inline box opens holding for **every** type, note included: there the
+  /// name is how the line re-resolves its object.
+  static String displayLine(String type, String args) =>
+      PatchTypeName.isNote(type)
+      ? PatchNoteBox.displayText(args)
+      : objectLine(type, args);
+
   /// Whether a node of [type] renders as an object box rather than as a bare
   /// GUI control (design §7). An **unregistered** type is one too: a plain
   /// engine object dragged off the palette has no hand-authored body and never
@@ -362,7 +377,9 @@ class PatcherController {
       return Size(math.max(tuned.width, floor), tuned.height);
     }
     return PatchObjectBoxMetrics.sizeFor(
-      text: objectLine(type, args),
+      // The *display* line: a note is measured from its content alone
+      // (issue #436), every other box from `name args`.
+      text: displayLine(type, args),
       inputs: inputs,
       outputs: outputs,
     );
@@ -1089,7 +1106,7 @@ class PatcherController {
   Size _sizeSeating(PatchNode node, int inputs, int outputs) {
     if (isObjectBox(node.type)) {
       return PatchObjectBoxMetrics.sizeFor(
-        text: objectLineOf(node.id),
+        text: displayLine(node.type, argsOf(node.id)),
         inputs: inputs,
         outputs: outputs,
       );

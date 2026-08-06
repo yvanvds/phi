@@ -70,6 +70,19 @@ void main() {
         ),
       ],
     ),
+    // The annotation object (issue #436): one free-text `text` parameter.
+    desc(
+      '.text',
+      description: 'text label',
+      params: const [
+        PatchParamDescriptor(
+          name: 'text',
+          doc: 'label text',
+          defaultValue: '',
+          range: 'any string',
+        ),
+      ],
+    ),
   ];
 
   PatchObjectDescriptor? created;
@@ -469,6 +482,39 @@ void main() {
     // should not have to be arrowed to.
     expect(fieldText(tester), '.slider ');
     expect(created, isNull);
+  });
+
+  group('the note takes free text (issue #436)', () {
+    testWidgets('every word typed after the name survives the commit', (
+      tester,
+    ) async {
+      await pumpBox(tester);
+      await type(tester, 'text warm pad from here');
+
+      await press(tester, LogicalKeyboardKey.enter);
+
+      // The bug half of issue #436: the content is not positional arguments,
+      // so nothing after the first space may be refused or dropped.
+      expect(created?.type, '.text');
+      expect(createdArgs, 'warm pad from here');
+      expect(find.byKey(PatchInlineObjectBox.rejectKey), findsNothing);
+    });
+
+    testWidgets('editing a note re-commits its whole line of text', (
+      tester,
+    ) async {
+      await pumpBox(
+        tester,
+        editing: catalogue.firstWhere((d) => d.type == '.text'),
+        initialText: 'text warm pad',
+      );
+      await type(tester, 'text a longer note than before');
+
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(created?.type, '.text');
+      expect(createdArgs, 'a longer note than before');
+    });
   });
 
   group('editing an existing object in place (issue #382)', () {

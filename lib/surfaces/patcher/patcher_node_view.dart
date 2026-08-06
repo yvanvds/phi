@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../../design/tokens/phi_colors.dart';
 import '../../design/widgets/patcher/patch_canvas_constants.dart';
 import '../../design/widgets/patcher/patch_gui_object.dart';
+import '../../design/widgets/patcher/patch_note_box.dart';
 import '../../design/widgets/patcher/patch_object_box.dart';
 import '../../domain/patcher/patch_node.dart';
 import '../../domain/patcher/patch_node_id.dart';
@@ -22,6 +23,12 @@ import '../../engine/state/patcher_controller.dart';
 /// node, with nothing around it but its ports (issue #381). **There are no
 /// headers left anywhere** — which is why `PatchNode` no longer carries a
 /// display title at all.
+///
+/// One exception sits outside both kinds: the annotation object
+/// ([PatchTypeName.isNote]) renders as a [PatchNoteBox] — its free-text
+/// content on a sticky-note field, no name, no port dots (a note has no
+/// ports to dot), so a comment never reads as a device (issue #436). It is
+/// still an *object box* to the canvas — double-click edits it in place.
 ///
 /// **Purely visual** where pointers are concerned: select, double-click and
 /// body-drag are all driven by the canvas's raw pointer pipeline, which sees
@@ -98,7 +105,15 @@ class PatcherNodeView extends StatelessWidget {
                   ),
                 ),
               ),
-            if (body == null)
+            if (PatchTypeName.isNote(node.type))
+              // The note (issue #436): content alone on a sticky-note field.
+              // No port dots — the engine gives the annotation object no
+              // ports, and drawing none is part of not looking like a device.
+              PatchNoteBox(
+                text: controller.argsOf(node.id),
+                textKey: objectLineKey(node.id),
+              )
+            else if (body == null)
               PatchObjectBox(
                 text: controller.objectLineOf(node.id),
                 // The `~`/`.` the line no longer prints, as its colour

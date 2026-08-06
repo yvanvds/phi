@@ -1,4 +1,5 @@
 import '../../domain/patcher/patch_args.dart';
+import '../../domain/patcher/patch_type_name.dart';
 import 'patch_object_descriptor.dart';
 
 /// A typed creation-argument string checked against an object type's documented
@@ -28,6 +29,18 @@ class PatchCreationArgs {
 
   /// Check [typed] — the raw text after the object name — against [desc].
   factory PatchCreationArgs.check(PatchObjectDescriptor desc, String typed) {
+    // The note object's one `text` parameter is **free text** (issue #436):
+    // `text warm pad here` is a three-word label, not three positional
+    // arguments, so tokenising it would refuse every word after the first.
+    // The whole remainder passes through verbatim — the engine stores the
+    // full creation-argument string and round-trips it through save/load, so
+    // spaces (and their runs) survive. Only the note gets this: for any
+    // *functional* object the engine reads just the first token into a string
+    // parameter, and waving extra words through would show content the object
+    // does not actually hold.
+    if (PatchTypeName.isNote(desc.type)) {
+      return PatchCreationArgs._(typed.trim(), null);
+    }
     final given = splitPatchArgs(typed);
     final params = desc.params;
     if (given.length > params.length) {

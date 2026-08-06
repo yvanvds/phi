@@ -158,4 +158,37 @@ void main() {
       expect(PatchCreationArgs.check(pan, '-1.5').problem, isNotNull);
     });
   });
+
+  group('the note is free text, never positional arguments (issue #436)', () {
+    // Mirrors the engine's own `.text` metadata: one `text` parameter, no
+    // default, a prose range.
+    final note = desc('.text', [param('text', range: 'any string')]);
+
+    test('every word after the first survives', () {
+      final checked = PatchCreationArgs.check(note, 'warm pad from here');
+      expect(checked.isValid, isTrue);
+      expect(checked.args, 'warm pad from here');
+    });
+
+    test('interior whitespace runs are kept, not collapsed', () {
+      expect(PatchCreationArgs.check(note, 'a   b').args, 'a   b');
+    });
+
+    test('outer whitespace is trimmed and empty content stays empty', () {
+      expect(
+        PatchCreationArgs.check(note, '  spaced out  ').args,
+        'spaced out',
+      );
+      expect(PatchCreationArgs.check(note, '').args, isEmpty);
+      expect(PatchCreationArgs.check(note, '').isValid, isTrue);
+    });
+
+    test('only the note gets the pass-through', () {
+      // `.s bus extra` still refuses: for a functional object the engine reads
+      // just the first token, and waving the rest through would show content
+      // the object does not hold.
+      final send = desc('.s', [param('name', defaultValue: 'bus')]);
+      expect(PatchCreationArgs.check(send, 'bells extra').problem, isNotNull);
+    });
+  });
 }

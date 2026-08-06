@@ -1842,6 +1842,63 @@ void main() {
       expect(controller.argsOf(sine.id), '220');
     });
 
+    testWidgets('a note edits in place and keeps every word (issue #436)', (
+      tester,
+    ) async {
+      // The engine's `.text` catalogue entry: one free-text `text` parameter.
+      const textDesc = PatchObjectDescriptor(
+        type: '.text',
+        description: 'text label',
+        category: PatchObjectCategory.gui,
+        isDsp: false,
+        inlets: [],
+        outlets: [],
+        params: [
+          PatchParamDescriptor(
+            name: 'text',
+            doc: 'label text',
+            defaultValue: '',
+            range: 'any string',
+          ),
+        ],
+      );
+      gateway.objectTypesCatalogue = [
+        ...FakePatcherGateway.defaultCatalogue,
+        textDesc,
+      ];
+      final note = controller.addObject(
+        desc: textDesc,
+        position: const Offset(120, 120),
+        args: 'hello world',
+      );
+      await pumpCanvas(tester, objectTypes: catalogue());
+      // The note renders its content whole; a comment is still an object box
+      // to the canvas, so a double-click opens the same in-place editor.
+      expect(find.text('hello world'), findsOneWidget);
+      await doubleClickAt(tester, nodeCenter(tester, note));
+      expect(editBox(), findsOneWidget);
+      // Seeded with the *editable* line — name and all — which is how the
+      // typed text re-resolves the object it edits.
+      expect(
+        tester.widget<TextField>(field()).controller!.text,
+        'text hello world',
+      );
+
+      await tester.enterText(field(), 'text warm pad from here');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      // Every word survives — the bug half of issue #436 — through the same
+      // journaled `applyParams` as any other box edit.
+      expect(controller.argsOf(note.id), 'warm pad from here');
+      expect(find.text('warm pad from here'), findsOneWidget);
+      expect(editBox(), findsNothing);
+
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(controller.argsOf(note.id), 'hello world');
+    });
+
     testWidgets('in run mode a double-click plays the patch, it does not edit '
         'it', (tester) async {
       final sine = controller.addNode(

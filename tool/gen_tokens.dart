@@ -204,6 +204,10 @@ String _emitColors(Map<String, String> root) {
   for (final name in ['hot', 'warm', 'cool', 'live']) {
     b.line('static const Color $name = ${_cssHex(root[name]!)};');
   }
+  b.section('Annotation');
+  b.line('static const Color noteBg = ${_cssHex(root["note-bg"]!)};');
+  b.line('static const Color noteFg = ${_cssHex(root["note-fg"]!)};');
+  b.line('static const Color noteLine = ${_cssRgba(root["note-line"]!)};');
   b.section('Grid');
   b.line('static const Color grid = ${_cssRgba(root["grid-color"]!)};');
   b.line('static const Color gridStrong = ${_cssRgba(root["grid-strong"]!)};');

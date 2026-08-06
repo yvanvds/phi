@@ -54,6 +54,11 @@ abstract final class PhiColors {
   static const Color cool = Color(0xFF6FD5FF);
   static const Color live = Color(0xFFFF3DCB);
 
+  // ── Annotation ─────────────────────────────────────────────────────────
+  static const Color noteBg = Color(0xFF262117);
+  static const Color noteFg = Color(0xFFE8DFC0);
+  static const Color noteLine = Color(0x2EFFE066);
+
   // ── Grid ───────────────────────────────────────────────────────────────
   static const Color grid = Color(0x06FFFFFF);
   static const Color gridStrong = Color(0x0FFFFFFF);

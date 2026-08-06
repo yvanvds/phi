@@ -84,6 +84,13 @@
   --cool:    #6fd5ff;   /* info, monitor */
   --live:    #ff3dcb;   /* armed, transmitting */
 
+  /* ---------- Color: annotation ----------------------------- */
+  /* Sticky-note surfaces (the patcher's `.text` comment): a dim */
+  /* warm paper field that reads as a note, never as a device.   */
+  --note-bg:   #262117;                    /* note field — warm paper */
+  --note-fg:   #e8dfc0;                    /* note ink */
+  --note-line: rgba(255, 224, 102, 0.18);  /* soft frame, off voice-6 */
+
   /* ---------- Spacing scale --------------------------------- */
   --s-0:  2px;
   --s-1:  4px;

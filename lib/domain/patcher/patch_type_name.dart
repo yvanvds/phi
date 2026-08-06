@@ -26,4 +26,16 @@ abstract final class PatchTypeName {
   /// Whether [type] names a DSP / audio-rate object — the `~` convention the
   /// engine's own object list is built on.
   static bool isDsp(String type) => type.startsWith('~');
+
+  /// The engine's annotation object (`Obj.gText`): a text label with no
+  /// inlets, no outlets and no behaviour — a comment, not a device.
+  ///
+  /// Named here (pure Dart, mirroring the `package:yse` constant) because two
+  /// far-apart readers must agree on it (issue #436): the creation-args check
+  /// treats its content as **free text** rather than positional arguments, and
+  /// the canvas renders it as a **note** rather than an object box.
+  static const String noteType = '.text';
+
+  /// Whether [type] is the annotation note object — see [noteType].
+  static bool isNote(String type) => type == noteType;
 }
