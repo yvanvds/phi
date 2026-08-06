@@ -17,6 +17,7 @@ import '../../domain/project/registry_kinds.dart';
 import '../../domain/project/registry_node.dart';
 import '../bridge/patcher_gateway.dart';
 import 'patch_bus_option.dart';
+import 'patch_clipboard.dart';
 import 'patch_reconciler.dart';
 import 'patch_tree_node.dart';
 import 'patcher_controller.dart';
@@ -70,6 +71,12 @@ class PatchLibraryController extends ChangeNotifier {
   /// One editor per opened patch, bound to the reconciler's live instance and
   /// kept alive across switches so a re-open shows the same live graph.
   final Map<EntityAddress, PatcherController> _editors = {};
+
+  /// One copy buffer shared by every editor this controller binds (issue
+  /// #435), so a fragment copied in one patch pastes into another — and the
+  /// copy survives switching patches. Deliberately kept across [rebind]: what
+  /// was copied is the performer's, not the project's.
+  final PatchClipboard _clipboard = PatchClipboard();
   EntityAddress? _openAddress;
 
   /// The registry whose `patch.` namespace this strip shows.
@@ -162,9 +169,11 @@ class PatchLibraryController extends ChangeNotifier {
       // A freshly-bound editor mirrors an empty graph; rebuild it from the live
       // native instance so a patch loaded from disk (or re-materialised by a
       // rename) shows its graph rather than a blank canvas (issue #308).
-      () =>
-          PatcherController.bound(_gateway, instanceId: instanceId)
-            ..rebuildFromInstance(),
+      () => PatcherController.bound(
+        _gateway,
+        instanceId: instanceId,
+        clipboard: _clipboard,
+      )..rebuildFromInstance(),
     );
     notifyListeners();
   }

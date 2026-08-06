@@ -17,7 +17,8 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 /// End-to-end proof of the reworked patcher canvas (issue #222) through the real
 /// [PhiApp] — real rail navigation, layout, fonts — backed by a
 /// [FakePatcherGateway] (no native `libyse.dll`). Drives body drag, delete-with-
-/// cables, and duplicate, each with undo, via real pointer + keyboard gestures.
+/// cables, duplicate, and copy/paste (issue #435), each with undo, via real
+/// pointer + keyboard gestures.
 ///
 /// Also the end-to-end guard for issue #352: in the composed app a node must
 /// travel exactly as far as the pointer does — measured on the rendered box,
@@ -38,7 +39,8 @@ void main() {
   }
 
   testWidgets(
-    'patcher canvas: drag, delete-with-cables, duplicate — all undo',
+    'patcher canvas: drag, delete-with-cables, duplicate, copy/paste — '
+    'all undo',
     (tester) async {
       final engine = PhiEngine(
         FakeYseGateway(),
@@ -143,6 +145,33 @@ void main() {
       await ctrl(tester, LogicalKeyboardKey.keyZ);
       expect(find.byType(PatcherNodeView), findsNWidgets(3));
       expect(graph.cables, hasLength(2));
+
+      // ── copy the dac (Ctrl+C), paste it (Ctrl+V) — the copy appears offset,
+      //    selected, and undoes as one step (issue #435) ──────────────────────
+      // Select by way of another node, for the same double-click reason above.
+      await tester.tap(sineLine);
+      await tester.pumpAndSettle();
+      await tester.tap(dacLine);
+      await tester.pumpAndSettle();
+      final dac = nodeOfType(Obj.dDac);
+      expect(graph.selectedNodes, {dac.id});
+
+      await ctrl(tester, LogicalKeyboardKey.keyC);
+      // Copying is not an edit — nothing appeared yet.
+      expect(find.byType(PatcherNodeView), findsNWidgets(3));
+
+      await ctrl(tester, LogicalKeyboardKey.keyV);
+      expect(find.byType(PatcherNodeView), findsNWidgets(4));
+      final pasted = graph.nodes.firstWhere(
+        (n) => n.type == Obj.dDac && n.id != dac.id,
+      );
+      // One grid step down-right of the original, and now the selection —
+      // ready to drag into place.
+      expect(pasted.position, dac.position + const Offset(16, 16));
+      expect(graph.selectedNodes, {pasted.id});
+
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(find.byType(PatcherNodeView), findsNWidgets(3));
 
       session.dispose();
       await engine.dispose();

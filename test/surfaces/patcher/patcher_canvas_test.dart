@@ -716,6 +716,70 @@ void main() {
     expect(controller.graph.nodes, hasLength(2));
   });
 
+  testWidgets('Ctrl+C / Ctrl+V copy and paste the selection, offset and '
+      'selected; undo removes the paste (issue #435)', (tester) async {
+    final sine = controller.addNode(
+      desc: desc(Obj.dSine),
+      position: const Offset(120, 120),
+    );
+    await pumpCanvas(tester);
+
+    await tester.tapAt(nodeCenter(tester, sine));
+    await tester.pump();
+    expect(controller.graph.selectedNodes, {sine.id});
+
+    await ctrl(tester, LogicalKeyboardKey.keyC);
+    // Copy alone changes nothing on the canvas.
+    expect(controller.graph.nodes, hasLength(1));
+
+    await ctrl(tester, LogicalKeyboardKey.keyV);
+    expect(controller.graph.nodes, hasLength(2));
+    final pasted = controller.graph.nodes.firstWhere((n) => n.id != sine.id);
+    expect(pasted.position, const Offset(136, 136)); // one grid step (16px)
+    // The pasted set is the selection, ready to drag.
+    expect(controller.graph.selectedNodes, {pasted.id});
+
+    // A second paste of the same copy lands one step further, not on top.
+    await ctrl(tester, LogicalKeyboardKey.keyV);
+    expect(controller.graph.nodes, hasLength(3));
+    expect(
+      controller.graph.nodes.map((n) => n.position),
+      containsAll(<Offset>[const Offset(136, 136), const Offset(152, 152)]),
+    );
+
+    await ctrl(tester, LogicalKeyboardKey.keyZ);
+    await ctrl(tester, LogicalKeyboardKey.keyZ);
+    expect(controller.graph.nodes, hasLength(1));
+
+    await ctrl(tester, LogicalKeyboardKey.keyY);
+    expect(controller.graph.nodes, hasLength(2));
+  });
+
+  testWidgets('run mode declines Ctrl+V — a played patch cannot be pasted '
+      'into by a mistyped chord', (tester) async {
+    final sine = controller.addNode(
+      desc: desc(Obj.dSine),
+      position: const Offset(120, 120),
+    );
+    await pumpCanvas(tester);
+
+    // Copy in edit mode, then flip to run mode and try to paste.
+    await tester.tapAt(nodeCenter(tester, sine));
+    await tester.pump();
+    await ctrl(tester, LogicalKeyboardKey.keyC);
+    await setMode(tester, PatchCanvasMode.run);
+
+    await ctrl(tester, LogicalKeyboardKey.keyV);
+    expect(controller.graph.nodes, hasLength(1));
+
+    // Back in edit mode the same chord pastes — the copy survived the trip.
+    await setMode(tester, PatchCanvasMode.edit);
+    await tester.tapAt(canvasTL(tester) + const Offset(600, 500));
+    await tester.pump();
+    await ctrl(tester, LogicalKeyboardKey.keyV);
+    expect(controller.graph.nodes, hasLength(2));
+  });
+
   // ─── keyboard nudge + grid snap on drop (issue #368) ─────────────────────
   //
   // Both ride the machinery a body drag already uses, so what these cases are

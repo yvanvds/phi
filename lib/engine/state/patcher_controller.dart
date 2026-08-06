@@ -18,6 +18,9 @@ import '../bridge/patch_pin_compatibility.dart';
 import '../bridge/patcher_gateway.dart';
 import '../bridge/patcher_node_snapshot.dart';
 import 'node_type_registry.dart';
+import 'patch_clipboard.dart';
+import 'patch_clipboard_cable.dart';
+import 'patch_clipboard_data.dart';
 import 'patch_node_spec.dart';
 import 'patcher_commands/connect_cable_command.dart';
 import 'patcher_commands/create_patch_object_command.dart';
@@ -25,6 +28,7 @@ import 'patcher_commands/delete_cable_command.dart';
 import 'patcher_commands/delete_patch_nodes_command.dart';
 import 'patcher_commands/duplicate_patch_selection_command.dart';
 import 'patcher_commands/move_patch_nodes_command.dart';
+import 'patcher_commands/paste_patch_clipboard_command.dart';
 import 'patcher_commands/reroute_cable_command.dart';
 import 'patcher_commands/retype_patch_object_command.dart';
 import 'patcher_commands/set_patch_params_command.dart';
@@ -55,21 +59,36 @@ import 'patcher_commands/set_patch_params_command.dart';
 /// owning it, so [dispose] leaves the native patcher to the reconciler that
 /// created it.
 class PatcherController {
-  PatcherController(this._gateway, {int mainOutputs = 2, String name = ''})
-    : instanceId = _gateway.createInstance(
-        mainOutputs: mainOutputs,
-        name: name,
-      ),
-      _ownsInstance = true;
+  PatcherController(
+    this._gateway, {
+    int mainOutputs = 2,
+    String name = '',
+    PatchClipboard? clipboard,
+  }) : instanceId = _gateway.createInstance(
+         mainOutputs: mainOutputs,
+         name: name,
+       ),
+       clipboard = clipboard ?? PatchClipboard(),
+       _ownsInstance = true;
 
   /// Bind an editor to an already-created gateway [instanceId] (the reconciler's
   /// per-entity patcher). The controller drives edits on it but does **not** own
   /// it: [dispose] frees only the Dart-side resources, leaving the native patcher
   /// to whoever minted the instance.
-  PatcherController.bound(this._gateway, {required this.instanceId})
-    : _ownsInstance = false;
+  PatcherController.bound(
+    this._gateway, {
+    required this.instanceId,
+    PatchClipboard? clipboard,
+  }) : clipboard = clipboard ?? PatchClipboard(),
+       _ownsInstance = false;
 
   final PatcherGateway _gateway;
+
+  /// The copy buffer `Ctrl+C` fills and `Ctrl+V` pastes from (issue #435).
+  /// Injected by whoever minted this editor — [PatchLibraryController] hands
+  /// every bound editor the *same* instance, so a fragment copied in one patch
+  /// pastes into another; a standalone controller defaults to its own.
+  final PatchClipboard clipboard;
 
   /// This controller's gateway instance — the patcher every op is keyed to.
   final int instanceId;
@@ -868,6 +887,49 @@ class PatcherController {
         sourceIds: ids,
         offset: const Offset(step, step),
       ),
+    );
+  }
+
+  /// Copy the selected nodes — and every cable with *both* endpoints in the
+  /// selection — into the [clipboard] (`Ctrl+C`, issue #435).
+  ///
+  /// Captures full [PatchNodeSpec]s and index-keyed cables, so the copy is
+  /// self-contained: it pastes after the originals are deleted, and into a
+  /// different patch when the clipboard is shared. Copying is not an edit —
+  /// nothing is journaled — and an empty selection is a no-op that leaves the
+  /// previous copy intact.
+  void copySelection() {
+    final order = graph.selectedNodes.toList();
+    if (order.isEmpty) return;
+    final index = {for (var i = 0; i < order.length; i++) order[i]: i};
+    clipboard.set(
+      PatchClipboardData(
+        nodes: [for (final id in order) captureSpec(id)],
+        cables: [
+          for (final c in cablesWithin(index.keys.toSet()))
+            PatchClipboardCable(
+              sourceNode: index[c.source.nodeId]!,
+              sourceOutlet: c.source.index,
+              targetNode: index[c.target.nodeId]!,
+              targetInlet: c.target.index,
+              kind: c.kind,
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Paste the clipboard's fragment as one journaled step (`Ctrl+V`, issue
+  /// #435); the pasted set becomes the selection, ready to drag. Each repeated
+  /// paste of the same copy lands one grid step further down-right — the
+  /// duplicate offset, per generation — so copies never stack on the same
+  /// spot. A no-op while the clipboard is empty.
+  void pasteClipboard() {
+    final data = clipboard.data;
+    if (data == null || data.isEmpty) return;
+    final step = PatchCanvasConstants.gridCell * clipboard.takePasteStep();
+    undoScope.run(
+      PastePatchClipboardCommand(this, data: data, offset: Offset(step, step)),
     );
   }
 

@@ -61,7 +61,9 @@ import 'patcher_node_view.dart';
 ///   is one journaled step.
 /// - **Selection** — click a node, shift-click to extend, drag over empty
 ///   canvas to marquee. `Delete` removes the selection (nodes with their
-///   cables, or the selected cable); `Ctrl+D` duplicates; `Ctrl+Z/Y` undo/redo.
+///   cables, or the selected cable); `Ctrl+D` duplicates; `Ctrl+C`/`Ctrl+V`
+///   copy and paste it (with its intra-selection cables, one grid step further
+///   per paste, issue #435); `Ctrl+Z/Y` undo/redo.
 /// - **Arrow keys nudge** the selected nodes by one grid cell, `Shift` by a
 ///   major cell (issue #368). A held arrow moves live on every repeat but
 ///   journals **once**, on release, so `Ctrl+Z` undoes the burst rather than
@@ -611,6 +613,18 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
           return KeyEventResult.handled;
         case LogicalKeyboardKey.keyD:
           _controller.duplicateSelection();
+          return KeyEventResult.handled;
+        // Copy / paste (issue #435). Letters, so matched logically like
+        // `Ctrl+Z/Y/D` above — `C` and `V` sit in the same positions on
+        // QWERTY, AZERTY and QWERTZ alike, and the logical key is the glyph
+        // on the cap either way. Copy is gated with the edits although it
+        // changes nothing: in run mode there is no selection to copy, and the
+        // chord should stay free for whatever a live body means by it.
+        case LogicalKeyboardKey.keyC:
+          _controller.copySelection();
+          return KeyEventResult.handled;
+        case LogicalKeyboardKey.keyV:
+          _controller.pasteClipboard();
           return KeyEventResult.handled;
         default:
           return KeyEventResult.ignored;
