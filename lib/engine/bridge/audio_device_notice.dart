@@ -1,7 +1,9 @@
-/// A non-blocking notice raised while booting audio from settings or live-
-/// switching a device (design `docs/design/settings-and-devices.md` §5, §9.3).
+/// A non-blocking notice raised while applying an audio-device choice — the
+/// stored one at launch, or a live change from the settings window, which since
+/// issue #405 are the same code path (design
+/// `docs/design/settings-and-devices.md` §5, §9.3).
 ///
-/// The boot / switch logic never blocks and never rewrites the stored
+/// The switch logic never blocks and never rewrites the stored
 /// preference: when a chosen device is missing, refuses to open, or reports a
 /// sample rate / buffer the stored value no longer matches, it falls back (to the
 /// default device, or the device's own default rate / buffer) and raises one of
@@ -34,14 +36,6 @@ class AudioDeviceNotice {
 
 /// The cause behind an [AudioDeviceNotice] (design §5, §9.3).
 enum AudioNoticeKind {
-  /// The stored output device is not in the current device list (unplugged or
-  /// renamed) — the boot fell back to the platform default.
-  deviceUnavailable,
-
-  /// The stored output device is present but the engine refused to open it — the
-  /// boot fell back to the platform default.
-  deviceOpenFailed,
-
   /// The stored sample-rate override is not among the device's reported rates —
   /// the device's own default rate was used instead.
   unsupportedSampleRate,
@@ -50,8 +44,11 @@ enum AudioNoticeKind {
   /// the device's own default buffer was used instead.
   unsupportedBufferSize,
 
-  /// A live device switch failed (target missing or refused) — the previous
-  /// working device was kept / restored and the stored choice left unchanged.
+  /// A device switch failed (target missing or refused) — the previous working
+  /// device was kept / restored and the stored choice left unchanged. Covers the
+  /// launch-time apply of the stored preference too, since that runs through the
+  /// same switch (issue #405): a device that isn't plugged in leaves the app on
+  /// the platform default `init()` opened, with the preference intact.
   switchReverted,
 
   /// No audio device could be opened at all, not even the platform default — the

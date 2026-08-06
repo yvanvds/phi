@@ -39,8 +39,9 @@ void main() {
       gateway,
       telemetryInterval: const Duration(milliseconds: 5),
     );
-    engine.start(
-      audioSettings: const AudioSettings(
+    engine.start();
+    engine.switchAudioDevice(
+      const AudioSettings(
         outputHost: 'WASAPI',
         outputDevice: 'Alpha',
         layout: SpeakerLayout.stereo,

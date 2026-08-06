@@ -19,6 +19,13 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 /// (design §5), driven through the real [PhiApp] against in-memory fakes: the
 /// stored device is opened when present, and a missing one falls back to the
 /// default while the stored preference is kept intact.
+///
+/// This drives the *whole* boot path, not a slice of it — `PhiApp.initState`
+/// starting the engine on the platform default, then
+/// `Workstation._startProject` applying the just-loaded settings. Since issue
+/// #405 that is the only such path: `PhiEngine.start()` takes no settings, so
+/// there is no second, uncalled boot for a test to agree with while production
+/// runs something else (which is how #403's defect survived).
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 

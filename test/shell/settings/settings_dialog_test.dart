@@ -28,11 +28,9 @@ void main() {
   setUp(() async {
     gateway = FakeYseGateway()..devices = const [_alpha];
     engine = PhiEngine(gateway, telemetryInterval: const Duration(days: 1));
-    engine.start(
-      audioSettings: const AudioSettings(
-        outputHost: 'WASAPI',
-        outputDevice: 'Alpha',
-      ),
+    engine.start();
+    engine.switchAudioDevice(
+      const AudioSettings(outputHost: 'WASAPI', outputDevice: 'Alpha'),
     );
     store = FakeAppSettingsStore(
       const AppSettings(

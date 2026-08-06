@@ -128,7 +128,11 @@ main + app          (orchestration)
     rate + buffer size (from the *selected* device's reported lists, "device
     default" first), and speaker layout, plus a live read-back of the active
     rate / buffer / latency. Each change goes through `PhiEngine.switchAudioDevice`
-    (the live-switch path); on success the new `AudioSettings` persists through the
+    — the *only* device path (issue #405): `PhiEngine.start()` brings the platform
+    default up (it takes no settings, since the engine enumerates hardware only
+    while opening a device, #403) and the shell applies the stored choice through
+    the same switch once settings have loaded. On success the new `AudioSettings`
+    persists through the
     single `AppSettingsController` (§7), on failure the coordinator reverts to the
     previous working device and the picker snaps back (§9.3). `PhiEngine` exposes
     `audioDevices()` / `activeAudioState()` so the dialog reaches the device

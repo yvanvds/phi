@@ -49,7 +49,10 @@ void main() {
   setUp(() async {
     gateway = FakeYseGateway()..devices = const [_alpha, _beta];
     engine = PhiEngine(gateway, telemetryInterval: const Duration(days: 1));
-    engine.start(audioSettings: onAlpha);
+    // The app's launch sequence: default device up, then the stored choice
+    // applied as a switch (issue #405) — `start` takes no settings.
+    engine.start();
+    engine.switchAudioDevice(onAlpha);
     store = FakeAppSettingsStore(const AppSettings(audio: onAlpha));
     settings = AppSettingsController(store);
     await settings.load();

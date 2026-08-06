@@ -611,10 +611,13 @@ class _WorkstationState extends State<Workstation> {
     if (controller == null || actions == null) return;
     await controller.loadSettings();
     if (!mounted) return;
-    // Boot audio from the just-loaded settings (design §5): the engine came up
-    // on the platform default in `start()`; move it to the stored device now,
-    // reverting to the default (with a notice) if it is missing or refuses to
-    // open. A no-op when no device was chosen.
+    // Boot audio from the just-loaded settings (design §5). This is *the*
+    // boot-from-settings path — the only one (issue #405): the engine came up on
+    // the platform default in `start()`, because it enumerates hardware only
+    // while opening a device (#403), so the stored name can be resolved no
+    // earlier than here. Move it to the stored device now, staying on the
+    // default (with a notice) if that device is missing or refuses to open. A
+    // no-op when no device was chosen.
     widget.engine.switchAudioDevice(controller.audioSettings);
     // Apply the stored MIDI choice too (design §5): set the output port by name
     // and open the enabled input ports. A no-op when nothing was chosen.

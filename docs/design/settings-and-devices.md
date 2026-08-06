@@ -120,13 +120,19 @@ Confirmed against the bridge; no engine work is required for v1:
 
 ## 5. Apply semantics
 
-**Boot.** Always `init()` first. If `audio.outputDevice` is set, then:
-resolve the stored host+name against `devices` → `openDevice` with
-overrides and layout. If unset: nothing further — `init()` already opened
-the platform default, as today. If the stored device is **missing or fails
-to open**: fall back to the default device, show a non-blocking notice, and
-**keep the stored preference intact** — a performer whose interface wasn't
-plugged in yet must not lose their configuration to a helpful fallback.
+**Boot.** Two steps, in this order, because the engine gives no other:
+
+1. `PhiEngine.start()` → `init()`, which opens the platform default and is
+   the *only* call that enumerates hardware (§4). Auto-reconnect on.
+2. Once the settings store has loaded, the shell
+   (`Workstation._startProject`) applies `audio` as a **live switch** —
+   `switchAudioDevice(stored)`, resolving host+name against `devices` and
+   opening it with overrides and layout. A no-op when no device is stored.
+
+If the stored device is **missing or fails to open**, the app stays on the
+default opened in step 1, shows a non-blocking notice, and **keeps the
+stored preference intact** — a performer whose interface wasn't plugged in
+yet must not lose their configuration to a helpful fallback.
 
 > This originally read `initOffline()` → resolve → `openDevice`, so that
 > boot never opened a device the performer didn't ask for. It cannot work:
@@ -135,15 +141,23 @@ plugged in yet must not lose their configuration to a helpful fallback.
 > the stored-device boot was silent on real hardware while green in every
 > test (#403). The cost of `init()` first is that the platform default is
 > open for a moment before the swap; nothing is playing at boot, so it is
-> inaudible. Revisit if the engine grows an enumerate-without-opening call
-> (dart-yse #51).
+> inaudible.
+>
+> With the offline boot gone, a settings-carrying `PhiEngine.start()` was
+> just this same two-step sequence spelled inside the engine — and, since
+> the shell never called it, an unrun copy of it, which is exactly where
+> #403's defect survived. It was deleted (#405): boot-from-settings is the
+> live switch above, and the path that ships is the path that is tested.
+> Revisit if the engine grows an enumerate-without-opening call
+> (dart-yse #51) — then, and only then, is an offline boot worth a second
+> entry point.
 
 **Live change.** Picking a device / rate / buffer in the window applies
-immediately (`closeCurrentDevice` + `openDevice`). A brief audio dropout
-during the swap is accepted; selecting a device in a dropdown *is* the
-deliberate act, no separate Apply button. Failure on live change behaves
-like boot failure: revert to the previous working device, notice, stored
-choice updated only on success.
+immediately (`closeCurrentDevice` + `openDevice`) through that same
+`switchAudioDevice`. A brief audio dropout during the swap is accepted;
+selecting a device in a dropdown *is* the deliberate act, no separate Apply
+button. Failure reverts to the previous working device, raises a notice,
+and updates the stored choice only on success.
 
 **MIDI.** The chosen output port replaces the hard-coded port 0 in
 `EngineMidiController`; stored name resolves to an index each time the
@@ -200,8 +214,10 @@ File/app menu and the command palette later.
   the whole window is testable without hardware.
 - `MidiGateway` already enumerates outputs; it grows input enumeration +
   open/close and an activity callback, same Real/Fake split.
-- The engine façade (`PhiEngine`) gains the boot-from-settings path (§5)
-  so `main`/shell wiring stays one call.
+- The engine façade (`PhiEngine`) exposes `start()` (default device up) and
+  `switchAudioDevice(AudioSettings)`; the shell applies the stored choice
+  through the latter once settings have loaded (§5). One device path, not
+  two — see the note in §5.
 
 ## 8. Out of scope
 
