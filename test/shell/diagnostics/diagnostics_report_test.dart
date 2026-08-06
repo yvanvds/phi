@@ -37,7 +37,10 @@ void main() {
 
   setUp(() {
     gateway = FakeYseGateway()
-      ..devices = const [_alpha]
+      // Both interfaces are present when the engine starts, so both land in the
+      // enumeration it takes there and never refreshes (issue #412). Beta has to
+      // be in it for the total-loss test below to run the path it describes.
+      ..devices = const [_alpha, _beta]
       ..engineVersionValue = 'yse-test 9.9.1'
       ..libraryPathValue = r'C:\engine\yse\bin'
       // A sustained stall: well past the 3-tick floor for Alpha's 256 frames
@@ -129,6 +132,8 @@ void main() {
     // what the performer pastes into the bug report, and it used to read
     // "Active device: Alpha · WASAPI" beside a live rate of 0.
     gateway.unopenableDeviceNames.add('Beta');
+    // Alpha leaves the machine but keeps its cached entry, so the revert
+    // resolves it and fails on the open — the production shape (issue #412).
     gateway.devices = const [_beta];
     engine.switchAudioDevice(
       const AudioSettings(outputHost: 'ASIO', outputDevice: 'Beta'),

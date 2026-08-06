@@ -112,9 +112,24 @@ class AudioDeviceCoordinator {
     // own default so the decision is visible on the wire.
     _gateway.setAutoReconnect(on: false);
     // A machine whose engine came up with no device at all is already the state
-    // recovery exists for — an interface that is slow to enumerate at login is
-    // the ordinary cause — so start trying rather than sitting silent.
-    if (_current == null) _recovery.arm();
+    // recovery exists for — an interface that is enumerated but held by another
+    // process, or one whose default refused, is the ordinary cause — so start
+    // trying rather than sitting silent.
+    //
+    // Unless the engine enumerated *nothing*, in which case there is provably
+    // nothing to reach for and a run would be theatre: the device list is built
+    // once, inside `init()`, from a PortAudio table that is never rescanned, and
+    // no in-process call refreshes either (issue #412, dart-yse #51). An empty
+    // list stays empty until Phi is restarted, so say that now instead of
+    // spending two minutes of RECONNECTING on hardware that cannot appear.
+    if (_current == null && !_armRecovery()) {
+      _notify(
+        AudioNoticeKind.noAudioDevice,
+        'No audio output device is available — the engine found none at '
+        'startup. Connect one and restart Phi: the device list is built once, '
+        'when the engine starts.',
+      );
+    }
   }
 
   /// Applies a device change (design §5, §9.3): close the open device and open
@@ -158,7 +173,7 @@ class AudioDeviceCoordinator {
       );
       // Nothing is open and the performer's pick isn't there either: keep
       // trying, with a fresh budget, now that we know which device they want.
-      if (current == null) _recovery.arm();
+      if (current == null) _armRecovery();
       return false;
     }
 
@@ -189,7 +204,7 @@ class AudioDeviceCoordinator {
         AudioNoticeKind.noAudioDevice,
         'No audio output device could be opened.',
       );
-      _recovery.arm();
+      _armRecovery();
       return false;
     }
 
@@ -212,7 +227,7 @@ class AudioDeviceCoordinator {
         AudioNoticeKind.noAudioDevice,
         'No audio output device could be opened.',
       );
-      _recovery.arm();
+      _armRecovery();
     }
     return false;
   }
@@ -241,7 +256,33 @@ class AudioDeviceCoordinator {
     if (_current == null) return;
     if (_gateway.activeAudioState() != AudioDeviceState.none) return;
     _current = null;
+    _armRecovery();
+  }
+
+  /// Arms a bounded recovery run, unless it would be theatre — and reports
+  /// which happened.
+  ///
+  /// Recovery re-opens **cached** descriptors, and that is the only thing it
+  /// can do: libyse enumerates once, inside `init()`, over a PortAudio device
+  /// table captured at the first `Pa_Initialize()`, and nothing refreshes either
+  /// in-process — not `closeCurrentDevice()`, not `System::close()` + `init()`,
+  /// and there is no exported rescan (issue #412, dart-yse #51). That cuts both
+  /// ways, and the good half is the one recovery depends on: an interface that
+  /// is unplugged **keeps its entry**, so the device the performer asked for
+  /// stays resolvable and each attempt is a real `openDevice` on it that starts
+  /// working again the moment the hardware is back.
+  ///
+  /// The bad half is this guard. A device the engine never enumerated cannot be
+  /// opened, ever, for the life of the process — so when the list is empty there
+  /// is no descriptor to reach for and no attempt that could succeed. Arming
+  /// anyway would show RECONNECTING for two minutes and then give up, which
+  /// tells a performer to wait for something that is not coming.
+  ///
+  /// Returns `true` when a run was armed.
+  bool _armRecovery() {
+    if (_gateway.audioDevices().isEmpty) return false;
     _recovery.arm();
+    return true;
   }
 
   /// One recovery attempt (issue #410): reach for the device the performer

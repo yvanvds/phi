@@ -56,7 +56,10 @@ main + app          (orchestration)
   native notion of them. Since issue #150 `YseGateway` also carries the
   **device surface** the settings epic (design `settings-and-devices.md`)
   consumes: `audioDevices()` hands out FFI-free `AudioDeviceDescriptor`s (name +
-  host identity, reported rates/buffers/latencies), `openAudioDevice()` does the
+  host identity, reported rates/buffers/latencies) from the engine's **frozen
+  enumeration cache** — built once inside `init()` and never refreshed
+  in-process, so an unplugged device keeps its entry and a newly plugged one is
+  invisible until restart (issue #412) — `openAudioDevice()` does the
   `closeCurrentDevice`+`openDevice` live-swap (throwing a bridge-level
   `AudioDeviceException` the caller falls back on — including for the engine's
   *silent* refusals, which it detects by reading the live state back), and

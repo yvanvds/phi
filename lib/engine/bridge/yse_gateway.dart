@@ -38,11 +38,26 @@ abstract interface class YseGateway {
   /// library then resolves from its bundled/package location).
   String? get libraryPath;
 
-  /// The audio devices the engine can currently see, as pure FFI-free
+  /// The audio devices the engine can see, as pure FFI-free
   /// [AudioDeviceDescriptor]s (design §4) — the list the settings window builds
   /// its output-device dropdown from. Empty until [init] has run — the engine
   /// enumerates as part of opening a device, never on its own, so an
   /// [initOffline] session sees nothing (issue #403).
+  ///
+  /// **A cache, not a live list** (issue #412). It is built once, inside
+  /// [init], and nothing refreshes it for the rest of the process:
+  /// `updateDeviceList()` has a single call site, `closeCurrentDevice()` and
+  /// `close()` leave the vector alone, `Pa_Terminate()` runs only at process
+  /// exit so even a [close] + [init] re-reads PortAudio's original table, and
+  /// there is no exported rescan (dart-yse #51). Two consequences callers must
+  /// design around:
+  ///
+  /// - a device that is unplugged **stays listed**, with its old index — the
+  ///   only way to find out it is gone is that [openAudioDevice] on it fails;
+  /// - a device plugged in after [init] **never appears**, and cannot be opened
+  ///   at all until Phi is restarted.
+  ///
+  /// So an empty list here is a restart-level fact, not something to retry.
   List<AudioDeviceDescriptor> audioDevices();
 
   /// Open an audio device, or live-swap to it if one is already open

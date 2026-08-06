@@ -29,7 +29,11 @@ void main() {
 
   setUp(() {
     gateway = FakeYseGateway()
-      ..devices = const [_alpha]
+      // Both interfaces are in the machine when the engine starts, so both are
+      // in the enumeration the engine takes there and keeps (issue #412) — that
+      // is what lets `loseEveryDevice` below drive the loss it describes, where
+      // Beta *resolves* and then refuses to open.
+      ..devices = const [_alpha, _beta]
       ..engineVersionValue = 'yse-test 9.9.1'
       ..libraryPathValue = r'C:\engine\yse\bin'
       // A sustained stall — past the 3-tick floor for Alpha's 256 frames @
@@ -151,6 +155,9 @@ void main() {
   /// ends up on nothing, and `activeAudioSettings` reads `null` (issue #408).
   void loseEveryDevice() {
     gateway.unopenableDeviceNames.add('Beta');
+    // Alpha is pulled out of the machine. Its cached entry stays — the engine
+    // never rescans (issue #412) — so the revert still *resolves* Alpha and it
+    // is the open that fails, which is exactly the production shape.
     gateway.devices = const [_beta];
     engine.switchAudioDevice(
       const AudioSettings(outputHost: 'ASIO', outputDevice: 'Beta'),
