@@ -103,7 +103,7 @@ void main() {
       gateway.masterVolumeValue = 0.7; // as if a previous session had set it
       engine.start();
 
-      expect(engine.masterVolume.value, closeTo(1.0, 1e-9));
+      expect(engine.masterChannel.volume, closeTo(1.0, 1e-9));
       expect(gateway.appliedMasterVolume, closeTo(1.0, 1e-9));
     });
 
@@ -119,7 +119,7 @@ void main() {
       // reports 0.3 — the exact divergence that made the old read-back look
       // right. What matters is that the master is *audibly* back at 0.3.
       expect(gateway.masterVolumeValue, closeTo(0.3, 1e-9));
-      expect(engine.masterVolume.value, closeTo(0.3, 1e-9));
+      expect(engine.masterChannel.volume, closeTo(0.3, 1e-9));
       expect(gateway.appliedMasterVolume, closeTo(0.3, 1e-9));
     });
 
@@ -135,33 +135,33 @@ void main() {
 
         // Reading the *effective* volume back would have written 0.0 over the
         // remembered user volume; pushing preserves both halves.
-        expect(engine.masterVolume.value, closeTo(0.6, 1e-9));
-        expect(engine.masterMuted.value, isTrue);
+        expect(engine.masterChannel.volume, closeTo(0.6, 1e-9));
+        expect(engine.masterChannel.muted, isTrue);
         expect(gateway.appliedMasterVolume, 0.0);
       },
     );
 
-    test('setMasterVolume clamps to [0, 1] and updates listenable', () {
+    test('setMasterVolume clamps to [0, 1] and updates the master strip', () {
       engine.start();
 
       engine.setMasterVolume(0.42);
       expect(gateway.masterVolumeValue, closeTo(0.42, 1e-9));
-      expect(engine.masterVolume.value, closeTo(0.42, 1e-9));
+      expect(engine.masterChannel.volume, closeTo(0.42, 1e-9));
 
       engine.setMasterVolume(1.7);
       expect(gateway.masterVolumeValue, closeTo(1.0, 1e-9));
-      expect(engine.masterVolume.value, closeTo(1.0, 1e-9));
+      expect(engine.masterChannel.volume, closeTo(1.0, 1e-9));
 
       engine.setMasterVolume(-0.3);
       expect(gateway.masterVolumeValue, closeTo(0.0, 1e-9));
-      expect(engine.masterVolume.value, closeTo(0.0, 1e-9));
+      expect(engine.masterChannel.volume, closeTo(0.0, 1e-9));
     });
 
     test('setMasterVolume is a no-op before start()', () {
       engine.setMasterVolume(0.5);
 
       expect(gateway.calls.any((c) => c.startsWith('masterVolume')), isFalse);
-      expect(engine.masterVolume.value, closeTo(1.0, 1e-9));
+      expect(engine.masterChannel.volume, closeTo(1.0, 1e-9));
     });
 
     test('setMasterMuted collapses the effective gateway volume to zero', () {
@@ -171,14 +171,14 @@ void main() {
       engine.setMasterMuted(muted: true);
       // The gateway is silenced …
       expect(gateway.masterVolumeValue, 0.0);
-      expect(engine.masterMuted.value, isTrue);
+      expect(engine.masterChannel.muted, isTrue);
       // … but the user-set volume is remembered and still reported.
-      expect(engine.masterVolume.value, closeTo(0.8, 1e-9));
+      expect(engine.masterChannel.volume, closeTo(0.8, 1e-9));
 
       // A volume move while muted stays silent at the gateway.
       engine.setMasterVolume(0.5);
       expect(gateway.masterVolumeValue, 0.0);
-      expect(engine.masterVolume.value, closeTo(0.5, 1e-9));
+      expect(engine.masterChannel.volume, closeTo(0.5, 1e-9));
 
       // Unmuting restores the effective volume.
       engine.setMasterMuted(muted: false);
@@ -386,7 +386,7 @@ void main() {
       engine.setChannelVolume(engine.masterChannel, 0.3);
 
       expect(gateway.masterVolumeValue, closeTo(0.3, 1e-9));
-      expect(engine.masterVolume.value, closeTo(0.3, 1e-9));
+      expect(engine.masterChannel.volume, closeTo(0.3, 1e-9));
       expect(engine.masterChannel.volume, closeTo(0.3, 1e-9));
     });
 

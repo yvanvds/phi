@@ -225,7 +225,11 @@ class _PhiAppState extends State<PhiApp> {
       _ownedAppSettings?.dispose();
     }
     if (_ownsEngine) {
-      _engine.stop();
+      // `dispose` is `stop` plus the timers, streams and notifiers `start` did
+      // not create — the recovery supervisor's retry timer among them (issue
+      // #410). Stopping alone left those alive for the life of the process
+      // (issue #407). Fire-and-forget: the widget is going away regardless.
+      unawaited(_engine.dispose());
     }
     _ownedCodeEvaluator?.dispose();
     // Mark this session's orderly shutdown (design §2, §6): the marker's

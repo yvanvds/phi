@@ -126,7 +126,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('loopMIDI Port'));
     await tester.pumpAndSettle();
-    expect(engine.midiOutputPort, 'loopMIDI Port');
+    expect(engine.midiOrNull?.outputPortName, 'loopMIDI Port');
     expect(settings.value.midi.outputPort, 'loopMIDI Port');
 
     // ── PROJECTS ──────────────────────────────────────────────────────────────
