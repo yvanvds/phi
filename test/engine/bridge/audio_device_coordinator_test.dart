@@ -751,10 +751,13 @@ void main() {
 
         expect(coordinator.current, isNull);
         expect(coordinator.recovery.retrying, isTrue);
-        expect(notices.single.kind, AudioNoticeKind.noAudioDevice);
+        // No notice: the shell's health monitor already says "dropped —
+        // reconnecting" at warning level, and an error-level "no audio device"
+        // for a state that is being actively retried is exactly the muddle this
+        // issue set out to remove. The error comes on the give-up or not at all.
+        expect(notices, isEmpty);
 
         // A standing loss re-arms nothing — the tick runs sixty times a second.
-        notices.clear();
         for (var i = 0; i < 20; i++) {
           coordinator.observeLiveState();
         }

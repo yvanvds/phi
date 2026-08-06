@@ -230,14 +230,17 @@ class AudioDeviceCoordinator {
   /// Idempotent by construction: it fires only on the edge where [current] still
   /// names a device the engine has stopped reporting, and arming clears
   /// [current], so a standing loss re-arms nothing.
+  ///
+  /// Deliberately raises **no notice**. The shell already surfaces the drop from
+  /// the health monitor ("Audio device dropped — reconnecting…", a warning), and
+  /// a [AudioNoticeKind.noAudioDevice] here would toast a second time at *error*
+  /// level for a state Phi is actively fixing — which is the distinction this
+  /// whole change exists to draw. The error notice belongs to the one moment it
+  /// is true: [_onRecoveryExhausted].
   void observeLiveState() {
     if (_current == null) return;
     if (_gateway.activeAudioState() != AudioDeviceState.none) return;
     _current = null;
-    _notify(
-      AudioNoticeKind.noAudioDevice,
-      'The audio output device stopped — trying to bring audio back.',
-    );
     _recovery.arm();
   }
 
