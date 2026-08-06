@@ -135,6 +135,37 @@ void main() {
     expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
   });
 
+  testWidgets('an unplugged interface is still listed, and picking it reverts '
+      '(#412)', (tester) async {
+    // The list the dropdown is built from is the engine's enumeration cache,
+    // filled once inside `init()` and never refreshed — no rescan exists in
+    // libyse or its C API (dart-yse #51). So an interface pulled out of the
+    // machine goes on being offered, with its old index, and the performer can
+    // pick it. This is the shipped shape of the dropdown and it used to be
+    // untested: the fake shortened its list on an unplug, so the entry simply
+    // vanished and this path never ran.
+    gateway.devices = const [_alpha]; // Beta pulled out
+    await pumpSection(tester);
+    final before = store.saveCount;
+
+    await tester.tap(find.byType(PhiSelect<String>));
+    await tester.pumpAndSettle();
+    expect(find.text('Beta'), findsOneWidget); // still on offer
+    await tester.tap(find.text('Beta'));
+    await tester.pumpAndSettle();
+
+    // Choosing it is how Phi finds out it is gone: the open fails, the previous
+    // working device is reopened, nothing is persisted, and the performer is
+    // told — no silent selection of a device that cannot carry audio.
+    expect(find.text('Alpha'), findsOneWidget);
+    expect(find.text('Beta'), findsNothing);
+    expect(settings.value.audio.outputDevice, 'Alpha');
+    expect(store.saveCount, before);
+    expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+    // Audio really is back on Alpha, not merely reported as such.
+    expect(engine.activeAudioState().sampleRate, 44100);
+  });
+
   testWidgets('the rate picker is populated from the selected device', (
     tester,
   ) async {

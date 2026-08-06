@@ -1643,11 +1643,18 @@ class PhiEngine {
   /// known name, which is the stale reading this nullability exists to prevent.
   AudioSettings? get activeAudioSettings => _audio.current;
 
-  /// The audio devices the engine can currently see, as pure FFI-free
+  /// The audio devices the engine enumerated, as pure FFI-free
   /// [AudioDeviceDescriptor]s (design §4) — the list the settings dialog's AUDIO
   /// section builds its output-device / rate / buffer pickers from. Empty before
   /// [start] (no device surface yet); the shell never touches the gateway, so
   /// this façade method is the only way above the bridge to enumerate devices.
+  ///
+  /// A **cache, not a live list** (issue #412): the engine fills it once, while
+  /// starting, and no in-process call refreshes it. So the pickers go on
+  /// offering an interface that has been unplugged — choosing it fails the open,
+  /// which is the intended way to find out — and an interface plugged in after
+  /// startup does not appear here until Phi is restarted. Re-reading this after
+  /// a device change is therefore pointless; it cannot return anything new.
   List<AudioDeviceDescriptor> audioDevices() =>
       _started ? _gateway.audioDevices() : const [];
 

@@ -88,6 +88,95 @@ void main() {
     });
   });
 
+  // The list `audioDevices()` returns is a **cache**, not a view of the machine
+  // (issue #412). `updateDeviceList()` has one call site — `deviceManager::
+  // init(true)` — and PortAudio builds the table behind it at `Pa_Initialize()`,
+  // which is never followed by a `Pa_Terminate()` before process exit. So there
+  // is no in-process path to a fresh list at all, and no exported call that asks
+  // for one (dart-yse #51). Held here so the fake cannot drift back into
+  // modelling a live list, which let tests recover from hardware the shipped app
+  // could never see.
+  group('enumeration is a frozen cache, not a view of the hardware', () {
+    test('unplugging a device leaves its entry in the list', () {
+      gateway.init();
+      expect(gateway.audioDevices(), hasLength(2));
+
+      gateway.devices = const [];
+
+      // The dropdown keeps offering it, with its old index — which is what the
+      // performer really sees after pulling an interface.
+      expect(gateway.audioDevices(), hasLength(2));
+      expect(gateway.devices, isEmpty);
+    });
+
+    test('a device plugged in after init never appears', () {
+      gateway.devices = const [];
+      gateway.init();
+
+      gateway.devices = const [
+        AudioDeviceDescriptor(
+          name: 'Latecomer',
+          hostName: 'WASAPI',
+          sampleRates: [48000.0],
+          bufferSizes: [256],
+          defaultBufferSize: 256,
+        ),
+      ];
+
+      expect(gateway.audioDevices(), isEmpty);
+      // …not even after the engine is torn down and brought back up: `close()`
+      // does not call `Pa_Terminate()`, so a second `init()` re-reads the same
+      // snapshot.
+      gateway.close();
+      gateway.init();
+      expect(gateway.audioDevices(), isEmpty);
+    });
+
+    test('only a new gateway — a new process — enumerates afresh', () {
+      gateway.init();
+      expect(gateway.audioDevices(), hasLength(2));
+
+      final restarted = FakeYseGateway()..devices = const [];
+      addTearDown(restarted.dispose);
+      restarted.init();
+
+      expect(restarted.audioDevices(), isEmpty);
+    });
+
+    test('a cached descriptor whose hardware is gone fails to open', () {
+      gateway.init();
+      final alpha = gateway.audioDevices().first;
+      gateway.devices = const [];
+
+      // It still resolves — that is the cache — and the *open* is what fails,
+      // which is how Phi finds out a device went away. `RealYseGateway` reads
+      // this back from `activeSampleRate`, since the engine reports the refusal
+      // as a log line rather than a status (dart-yse #52).
+      expect(gateway.audioDevices(), contains(alpha));
+      expect(
+        () => gateway.openAudioDevice(alpha),
+        throwsA(isA<AudioDeviceException>()),
+      );
+      expect(gateway.activeAudioState(), AudioDeviceState.none);
+    });
+
+    test('the same descriptor opens again once the hardware is back', () {
+      gateway.init();
+      final alpha = gateway.audioDevices().first;
+      gateway.devices = const [];
+      expect(
+        () => gateway.openAudioDevice(alpha),
+        throwsA(isA<AudioDeviceException>()),
+      );
+
+      gateway.devices = [alpha];
+      gateway.openAudioDevice(alpha);
+
+      expect(gateway.activeAudioState().sampleRate, 44100);
+      expect(gateway.openedDevice, alpha);
+    });
+  });
+
   // `System::init()` brings the platform default up with it; only
   // `initOffline()` comes up device-less. A fake that skipped this reported a
   // booted app as "no device open", which reads downstream as a device that
@@ -367,10 +456,23 @@ void main() {
       );
     });
 
-    test('a null descriptor with no devices throws', () {
+    test('a null descriptor whose default hardware is gone throws', () {
+      // The cache still names a platform default, so the open is attempted and
+      // fails on the missing hardware rather than on an empty list (issue #412).
       gateway.devices = const [];
       expect(
         () => gateway.openAudioDevice(null),
+        throwsA(isA<AudioDeviceException>()),
+      );
+    });
+
+    test('a null descriptor on an engine that enumerated nothing throws', () {
+      final bare = FakeYseGateway()..devices = const [];
+      addTearDown(bare.dispose);
+      bare.init();
+
+      expect(
+        () => bare.openAudioDevice(null),
         throwsA(isA<AudioDeviceException>()),
       );
     });

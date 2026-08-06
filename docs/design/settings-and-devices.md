@@ -132,8 +132,24 @@ Confirmed against the bridge; no engine work is required for v1:
   process exit even `close()` + `init()` re-reads PortAudio's original
   snapshot. Recovery therefore **polls**: `activeSampleRate == 0` is the
   engine's documented "nothing is open" sentinel, read on Phi's telemetry
-  tick. (One consequence for the dropdown: a device removed or added
-  mid-session is invisible to enumeration — issue #412, dart-yse #51.)
+  tick.
+- **The device list is a cache, and the whole app is built on that**
+  (issue #412). Enumeration is not a view of the machine, so:
+  - a device unplugged mid-session **keeps its entry**, with its old
+    index — the dropdown goes on offering it, and the only way Phi finds
+    out it is gone is that opening it fails. This is what makes recovery
+    (§5) possible at all: the descriptor the performer asked for stays
+    resolvable through the loss, so every attempt is a real `openDevice`
+    on *that* device and the one after the cable goes back in succeeds.
+  - a device plugged in mid-session **never appears**, and cannot be
+    opened until Phi restarts. So recovery is armed only when the engine
+    enumerated *something*; a boot that saw no hardware at all says so
+    immediately instead of showing RECONNECTING for two minutes about an
+    interface that cannot arrive.
+  `FakeYseGateway` models both halves: its `devices` is the hardware, and
+  `audioDevices()` is the frozen snapshot `init()` took of it. A fake with
+  one live list let tests recover from hardware the shipped app could
+  never see.
 - **Recovery is cheap, re-init is not.** `closeCurrentDevice()` tears down
   only the stream — PortAudio stays initialised, and every channel, sound
   and clock survives — so `openDevice` right afterwards is the designed
@@ -214,6 +230,12 @@ that came up device-less — it arms a **bounded recovery run**:
   default, it does not keep watching for the preferred interface to come
   back; the stored preference is untouched, so re-picking it is one click
   (issue #413).
+- **What it cannot do.** Reach a device the engine never enumerated
+  (§4, issue #412). Attempts re-open *cached* descriptors, so recovery
+  covers the case that matters — an interface that was there at startup,
+  went away, and came back — but not an interface first connected after
+  Phi started. With nothing enumerated there is nothing to attempt, so no
+  run is armed and the performer is told to connect a device and restart.
 
 **MIDI.** The chosen output port replaces the hard-coded port 0 in
 `EngineMidiController`; stored name resolves to an index each time the
