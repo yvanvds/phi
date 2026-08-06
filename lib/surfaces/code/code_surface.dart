@@ -42,9 +42,9 @@ class CodeSurface extends Surface {
     required this.evaluator,
     this.libraryController,
     this.registry,
-    String? seedSource,
+    this._seedSource,
     super.key,
-  }) : _seedSource = seedSource;
+  });
 
   final PhiEngine engine;
   final SessionState session;

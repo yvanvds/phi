@@ -17,11 +17,8 @@ import 'synth_gateway.dart';
 /// Requires `libyse.dll` discoverable at runtime — see README.md. The heavy
 /// lifting lives on the [RealMaterialisedSynth] handle each call mints.
 class RealSynthGateway implements SynthGateway {
-  RealSynthGateway({
-    MixBusResolver? busResolver,
-    AssetPathResolver? resolveAsset,
-  }) : _busResolver = busResolver ?? _masterBus,
-       _resolveAsset = resolveAsset;
+  RealSynthGateway({MixBusResolver? busResolver, this._resolveAsset})
+    : _busResolver = busResolver ?? _masterBus;
 
   static Channel? _masterBus(int _) => null;
 

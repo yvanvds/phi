@@ -30,10 +30,10 @@ import 'midi_graph_controller.dart';
 /// notifications and graph *layout* (position) changes — which don't alter the
 /// persisted document — never spuriously dirty the project.
 class ClipRegistryPublisher {
-  /// Creates an unbound publisher. [loop] reads the edited clip's live loop flag
+  /// Creates an unbound publisher. [_loop] reads the edited clip's live loop flag
   /// (issue #190) — `null` falls back to `true`. The live clip objects are bound
   /// (and rebound as the edited session swaps, issue #197) through [bind].
-  ClipRegistryPublisher({bool Function()? loop}) : _loop = loop;
+  ClipRegistryPublisher({this._loop});
 
   /// Reads the edited clip's live loop flag (issue #190). `null` falls back to
   /// `true`, matching a fresh clip's default. The loop flag is not carried by any

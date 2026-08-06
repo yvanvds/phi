@@ -25,11 +25,8 @@ import 'real_materialised_synth.dart' show MixBusResolver;
 /// lifting lives on the [RealMaterialisedFx] handles and [RealFxChain]s each
 /// call mints.
 class RealFxGateway implements FxGateway {
-  RealFxGateway({
-    MixBusResolver? busResolver,
-    PatcherInsertSource? patcherInsertSource,
-  }) : _busResolver = busResolver ?? _masterBus,
-       _patcherInsertSource = patcherInsertSource;
+  RealFxGateway({MixBusResolver? busResolver, this._patcherInsertSource})
+    : _busResolver = busResolver ?? _masterBus;
 
   static Null _masterBus(int _) => null;
 

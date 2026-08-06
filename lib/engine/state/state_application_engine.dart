@@ -31,19 +31,16 @@ import 'state_slice_applier.dart';
 /// through a [CodeEvaluator], both injected — faked in tests (the cross-epic
 /// seams of #183 and #228), wired to the real controllers by the engine.
 class StateApplicationEngine {
-  /// Builds an application engine over [applier], resolving on-enter scripts
-  /// through [scriptSourceOf] and evaluating them through [evaluator] (read
-  /// per entry, so the shell can wire it late). [onNotice] receives every
+  /// Builds an application engine over [_applier], resolving on-enter scripts
+  /// through [_scriptSourceOf] and evaluating them through [_evaluator] (read
+  /// per entry, so the shell can wire it late). [_onNotice] receives every
   /// degradation notice.
   StateApplicationEngine({
-    required StateSliceApplier applier,
-    required CodeEvaluator? Function() evaluator,
-    required String? Function(EntityAddress code) scriptSourceOf,
-    void Function(StateApplicationNotice notice)? onNotice,
-  }) : _applier = applier,
-       _evaluator = evaluator,
-       _scriptSourceOf = scriptSourceOf,
-       _onNotice = onNotice;
+    required this._applier,
+    required this._evaluator,
+    required this._scriptSourceOf,
+    this._onNotice,
+  });
 
   final StateSliceApplier _applier;
 

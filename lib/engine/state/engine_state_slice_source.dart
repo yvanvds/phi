@@ -28,14 +28,11 @@ import 'state_slice_source.dart';
 ///   tempo).
 class EngineStateSliceSource implements StateSliceSource {
   EngineStateSliceSource({
-    required List<ClipSliceEntry> Function() playingClips,
-    required List<MixTreeNode> Function() mixNodes,
-    required RuntimeVariableRegistry Function() variables,
-    required ProjectRegistry Function() registry,
-  }) : _playingClips = playingClips,
-       _mixNodes = mixNodes,
-       _variables = variables,
-       _registry = registry;
+    required this._playingClips,
+    required this._mixNodes,
+    required this._variables,
+    required this._registry,
+  });
 
   final List<ClipSliceEntry> Function() _playingClips;
   final List<MixTreeNode> Function() _mixNodes;

@@ -40,9 +40,8 @@ class ClipEditor extends ChangeNotifier {
     this.minPitch = 55,
     this.maxPitch = 76,
     String undoScopeId = 'midi',
-    EntityAddress? clipAddress,
-  }) : _clipAddress = clipAddress,
-       _scope = UndoScope(id: undoScopeId, label: 'MIDI editor') {
+    this._clipAddress,
+  }) : _scope = UndoScope(id: undoScopeId, label: 'MIDI editor') {
     _scope.addListener(_onScopeChanged);
   }
 

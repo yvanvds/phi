@@ -37,21 +37,18 @@ class AudioHealthMonitor {
   /// Wires the monitor to the engine's live signals and the notice channel.
   ///
   /// [tick] is the telemetry stream to re-evaluate on (`PhiEngine.telemetry`);
-  /// [readState] reads the live device snapshot (`PhiEngine.activeAudioState`);
+  /// [_readState] reads the live device snapshot (`PhiEngine.activeAudioState`);
   /// [lastNotice] is the retained fallback notice (`PhiEngine.lastAudioNotice`);
-  /// [readRecovery] reads the supervisor's state (`PhiEngine.audioRecovery`) —
-  /// [AudioRecoveryStatus.idle] for a caller with no supervisor; and [notices] is
+  /// [_readRecovery] reads the supervisor's state (`PhiEngine.audioRecovery`) —
+  /// [AudioRecoveryStatus.idle] for a caller with no supervisor; and [_notices] is
   /// the channel each transition is surfaced through.
   AudioHealthMonitor({
     required Stream<void> tick,
-    required AudioDeviceState Function() readState,
+    required this._readState,
     required ValueListenable<AudioDeviceNotice?> lastNotice,
-    required AudioRecoveryStatus Function() readRecovery,
-    required NoticeCenter notices,
-  }) : _readState = readState,
-       _lastNotice = lastNotice,
-       _readRecovery = readRecovery,
-       _notices = notices {
+    required this._readRecovery,
+    required this._notices,
+  }) : _lastNotice = lastNotice {
     _lastNoticeKind = lastNotice.value?.kind;
     _lastNotice.addListener(_onNoticeChanged);
     _tickSub = tick.listen(_onTick);

@@ -101,26 +101,17 @@ import 'state/state_trigger_scheduler.dart';
 class PhiEngine {
   PhiEngine(
     this._gateway, {
-    SceneRenderer? sceneRenderer,
-    PatcherGateway? patcherGateway,
-    MidiGateway? midiGateway,
-    SynthGateway? synthGateway,
-    FxGateway? fxGateway,
+    this._sceneRenderer,
+    this._patcherGateway,
+    this._midiGateway,
+    this._synthGateway,
+    this._fxGateway,
     RegistryMirror registryMirror = const NoOpRegistryMirror(),
-    BusTap busTap = const NoOpBusTap(),
-    EngineLogSource engineLogSource = const NoOpEngineLogSource(),
-    Duration telemetryInterval = const Duration(milliseconds: 50),
-    List<Duration> audioRecoverySchedule = AudioDeviceRecovery.defaultSchedule,
-  }) : _sceneRenderer = sceneRenderer,
-       _patcherGateway = patcherGateway,
-       _midiGateway = midiGateway,
-       _synthGateway = synthGateway,
-       _fxGateway = fxGateway,
-       _mirrorBinder = RegistryMirrorBinder(registryMirror),
-       _busTap = busTap,
-       _engineLogSource = engineLogSource,
-       _telemetryInterval = telemetryInterval,
-       _audioRecoverySchedule = audioRecoverySchedule {
+    this._busTap = const NoOpBusTap(),
+    this._engineLogSource = const NoOpEngineLogSource(),
+    this._telemetryInterval = const Duration(milliseconds: 50),
+    this._audioRecoverySchedule = AudioDeviceRecovery.defaultSchedule,
+  }) : _mirrorBinder = RegistryMirrorBinder(registryMirror) {
     // The registry is the source of truth for the channel set (design §8): the
     // engine materialises its `MixerChannel`s from `mix.` entities and re-syncs
     // whenever the tree changes. Until [bindProject] points it at the project's

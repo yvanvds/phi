@@ -57,13 +57,10 @@ import 'state_slice_source.dart';
 class StateMachineController extends ChangeNotifier {
   /// Builds a controller over [registry] (creating and owning a private
   /// scratch registry when none is given — the bare-test path), recording
-  /// structural commands through [recordCommand].
-  StateMachineController({
-    ProjectRegistry? registry,
-    void Function(ProjectCommand)? recordCommand,
-  }) : _registry = registry ?? ProjectRegistry(),
-       _ownsRegistry = registry == null,
-       _recordCommand = recordCommand {
+  /// structural commands through [_recordCommand].
+  StateMachineController({ProjectRegistry? registry, this._recordCommand})
+    : _registry = registry ?? ProjectRegistry(),
+      _ownsRegistry = registry == null {
     _attach();
   }
 

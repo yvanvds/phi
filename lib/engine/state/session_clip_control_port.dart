@@ -23,11 +23,7 @@ import 'engine_midi_controller.dart';
 /// the panel's concern, design §4). Unknown targets degrade to a silent no-op;
 /// everything no-ops gracefully when no MIDI subsystem is wired.
 class SessionClipControlPort implements ClipControlPort {
-  SessionClipControlPort({
-    required EngineMidiController? midi,
-    required ClipDocument? Function(EntityAddress address) documentAt,
-  }) : _midi = midi,
-       _documentAt = documentAt;
+  SessionClipControlPort({required this._midi, required this._documentAt});
 
   final EngineMidiController? _midi;
   final ClipDocument? Function(EntityAddress address) _documentAt;

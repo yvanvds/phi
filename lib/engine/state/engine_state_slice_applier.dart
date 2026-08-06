@@ -22,23 +22,13 @@ import 'state_slice_applier.dart';
 ///   a captured clip with no decodable document is reported skipped.
 class EngineStateSliceApplier implements StateSliceApplier {
   EngineStateSliceApplier({
-    required RuntimeVariableRegistry Function() variables,
-    required void Function(EntityAddress domain, double bpm) domainTempo,
-    required void Function(
-      EntityAddress bus, {
-      required double volume,
-      required bool muted,
-    })
-    mixLevel,
-    required List<ClipSliceEntry> Function() playingClips,
-    required bool Function(ClipSliceEntry entry) playClip,
-    required void Function(EntityAddress clip) stopClip,
-  }) : _variables = variables,
-       _domainTempo = domainTempo,
-       _mixLevel = mixLevel,
-       _playingClips = playingClips,
-       _playClip = playClip,
-       _stopClip = stopClip;
+    required this._variables,
+    required this._domainTempo,
+    required this._mixLevel,
+    required this._playingClips,
+    required this._playClip,
+    required this._stopClip,
+  });
 
   final RuntimeVariableRegistry Function() _variables;
   final void Function(EntityAddress domain, double bpm) _domainTempo;

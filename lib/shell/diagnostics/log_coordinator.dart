@@ -14,12 +14,12 @@ import 'engine_log_level.dart';
 /// evaluator's event stream), so the whole coordinator is exercised in a unit
 /// test with plain controllers — no yse, no interpreter.
 class LogCoordinator {
-  /// Subscribes [engineMessages] and [pythonEvents] into [recorder] immediately.
+  /// Subscribes [engineMessages] and [pythonEvents] into [_recorder] immediately.
   LogCoordinator({
-    required LogRecorder recorder,
+    required this._recorder,
     required Stream<String> engineMessages,
     required Stream<EvalEvent> pythonEvents,
-  }) : _recorder = recorder {
+  }) {
     // Engine lines land tagged `engine`, at a level inferred from the text
     // (yse's stream carries no structured level).
     _engineSub = engineMessages.listen(

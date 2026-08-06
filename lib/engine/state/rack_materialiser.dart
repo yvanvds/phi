@@ -70,16 +70,12 @@ typedef VoicesChanged =
 /// its transport while the handle is still valid.
 class RackMaterialiser {
   RackMaterialiser({
-    required SynthGateway synthGateway,
-    required FxGateway fxGateway,
-    required int? Function(EntityAddress bus) busChannelId,
-    required VoicesChanged onVoicesChanged,
-    int? Function(EntityAddress patch)? patchInstanceId,
-  }) : _synthGateway = synthGateway,
-       _fxGateway = fxGateway,
-       _busChannelId = busChannelId,
-       _onVoicesChanged = onVoicesChanged,
-       _patchInstanceId = patchInstanceId;
+    required this._synthGateway,
+    required this._fxGateway,
+    required this._busChannelId,
+    required this._onVoicesChanged,
+    this._patchInstanceId,
+  });
 
   final SynthGateway _synthGateway;
   final FxGateway _fxGateway;

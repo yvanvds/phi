@@ -42,26 +42,18 @@ import '../bridge/transport_note.dart';
 /// transport still runs, silently.
 class MetronomeController extends ChangeNotifier {
   MetronomeController({
-    required MidiGateway gateway,
-    required TimeDomainRegistry Function() domains,
-    required double Function() sessionTempo,
-    MaterialisedSynth? Function()? clickSynth,
-    double? Function(String domainName)? domainTempoOverride,
-    String clockName = defaultClockName,
+    required this._gateway,
+    required this._domains,
+    required this._sessionTempo,
+    this._clickSynth,
+    this._domainTempoOverride,
+    this._clockName = defaultClockName,
     int beatsPerBar = 4,
-    bool accentDownbeat = true,
+    this._accentDownbeat = true,
     double volume = 0.7,
-    String? domainName,
-  }) : _gateway = gateway,
-       _domains = domains,
-       _sessionTempo = sessionTempo,
-       _clickSynth = clickSynth,
-       _domainTempoOverride = domainTempoOverride,
-       _clockName = clockName,
-       _beatsPerBar = beatsPerBar < 1 ? 1 : beatsPerBar,
-       _accentDownbeat = accentDownbeat,
-       _volume = volume.clamp(0.0, 1.0).toDouble(),
-       _domainName = domainName;
+    this._domainName,
+  }) : _beatsPerBar = beatsPerBar < 1 ? 1 : beatsPerBar,
+       _volume = volume.clamp(0.0, 1.0).toDouble();
 
   final MidiGateway _gateway;
   final TimeDomainRegistry Function() _domains;

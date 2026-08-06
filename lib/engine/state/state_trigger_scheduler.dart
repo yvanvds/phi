@@ -43,26 +43,20 @@ import 'state_machine_controller.dart';
 /// so a rename mid-count keeps the count and a rename mid-watch keeps the
 /// watch. Firing is performance, not authorship — nothing here journals.
 class StateTriggerScheduler {
-  /// Builds a scheduler over [stateMachine]. Timed triggers count on clocks
-  /// minted through [createTransport] (`null` — a setup without a MIDI
+  /// Builds a scheduler over [_stateMachine]. Timed triggers count on clocks
+  /// minted through [_createTransport] (`null` — a setup without a MIDI
   /// gateway — degrades every timed trigger to a notice) and pace from
   /// [domainTempo], the effective BPM of a `domain.` entity (`null` when the
-  /// domain is unknown). Variable triggers watch [variables]; [onNotice]
+  /// domain is unknown). Variable triggers watch [_variables]; [_onNotice]
   /// receives every degradation.
   StateTriggerScheduler({
-    required StateMachineController stateMachine,
-    RuntimeVariableRegistry? variables,
-    MidiTransport Function({required String clockName, required double tempo})?
-    createTransport,
+    required this._stateMachine,
+    this._variables,
+    this._createTransport,
     double? Function(EntityAddress domain)? domainTempo,
-    void Function(StateApplicationNotice notice)? onNotice,
-    Duration tickInterval = const Duration(milliseconds: 16),
-  }) : _stateMachine = stateMachine,
-       _variables = variables,
-       _createTransport = createTransport,
-       _domainTempo = domainTempo ?? ((_) => null),
-       _onNotice = onNotice,
-       _tickInterval = tickInterval {
+    this._onNotice,
+    this._tickInterval = const Duration(milliseconds: 16),
+  }) : _domainTempo = domainTempo ?? ((_) => null) {
     _stateMachine.addListener(_reconcile);
     _variables?.addListener(_onVariablesChanged);
     _rebuildWatchersIfNeeded();

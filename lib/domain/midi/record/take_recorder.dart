@@ -44,13 +44,11 @@ typedef ClipCommandSink = void Function(ClipEditCommand batch);
 class TakeRecorder {
   TakeRecorder({
     required this.clip,
-    required double Function() clock,
-    required ClipCommandSink commit,
-    EntityAddress? clipAddress,
+    required this._clock,
+    required this._commit,
+    this._clipAddress,
     this.voice,
-  }) : _clock = clock,
-       _commit = commit,
-       _clipAddress = clipAddress;
+  });
 
   /// The clip captured notes are appended to. Held by the [AddNoteCommand]s the
   /// recorder builds; the recorder never mutates it directly.

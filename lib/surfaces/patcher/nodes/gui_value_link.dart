@@ -23,11 +23,9 @@ import '../../../engine/state/patcher_controller.dart';
 class GuiValueLink {
   GuiValueLink({
     required PatchNode node,
-    required PatcherController controller,
-    required void Function(String value) onInbound,
+    required this._controller,
+    required this._onInbound,
   }) : _node = node,
-       _controller = controller,
-       _onInbound = onInbound,
        _revision = node.guiRevision {
     _node.addListener(_onNodeChanged);
   }

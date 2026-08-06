@@ -31,27 +31,18 @@ import 'midi_viewport.dart';
 /// stays parked at the origin.
 class MidiSurface extends Surface {
   MidiSurface({
-    required PhiEngine engine,
+    required this._engine,
     MidiTransformChain? chain,
-    ClipEditor? editor,
-    CustomTransformRegistry? registry,
-    ValueListenable<double>? playhead,
-    MidiFileIo? fileIo,
-    MidiGraphController? graphController,
-    StateMachineController? stateMachine,
-    RuntimeVariableRegistry? runtimeVariables,
-    ClipLibraryController? libraryController,
+    this._editor,
+    this._registry,
+    this._playhead,
+    this._fileIo,
+    this._graphController,
+    this._stateMachine,
+    this._runtimeVariables,
+    this._libraryController,
     super.key,
-  }) : _engine = engine,
-       _chain = chain ?? defaultDemoChain(),
-       _editor = editor,
-       _registry = registry,
-       _playhead = playhead,
-       _fileIo = fileIo,
-       _graphController = graphController,
-       _stateMachine = stateMachine,
-       _runtimeVariables = runtimeVariables,
-       _libraryController = libraryController;
+  }) : _chain = chain ?? defaultDemoChain();
 
   final PhiEngine _engine;
   final MidiTransformChain _chain;

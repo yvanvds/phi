@@ -45,25 +45,19 @@ typedef RecoveryPrompt = Future<RecoveryChoice?> Function(RecoveryOffer offer);
 /// to the project name, the dirty flag, and the recents list without rebuilding
 /// on every internal change.
 class ProjectController extends ChangeNotifier {
-  /// Wires the controller to its collaborators. [storeFactory] and
-  /// [journalStoreFactory] mint the I/O seams for a given `.phi` folder (real in
-  /// production, fakes in tests). [autosaveIntervalOverride] forces a cadence
+  /// Wires the controller to its collaborators. [_storeFactory] and
+  /// [_journalStoreFactory] mint the I/O seams for a given `.phi` folder (real in
+  /// production, fakes in tests). [_autosaveIntervalOverride] forces a cadence
   /// regardless of settings — handy for deterministic tests.
   ProjectController({
-    required SessionState session,
-    required AppSettingsController settings,
-    required ProjectStore Function(String directory) storeFactory,
-    required JournalStore Function(String directory) journalStoreFactory,
-    RegistryCommandCodec codec = const RegistryCommandCodec(),
-    void Function(ProjectRegistry registry)? seedRegistry,
-    Duration? autosaveIntervalOverride,
-  }) : _session = session,
-       _settings = settings,
-       _storeFactory = storeFactory,
-       _journalStoreFactory = journalStoreFactory,
-       _codec = codec,
-       _seedRegistry = seedRegistry,
-       _autosaveIntervalOverride = autosaveIntervalOverride {
+    required this._session,
+    required this._settings,
+    required this._storeFactory,
+    required this._journalStoreFactory,
+    this._codec = const RegistryCommandCodec(),
+    this._seedRegistry,
+    this._autosaveIntervalOverride,
+  }) {
     _session.sceneName.addListener(_onSessionChanged);
     _session.tempo.addListener(_onSessionChanged);
     // Master volume/mute are manifest state too (design `docs/design/mix.md` §3),

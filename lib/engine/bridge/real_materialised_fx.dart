@@ -43,14 +43,13 @@ import 'patcher_insert_source.dart';
 ///   editor's *own* native patcher, edits to the patch are heard live through it.
 class RealMaterialisedFx implements MaterialisedFx {
   /// Builds the engine effect for [definition] and applies its params. For a
-  /// [FxKind.patcherInsert] the patcher is resolved from [patchInstanceId]
-  /// through [patcherInsertSource] (both `null` for every other kind).
+  /// [FxKind.patcherInsert] the patcher is resolved from [_patchInstanceId]
+  /// through [_patcherInsertSource] (both `null` for every other kind).
   RealMaterialisedFx(
     this._definition, {
-    PatcherInsertSource? patcherInsertSource,
-    int? patchInstanceId,
-  }) : _patcherInsertSource = patcherInsertSource,
-       _patchInstanceId = patchInstanceId {
+    this._patcherInsertSource,
+    this._patchInstanceId,
+  }) {
     _dsp = _build(_definition);
     if (_dsp != null) _applyParams(_dsp!, _definition);
   }

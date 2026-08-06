@@ -18,8 +18,8 @@ class PhiCommand {
     required this.category,
     required this.invoke,
     this.shortcut,
-    bool Function()? isEnabled,
-  }) : _isEnabled = isEnabled;
+    this._isEnabled,
+  });
 
   /// Stable identity, e.g. `project.save`, `surface.mix`, `transport.play`.
   final String id;

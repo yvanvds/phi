@@ -39,10 +39,9 @@ class ClipLibraryController extends ChangeNotifier {
   ClipLibraryController({
     required ProjectRegistry registry,
     required this.sessions,
-    void Function(ProjectCommand)? recordCommand,
+    this._recordCommand,
     MidiTransformCodec transformCodec = const MidiTransformCodec(),
   }) : _registry = registry,
-       _recordCommand = recordCommand,
        _transformCodec = transformCodec {
     _library = ClipLibrary(registry, transformCodec: transformCodec);
     _registry.addListener(_onRegistryChanged);

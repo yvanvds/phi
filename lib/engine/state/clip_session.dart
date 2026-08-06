@@ -43,18 +43,15 @@ import 'record_target.dart';
 /// [MidiTransformGraph]'s `evaluate` against the host's live [GraphEvalContext].
 class ClipSession implements RecordTarget {
   ClipSession({
-    required EntityAddress? address,
+    required this._address,
     required this.host,
     required MidiTransformChain chain,
     ClipEditor? editor,
     MidiGraphController? graphController,
-    String clockName = defaultClockName,
+    this._clockName = defaultClockName,
     this.sceneKeyBase = 0,
-    bool loop = true,
-  }) : _address = address,
-       _clockName = clockName,
-       _chain = chain,
-       _loop = loop,
+    this._loop = true,
+  }) : _chain = chain,
        editor = editor ?? ClipEditor(chain.source),
        graphController =
            graphController ?? MidiGraphController.seededFrom(chain);

@@ -58,25 +58,17 @@ import 'state_machine_controller.dart';
 class EngineMidiController implements ClipSessionHost {
   EngineMidiController({
     required MidiTransformChain chain,
-    required MidiGateway gateway,
+    required this._gateway,
     ClipEditor? editor,
-    SceneAgentSink? agentSink,
-    StateMachineController? stateMachine,
-    RuntimeVariableRegistry? runtimeVariables,
+    this._agentSink,
+    this._stateMachine,
+    this._runtimeVariables,
     VoiceChannelResolver? voiceResolver,
-    double bpm = 120,
-    String? outputPortName,
-    bool microtonal = false,
-    Duration tickInterval = const Duration(milliseconds: 16),
-  }) : _gateway = gateway,
-       _agentSink = agentSink,
-       _stateMachine = stateMachine,
-       _runtimeVariables = runtimeVariables,
-       _voiceResolver = voiceResolver ?? VoiceChannelResolver.seededDefault(),
-       _microtonal = microtonal,
-       _bpm = bpm,
-       _outputPortName = outputPortName,
-       _tickInterval = tickInterval {
+    this._bpm = 120,
+    this._outputPortName,
+    this._microtonal = false,
+    this._tickInterval = const Duration(milliseconds: 16),
+  }) : _voiceResolver = voiceResolver ?? VoiceChannelResolver.seededDefault() {
     // The tempo-source seam (issue #104): the played tempo is each session's base
     // rate (its subscription or the session tempo) bent by the sum of the stack's
     // sources. The fader is the first source; re-ramp the playing sessions'

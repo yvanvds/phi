@@ -51,15 +51,11 @@ import 'patcher_controller.dart';
 class PatchLibraryController extends ChangeNotifier {
   PatchLibraryController({
     required ProjectRegistry registry,
-    required PatchReconciler patches,
-    required PatcherGateway gateway,
-    required List<PatchBusOption> Function() busOptions,
-    void Function(ProjectCommand)? recordCommand,
-  }) : _registry = registry,
-       _patches = patches,
-       _gateway = gateway,
-       _busOptions = busOptions,
-       _recordCommand = recordCommand {
+    required this._patches,
+    required this._gateway,
+    required this._busOptions,
+    this._recordCommand,
+  }) : _registry = registry {
     _library = PatchLibrary(registry);
     _registry.addListener(_onRegistryChanged);
   }

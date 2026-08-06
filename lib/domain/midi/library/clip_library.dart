@@ -43,15 +43,14 @@ class ClipLibrary {
   /// Binds the library to [registry]. [transformCodec] (de)serialises the chain
   /// / graph transforms — pass one carrying a `CustomTransformRegistry` and/or
   /// the project's time domains so imported/exported live-coded transforms and
-  /// domain subscriptions re-link. [reader] / [writer] are the SMF codec, faked
+  /// domain subscriptions re-link. [_reader] / [_writer] are the SMF codec, faked
   /// in tests but stateless `const` values in production.
   ClipLibrary(
     this.registry, {
     this.transformCodec = const MidiTransformCodec(),
-    SmfReader reader = const SmfReader(),
-    SmfWriter writer = const SmfWriter(),
-  }) : _reader = reader,
-       _writer = writer;
+    this._reader = const SmfReader(),
+    this._writer = const SmfWriter(),
+  });
 
   /// The registry the minted commands target and the exports read from.
   final ProjectRegistry registry;

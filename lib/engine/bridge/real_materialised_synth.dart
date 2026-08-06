@@ -42,10 +42,9 @@ class RealMaterialisedSynth implements MaterialisedSynth {
   RealMaterialisedSynth(
     this._definition, {
     required this.channel,
-    required MixBusResolver busResolver,
+    required this._busResolver,
     AssetPathResolver? resolveAsset,
-  }) : _busResolver = busResolver,
-       _resolveAsset = resolveAsset ?? _identity {
+  }) : _resolveAsset = resolveAsset ?? _identity {
     _synth = _buildSynth(_definition);
   }
 
