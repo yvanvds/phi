@@ -42,26 +42,46 @@ void main() {
   });
 
   group('boot — stored device', () {
-    test(
-      'initOffline + opens the resolved device (name + host), no notice',
-      () {
-        const stored = AudioSettings(
-          outputHost: 'ASIO',
-          outputDevice: 'Fake Interface',
-          layout: SpeakerLayout.quad,
-        );
-        coordinator.boot(stored);
+    test('init + opens the resolved device (name + host), no notice', () {
+      const stored = AudioSettings(
+        outputHost: 'ASIO',
+        outputDevice: 'Fake Interface',
+        layout: SpeakerLayout.quad,
+      );
+      coordinator.boot(stored);
 
-        expect(gateway.calls, containsAllInOrder(<String>['initOffline']));
-        // The ASIO entry (not the WASAPI namesake) is the one that opened.
-        expect(gateway.openedDevice, gateway.devices[1]);
-        expect(gateway.openLayout, SpeakerLayout.quad);
-        expect(gateway.autoReconnectOn, isTrue);
-        expect(notices, isEmpty);
-        expect(coordinator.current.outputDevice, 'Fake Interface');
-        expect(coordinator.current.outputHost, 'ASIO');
-      },
-    );
+      expect(gateway.calls, containsAllInOrder(<String>['init']));
+      // The ASIO entry (not the WASAPI namesake) is the one that opened.
+      expect(gateway.openedDevice, gateway.devices[1]);
+      expect(gateway.openLayout, SpeakerLayout.quad);
+      expect(gateway.autoReconnectOn, isTrue);
+      expect(notices, isEmpty);
+      expect(coordinator.current.outputDevice, 'Fake Interface');
+      expect(coordinator.current.outputHost, 'ASIO');
+    });
+
+    test('boots through init(), never initOffline() — an offline engine '
+        'enumerates nothing (#403)', () {
+      // The regression this issue is about. `initOffline()` leaves the engine
+      // with an empty device list (measured against libyse 2.4.0: 0 devices vs
+      // 19 after `init()`), so a stored device resolved to "not available", the
+      // default fallback searched the same empty list, and the app booted
+      // silent — while every test passed, because the fake used to hand its
+      // fabricated list back on the offline path too.
+      coordinator.boot(
+        const AudioSettings(outputHost: 'ASIO', outputDevice: 'Fake Interface'),
+      );
+
+      expect(gateway.calls.any((c) => c.startsWith('initOffline')), isFalse);
+      // The device the performer stored is the device that is open — no
+      // "unavailable" notice, no silent boot.
+      expect(gateway.audioDevices(), isNotEmpty);
+      expect(gateway.openedDevice?.hostName, 'ASIO');
+      expect(
+        notices.map((n) => n.kind),
+        isNot(contains(AudioNoticeKind.noAudioDevice)),
+      );
+    });
 
     test('valid rate + buffer overrides are passed through', () {
       const stored = AudioSettings(
@@ -121,7 +141,7 @@ void main() {
         );
         coordinator.boot(stored);
 
-        expect(gateway.calls, contains('initOffline'));
+        expect(gateway.calls, contains('init'));
         // Fell back to the platform default (first device).
         expect(gateway.openedDevice, gateway.devices.first);
         expect(coordinator.current.outputDevice, isNull);

@@ -57,8 +57,14 @@ void main() {
       telemetryInterval: const Duration(milliseconds: 20),
     );
     final session = SessionState();
-    // Boot with a stored device so the coordinator opens it (initOffline +
-    // openAudioDevice), giving a real live-device read-back — a healthy start.
+    // Store a device so the app ends up on it, giving a real live-device
+    // read-back — a healthy start. This walks the *production* sequence, which
+    // is `engine.start()` on the platform default followed by
+    // `switchAudioDevice(stored)` once the workstation has loaded settings
+    // (`Workstation._startProject`), not `PhiEngine.start(audioSettings:)`.
+    // Since issue #403 the fake enumerates its hardware on `init()` only, the
+    // way the engine does, so reaching 'Alpha' here also proves the sequence
+    // never resolves a stored device against an un-enumerated engine.
     final settingsStore = FakeAppSettingsStore(
       const AppSettings(
         audio: AudioSettings(outputHost: 'WASAPI', outputDevice: 'Alpha'),

@@ -40,21 +40,32 @@ class AudioDeviceCoordinator {
   ///
   /// - **no stored device** → `init()` (the platform default), exactly as before
   ///   settings existed;
-  /// - **a stored device** → `initOffline()`, then resolve the stored host + name
+  /// - **a stored device** → `init()` too, then resolve the stored host + name
   ///   against the live device list and open it with its (validated) rate /
   ///   buffer overrides and layout. A missing device, an open failure, or an
   ///   unsupported rate / buffer each falls back (to the default device, or the
   ///   device's own default rate / buffer) and raises a notice.
   ///
+  /// Both branches `init()` because **the engine only enumerates devices when it
+  /// opens one** (issue #403). `initOffline()` — which design §5 originally
+  /// specified for the stored-device path, to avoid opening the wrong device for
+  /// a moment — takes `deviceManager::init(false)`, which skips both
+  /// `Pa_Initialize()` and `updateDeviceList()`. Measured against libyse 2.4.0 on
+  /// Windows: `initOffline()` then `audioDevices()` returns **0** devices (and
+  /// `init()` afterwards is a no-op, the engine refusing a second init), where
+  /// `init()` returns 19. On the old path every stored device therefore resolved
+  /// to "not available", the default fallback searched the same empty list, and
+  /// the app booted silent — the one outcome design §5 exists to prevent. The
+  /// brief platform-default open is the price; restoring the offline boot needs
+  /// an enumerate-without-opening call in the engine (dart-yse #51).
+  ///
   /// Enables 1 s engine auto-reconnect regardless (design §4). The stored
   /// [settings] are only ever read here, never rewritten — the keep-preference
   /// rule holds by construction.
   void boot(AudioSettings settings) {
-    if (settings.outputDevice == null) {
-      _gateway.init();
-      _current = const AudioSettings();
-    } else {
-      _gateway.initOffline();
+    _gateway.init();
+    _current = const AudioSettings();
+    if (settings.outputDevice != null) {
       _openStoredOrFallBackToDefault(settings);
     }
     _gateway.setAutoReconnect(on: true, delayMs: _reconnectDelayMs);
@@ -109,7 +120,8 @@ class AudioDeviceCoordinator {
 
   /// Opens the stored device (design §5), falling back to the platform default
   /// with a notice when it is missing or refuses to open. Runs only on the boot
-  /// path, after [boot] has already `initOffline()`-ed the engine.
+  /// path, after [boot] has already `init()`-ed the engine — which is what makes
+  /// the device list it resolves against non-empty (issue #403).
   void _openStoredOrFallBackToDefault(AudioSettings settings) {
     final descriptor = _resolve(settings.outputHost, settings.outputDevice);
     if (descriptor == null) {

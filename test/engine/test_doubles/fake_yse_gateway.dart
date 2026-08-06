@@ -11,8 +11,9 @@ import 'package:phi/engine/bridge/yse_gateway.dart';
 /// Records every call against the engine so tests can assert call sequence
 /// without touching `package:yse` or its native library. Fabricates an audio
 /// device list ([devices]) so the settings window is fully drivable without
-/// hardware; [init] and [openAudioDevice] reflect what the engine opened into
-/// the active-state fields, [close] tears that state back down the way
+/// hardware — visible only once [init] has *enumerated* it, as the engine does;
+/// [init] and [openAudioDevice] reflect what the engine opened into the
+/// active-state fields, [close] tears that state back down the way
 /// `System::close()` does, and [unopenableDeviceNames] simulates a device that
 /// is present but refuses to open (the design §5 fallback path).
 ///
@@ -64,8 +65,19 @@ class FakeYseGateway implements YseGateway {
   @override
   void init() {
     calls.add('init');
+    // `system::initShared()` early-returns on `Global().active` ("You're trying
+    // to initialize more than once!"), so an init that lands on a live engine
+    // changes nothing — measured: `initOffline()` then `init()` still reports
+    // zero devices. A fake that enumerated here would offer a repair the engine
+    // does not have (issue #403).
+    if (initialised) return;
     initialised = true;
     _midiInputsOpen = true;
+    // Enumeration is a side effect of *opening* a device, not of initialising:
+    // the engine's device manager only calls `updateDeviceList()` on the
+    // `init(true)` path (issue #403). So this is the call that makes [devices]
+    // visible — see [audioDevices].
+    _enumerated = true;
     // The native `System::init()` brings the platform-default device up with
     // it — only `initOffline()` comes up device-less. Reflect that here, or a
     // fake that booted the default device reads back as "no device open" and
@@ -77,8 +89,15 @@ class FakeYseGateway implements YseGateway {
   @override
   void initOffline() {
     calls.add('initOffline');
+    if (initialised) return; // same one-init-per-session rule as [init]
     initialised = true;
     _midiInputsOpen = true;
+    // Deliberately *no* enumeration: an offline session sees no hardware at
+    // all (issue #403). Measured against libyse 2.4.0 on Windows —
+    // `initOffline()` then `System.devices` is empty, where `init()` reports
+    // 19 devices on the same machine. The engine skips `Pa_Initialize()` and
+    // `updateDeviceList()` when it is not opening a device, and there is no
+    // lazy refresh behind the accessor.
   }
 
   /// Brings the platform default (the first entry of [devices]) up in the live
@@ -87,8 +106,9 @@ class FakeYseGateway implements YseGateway {
   /// rules (design §5) are asserted through. A machine with no audio hardware
   /// (or whose default refuses to open) stays device-less.
   void _openPlatformDefault() {
-    if (devices.isEmpty) return;
-    final target = devices.first;
+    final visible = audioDevices();
+    if (visible.isEmpty) return;
+    final target = visible.first;
     if (unopenableDeviceNames.contains(target.name)) return;
     activeSampleRateValue = target.sampleRates.isNotEmpty
         ? target.sampleRates.first
@@ -150,9 +170,20 @@ class FakeYseGateway implements YseGateway {
   @override
   String? get libraryPath => libraryPathValue;
 
-  /// Fabricated device list handed out by [audioDevices]. Two entries share a
-  /// name under different hosts, so tests exercise the name + host identity rule
-  /// (design §3). Reassign to model other hardware (or an empty list).
+  /// Whether the engine has enumerated its hardware yet — set by [init] and
+  /// never cleared. Measured against libyse 2.4.0: the device list is empty
+  /// before any init, is filled by `init()` only, and then *survives* both
+  /// `close()` and a later `initOffline()` in the same process (issue #403).
+  /// That last part is why the defect hid for so long: an in-process engine
+  /// restart looks healthy, only a cold boot goes silent.
+  bool _enumerated = false;
+
+  /// The hardware this fake fabricates — what [audioDevices] hands out **once
+  /// the engine has enumerated it** ([init]). Two entries share a name under
+  /// different hosts, so tests exercise the name + host identity rule (design
+  /// §3). Reassign to model other hardware (or an empty list); a test that
+  /// needs the list readable without booting can call [init] first, exactly as
+  /// the app does.
   List<AudioDeviceDescriptor> devices = const [
     AudioDeviceDescriptor(
       name: 'Fake Interface',
@@ -190,8 +221,14 @@ class FakeYseGateway implements YseGateway {
   /// The layout the last successful [openAudioDevice] opened with.
   SpeakerLayout? openLayout;
 
+  /// The devices the engine can currently see — empty until [init] has
+  /// enumerated them (issue #403). Modelling this is the whole point: the
+  /// previous fake handed [devices] back after `initOffline()` too, which made
+  /// a stored-device boot look like it resolved and opened its device while the
+  /// real engine had nothing to resolve against and booted silent.
   @override
-  List<AudioDeviceDescriptor> audioDevices() => devices;
+  List<AudioDeviceDescriptor> audioDevices() =>
+      _enumerated ? devices : const [];
 
   @override
   void openAudioDevice(
@@ -200,14 +237,18 @@ class FakeYseGateway implements YseGateway {
     int? buffer,
     SpeakerLayout layout = SpeakerLayout.auto,
   }) {
+    // Resolved against the *enumerated* list, like `RealYseGateway`, which
+    // searches `System.devices` — so an un-enumerated engine refuses every
+    // open, including the platform default (issue #403).
+    final visible = audioDevices();
     final AudioDeviceDescriptor target;
     if (descriptor == null) {
-      if (devices.isEmpty) {
+      if (visible.isEmpty) {
         throw const AudioDeviceException(
           'no platform-default audio device is available',
         );
       }
-      target = devices.first;
+      target = visible.first;
     } else {
       final match = _find(descriptor.name, descriptor.hostName);
       if (match == null) {
@@ -256,7 +297,7 @@ class FakeYseGateway implements YseGateway {
   }
 
   AudioDeviceDescriptor? _find(String name, String hostName) {
-    for (final device in devices) {
+    for (final device in audioDevices()) {
       if (device.name == name && device.hostName == hostName) return device;
     }
     return null;

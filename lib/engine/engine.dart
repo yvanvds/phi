@@ -966,10 +966,12 @@ class PhiEngine {
   ///
   /// Boots audio from [audioSettings] (design §5): with no stored device it opens
   /// the platform default (`init()`, the pre-settings behaviour and the default
-  /// here); with a stored device it `initOffline()`s and opens that device,
+  /// here); with a stored device it `init()`s too and then swaps to that device,
   /// falling back to the default with a [lastAudioNotice] when it is missing or
   /// refuses to open — the stored preference is never touched. Engine auto-
-  /// reconnect is enabled either way (design §4).
+  /// reconnect is enabled either way (design §4). The stored-device path goes
+  /// through `init()` rather than `initOffline()` because the engine enumerates
+  /// its hardware only while opening a device (issue #403).
   void start({AudioSettings audioSettings = const AudioSettings()}) {
     if (_started) return;
     _audio.boot(audioSettings);

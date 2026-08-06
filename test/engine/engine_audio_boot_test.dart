@@ -37,7 +37,7 @@ void main() {
     expect(gateway.autoReconnectOn, isTrue);
   });
 
-  test('start() with a stored device boots offline and opens it', () {
+  test('start() with a stored device inits and opens it', () {
     engine.start(
       audioSettings: const AudioSettings(
         outputHost: 'ASIO',
@@ -45,7 +45,11 @@ void main() {
       ),
     );
 
-    expect(gateway.calls, contains('initOffline'));
+    // `init()`, not `initOffline()`: the engine only enumerates devices when it
+    // opens one, so an offline boot has nothing to resolve the stored name
+    // against and ends in silence (issue #403).
+    expect(gateway.calls, contains('init'));
+    expect(gateway.calls.any((c) => c.startsWith('initOffline')), isFalse);
     expect(gateway.openedDevice, gateway.devices[1]);
     expect(engine.activeAudioSettings.outputDevice, 'Fake Interface');
     expect(engine.lastAudioNotice.value, isNull);
