@@ -16,7 +16,7 @@ project, Windows desktop only.
 |--------------|-------------------------------------------------------|
 | Audio engine | C++ (`yse-soundengine`)                               |
 | FFI bridge   | `dart-yse` — Dart wrapper, package name `yse`         |
-| UI shell     | Flutter ≥ 3.38, Windows desktop                       |
+| UI shell     | Flutter ≥ 3.44, Windows desktop                       |
 | Design       | Dart tokens derived from `design system/colors_and_type.css` |
 | 3D viewport  | macbear_3d (ANGLE / OpenGL ES 3), pub.dev 0.9.0       |
 | Scripting    | Python with DSL (Phase ≥ 2 — not yet)                 |
