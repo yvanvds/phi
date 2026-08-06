@@ -7,9 +7,12 @@ import 'package:phi/engine/bridge/audio_device_notice.dart';
 
 import '../test_doubles/fake_yse_gateway.dart';
 
-/// Boot-from-settings + live-switch rules (design §5, §9.3) exercised end to end
-/// against the fake gateway — every fallback path, the keep-preference rule, and
-/// revert-on-failed-switch (the issue's "Done when").
+/// The device rules (design §5, §9.3) exercised end to end against the fake
+/// gateway. Since issue #405 there is one device path, so every case runs it the
+/// way the app does: `boot()` brings the platform default up, then `switchTo`
+/// applies a choice — the stored preference at launch (`applyStored` below) or a
+/// live pick from the settings window. Both spellings are the *same* call; the
+/// grouping only records which moment each rule belongs to.
 void main() {
   late FakeYseGateway gateway;
   late List<AudioDeviceNotice> notices;
@@ -23,9 +26,16 @@ void main() {
 
   tearDown(() => gateway.dispose());
 
-  group('boot — no stored device', () {
+  /// The launch sequence `PhiApp` + `Workstation._startProject` run: engine up
+  /// on the platform default, then the just-loaded [stored] settings applied.
+  bool applyStored(AudioSettings stored) {
+    coordinator.boot();
+    return coordinator.switchTo(stored);
+  }
+
+  group('boot', () {
     test('opens the platform default via init(), enables auto-reconnect', () {
-      coordinator.boot(const AudioSettings());
+      coordinator.boot();
 
       expect(gateway.calls, contains('init'));
       expect(gateway.calls.any((c) => c.startsWith('initOffline')), isFalse);
@@ -39,17 +49,36 @@ void main() {
       expect(coordinator.current, const AudioSettings());
       expect(notices, isEmpty);
     });
+
+    test(
+      'takes no settings — the stored device cannot be resolved yet (#405)',
+      () {
+        // `boot()` deliberately has no settings-carrying twin. The engine
+        // enumerates hardware only while opening a device (#403), so nothing
+        // could be resolved before this `init()` anyway; a second entry point
+        // would only be an unrun copy of boot + switch, which is how #403's
+        // defect survived. Guarded here by pinning the observable contract:
+        // boot opens *no* named device, whatever is stored.
+        coordinator.boot();
+
+        expect(gateway.openedDevice, isNull);
+        expect(coordinator.current.outputDevice, isNull);
+        // …but it has enumerated, so the very next switch can resolve a name.
+        expect(gateway.audioDevices(), isNotEmpty);
+      },
+    );
   });
 
-  group('boot — stored device', () {
-    test('init + opens the resolved device (name + host), no notice', () {
+  group('boot-from-settings — the stored device applied at launch', () {
+    test('opens the resolved device (name + host), no notice', () {
       const stored = AudioSettings(
         outputHost: 'ASIO',
         outputDevice: 'Fake Interface',
         layout: SpeakerLayout.quad,
       );
-      coordinator.boot(stored);
+      final ok = applyStored(stored);
 
+      expect(ok, isTrue);
       expect(gateway.calls, containsAllInOrder(<String>['init']));
       // The ASIO entry (not the WASAPI namesake) is the one that opened.
       expect(gateway.openedDevice, gateway.devices[1]);
@@ -60,15 +89,16 @@ void main() {
       expect(coordinator.current.outputHost, 'ASIO');
     });
 
-    test('boots through init(), never initOffline() — an offline engine '
+    test('runs through init(), never initOffline() — an offline engine '
         'enumerates nothing (#403)', () {
-      // The regression this issue is about. `initOffline()` leaves the engine
-      // with an empty device list (measured against libyse 2.4.0: 0 devices vs
-      // 19 after `init()`), so a stored device resolved to "not available", the
-      // default fallback searched the same empty list, and the app booted
-      // silent — while every test passed, because the fake used to hand its
-      // fabricated list back on the offline path too.
-      coordinator.boot(
+      // The regression #403 was about, now pinned on the path the app runs.
+      // `initOffline()` leaves the engine with an empty device list (measured
+      // against libyse 2.4.0: 0 devices vs 19 after `init()`), so a stored
+      // device resolved to "not available", the fallback searched the same
+      // empty list, and the app booted silent — while every test passed,
+      // because the fake used to hand its fabricated list back on the offline
+      // path too.
+      applyStored(
         const AudioSettings(outputHost: 'ASIO', outputDevice: 'Fake Interface'),
       );
 
@@ -90,7 +120,7 @@ void main() {
         sampleRate: 96000,
         bufferSize: 128,
       );
-      coordinator.boot(stored);
+      applyStored(stored);
 
       final state = gateway.activeAudioState();
       expect(state.sampleRate, 96000);
@@ -105,7 +135,7 @@ void main() {
         outputDevice: 'Fake Interface',
         sampleRate: 44100,
       );
-      coordinator.boot(stored);
+      applyStored(stored);
 
       expect(gateway.activeSampleRateValue, 48000); // device's first reported
       expect(
@@ -123,7 +153,7 @@ void main() {
         outputDevice: 'Fake Interface',
         bufferSize: 64,
       );
-      coordinator.boot(stored);
+      applyStored(stored);
 
       expect(gateway.activeBufferSizeValue, 128); // device's default buffer
       expect(
@@ -132,24 +162,27 @@ void main() {
       );
     });
 
-    test(
-      'a missing device falls back to the default and keeps the preference',
-      () {
-        const stored = AudioSettings(
-          outputHost: 'ASIO',
-          outputDevice: 'Ghost Device',
-        );
-        coordinator.boot(stored);
+    test('a missing device stays on the default and keeps the preference', () {
+      const stored = AudioSettings(
+        outputHost: 'ASIO',
+        outputDevice: 'Ghost Device',
+      );
+      final ok = applyStored(stored);
 
-        expect(gateway.calls, contains('init'));
-        // Fell back to the platform default (first device).
-        expect(gateway.openedDevice, gateway.devices.first);
-        expect(coordinator.current.outputDevice, isNull);
-        expect(notices.single.kind, AudioNoticeKind.deviceUnavailable);
-        // Keep-preference: the coordinator never rewrote the stored value.
-        expect(stored.outputDevice, 'Ghost Device');
-      },
-    );
+      expect(ok, isFalse);
+      expect(gateway.calls, contains('init'));
+      // The platform default `init()` opened is still the live device — the
+      // failed switch never touched it (§9.3).
+      expect(gateway.openedDevice, isNull); // no explicit open happened
+      expect(
+        gateway.activeSampleRateValue,
+        gateway.devices.first.sampleRates.first,
+      );
+      expect(coordinator.current.outputDevice, isNull);
+      expect(notices.single.kind, AudioNoticeKind.switchReverted);
+      // Keep-preference: the coordinator never rewrote the stored value.
+      expect(stored.outputDevice, 'Ghost Device');
+    });
 
     test('a present-but-unopenable device falls back to the default', () {
       gateway.devices = const [
@@ -171,35 +204,54 @@ void main() {
       ];
       gateway.unopenableDeviceNames.add('Broken Card');
 
-      coordinator.boot(
+      final ok = applyStored(
         const AudioSettings(outputHost: 'ASIO', outputDevice: 'Broken Card'),
       );
 
+      expect(ok, isFalse);
+      // The failed open closed the default first, so it was reopened (§9.3).
       expect(gateway.openedDevice?.name, 'Default Card');
-      expect(notices.single.kind, AudioNoticeKind.deviceOpenFailed);
+      expect(coordinator.current.outputDevice, isNull);
+      expect(notices.single.kind, AudioNoticeKind.switchReverted);
     });
 
-    test('no devices at all — device unavailable then no-audio notice', () {
+    test('no devices at all — switch reverted, then a no-audio notice', () {
       gateway.devices = const [];
 
-      coordinator.boot(
+      final ok = applyStored(
         const AudioSettings(outputHost: 'ASIO', outputDevice: 'Ghost'),
       );
 
-      expect(
-        notices.map((n) => n.kind),
-        containsAllInOrder(<AudioNoticeKind>[
-          AudioNoticeKind.deviceUnavailable,
-          AudioNoticeKind.noAudioDevice,
-        ]),
-      );
+      expect(ok, isFalse);
+      expect(notices.single.kind, AudioNoticeKind.switchReverted);
       expect(coordinator.current, const AudioSettings());
+    });
+
+    test('a stored layout without a device still reaches the engine', () {
+      // No device name to resolve, but the layout is a stored choice too — the
+      // switch opens the platform default with it rather than skipping.
+      final ok = applyStored(const AudioSettings(layout: SpeakerLayout.quad));
+
+      expect(ok, isTrue);
+      expect(gateway.openLayout, SpeakerLayout.quad);
+      expect(notices, isEmpty);
+    });
+
+    test('nothing stored is a no-op — no needless dropout at launch', () {
+      final ok = applyStored(const AudioSettings());
+
+      expect(ok, isTrue);
+      expect(
+        gateway.calls.any((c) => c.startsWith('openAudioDevice')),
+        isFalse,
+      );
+      expect(notices, isEmpty);
     });
   });
 
   group('switchTo — live change', () {
     test('opens the target and returns true; current follows', () {
-      coordinator.boot(const AudioSettings()); // default
+      coordinator.boot(); // default
       final ok = coordinator.switchTo(
         const AudioSettings(outputHost: 'ASIO', outputDevice: 'Fake Interface'),
       );
@@ -211,7 +263,7 @@ void main() {
     });
 
     test('re-applying the current target is a no-op (no dropout)', () {
-      coordinator.boot(const AudioSettings());
+      coordinator.boot();
       const target = AudioSettings(
         outputHost: 'ASIO',
         outputDevice: 'Fake Interface',
@@ -231,13 +283,14 @@ void main() {
     });
 
     test('a missing target keeps the current device and returns false', () {
-      coordinator.boot(
+      applyStored(
         const AudioSettings(
           outputHost: 'WASAPI',
           outputDevice: 'Fake Interface',
         ),
       );
       final currentBefore = gateway.openedDevice;
+      notices.clear();
 
       final ok = coordinator.switchTo(
         const AudioSettings(outputHost: 'ASIO', outputDevice: 'Ghost'),
@@ -267,7 +320,7 @@ void main() {
       ];
       gateway.unopenableDeviceNames.add('Refuses');
 
-      coordinator.boot(
+      applyStored(
         const AudioSettings(outputHost: 'WASAPI', outputDevice: 'Working'),
       );
       expect(coordinator.current.outputDevice, 'Working');
@@ -282,6 +335,32 @@ void main() {
       expect(gateway.openedDevice?.name, 'Working');
       expect(coordinator.current.outputDevice, 'Working');
       expect(notices.last.kind, AudioNoticeKind.switchReverted);
+    });
+
+    test('a revert that also fails raises the no-audio notice', () {
+      applyStored(
+        const AudioSettings(outputHost: 'ASIO', outputDevice: 'Fake Interface'),
+      );
+      // Every device disappears mid-session: the target cannot be resolved, so
+      // the switch keeps the (now dead) current device and reports failure.
+      gateway.devices = const [];
+      notices.clear();
+
+      final ok = coordinator.switchTo(const AudioSettings());
+
+      expect(ok, isFalse);
+      expect(
+        notices.map((n) => n.kind),
+        containsAllInOrder(<AudioNoticeKind>[
+          AudioNoticeKind.switchReverted,
+          AudioNoticeKind.noAudioDevice,
+        ]),
+      );
+      // [current] still names the last device that opened cleanly — the
+      // coordinator reports what it last had, and the standing `noAudioDevice`
+      // notice (plus a dead `activeAudioState`) is what tells the shell the
+      // hardware is gone (the status chip reads both).
+      expect(coordinator.current.outputDevice, 'Fake Interface');
     });
   });
 }

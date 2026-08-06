@@ -5,10 +5,12 @@ import 'package:phi/engine/engine.dart';
 
 import 'test_doubles/fake_yse_gateway.dart';
 
-/// PhiEngine's boot-from-settings entry points (design §5): `start` routes the
-/// stored [AudioSettings] through the device coordinator, and `switchAudioDevice`
-/// applies a live change with revert-on-failure — both surfaced through
-/// `activeAudioSettings` / `lastAudioNotice`.
+/// PhiEngine's audio-device surface (design §5). Since issue #405 there is one
+/// entry point per step and no unused twin: `start()` takes no settings and
+/// brings the platform default up, `switchAudioDevice` applies a chosen device —
+/// the stored one once settings have loaded, or a live pick — with
+/// revert-on-failure. Both surface through `activeAudioSettings` /
+/// `lastAudioNotice`.
 void main() {
   late FakeYseGateway gateway;
   late PhiEngine engine;
@@ -26,7 +28,7 @@ void main() {
     await gateway.dispose();
   });
 
-  test('start() with no stored device opens the default (init)', () {
+  test('start() opens the platform default (init)', () {
     engine.start();
 
     expect(gateway.calls, contains('init'));
@@ -37,17 +39,19 @@ void main() {
     expect(gateway.autoReconnectOn, isTrue);
   });
 
-  test('start() with a stored device inits and opens it', () {
-    engine.start(
-      audioSettings: const AudioSettings(
-        outputHost: 'ASIO',
-        outputDevice: 'Fake Interface',
-      ),
+  test('the launch sequence opens the stored device', () {
+    // Exactly what `PhiApp` + `Workstation._startProject` run: start the engine,
+    // then apply the settings the store has just handed over. `init()`, not
+    // `initOffline()` — the engine enumerates devices only while opening one, so
+    // an offline boot has nothing to resolve the stored name against and ends in
+    // silence (issue #403). There is no `start(audioSettings:)` to test instead;
+    // it was the unrun duplicate of these two lines (issue #405).
+    engine.start();
+    final ok = engine.switchAudioDevice(
+      const AudioSettings(outputHost: 'ASIO', outputDevice: 'Fake Interface'),
     );
 
-    // `init()`, not `initOffline()`: the engine only enumerates devices when it
-    // opens one, so an offline boot has nothing to resolve the stored name
-    // against and ends in silence (issue #403).
+    expect(ok, isTrue);
     expect(gateway.calls, contains('init'));
     expect(gateway.calls.any((c) => c.startsWith('initOffline')), isFalse);
     expect(gateway.openedDevice, gateway.devices[1]);
@@ -55,19 +59,18 @@ void main() {
     expect(engine.lastAudioNotice.value, isNull);
   });
 
-  test('start() with a missing device falls back and surfaces a notice', () {
+  test('a stored device that is missing stays on the default and notifies', () {
     const stored = AudioSettings(
       outputHost: 'ASIO',
       outputDevice: 'Ghost Device',
     );
-    engine.start(audioSettings: stored);
+    engine.start();
+    final ok = engine.switchAudioDevice(stored);
 
-    // Fell back to the platform default …
+    expect(ok, isFalse);
+    // Stayed on the platform default `start()` opened …
     expect(engine.activeAudioSettings.outputDevice, isNull);
-    expect(
-      engine.lastAudioNotice.value?.kind,
-      AudioNoticeKind.deviceUnavailable,
-    );
+    expect(engine.lastAudioNotice.value?.kind, AudioNoticeKind.switchReverted);
     // … while the stored preference (an immutable value) is untouched.
     expect(stored.outputDevice, 'Ghost Device');
   });

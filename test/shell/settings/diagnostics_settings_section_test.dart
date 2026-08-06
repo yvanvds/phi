@@ -44,11 +44,9 @@ void main() {
   }) async {
     // Started inside the test body, so the telemetry timer lives in the same
     // fake-async zone [tick] drives (a timer created in `setUp` is real).
-    engine.start(
-      audioSettings: const AudioSettings(
-        outputHost: 'WASAPI',
-        outputDevice: 'Alpha',
-      ),
+    engine.start();
+    engine.switchAudioDevice(
+      const AudioSettings(outputHost: 'WASAPI', outputDevice: 'Alpha'),
     );
     await tester.pumpWidget(
       MaterialApp(

@@ -964,17 +964,17 @@ class PhiEngine {
 
   /// Initialise the engine, start the update loop, begin emitting telemetry.
   ///
-  /// Boots audio from [audioSettings] (design §5): with no stored device it opens
-  /// the platform default (`init()`, the pre-settings behaviour and the default
-  /// here); with a stored device it `init()`s too and then swaps to that device,
-  /// falling back to the default with a [lastAudioNotice] when it is missing or
-  /// refuses to open — the stored preference is never touched. Engine auto-
-  /// reconnect is enabled either way (design §4). The stored-device path goes
-  /// through `init()` rather than `initOffline()` because the engine enumerates
-  /// its hardware only while opening a device (issue #403).
-  void start({AudioSettings audioSettings = const AudioSettings()}) {
+  /// Brings audio up on the platform default with auto-reconnect enabled
+  /// (design §4, §5). It takes **no settings**: the stored device is applied
+  /// afterwards through [switchAudioDevice], once the settings store has loaded
+  /// — that is what the shell does (`Workstation._startProject`) and the only
+  /// sequence the engine supports, because it enumerates its hardware solely
+  /// while opening a device (issue #403). A settings-carrying `start` therefore
+  /// could not open the stored device any sooner; it only duplicated this path,
+  /// unused, which is where #403's defect hid (issue #405).
+  void start() {
     if (_started) return;
-    _audio.boot(audioSettings);
+    _audio.boot();
     // Patcher subsystem is optional — tests that don't inject a
     // PatcherGateway get an engine without a patcher (engine.patcher throws).
     // When wired, the native patchers are created per `patch.` entity by the
