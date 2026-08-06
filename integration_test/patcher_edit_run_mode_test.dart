@@ -139,6 +139,26 @@ void main() {
     expect(slider.position, placed);
     expect(patcher.graph.selectedNodes, isEmpty);
 
+    // ── 3b) regression #433: Ctrl+E works straight after playing a body ─────
+    // The press on the fader moved keyboard focus to the enclosing pane (its
+    // pointer-down grab), not the canvas. Ctrl+E used to die there until an
+    // empty-canvas click handed the keyboard back — the "only sometimes"
+    // toggle of the issue. No such click here, deliberately.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(canvasMode(), PatchCanvasMode.edit);
+    expect(find.text('EDIT'), findsOneWidget);
+
+    // Back to run mode for the rest of the flow — the canvas holds the
+    // keyboard now, so the same chord flips straight back.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(canvasMode(), PatchCanvasMode.run);
+
     // Delete cannot take a node out of a patch that is being played, either.
     final nodeCount = patcher.graph.nodes.length;
     await tester.tapAt(canvasTL + const Offset(400, 400));
