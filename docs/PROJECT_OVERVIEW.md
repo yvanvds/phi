@@ -57,8 +57,9 @@ main + app          (orchestration)
   **device surface** the settings epic (design `settings-and-devices.md`)
   consumes: `audioDevices()` hands out FFI-free `AudioDeviceDescriptor`s (name +
   host identity, reported rates/buffers/latencies), `openAudioDevice()` does the
-  `initOffline` boot / `closeCurrentDevice`+`openDevice` live-swap (throwing a
-  bridge-level `AudioDeviceException` the caller falls back on), and
+  `closeCurrentDevice`+`openDevice` live-swap (throwing a bridge-level
+  `AudioDeviceException` the caller falls back on — including for the engine's
+  *silent* refusals, which it detects by reading the live state back), and
   `activeAudioState()` reads back the live device state — the `SpeakerLayout`
   domain enum maps to yse's `ChannelType` only inside the bridge.
 - `SessionState` in `lib/domain/session/` — pure-Dart cross-cutting state

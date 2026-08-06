@@ -5,7 +5,8 @@
 ///
 /// A pure, FFI-free snapshot returned by [YseGateway.activeAudioState]. All
 /// fields are zero when no device is open (the [none] instance) — pre-init,
-/// after close, or on the `initOffline` boot path.
+/// after close, or throughout an `initOffline` session, which never opens one
+/// (it cannot: it enumerates no devices at all — issue #403).
 class AudioDeviceState {
   /// Builds a state snapshot. Defaults describe "no device open".
   const AudioDeviceState({
