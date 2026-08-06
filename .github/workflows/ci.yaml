@@ -18,6 +18,12 @@ name: CI
 #     instead of silently building against a set of versions nobody reviewed.
 #     phi commits `pubspec.lock`; dart-yse gitignores its own, so the sibling
 #     `dart pub get` below stays unenforced until that repo commits one.
+#   * A lockfile only means anything against a fixed SDK: `pubspec.lock` carries
+#     its own `sdks:` block, and pub refuses to honour a lock its SDK cannot
+#     satisfy. So `flutter-version:` here and that block are a single contract —
+#     bump them in the same commit, never one without the other. (Before #396
+#     they had already drifted apart, and plain `pub get` hid it by silently
+#     resolving a different graph than the lockfile describes.)
 
 on:
   push:
@@ -54,7 +60,11 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          flutter-version: '3.38.3'
+          # This pin and the committed `pubspec.lock` are one contract: the
+          # lock records `flutter: ">=3.44.0"` / `dart: ">=3.12.0"`, so
+          # --enforce-lockfile below can only be satisfied by an SDK that
+          # meets them. Bump the two together, never one alone.
+          flutter-version: '3.44.0'
           channel: stable
           cache: true
 
@@ -134,7 +144,11 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          flutter-version: '3.38.3'
+          # This pin and the committed `pubspec.lock` are one contract: the
+          # lock records `flutter: ">=3.44.0"` / `dart: ">=3.12.0"`, so
+          # --enforce-lockfile below can only be satisfied by an SDK that
+          # meets them. Bump the two together, never one alone.
+          flutter-version: '3.44.0'
           channel: stable
           cache: true
 

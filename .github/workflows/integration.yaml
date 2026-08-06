@@ -86,7 +86,11 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          flutter-version: '3.38.3'
+          # This pin and the committed `pubspec.lock` are one contract: the
+          # lock records `flutter: ">=3.44.0"` / `dart: ">=3.12.0"`, so
+          # --enforce-lockfile below can only be satisfied by an SDK that
+          # meets them. Bump the two together, never one alone.
+          flutter-version: '3.44.0'
           channel: stable
           cache: true
 
