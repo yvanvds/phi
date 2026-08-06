@@ -61,7 +61,9 @@ import 'patcher_node_view.dart';
 ///   is one journaled step.
 /// - **Selection** — click a node, shift-click to extend, drag over empty
 ///   canvas to marquee. `Delete` removes the selection (nodes with their
-///   cables, or the selected cable); `Ctrl+D` duplicates; `Ctrl+Z/Y` undo/redo.
+///   cables, or the selected cable); `Ctrl+D` duplicates; `Ctrl+C`/`Ctrl+V`
+///   copy and paste it (with its intra-selection cables, one grid step further
+///   per paste, issue #435); `Ctrl+Z/Y` undo/redo.
 /// - **Arrow keys nudge** the selected nodes by one grid cell, `Shift` by a
 ///   major cell (issue #368). A held arrow moves live on every repeat but
 ///   journals **once**, on release, so `Ctrl+Z` undoes the burst rather than
@@ -109,6 +111,7 @@ class PatcherCanvas extends StatefulWidget {
     this.onCreateObject,
     this.onNodeTap,
     this.onNodeContextMenu,
+    this.onTypeResolved,
     super.key,
   });
 
@@ -164,6 +167,12 @@ class PatcherCanvas extends StatefulWidget {
   /// would sit in the arena against the primary-button gestures the canvas
   /// already owns, which is exactly the competition issue #352 removed.
   final void Function(PatchNode node, Offset globalPosition)? onNodeContextMenu;
+
+  /// Called while the inline object box is open, each time its typed name comes
+  /// to unambiguously name one catalogue type — so the reference panel can
+  /// switch to the object being created (or retyped) while its arguments are
+  /// still being typed (issue #437). Null ignores the settling name.
+  final void Function(PatchObjectDescriptor desc)? onTypeResolved;
 
   /// Key on the transient banner shown when a cable drop is incompatible.
   static const Key rejectKey = Key('PatcherCanvas.reject');
@@ -541,7 +550,22 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // Flutter's own `DefaultTextEditingShortcuts`, which sit above the surface.
     // Without this guard Backspace would delete the selected nodes instead of a
     // character, and the box could never be typed into (issue #353).
-    if (!_focus.hasPrimaryFocus) return KeyEventResult.ignored;
+    //
+    // One chord is exempt: `Ctrl+E`, the mode flip (issue #433). It is the way
+    // *out* of run mode, and run mode is exactly where a number field can be
+    // holding the keyboard — declined here, the shortcut would only work after
+    // a click on empty canvas gave the keyboard back by hand, which is the
+    // unreliable toggle the issue describes. `Alt` is excluded because Windows
+    // reports AltGr as Ctrl+Alt, and on AZERTY `AltGr+E` is how `€` is typed —
+    // that press is text for the field, never the chord.
+    if (!_focus.hasPrimaryFocus) {
+      final isModeChord =
+          (event is KeyDownEvent || event is KeyRepeatEvent) &&
+          HardwareKeyboard.instance.isControlPressed &&
+          !HardwareKeyboard.instance.isAltPressed &&
+          _isModeKey(event);
+      return isModeChord ? _toggleMode() : KeyEventResult.ignored;
+    }
     final key = event.logicalKey;
     // The release of an arrow closes the nudge burst it opened, journaling the
     // whole run as one move (issue #368). Read before the down/repeat filter
@@ -596,6 +620,18 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
           return KeyEventResult.handled;
         case LogicalKeyboardKey.keyD:
           _controller.duplicateSelection();
+          return KeyEventResult.handled;
+        // Copy / paste (issue #435). Letters, so matched logically like
+        // `Ctrl+Z/Y/D` above — `C` and `V` sit in the same positions on
+        // QWERTY, AZERTY and QWERTZ alike, and the logical key is the glyph
+        // on the cap either way. Copy is gated with the edits although it
+        // changes nothing: in run mode there is no selection to copy, and the
+        // chord should stay free for whatever a live body means by it.
+        case LogicalKeyboardKey.keyC:
+          _controller.copySelection();
+          return KeyEventResult.handled;
+        case LogicalKeyboardKey.keyV:
+          _controller.pasteClipboard();
           return KeyEventResult.handled;
         default:
           return KeyEventResult.ignored;
@@ -786,10 +822,18 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // whatever the keyboard or the pointer had half-open is closed first: a
     // nudge burst is journaled rather than stranded, and a marquee or node
     // drag in flight is dropped rather than surviving into a mode that has no
-    // such gesture.
+    // such gesture. The inline object box is an editing transient too — left
+    // up, it would sit over a canvas whose mode has no way to commit or even
+    // close it, so it goes the way Escape takes it (issue #433).
     _commitNudge();
     _resetGesture();
+    if (_inlineAt != null) _closeInline();
     toggle();
+    // The chord may have been heard on a descendant's behalf — a `.i`/`.f`
+    // field holding the keyboard in run mode (issue #433). The flip makes that
+    // field inert, so the keyboard comes back here, where the next chord (and
+    // every edit-mode key) is actually listened for.
+    _focus.requestFocus();
     return KeyEventResult.handled;
   }
 
@@ -896,8 +940,11 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     //
     // A press on empty canvas still takes the keyboard on release, because
     // `Ctrl+E` is the way back out of the mode and the canvas has to be
-    // holding the keyboard to hear it. A press on a *node* does not: the body
-    // underneath may have just taken focus for its caret (issue #353).
+    // holding the keyboard to hear it. A press on a *node* only defers: the
+    // body underneath may be taking focus for its caret (issue #353), so the
+    // release checks whether it actually did and reclaims the keyboard when it
+    // did not (`_reclaimFocusIfBodyDeclined`, issue #433) — otherwise the
+    // pane's own pointer-down grab strands `Ctrl+E` outside the canvas.
     if (widget.mode.isRun) {
       _pressBelongsToWidget = _nodeAt(scene) != null;
       return;
@@ -1019,6 +1066,22 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     _nodeDragScene = scene;
   }
 
+  /// A press handed to a widget under the canvas keeps the canvas's hands off
+  /// the keyboard at first — the body may be about to take it for a caret
+  /// (issue #353). But most run-mode bodies (a fader, a toggle, a button) take
+  /// no focus at all, and by this release the enclosing pane's pointer-down
+  /// grab has already moved the keyboard *outside* the canvas — where `Ctrl+E`
+  /// can never arrive, which is exactly issue #433's "click empty canvas first
+  /// to make it work again". So the body's claim is checked rather than
+  /// assumed: a frame later, once the focus changes this gesture queued have
+  /// been applied, the keyboard is taken back unless something inside the
+  /// canvas actually holds it.
+  void _reclaimFocusIfBodyDeclined() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_focus.hasFocus) _focus.requestFocus();
+    });
+  }
+
   void _onPointerUp(PointerUpEvent event) {
     // Take keyboard focus on release — *after* the enclosing pane's own
     // pointer-down focus grab, so the canvas keeps focus for Delete / Ctrl+D /
@@ -1028,7 +1091,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // here is precisely what made number boxes uneditable (issue #353).
     final onBody = _pressBelongsToWidget;
     _pressBelongsToWidget = false;
-    if (!onBody) _focus.requestFocus();
+    onBody ? _reclaimFocusIfBodyDeclined() : _focus.requestFocus();
     if (_panning) {
       // A pan is a gesture in its own right, and it moves the scene under the
       // cursor — so the click before it can no longer be half of anything.
@@ -1186,6 +1249,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
         initialText: editing == null ? '' : _controller.objectLineOf(id!),
         onCommit: _commitInline,
         onDismiss: _closeInline,
+        onResolve: widget.onTypeResolved,
       ),
     );
   }

@@ -97,7 +97,15 @@ abstract interface class PatcherGateway {
   /// (`.slider`, `.f`, …) to push their value into the graph.
   void sendFloat(int instanceId, int handleId, int inlet, double value);
 
-  /// Bang [inlet] of [handleId]. Used by control-node bodies (`.b`, `.t`,
+  /// Drop an integer into [inlet] of [handleId]. Used by control-node bodies
+  /// whose engine object registers an **int** handler on the inlet but no
+  /// float one — `.t` (gToggle) is the canonical case. The engine's inlet
+  /// dispatch never coerces: a float sent at an int-only inlet is silently
+  /// dropped, so pushing a toggle's state as a float reached nothing at all
+  /// (issue #439).
+  void sendInt(int instanceId, int handleId, int inlet, int value);
+
+  /// Bang [inlet] of [handleId]. Used by control-node bodies (`.b`,
   /// message) to fire their trigger into the graph.
   void sendBang(int instanceId, int handleId, int inlet);
 

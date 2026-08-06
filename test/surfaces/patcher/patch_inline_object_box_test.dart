@@ -70,16 +70,31 @@ void main() {
         ),
       ],
     ),
+    // The annotation object (issue #436): one free-text `text` parameter.
+    desc(
+      '.text',
+      description: 'text label',
+      params: const [
+        PatchParamDescriptor(
+          name: 'text',
+          doc: 'label text',
+          defaultValue: '',
+          range: 'any string',
+        ),
+      ],
+    ),
   ];
 
   PatchObjectDescriptor? created;
   String? createdArgs;
   var dismissed = 0;
+  final resolved = <String>[];
 
   setUp(() {
     created = null;
     createdArgs = null;
     dismissed = 0;
+    resolved.clear();
   });
 
   /// Pump the box — creating by default, or **editing** [editing] when one is
@@ -103,6 +118,7 @@ void main() {
                 createdArgs = a;
               },
               onDismiss: () => dismissed++,
+              onResolve: (d) => resolved.add(d.type),
             ),
           ),
         ),
@@ -469,6 +485,128 @@ void main() {
     // should not have to be arrowed to.
     expect(fieldText(tester), '.slider ');
     expect(created, isNull);
+  });
+
+  group('the note takes free text (issue #436)', () {
+    testWidgets('every word typed after the name survives the commit', (
+      tester,
+    ) async {
+      await pumpBox(tester);
+      await type(tester, 'text warm pad from here');
+
+      await press(tester, LogicalKeyboardKey.enter);
+
+      // The bug half of issue #436: the content is not positional arguments,
+      // so nothing after the first space may be refused or dropped.
+      expect(created?.type, '.text');
+      expect(createdArgs, 'warm pad from here');
+      expect(find.byKey(PatchInlineObjectBox.rejectKey), findsNothing);
+    });
+
+    testWidgets('editing a note re-commits its whole line of text', (
+      tester,
+    ) async {
+      await pumpBox(
+        tester,
+        editing: catalogue.firstWhere((d) => d.type == '.text'),
+        initialText: 'text warm pad',
+      );
+      await type(tester, 'text a longer note than before');
+
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(created?.type, '.text');
+      expect(createdArgs, 'a longer note than before');
+    });
+  });
+
+  group('the reference panel follows the name as it settles (issue #437)', () {
+    testWidgets('a name reports the moment it is unambiguous, not before', (
+      tester,
+    ) async {
+      await pumpBox(tester);
+
+      // `s` still matches ~sine, ~saw and .slider — nothing has settled.
+      await type(tester, 's');
+      expect(resolved, isEmpty);
+
+      // `sa` narrows the list to ~saw alone: the name has settled without
+      // being complete, which is exactly when the panel should switch.
+      await type(tester, 'sa');
+      expect(resolved, ['~saw']);
+    });
+
+    testWidgets('typing arguments after the name reports the type once', (
+      tester,
+    ) async {
+      await pumpBox(tester);
+      await type(tester, 'sine 220');
+      await type(tester, 'sine 2200');
+
+      // The name resolved once; the arguments changing under it is not news.
+      expect(resolved, ['~sine']);
+    });
+
+    testWidgets('an ambiguous bare name reports nothing', (tester) async {
+      await pumpBox(tester);
+      await type(tester, '*');
+
+      // Two objects answer to `*` (issue #380): the panel keeps whatever it
+      // was showing rather than jumping to whichever ranks first.
+      expect(resolved, isEmpty);
+    });
+
+    testWidgets('arrowing the highlight reports the candidate it lands on', (
+      tester,
+    ) async {
+      await pumpBox(tester);
+      await type(tester, '*');
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(resolved, ['~*']);
+
+      // Arrowing on wraps back to the other candidate — the panel follows, so
+      // the two can be compared without committing to either.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(resolved, ['~*', '.*']);
+    });
+
+    testWidgets('Tab reports the completion it inserts', (tester) async {
+      await pumpBox(tester);
+      await type(tester, 's');
+
+      await press(tester, LogicalKeyboardKey.tab);
+
+      expect(resolved, ['~sine']);
+    });
+
+    testWidgets('an unknown name reports nothing', (tester) async {
+      await pumpBox(tester);
+      await type(tester, 'zzzz');
+
+      expect(resolved, isEmpty);
+    });
+
+    testWidgets('an edit stays silent on its own name and reports a retype', (
+      tester,
+    ) async {
+      await pumpBox(
+        tester,
+        editing: catalogue.firstWhere((d) => d.type == '~sine'),
+        initialText: 'sine 440',
+      );
+      expect(resolved, isEmpty);
+
+      // New arguments, same name: the panel is already showing this object,
+      // values and all — switching it to bare type documentation would lose
+      // information, not add it.
+      await type(tester, 'sine 220');
+      expect(resolved, isEmpty);
+
+      // A retype is a different object, and that *is* news.
+      await type(tester, 'saw');
+      expect(resolved, ['~saw']);
+    });
   });
 
   group('editing an existing object in place (issue #382)', () {

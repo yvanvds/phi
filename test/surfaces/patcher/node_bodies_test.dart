@@ -73,17 +73,37 @@ void main() {
     expect(gateway.calls, contains('sendFloat:${handle()}:0:0.400'));
   });
 
-  testWidgets('toggle body sends 1 on, 0 off', (tester) async {
+  testWidgets('toggle body sends int 1 on, int 0 off', (tester) async {
+    // An *int*, not a float: the engine's `gToggle` registers no float handler
+    // on inlet 0 and the inlet dispatch never coerces, so the float this body
+    // used to push was silently dropped — the switch drove nothing (issue
+    // #439).
     final node = addNode(Obj.gToggle);
     await pumpBody(tester, ToggleNodeBody(node: node, controller: controller));
 
     await tester.tap(find.byType(PatchToggleSquare));
     await tester.pump();
-    expect(gateway.calls, contains('sendFloat:${handle()}:0:1.000'));
+    expect(gateway.calls, contains('sendInt:${handle()}:0:1'));
 
     await tester.tap(find.byType(PatchToggleSquare));
     await tester.pump();
-    expect(gateway.calls, contains('sendFloat:${handle()}:0:0.000'));
+    expect(gateway.calls, contains('sendInt:${handle()}:0:0'));
+  });
+
+  testWidgets('toggle body seeds from the engine\'s on/off guiValue', (
+    tester,
+  ) async {
+    // The real `gToggle` reports its state as the strings `on`/`off`, not as a
+    // number (issue #439) — a reopened patch must show the switch where the
+    // engine holds it.
+    final node = addNode(Obj.gToggle);
+    gateway.nodes.values.single.guiValue = 'on';
+    await pumpBody(tester, ToggleNodeBody(node: node, controller: controller));
+
+    expect(
+      tester.widget<PatchToggleSquare>(find.byType(PatchToggleSquare)).value,
+      isTrue,
+    );
   });
 
   testWidgets('button body bangs the hot inlet on tap', (tester) async {
@@ -297,6 +317,16 @@ void main() {
         tester.widget<PatchToggleSquare>(find.byType(PatchToggleSquare)).value;
     expect(on(), isFalse);
 
+    // `on`/`off` is what the real `gToggle` reports (issue #439)…
+    driveFromEngine('on');
+    await poll(tester);
+    expect(on(), isTrue);
+
+    driveFromEngine('off');
+    await poll(tester);
+    expect(on(), isFalse);
+
+    // …and a numeric report still reads as Max's "anything non-zero is on".
     driveFromEngine('1');
     await poll(tester);
     expect(on(), isTrue);

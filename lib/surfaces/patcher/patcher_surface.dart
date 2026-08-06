@@ -142,16 +142,25 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   /// inline object box's Enter (issue #358). [args] is the box's checked
   /// argument string; null means the type's documented defaults, which is what
   /// a drop wants. Journaled either way, so `Ctrl+Z` un-creates.
+  ///
+  /// The reference panel follows the object just made (issue #437): pointed at
+  /// the created *node* — so the values it actually holds sit beside each
+  /// documented parameter — falling back to the bare type documentation when
+  /// the node cannot be resolved. This is what makes a drop teach: the object
+  /// lands, and its arguments are already on screen.
   void _createObject(
     PatchObjectDescriptor desc,
     Offset position, {
     String? args,
   }) {
-    widget.engine.patcher.createObject(
+    final controller = widget.engine.patcher;
+    final id = controller.createObject(
       desc: desc,
       position: position,
       args: args,
     );
+    final node = id == null ? null : controller.graph.nodeById(id);
+    node == null ? _select(desc) : _selectNode(node);
   }
 
   /// Right-click on a node: the standard affordances, named (issue #356).
@@ -302,6 +311,11 @@ class _PatcherViewportState extends State<_PatcherViewport> {
                               onCreateObject: _createObject,
                               onNodeTap: _selectNode,
                               onNodeContextMenu: _onNodeContextMenu,
+                              // The panel switches the moment the inline box's
+                              // typed name settles on a type, so the arguments
+                              // are documented while they are being typed
+                              // (issue #437).
+                              onTypeResolved: _select,
                             ),
                           ),
                   ),

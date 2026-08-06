@@ -5,6 +5,7 @@ import '../../../design/tokens/phi_spacing.dart';
 import '../../../design/tokens/phi_type.dart';
 import '../../../design/widgets/patcher/patch_type_style.dart';
 import '../../../domain/patcher/patch_args.dart';
+import '../../../domain/patcher/patch_type_name.dart';
 import '../../../engine/bridge/patch_object_descriptor.dart';
 
 /// The patcher's **reference panel** (design `docs/design/patcher.md` §5): the
@@ -83,8 +84,13 @@ class _Reference extends StatelessWidget {
     final accent = PatchTypeStyle.color(d.isDsp);
     // Positional, exactly as `setParams` reads them, so the nth value lines up
     // with the nth documented parameter. A palette tap documents a type and
-    // supplies none.
-    final values = args == null ? const <String>[] : splitPatchArgs(args!);
+    // supplies none. The note's single parameter is **free text** (issue
+    // #436): its value is the whole string, not the first word of it.
+    final values = args == null
+        ? const <String>[]
+        : PatchTypeName.isNote(d.type)
+        ? [if (args!.trim().isNotEmpty) args!.trim()]
+        : splitPatchArgs(args!);
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: PhiSpacing.s2),
       children: [

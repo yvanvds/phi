@@ -209,6 +209,11 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
   }
 
   @override
+  void sendInt(int instanceId, int handleId, int inlet, int value) {
+    _inst(instanceId).handles[handleId]?.sendInt(inlet, value);
+  }
+
+  @override
   void sendBang(int instanceId, int handleId, int inlet) {
     _inst(instanceId).handles[handleId]?.sendBang(inlet);
   }
@@ -270,12 +275,60 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
   }
 
   @override
-  List<PatchObjectDescriptor> objectTypes() => [
+  List<PatchObjectDescriptor> objectTypes() => withDacFallback([
     for (final t in PatcherRegistry.types())
       // The subpatcher object is hidden from the palette in v1: no dive-in
       // editing means showing it would be a trap (design §10 decision 2).
       if (t.name != Obj.patcher) _descriptorFor(t),
-  ];
+  ]);
+
+  /// Ensure the catalogue lists `~dac` (issue #434).
+  ///
+  /// The engine can *create* a `~dac` — `CreateObject` special-cases it to
+  /// build a channel-matched instance — but its metadata registry never
+  /// registers the type (unlike `~adc`, which got the same special-casing
+  /// *and* a registry entry), so the metadata snapshot omits it. The palette
+  /// and inline object box complete against this catalogue alone, which made
+  /// the one object every audible patch needs impossible to create by hand.
+  /// Until the engine documents it (yvanvds/yse-soundengine#624), a
+  /// hand-authored [dacDescriptor] is appended — and only when the engine's
+  /// own metadata lacks the type, so an engine that ships it wins outright.
+  static List<PatchObjectDescriptor> withDacFallback(
+    List<PatchObjectDescriptor> types,
+  ) {
+    if (types.any((d) => d.type == Obj.dDac)) return types;
+    return [...types, dacDescriptor];
+  }
+
+  /// The hand-authored `~dac` catalogue entry [withDacFallback] appends.
+  ///
+  /// Mirrors what the engine builds: a DSP sink with one audio inlet per
+  /// output channel (phi patchers open stereo, so L/R — the node's real port
+  /// shape is read back from `inspect` after creation regardless), no
+  /// outlets, and **no creation parameters** — the engine constructs it from
+  /// the patcher's channel count and takes no arguments.
+  static const PatchObjectDescriptor dacDescriptor = PatchObjectDescriptor(
+    type: Obj.dDac,
+    description: 'audio output',
+    category: PatchObjectCategory.generic,
+    isDsp: true,
+    inlets: [
+      PatchInletDescriptor(
+        label: 'L',
+        doc: 'left channel signal',
+        range: '',
+        accepts: {PatchInletAccept.buffer},
+      ),
+      PatchInletDescriptor(
+        label: 'R',
+        doc: 'right channel signal',
+        range: '',
+        accepts: {PatchInletAccept.buffer},
+      ),
+    ],
+    outlets: [],
+    params: [],
+  );
 
   PatchObjectDescriptor _descriptorFor(PatcherObjectType t) =>
       PatchObjectDescriptor(

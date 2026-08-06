@@ -43,4 +43,20 @@ void main() {
       expect(PatchTypeName.isDsp(''), isFalse);
     });
   });
+
+  group('isNote (issue #436)', () {
+    test('names exactly the engine annotation object', () {
+      // Pure Dart mirror of the `package:yse` constant — this drift guard is
+      // what lets the domain predicate exist without the FFI import.
+      expect(PatchTypeName.noteType, Obj.gText);
+      expect(PatchTypeName.isNote(Obj.gText), isTrue);
+    });
+
+    test('no functional object is a note', () {
+      expect(PatchTypeName.isNote(Obj.gMessage), isFalse);
+      expect(PatchTypeName.isNote(Obj.dSine), isFalse);
+      expect(PatchTypeName.isNote('text'), isFalse);
+      expect(PatchTypeName.isNote(''), isFalse);
+    });
+  });
 }

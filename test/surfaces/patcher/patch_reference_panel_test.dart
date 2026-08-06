@@ -212,5 +212,31 @@ void main() {
       );
       expect(find.byKey(PatchReferencePanel.valueKey('time')), findsNothing);
     });
+
+    testWidgets("the note's value is its whole text, not the first word "
+        '(issue #436)', (tester) async {
+      const note = PatchObjectDescriptor(
+        type: '.text',
+        description: 'text label',
+        category: PatchObjectCategory.gui,
+        isDsp: false,
+        inlets: [],
+        outlets: [],
+        params: [
+          PatchParamDescriptor(
+            name: 'text',
+            doc: 'label text',
+            defaultValue: '',
+            range: 'any string',
+          ),
+        ],
+      );
+      await pumpPanel(tester, note, args: 'warm pad from here');
+
+      // Free text is one value — splitting it positionally would document a
+      // note that reads `warm` as holding one word of its four.
+      expect(find.byKey(PatchReferencePanel.valueKey('text')), findsOneWidget);
+      expect(find.text('= warm pad from here'), findsOneWidget);
+    });
   });
 }

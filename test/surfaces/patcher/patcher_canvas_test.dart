@@ -23,7 +23,7 @@ import 'package:phi/surfaces/patcher/patch_canvas_mode.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
 import 'package:phi/surfaces/patcher/patcher_ghost_cable.dart';
 import 'package:phi/surfaces/patcher/patcher_node_view.dart';
-import 'package:yse/yse.dart';
+import 'package:yse/yse.dart' hide Listener;
 
 import '../../engine/test_doubles/fake_patcher_gateway.dart';
 
@@ -83,6 +83,7 @@ void main() {
     bool snapToGrid = false,
     PatchCanvasMode initialMode = PatchCanvasMode.edit,
     bool toggleable = true,
+    bool paneFocusGrab = false,
     void Function(
       PatchObjectDescriptor desc,
       Offset canvasPosition, {
@@ -93,13 +94,21 @@ void main() {
     void Function(PatchNode node, Offset globalPosition)? onNodeContextMenu,
   }) async {
     mode = initialMode;
+    // Stands in for the shell's [WorkstationPane], which takes keyboard focus
+    // on *every* pointer-down anywhere in the pane — the grab that used to
+    // strand `Ctrl+E` outside the canvas after a run-mode body press (#433).
+    FocusNode? paneFocus;
+    if (paneFocusGrab) {
+      paneFocus = FocusNode(debugLabel: 'pane-stand-in');
+      addTearDown(paneFocus.dispose);
+    }
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: StatefulBuilder(
             builder: (context, setState) {
               setHostState = setState;
-              return PatcherCanvas(
+              final canvas = PatcherCanvas(
                 controller: controller,
                 objectTypes: objectTypes,
                 snapToGrid: snapToGrid,
@@ -110,6 +119,15 @@ void main() {
                 onCreateObject: onCreateObject,
                 onNodeTap: onNodeTap,
                 onNodeContextMenu: onNodeContextMenu,
+              );
+              if (paneFocus == null) return canvas;
+              return Focus(
+                focusNode: paneFocus,
+                child: Listener(
+                  behavior: HitTestBehavior.translucent,
+                  onPointerDown: (_) => paneFocus!.requestFocus(),
+                  child: canvas,
+                ),
               );
             },
           ),
@@ -695,6 +713,70 @@ void main() {
     expect(controller.graph.nodes, hasLength(1));
 
     await ctrl(tester, LogicalKeyboardKey.keyY);
+    expect(controller.graph.nodes, hasLength(2));
+  });
+
+  testWidgets('Ctrl+C / Ctrl+V copy and paste the selection, offset and '
+      'selected; undo removes the paste (issue #435)', (tester) async {
+    final sine = controller.addNode(
+      desc: desc(Obj.dSine),
+      position: const Offset(120, 120),
+    );
+    await pumpCanvas(tester);
+
+    await tester.tapAt(nodeCenter(tester, sine));
+    await tester.pump();
+    expect(controller.graph.selectedNodes, {sine.id});
+
+    await ctrl(tester, LogicalKeyboardKey.keyC);
+    // Copy alone changes nothing on the canvas.
+    expect(controller.graph.nodes, hasLength(1));
+
+    await ctrl(tester, LogicalKeyboardKey.keyV);
+    expect(controller.graph.nodes, hasLength(2));
+    final pasted = controller.graph.nodes.firstWhere((n) => n.id != sine.id);
+    expect(pasted.position, const Offset(136, 136)); // one grid step (16px)
+    // The pasted set is the selection, ready to drag.
+    expect(controller.graph.selectedNodes, {pasted.id});
+
+    // A second paste of the same copy lands one step further, not on top.
+    await ctrl(tester, LogicalKeyboardKey.keyV);
+    expect(controller.graph.nodes, hasLength(3));
+    expect(
+      controller.graph.nodes.map((n) => n.position),
+      containsAll(<Offset>[const Offset(136, 136), const Offset(152, 152)]),
+    );
+
+    await ctrl(tester, LogicalKeyboardKey.keyZ);
+    await ctrl(tester, LogicalKeyboardKey.keyZ);
+    expect(controller.graph.nodes, hasLength(1));
+
+    await ctrl(tester, LogicalKeyboardKey.keyY);
+    expect(controller.graph.nodes, hasLength(2));
+  });
+
+  testWidgets('run mode declines Ctrl+V — a played patch cannot be pasted '
+      'into by a mistyped chord', (tester) async {
+    final sine = controller.addNode(
+      desc: desc(Obj.dSine),
+      position: const Offset(120, 120),
+    );
+    await pumpCanvas(tester);
+
+    // Copy in edit mode, then flip to run mode and try to paste.
+    await tester.tapAt(nodeCenter(tester, sine));
+    await tester.pump();
+    await ctrl(tester, LogicalKeyboardKey.keyC);
+    await setMode(tester, PatchCanvasMode.run);
+
+    await ctrl(tester, LogicalKeyboardKey.keyV);
+    expect(controller.graph.nodes, hasLength(1));
+
+    // Back in edit mode the same chord pastes — the copy survived the trip.
+    await setMode(tester, PatchCanvasMode.edit);
+    await tester.tapAt(canvasTL(tester) + const Offset(600, 500));
+    await tester.pump();
+    await ctrl(tester, LogicalKeyboardKey.keyV);
     expect(controller.graph.nodes, hasLength(2));
   });
 
@@ -1758,6 +1840,63 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pump();
       expect(controller.argsOf(sine.id), '220');
+    });
+
+    testWidgets('a note edits in place and keeps every word (issue #436)', (
+      tester,
+    ) async {
+      // The engine's `.text` catalogue entry: one free-text `text` parameter.
+      const textDesc = PatchObjectDescriptor(
+        type: '.text',
+        description: 'text label',
+        category: PatchObjectCategory.gui,
+        isDsp: false,
+        inlets: [],
+        outlets: [],
+        params: [
+          PatchParamDescriptor(
+            name: 'text',
+            doc: 'label text',
+            defaultValue: '',
+            range: 'any string',
+          ),
+        ],
+      );
+      gateway.objectTypesCatalogue = [
+        ...FakePatcherGateway.defaultCatalogue,
+        textDesc,
+      ];
+      final note = controller.addObject(
+        desc: textDesc,
+        position: const Offset(120, 120),
+        args: 'hello world',
+      );
+      await pumpCanvas(tester, objectTypes: catalogue());
+      // The note renders its content whole; a comment is still an object box
+      // to the canvas, so a double-click opens the same in-place editor.
+      expect(find.text('hello world'), findsOneWidget);
+      await doubleClickAt(tester, nodeCenter(tester, note));
+      expect(editBox(), findsOneWidget);
+      // Seeded with the *editable* line — name and all — which is how the
+      // typed text re-resolves the object it edits.
+      expect(
+        tester.widget<TextField>(field()).controller!.text,
+        'text hello world',
+      );
+
+      await tester.enterText(field(), 'text warm pad from here');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      // Every word survives — the bug half of issue #436 — through the same
+      // journaled `applyParams` as any other box edit.
+      expect(controller.argsOf(note.id), 'warm pad from here');
+      expect(find.text('warm pad from here'), findsOneWidget);
+      expect(editBox(), findsNothing);
+
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(controller.argsOf(note.id), 'hello world');
     });
 
     testWidgets('in run mode a double-click plays the patch, it does not edit '
@@ -3071,6 +3210,109 @@ void main() {
       await pumpCanvas(tester, toggleable: false);
       await focusCanvas(tester);
 
+      await ctrl(tester, LogicalKeyboardKey.keyE);
+      expect(mode, PatchCanvasMode.edit);
+    });
+
+    testWidgets('run mode: Ctrl+E returns to edit straight after a body press, '
+        'even though the pane grabbed the keyboard (issue #433)', (
+      tester,
+    ) async {
+      final slider = controller.addNode(
+        desc: liveDesc(),
+        position: const Offset(120, 120),
+      );
+      await pumpCanvas(
+        tester,
+        initialMode: PatchCanvasMode.run,
+        paneFocusGrab: true,
+      );
+
+      // Play the object. The press belongs to the body (run mode), so the
+      // canvas defers on the keyboard — and the pane's pointer-down grab has
+      // taken it. The body itself takes no focus, so the canvas must notice
+      // the claim was never made and take the keyboard back on its own.
+      await tester.tapAt(nodeCenter(tester, slider));
+      await tester.pump();
+      await tester.pump();
+      expect(bodyPressed, isTrue);
+
+      // No click on empty canvas in between — that workaround is the bug.
+      await ctrl(tester, LogicalKeyboardKey.keyE);
+      expect(mode, PatchCanvasMode.edit);
+    });
+
+    testWidgets('run mode: Ctrl+E flips to edit while a number field holds '
+        'the keyboard, and the canvas gets it back (issue #433)', (
+      tester,
+    ) async {
+      controller.addNode(desc: numberDesc(), position: const Offset(120, 120));
+      await pumpCanvas(tester, initialMode: PatchCanvasMode.run);
+
+      await tester.tapAt(tester.getCenter(find.byType(TextField)));
+      await tester.pump();
+      await tester.pump();
+      expect(fieldFocus(tester).hasPrimaryFocus, isTrue);
+
+      // The chord is the one key the field does not keep (issue #353 keeps
+      // every other): it is the way out of the mode that made the field live.
+      await ctrl(tester, LogicalKeyboardKey.keyE);
+      expect(mode, PatchCanvasMode.edit);
+      // The flip made the field inert, so the keyboard belongs to the canvas
+      // again — the next Ctrl+E must not need a click first.
+      expect(fieldFocus(tester).hasPrimaryFocus, isFalse);
+      await ctrl(tester, LogicalKeyboardKey.keyE);
+      expect(mode, PatchCanvasMode.run);
+    });
+
+    testWidgets('AltGr+E in a number field is text, never the mode chord', (
+      tester,
+    ) async {
+      controller.addNode(desc: numberDesc(), position: const Offset(120, 120));
+      await pumpCanvas(tester, initialMode: PatchCanvasMode.run);
+
+      await tester.tapAt(tester.getCenter(find.byType(TextField)));
+      await tester.pump();
+      await tester.pump();
+      expect(fieldFocus(tester).hasPrimaryFocus, isTrue);
+
+      // Windows reports AltGr as Ctrl+Alt — on AZERTY this is how `€` is
+      // typed, and a keystroke meant for the field must not flip the canvas.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altRight);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altRight);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+
+      expect(mode, PatchCanvasMode.run);
+      expect(fieldFocus(tester).hasPrimaryFocus, isTrue);
+    });
+
+    testWidgets('Ctrl+E with the inline object box open closes it and flips '
+        'the mode', (tester) async {
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (_, _, {args}) {},
+      );
+      // Two movement-free clicks on empty canvas open the box (issue #358).
+      final at = canvasTL(tester) + const Offset(300, 200);
+      await tester.tapAt(at);
+      await tester.pump();
+      await tester.tapAt(at);
+      await tester.pump();
+      expect(find.byKey(PatcherCanvas.inlineCreateKey), findsOneWidget);
+
+      // The chord is heard even though the box's field holds the keyboard —
+      // and the box, an editing transient, goes the way Escape takes it: a
+      // run-mode canvas could neither commit nor close it (issue #433).
+      await ctrl(tester, LogicalKeyboardKey.keyE);
+      expect(mode, PatchCanvasMode.run);
+      expect(find.byKey(PatcherCanvas.inlineCreateKey), findsNothing);
+      expect(controller.graph.nodes, isEmpty);
+
+      // And the keyboard came back with it: the way back is one chord away.
       await ctrl(tester, LogicalKeyboardKey.keyE);
       expect(mode, PatchCanvasMode.edit);
     });

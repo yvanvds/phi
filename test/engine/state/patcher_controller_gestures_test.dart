@@ -446,6 +446,137 @@ void main() {
     });
   });
 
+  group('copy/paste (issue #435)', () {
+    test('paste recreates nodes + intra-selection cables one grid step '
+        'down-right, selected, and undo/redo walk it as one step', () {
+      final slider = addSlider(const Offset(0, 0));
+      final sine = addSine(const Offset(100, 0));
+      controller.connectViaGesture(_out(slider.id, 0), _in(sine.id, 0));
+
+      controller.selectNodes({slider.id, sine.id});
+      controller.copySelection();
+      // Copying is not an edit: nothing on the graph moved. (That it journals
+      // nothing is proved below — the first undo removes the *paste*, and the
+      // no-op-paste case asserts an empty stack outright.)
+      expect(controller.graph.nodes, hasLength(2));
+
+      controller.pasteClipboard();
+      expect(controller.graph.nodes, hasLength(4));
+      expect(controller.graph.cables, hasLength(2));
+      expect(controller.graph.selectedNodes, hasLength(2));
+      final pasted = controller.graph.nodes
+          .where((n) => !{slider.id, sine.id}.contains(n.id))
+          .toList();
+      expect(pasted.map((n) => n.position), <Offset>{
+        const Offset(16, 16),
+        const Offset(116, 16),
+      });
+      // The pasted set is the selection, ready to drag.
+      expect(controller.graph.selectedNodes, pasted.map((n) => n.id).toSet());
+
+      controller.undo();
+      expect(controller.graph.nodes, hasLength(2));
+      expect(controller.graph.cables, hasLength(1));
+
+      controller.redo();
+      expect(controller.graph.nodes, hasLength(4));
+      expect(controller.graph.cables, hasLength(2));
+    });
+
+    test(
+      'each repeated paste of the same copy lands one grid step further',
+      () {
+        final sine = addSine(const Offset(0, 0));
+        controller.selectNodes({sine.id});
+        controller.copySelection();
+
+        controller.pasteClipboard();
+        controller.pasteClipboard();
+
+        final positions = controller.graph.nodes.map((n) => n.position).toSet();
+        expect(positions, {
+          const Offset(0, 0),
+          const Offset(16, 16),
+          const Offset(32, 32),
+        });
+        // A fresh copy resets the generation, so its first paste is one step.
+        controller.selectNodes({sine.id});
+        controller.copySelection();
+        controller.pasteClipboard();
+        expect(controller.graph.nodes, hasLength(4));
+        expect(
+          controller.graph.nodes.where(
+            (n) => n.position == const Offset(16, 16),
+          ),
+          hasLength(2),
+        );
+      },
+    );
+
+    test('the copy is self-contained: it pastes after the originals are '
+        'deleted', () {
+      final slider = addSlider(const Offset(0, 0));
+      final sine = addSine(const Offset(100, 0));
+      controller.connectViaGesture(_out(slider.id, 0), _in(sine.id, 0));
+
+      controller.selectNodes({slider.id, sine.id});
+      controller.copySelection();
+      controller.deleteSelection();
+      expect(controller.graph.nodes, isEmpty);
+
+      controller.pasteClipboard();
+      expect(controller.graph.nodes, hasLength(2));
+      expect(controller.graph.cables, hasLength(1));
+    });
+
+    test('a cable with only one endpoint selected is not copied', () {
+      final slider = addSlider();
+      final sine = addSine(const Offset(100, 0));
+      controller.connectViaGesture(_out(slider.id, 0), _in(sine.id, 0));
+
+      controller.selectNodes({sine.id});
+      controller.copySelection();
+      controller.pasteClipboard();
+
+      expect(controller.graph.nodes, hasLength(3)); // one copy of sine
+      expect(controller.graph.cables, hasLength(1)); // no new cable
+    });
+
+    test('copy with an empty selection keeps the previous copy; paste with an '
+        'empty clipboard is a no-op', () {
+      // Nothing copied yet: paste does nothing, journals nothing.
+      controller.pasteClipboard();
+      expect(controller.graph.nodes, isEmpty);
+      expect(controller.undoScope.canUndo, isFalse);
+
+      final sine = addSine(const Offset(0, 0));
+      controller.selectNodes({sine.id});
+      controller.copySelection();
+      controller.clearSelection();
+      controller.copySelection(); // empty selection — must not clobber
+      controller.pasteClipboard();
+      expect(controller.graph.nodes, hasLength(2));
+    });
+
+    test('a shared clipboard pastes a fragment copied in another patch', () {
+      final other = PatcherController(gateway, clipboard: controller.clipboard);
+      addTearDown(other.dispose);
+
+      final slider = addSlider(const Offset(0, 0));
+      final sine = addSine(const Offset(100, 0));
+      controller.connectViaGesture(_out(slider.id, 0), _in(sine.id, 0));
+      controller.selectNodes({slider.id, sine.id});
+      controller.copySelection();
+
+      other.pasteClipboard();
+      expect(other.graph.nodes, hasLength(2));
+      expect(other.graph.cables, hasLength(1));
+      expect(other.graph.selectedNodes, hasLength(2));
+      // The source patch is untouched.
+      expect(controller.graph.nodes, hasLength(2));
+    });
+  });
+
   group('logical id stability across delete/undo', () {
     test('a move journaled before a delete still undoes after the node is '
         'restored', () {

@@ -50,6 +50,14 @@ import '../../../engine/bridge/patch_object_descriptor.dart';
 /// - **A refusal keeps the box open** with the reason under it, so a typo is
 ///   corrected in place rather than costing the whole gesture. **Escape**
 ///   dismisses and leaves the canvas exactly as it was.
+/// - **The reference panel follows the name as it settles** (issue #437):
+///   the moment the typed name unambiguously names one catalogue type — typed
+///   out in full, a bare name only one object answers to, a completion list
+///   narrowed to a single row, or a candidate chosen by arrow/Tab/click —
+///   [onResolve] reports it, so the panel is already documenting the object's
+///   arguments while they are still being typed after the name. An ambiguous
+///   or unknown name reports nothing: the panel keeps what it has rather than
+///   flickering through guesses.
 ///
 /// **Editing in place** ([editing] non-null, issue #382) changes exactly one
 /// answer:
@@ -78,6 +86,7 @@ class PatchInlineObjectBox extends StatefulWidget {
     required this.onDismiss,
     this.editing,
     this.initialText = '',
+    this.onResolve,
     super.key,
   });
 
@@ -103,6 +112,18 @@ class PatchInlineObjectBox extends StatefulWidget {
   /// Called when the box gives up the gesture (Escape). The canvas — and the
   /// object being edited — are left untouched.
   final VoidCallback onDismiss;
+
+  /// Called each time the typed name comes to **unambiguously name a different
+  /// catalogue type** — so the reference panel can follow the object being
+  /// created while its arguments are still being typed (issue #437).
+  ///
+  /// Fired only on a settled answer: an exact id, a bare name one object
+  /// answers to, a completion list narrowed to one row, or a candidate chosen
+  /// with the arrows, Tab or a click. Never fired while the name is ambiguous
+  /// or unknown, and never twice in a row for the same type. An **edit** does
+  /// not fire for the name it opened with — the panel is already showing that
+  /// object, values and all.
+  final void Function(PatchObjectDescriptor desc)? onResolve;
 
   /// Width of the typing field. The completion list matches it.
   static const double width = 190;
@@ -149,6 +170,12 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
   /// one keypress is not a mistake the undo stack should have to describe.
   bool _committed = false;
 
+  /// The type last reported through [PatchInlineObjectBox.onResolve], so the
+  /// same answer is never announced twice (issue #437). Seeded in `initState`
+  /// with whatever the initial text already resolves to — which is how an edit
+  /// opening on its own name stays silent.
+  String? _reportedType;
+
   static const double _rowHeight = 24;
   static const double _maxListHeight = 168;
 
@@ -166,6 +193,9 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
       );
     }
     _matches = _matchesFor(_name);
+    // What the seed already resolves to is not news: an edit opens on its own
+    // line, and the panel is already showing that very object (issue #437).
+    _reportedType = _resolvedUnambiguously?.type;
     // Take the keyboard *explicitly* rather than with `autofocus`. The canvas
     // grabs focus on the very pointer-up that opens this box, and an autofocus
     // is skipped whenever its scope already has a focused descendant — so the
@@ -246,6 +276,41 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
     return null;
   }
 
+  /// The one type the current text **unambiguously** names, or null while the
+  /// name is still a question (issue #437).
+  ///
+  /// Deliberately stricter than [_resolved], which exists to give Enter an
+  /// answer and so falls back on the highlight even when nothing chose it: a
+  /// bare `*` must not flick the reference panel to whichever of the two `*`s
+  /// happens to rank first. Here a name counts only when it is typed out in
+  /// full, is the edited object's own, has been *chosen* (arrow / Tab / click),
+  /// answers to exactly one object bare, or has narrowed the completion list to
+  /// a single row.
+  PatchObjectDescriptor? get _resolvedUnambiguously {
+    final name = _name;
+    if (name.isEmpty) return null;
+    final exact = _exact(name);
+    if (exact != null) return exact;
+    if (_isOwnName(name)) return widget.editing;
+    if (_chosen && _matches.isNotEmpty) {
+      return _matches[_index.clamp(0, _matches.length - 1)];
+    }
+    final bare = _bareCandidates(name);
+    if (bare.length == 1) return bare.single;
+    if (_matches.length == 1) return _matches.single;
+    return null;
+  }
+
+  /// Report a newly-settled name through [PatchInlineObjectBox.onResolve] —
+  /// once per answer, silence while the name is ambiguous or unknown, so the
+  /// reference panel follows what is typed without flickering through guesses.
+  void _notifyResolve() {
+    final target = _resolvedUnambiguously;
+    if (target == null || target.type == _reportedType) return;
+    _reportedType = target.type;
+    widget.onResolve?.call(target);
+  }
+
   void _onChanged(String _) {
     setState(() {
       _matches = _matchesFor(_name);
@@ -254,6 +319,7 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
       _chosen = false;
     });
     if (_scroll.hasClients) _scroll.jumpTo(0);
+    _notifyResolve();
   }
 
   void _move(int delta) {
@@ -264,6 +330,7 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
       _chosen = true;
     });
     _revealSelected();
+    _notifyResolve();
   }
 
   /// Scroll the highlighted row into view, so arrowing past the bottom of a
@@ -326,6 +393,7 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
       _reject = null;
       _chosen = true;
     });
+    _notifyResolve();
   }
 
   /// Enter: resolve the name, check the arguments, and commit — or refuse

@@ -61,6 +61,18 @@ void main() {
     expect(gateway.calls, contains('sendBang:$handle:0'));
   });
 
+  test('setControlInt reaches the gateway as a sendInt (issue #439)', () {
+    final node = controller.addNode(
+      desc: desc(Obj.gToggle),
+      position: Offset.zero,
+    );
+    controller.setControlInt(node.id, inlet: 0, value: 1);
+    final handle = gateway.nodes.keys.single;
+    expect(gateway.calls, contains('sendInt:$handle:0:1'));
+    // The fake models the engine's toggle read-back: `on`/`off`, not digits.
+    expect(controller.guiValueOf(node.id), 'on');
+  });
+
   test('applyParams is undoable and persists through setParams', () {
     final sineDesc = gateway.objectTypes().firstWhere(
       (d) => d.type == Obj.dSine,
@@ -275,6 +287,10 @@ void main() {
       returnsNormally,
     );
     expect(() => controller.setControlBang(unknown, inlet: 0), returnsNormally);
+    expect(
+      () => controller.setControlInt(unknown, inlet: 0, value: 1),
+      returnsNormally,
+    );
     expect(controller.setNodeParams(unknown, '1 2'), isEmpty);
   });
 }
