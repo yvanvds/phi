@@ -80,10 +80,16 @@ It keeps going after a failure, prints the log of every file that failed, and
 exits non-zero if any did. No `libyse.dll` is needed — the suite injects
 `FakeYseGateway` throughout.
 
-CI runs the same script nightly on `develop` and on every release PR into
-`main`. A feature PR into `develop` skips it to stay cheap — label such a PR
-`ci:integration` to run the sweep on it anyway. See
-[.github/workflows/integration.yaml](.github/workflows/integration.yaml).
+CI runs the same script as a **post-merge sweep**: every push to `develop`
+(i.e. every merged PR) triggers the full suite in the background, so a
+regression is caught within ~20 minutes and — merges being sequential —
+indicts exactly one PR. Feature PRs themselves stay cheap and skip the sweep;
+locally, run only the integration files your change touches and leave the
+full sweep to CI. Pre-merge coverage on demand: label a `develop` PR
+`ci:integration` (worth it when the PR rewires the CI/e2e plumbing itself).
+Release PRs into `main` always run the sweep pre-merge, and a nightly run
+catches environment drift (runner image, toolchain) on days nothing merges.
+See [.github/workflows/integration.yaml](.github/workflows/integration.yaml).
 
 ### Design tokens
 
