@@ -49,24 +49,18 @@ typedef ControlPlaneNotice = void Function(String message);
 /// epics merge (design §4, cross-epic note).
 class ControlPlaneDispatcher {
   /// Subscribe to [busTap]'s [prefix] frames and route each to the given ports.
-  /// [onNotice] receives every degradation message; when omitted they are logged
+  /// [_onNotice] receives every degradation message; when omitted they are logged
   /// via [debugPrint].
   ControlPlaneDispatcher({
     required BusTap busTap,
-    required ClipControlPort clips,
-    required VoiceControlPort voices,
-    required VariableControlPort variables,
-    required StateControlPort states,
-    required TempoControlPort tempo,
-    required FxControlPort fx,
-    ControlPlaneNotice? onNotice,
-  }) : _clips = clips,
-       _voices = voices,
-       _variables = variables,
-       _states = states,
-       _tempo = tempo,
-       _fx = fx,
-       _onNotice = onNotice {
+    required this._clips,
+    required this._voices,
+    required this._variables,
+    required this._states,
+    required this._tempo,
+    required this._fx,
+    this._onNotice,
+  }) {
     _subscription = busTap.subscribe(prefix).listen(handleFrame);
   }
 

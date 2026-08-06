@@ -45,14 +45,11 @@ typedef PatchBusResolver = ({int? channelId})? Function(EntityAddress address);
 /// patch whose dump is unchanged, so a clean save writes nothing spurious).
 class PatchReconciler {
   PatchReconciler({
-    required PatcherGateway gateway,
-    required PatchBusResolver resolveBus,
-    required void Function(PatchPlacementNotice notice) onNotice,
-    int mainOutputs = 1,
-  }) : _gateway = gateway,
-       _resolveBus = resolveBus,
-       _onNotice = onNotice,
-       _mainOutputs = mainOutputs;
+    required this._gateway,
+    required this._resolveBus,
+    required this._onNotice,
+    this._mainOutputs = 1,
+  });
 
   final PatcherGateway _gateway;
   final PatchBusResolver _resolveBus;

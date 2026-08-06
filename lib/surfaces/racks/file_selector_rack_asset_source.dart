@@ -17,11 +17,9 @@ import 'rack_asset_source.dart';
 /// headless tests. A `null` from [directoryProvider] (a never-saved project with
 /// no `.phi` folder yet) skips the import and returns `null`.
 class FileSelectorRackAssetSource implements RackAssetSource {
-  /// Builds the source over a [directoryProvider] that yields the open project's
+  /// Builds the source over a [_directoryProvider] that yields the open project's
   /// `.phi` folder path (or `null` before the project has a location).
-  const FileSelectorRackAssetSource({
-    required String? Function() directoryProvider,
-  }) : _directoryProvider = directoryProvider;
+  const FileSelectorRackAssetSource({required this._directoryProvider});
 
   final String? Function() _directoryProvider;
 

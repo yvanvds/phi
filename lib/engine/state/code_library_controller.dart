@@ -46,10 +46,9 @@ import 'code_tree_node.dart';
 class CodeLibraryController extends ChangeNotifier {
   CodeLibraryController({
     required ProjectRegistry registry,
-    void Function(ProjectCommand)? recordCommand,
+    this._recordCommand,
     this.idleDelay = const Duration(milliseconds: 400),
-  }) : _registry = registry,
-       _recordCommand = recordCommand {
+  }) : _registry = registry {
     _library = CodeLibrary(registry);
     _registry.addListener(_onRegistryChanged);
     _ensureOpenSelection();

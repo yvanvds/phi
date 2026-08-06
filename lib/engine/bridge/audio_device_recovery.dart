@@ -42,17 +42,15 @@ import 'audio_recovery_status.dart';
 /// it stops and says so ([AudioRecoveryStatus.gaveUp]) rather than retrying
 /// under the floorboards for the rest of the session.
 class AudioDeviceRecovery {
-  /// Binds a recovery run to its two collaborators. [attempt] tries to bring a
-  /// device up and returns `true` once one is open; [onExhausted] is called once
-  /// when the schedule runs out with nothing open. [schedule] gives the delay
+  /// Binds a recovery run to its two collaborators. [_attempt] tries to bring a
+  /// device up and returns `true` once one is open; [_onExhausted] is called once
+  /// when the schedule runs out with nothing open. [_schedule] gives the delay
   /// before each attempt — its length is the attempt budget.
   AudioDeviceRecovery({
-    required bool Function() attempt,
-    required void Function() onExhausted,
-    List<Duration> schedule = defaultSchedule,
-  }) : _attempt = attempt,
-       _onExhausted = onExhausted,
-       _schedule = schedule;
+    required this._attempt,
+    required this._onExhausted,
+    this._schedule = defaultSchedule,
+  });
 
   /// Eight attempts over about two minutes: quick enough that a cable pushed
   /// back in within a few seconds is inaudible, patient enough to cover an

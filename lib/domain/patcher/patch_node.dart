@@ -18,14 +18,11 @@ class PatchNode extends ChangeNotifier {
     required this.id,
     required this.type,
     required this.voice,
-    required Offset position,
-    required Size size,
-    required List<PatchPort> inputs,
-    required List<PatchPort> outputs,
-  }) : _position = position,
-       _size = size,
-       _inputs = inputs,
-       _outputs = outputs;
+    required this._position,
+    required this._size,
+    required this._inputs,
+    required this._outputs,
+  });
 
   /// Stable id mirroring the native `PHandle.id`.
   final PatchNodeId id;

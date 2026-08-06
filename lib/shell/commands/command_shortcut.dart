@@ -18,9 +18,9 @@ class CommandShortcut {
     this.control = false,
     this.shift = false,
     this.alt = false,
-    String? triggerLabel,
+    this._triggerLabel,
     this.aliases = const [],
-  }) : _triggerLabel = triggerLabel;
+  });
 
   /// The primary key, e.g. [LogicalKeyboardKey.keyP].
   final LogicalKeyboardKey trigger;

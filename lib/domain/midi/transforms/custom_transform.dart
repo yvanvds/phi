@@ -22,8 +22,8 @@ class CustomTransform extends MidiTransform {
   const CustomTransform({
     required this.definition,
     this.active = true,
-    String? label,
-  }) : _label = label;
+    this._label,
+  });
 
   /// The live, hot-reloadable unit this chip runs. Shared with the registry and
   /// with any other chip built from the same definition.

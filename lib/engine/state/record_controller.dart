@@ -37,10 +37,9 @@ import 'record_target.dart';
 class RecordController extends ChangeNotifier {
   RecordController({
     required Stream<MidiInputEvent> input,
-    required RecordTarget? Function() target,
-    String? Function()? armedVoice,
-  }) : _target = target,
-       _armedVoice = armedVoice {
+    required this._target,
+    this._armedVoice,
+  }) {
     _sub = input.listen(_onInput);
   }
 

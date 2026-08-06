@@ -50,11 +50,7 @@ import 'rack_voice_row.dart';
 /// tree with full registry affordances, the editor is a routed placeholder, and
 /// the voices pane renders read-only rows.
 class RackDefinitionsController extends ChangeNotifier {
-  RackDefinitionsController({
-    required ProjectRegistry registry,
-    void Function(ProjectCommand)? recordCommand,
-  }) : _registry = registry,
-       _recordCommand = recordCommand {
+  RackDefinitionsController({required this._registry, this._recordCommand}) {
     _registry.addListener(_onRegistryChanged);
   }
 

@@ -7,9 +7,7 @@ import 'package:phi/domain/time_domains/tempo_source_stack.dart';
 /// A hand-controllable [TempoSource] for asserting the seam's summing and
 /// idle-gating without leaning on the fader's clamping.
 class _FakeSource extends ChangeNotifier implements TempoSource {
-  _FakeSource({double offset = 0, bool modulating = false})
-    : _offset = offset,
-      _modulating = modulating;
+  _FakeSource({this._offset = 0, this._modulating = false});
 
   double _offset;
   bool _modulating;

@@ -29,14 +29,14 @@ import 'yse_gateway.dart';
 /// libyse's own `setAutoReconnect` really does and why boot now turns it off.
 /// Owning a timer makes this class disposable: call [dispose] with the engine.
 class AudioDeviceCoordinator {
-  /// Binds the coordinator to its [gateway]. [onNotice] receives every
+  /// Binds the coordinator to its [gateway]. [_onNotice] receives every
   /// non-blocking notice raised by a fallback (design §5) — `null` drops them.
   /// [recoverySchedule] overrides the retry cadence (tests drive it fast).
   AudioDeviceCoordinator(
     this._gateway, {
-    void Function(AudioDeviceNotice)? onNotice,
+    this._onNotice,
     List<Duration> recoverySchedule = AudioDeviceRecovery.defaultSchedule,
-  }) : _onNotice = onNotice {
+  }) {
     _recovery = AudioDeviceRecovery(
       attempt: _attemptRecovery,
       onExhausted: _onRecoveryExhausted,

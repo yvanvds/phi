@@ -16,10 +16,9 @@ import 'midi_transform.dart';
 /// boolean read rather than an `apply` call returning unchanged input.
 class MidiTransformChain extends ChangeNotifier {
   MidiTransformChain({
-    required MidiClip source,
+    required this._source,
     List<MidiTransform> transforms = const [],
-  }) : _source = source,
-       _transforms = List<MidiTransform>.of(transforms);
+  }) : _transforms = List<MidiTransform>.of(transforms);
 
   final MidiClip _source;
   final List<MidiTransform> _transforms;

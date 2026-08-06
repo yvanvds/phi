@@ -7,11 +7,6 @@ analyzer:
     strict-raw-types: true
   errors:
     invalid_annotation_target: ignore
-    # Language 3.12 (SDK floor raised in #420) makes private initializing
-    # formals (`Ctor(this._field)`) expressible, so this flutter_lints rule
-    # newly fires on ~128 pre-existing constructors. The mechanical migration
-    # is #428; drop this ignore there.
-    prefer_initializing_formals: ignore
 
 linter:
   rules:

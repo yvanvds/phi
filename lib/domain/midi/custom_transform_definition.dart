@@ -18,9 +18,9 @@ import 'transforms/custom_transform.dart';
 class CustomTransformDefinition {
   CustomTransformDefinition({
     required this.name,
-    required DslTransform transform,
+    required this._transform,
     this.kind = MidiTransformKind.struct,
-  }) : _transform = transform;
+  });
 
   final String name;
   final MidiTransformKind kind;
