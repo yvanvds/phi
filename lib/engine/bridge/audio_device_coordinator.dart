@@ -246,17 +246,30 @@ class AudioDeviceCoordinator {
   /// names a device the engine has stopped reporting, and arming clears
   /// [current], so a standing loss re-arms nothing.
   ///
-  /// Deliberately raises **no notice**. The shell already surfaces the drop from
-  /// the health monitor ("Audio device dropped — reconnecting…", a warning), and
-  /// a [AudioNoticeKind.noAudioDevice] here would toast a second time at *error*
-  /// level for a state Phi is actively fixing — which is the distinction this
-  /// whole change exists to draw. The error notice belongs to the one moment it
-  /// is true: [_onRecoveryExhausted].
+  /// Raises **no notice while a run is armed**. The shell already surfaces the
+  /// drop from the health monitor ("Audio device dropped — reconnecting…", a
+  /// warning), and a [AudioNoticeKind.noAudioDevice] here would toast a second
+  /// time at *error* level for a state Phi is actively fixing — which is the
+  /// distinction this whole change exists to draw. The error notice belongs to
+  /// the moments it is true: [_onRecoveryExhausted], and the case below.
+  ///
+  /// That case is a device dropping on an engine that enumerated nothing — a
+  /// default device opened by `init()` without going through the list, on a box
+  /// where enumeration itself failed. Nothing can be armed for it (issue #412),
+  /// so without a notice the health monitor would read the silence as
+  /// "reconnecting" and sit there forever, waiting on retries that were never
+  /// scheduled. Saying it is lost is what settles the chip on NO AUDIO.
   void observeLiveState() {
     if (_current == null) return;
     if (_gateway.activeAudioState() != AudioDeviceState.none) return;
     _current = null;
-    _armRecovery();
+    if (!_armRecovery()) {
+      _notify(
+        AudioNoticeKind.noAudioDevice,
+        'The audio output device is gone, and the engine enumerated no others '
+        '— restart Phi to pick one up.',
+      );
+    }
   }
 
   /// Arms a bounded recovery run, unless it would be theatre — and reports
