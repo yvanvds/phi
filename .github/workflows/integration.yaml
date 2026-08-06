@@ -23,6 +23,10 @@ name: Integration tests
 #   * No `libyse.dll` is needed: every file in the suite injects
 #     `FakeYseGateway`, so the app under test never opens the native engine.
 #     That is what keeps this job a plain runner with no release download.
+#
+# The supply-chain rules this file follows — every `uses:` pinned to a commit
+# SHA, phi's resolve run with `--enforce-lockfile` — are stated once in the
+# header of ci.yaml (issue #396). Read them there before bumping anything here.
 
 on:
   schedule:
@@ -68,31 +72,42 @@ jobs:
         shard: [1, 2, 3, 4]
     steps:
       - name: Checkout phi
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: phi
 
       - name: Checkout dart-yse (path dep sibling)
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: yvanvds/dart-yse
           path: dart-yse
           ref: main
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          flutter-version: '3.38.3'
+          # This pin and the committed `pubspec.lock` are one contract: the
+          # lock records `flutter: ">=3.44.0"` / `dart: ">=3.12.0"`, so
+          # --enforce-lockfile below can only be satisfied by an SDK that
+          # meets them. Bump the two together, never one alone.
+          flutter-version: '3.44.0'
           channel: stable
           cache: true
 
+      # Unenforced on purpose: dart-yse gitignores its `pubspec.lock`, so there
+      # is nothing to enforce against. Give that repo a committed lockfile and
+      # this becomes `dart pub get --enforce-lockfile` too.
       - name: Resolve dart-yse deps
         working-directory: dart-yse
         run: dart pub get
 
+      # --enforce-lockfile makes the committed `pubspec.lock` the contract:
+      # pub resolves to exactly those versions and exits 65 if `pubspec.yaml`
+      # asks for anything the lockfile cannot satisfy. A PR that edits
+      # `pubspec.yaml` without regenerating the lock fails right here.
       - name: Resolve phi deps
         working-directory: phi
-        run: flutter pub get
+        run: flutter pub get --enforce-lockfile
 
       # windows/runner/main.cpp opens a 1280x720 window at origin (10,10), but
       # the GitHub image boots a 1024x768 virtual display, so the window is
