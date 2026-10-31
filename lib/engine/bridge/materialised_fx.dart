@@ -41,6 +41,15 @@ abstract interface class MaterialisedFx {
   /// underlying effect (the owning chain must re-place afterwards).
   void applyDefinition(FxDefinition definition);
 
+  /// Set one param on the live effect **without** changing [definition] — a
+  /// performance gesture, not authorship (the live-coding control plane's
+  /// `fx.<addr>.<param> = v`, issue #348). Writes through the same click-free
+  /// setter [applyDefinition] uses for that key; an unrecognised [name] for this
+  /// [kind] is ignored. Because [definition] is untouched, a later re-sync whose
+  /// registry definition is unchanged leaves the live value in place, while a
+  /// journaled edit of the definition re-applies its params over it.
+  void setLiveParam(String name, double value);
+
   /// Release the engine effect. Idempotent. The owner disposes the handle; a
   /// chain that placed it must drop it from its order first (or the borrowed
   /// pointer dangles).

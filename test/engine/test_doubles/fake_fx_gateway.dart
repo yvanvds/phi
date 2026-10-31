@@ -44,7 +44,7 @@ class FakeFxGateway implements FxGateway {
 /// Records the lifecycle so tests can assert it: [materialiseCount] rises on
 /// every (re)build (starts at 1), [liveApplyCount] on every in-place same-kind
 /// param apply, and [calls] keeps an ordered log
-/// (`materialise:<kind>` / `apply:<kind>` / `dispose`). Mirrors the real handle:
+/// (`materialise:<kind>` / `apply:<kind>` / `set:<name>=<value>` / `dispose`). Mirrors the real handle:
 /// a same-kind edit applies live; a kind change rebuilds.
 class FakeMaterialisedFx implements MaterialisedFx {
   FakeMaterialisedFx(this._definition, {this.patchInstanceId}) {
@@ -66,6 +66,10 @@ class FakeMaterialisedFx implements MaterialisedFx {
 
   /// How many same-kind edits were applied in place (click-free setters).
   int liveApplyCount = 0;
+
+  /// The live (unjournaled) param sets [setLiveParam] applied, last value per
+  /// name — performance values layered over [definition] (issue #348).
+  final Map<String, double> liveParams = {};
 
   /// Ordered lifecycle log — see the class doc for the vocabulary.
   final List<String> calls = [];
@@ -93,6 +97,12 @@ class FakeMaterialisedFx implements MaterialisedFx {
       calls.add('apply:${next.kind.name}');
     }
     _definition = next;
+  }
+
+  @override
+  void setLiveParam(String name, double value) {
+    liveParams[name] = value;
+    calls.add('set:$name=$value');
   }
 
   @override

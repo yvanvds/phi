@@ -17,10 +17,9 @@ import '../../domain/project/entity_address.dart';
 /// rounds where a param is integral. A non-numeric frame never reaches here —
 /// it degrades to a dispatcher notice instead.
 ///
-/// A port, not the controller itself: the dispatcher lands with a fake here so
-/// the whole control plane is testable before the fx-registry wiring exists;
-/// the real adapter over the live fx chain activates as that epic lands (design
-/// §4, cross-epic note).
+/// A port, not the controller itself, so the dispatcher is testable against a
+/// fake. The production adapter is `LiveFxControlPort` (issue #348), which
+/// writes the value onto the live effect handle without journaling.
 abstract interface class FxControlPort {
   /// Set the [param] of the effect instance at [fx] to [value] (the decoded
   /// numeric bus value).

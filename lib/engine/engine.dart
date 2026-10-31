@@ -47,7 +47,6 @@ import 'bridge/bus_tap.dart';
 import 'bridge/code_evaluator.dart';
 import 'bridge/control_plane_dispatcher.dart';
 import 'bridge/engine_log_source.dart';
-import 'bridge/fx_control_port.dart';
 import 'bridge/fx_gateway.dart';
 import 'bridge/materialised_synth.dart';
 import 'bridge/midi_gateway.dart';
@@ -76,6 +75,7 @@ import 'state/engine_midi_controller.dart';
 import 'state/engine_state_slice_applier.dart';
 import 'state/engine_state_slice_source.dart';
 import 'state/engine_telemetry.dart';
+import 'state/live_fx_control_port.dart';
 import 'state/metronome_controller.dart';
 import 'state/mix_tree_node.dart';
 import 'state/mixer_channel.dart';
@@ -1109,9 +1109,9 @@ class PhiEngine {
     // scheduler, `var` assignments into the runtime registry, `domain.<d>.tempo`
     // as the same live override the state-slice application uses, clip verbs
     // onto the session manager (opening a clip from the registry when none is
-    // open yet), and voice notes through the racks audition path. The `fx` leg
-    // is decoded but not yet wired to a live fx-param controller (issue #348,
-    // the fx epic) — it degrades to a graceful no-op. Every degradation is a
+    // open yet), voice notes through the racks audition path, and fx param sets
+    // onto the live insert-effect handles, unjournaled (issue #348). Every
+    // degradation is a
     // notice, never a crash. Silent in production until the tap C API lands
     // (the default [NoOpBusTap] yields no frames).
     _controlPlane = _buildControlPlane();
@@ -1227,7 +1227,7 @@ class PhiEngine {
     variables: RuntimeVariableControlPort(_runtimeVariables!),
     states: StateMachineControlPort(_stateTriggers!),
     tempo: DomainTempoControlPort(_applyDomainTempo),
-    fx: const _UnwiredFxControlPort(),
+    fx: LiveFxControlPort(_applyLiveFxParam),
   );
 
   /// Build (or, after a project swap, rebind) the [PatchLibraryController] and
@@ -2199,6 +2199,18 @@ class PhiEngine {
     _recomputeEffectiveVolumes();
   }
 
+  /// Set one param on the live insert effect at [fx] **without journaling** —
+  /// the live-coding control plane's `fx.<addr>.<param> = v` (issue #348),
+  /// performance rather than authorship, like [applyLiveBusLevel]. Writes onto
+  /// the materialised effect through the same click-free setter a definition
+  /// edit uses; the authored `fx.` payload is untouched, so a later journaled
+  /// edit of that effect re-applies over the live value. A no-op while stopped,
+  /// without the rack subsystem, or for an address with no live effect.
+  void _applyLiveFxParam(EntityAddress fx, String param, double value) {
+    if (!_started) return;
+    _racks?.setLiveFxParam(fx, param, value);
+  }
+
   /// Mute or unmute a channel (strip or group bus). Master mute is set through
   /// [setMasterMuted]; muting a group silences its whole subtree (design §5).
   /// Triggers a tree-wide solo/mute re-evaluation. Discrete, so it persists
@@ -3003,17 +3015,4 @@ class _AppliedSend {
   final int returnId;
   double level;
   final bool preFader;
-}
-
-/// The `fx` leg of the control plane, decoded but **not yet wired** to a live
-/// fx-param controller (issue #334). Issue #316 landed the [FxControlPort] seam
-/// and the dispatcher's `phi.ctl.fx.*` routing; the real adapter over the live
-/// fx registry lands with the fx epic (issue #348). Until then a
-/// `fx.<addr>.<param> = v` frame decodes cleanly and no-ops here — a graceful
-/// degradation, never a crash.
-class _UnwiredFxControlPort implements FxControlPort {
-  const _UnwiredFxControlPort();
-
-  @override
-  void setParam(EntityAddress fx, String param, double value) {}
 }

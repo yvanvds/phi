@@ -612,6 +612,11 @@ class FakeYseGateway implements YseGateway {
   @override
   set masterVolume(double value) {
     calls.add('masterVolume:${value.toStringAsFixed(3)}');
+    // Outside a session the real gateway drops the write (issue #421): the
+    // master channel's implementation does not exist before init or after
+    // close, so forwarding would be a native null dereference. Nothing changes
+    // on either side — not even the interface-side cache the getter reads.
+    if (!initialised) return;
     // One write, both sides: `setVolume()` posts a VOLUME message to the impl
     // *and* caches the value on the interface. They only drift apart when the
     // impl is replaced underneath the cache — see [appliedMasterVolume].

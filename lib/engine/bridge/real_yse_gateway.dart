@@ -25,6 +25,14 @@ class RealYseGateway implements YseGateway {
   final Map<int, Channel> _channels = {};
   int _nextChannelId = 1;
 
+  /// Whether an engine session is running — set by [initOffline], cleared by
+  /// [close]. The master channel's native implementation (`pimpl`) exists only
+  /// inside a session: `System::close()` destroys it and nulls `pimpl`, and
+  /// before the first init there is none. A write to `Channel.master` outside a
+  /// session is therefore a native null dereference, not a no-op — neither the
+  /// wrapper nor the C shim checks `pimpl` (issue #421).
+  bool _sessionOpen = false;
+
   System get _system => _sys ??= System.instance;
 
   @override
@@ -50,11 +58,15 @@ class RealYseGateway implements YseGateway {
   @override
   void initOffline() {
     _system.initOffline();
+    _sessionOpen = true;
     _openMidiInputs();
   }
 
   @override
   void close() {
+    // Cleared first: from here on the master channel's implementation is being
+    // torn down, so no master write may reach it.
+    _sessionOpen = false;
     _closeMidiInputs();
     _destroyAllChannels();
     _system.close();
@@ -88,8 +100,20 @@ class RealYseGateway implements YseGateway {
   @override
   double get masterVolume => Channel.master.volume;
 
+  /// A no-op outside a session (issue #421). The master channel is the one
+  /// handle that outlives [close] — per-channel writes resolve through
+  /// `_channels`, which [close] empties — so this guard has to live here rather
+  /// than in a caller: `Channel.master.volume =` on a closed engine reaches
+  /// `pimpl->sendMessage()` with `pimpl == nullptr`.
+  ///
+  /// Nothing is cached for the next session: the fresh implementation `init`
+  /// creates is born at unity regardless, so the caller re-asserts its gain
+  /// after a start (issue #402).
   @override
-  set masterVolume(double value) => Channel.master.volume = value;
+  set masterVolume(double value) {
+    if (!_sessionOpen) return;
+    Channel.master.volume = value;
+  }
 
   @override
   double get masterPeak => Channel.master.peakLinearPost();

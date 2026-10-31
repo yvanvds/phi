@@ -156,6 +156,11 @@ abstract interface class YseGateway {
   set audioTest(bool on);
 
   /// Master-channel volume, in `[0.0, 1.0]`.
+  ///
+  /// Writing it is a **no-op outside a session** — before [initOffline] and
+  /// after [close] — rather than a native crash (issue #421). The write is not
+  /// remembered for the next session either: a new session's master starts at
+  /// unity, so a caller that wants a gain re-asserts it after starting.
   double get masterVolume;
   set masterVolume(double value);
 

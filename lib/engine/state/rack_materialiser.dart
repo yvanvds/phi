@@ -440,6 +440,23 @@ class RackMaterialiser {
     }
   }
 
+  // ─── live fx params ─────────────────────────────────────────────────────────
+
+  /// Set [param] on the live effect handle for the `fx.` instance at [fx] to
+  /// [value], without journaling — the live-coding control plane's
+  /// `fx.<addr>.<param> = v` (issue #348). The handle's authored definition is
+  /// untouched, so an unrelated re-sync keeps the live value while a journaled
+  /// edit of this effect's definition re-applies over it.
+  ///
+  /// Returns whether a live handle existed at [fx]; an unknown address (or one
+  /// whose payload never materialised) is a no-op.
+  bool setLiveFxParam(EntityAddress fx, String param, double value) {
+    final handle = _fxByAddress[fx];
+    if (handle == null) return false;
+    handle.setLiveParam(param, value);
+    return true;
+  }
+
   // ─── teardown ───────────────────────────────────────────────────────────────
 
   /// Dispose every live handle + chain and reset the tables, without touching
