@@ -136,3 +136,6 @@ sonar.token
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 !/dev/ci/**/Gemfile.lock
 YSElog.txt
+
+# Local path overrides (e.g. yse -> ../dart-yse) are per-machine; never commit.
+pubspec_overrides.yaml
