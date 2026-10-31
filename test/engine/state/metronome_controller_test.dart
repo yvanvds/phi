@@ -336,17 +336,14 @@ void main() {
       controller.dispose();
     });
 
-    test(
-      'the override wins over the authored tempo when starting the click',
-      () {
-        overrides['drum'] = 75;
-        final controller = build(domainName: 'drum'); // authored 120
-        controller.setEnabled(true);
-        // Enabling mints the transport at the base tempo — already the override.
-        expect(gateway.transport!.tempo, 75);
-        controller.dispose();
-      },
-    );
+    test('the override wins over the authored tempo when starting the click', () {
+      overrides['drum'] = 75;
+      final controller = build(domainName: 'drum'); // authored 120
+      controller.setEnabled(true);
+      // Enabling mints the transport at the base tempo — already the override.
+      expect(gateway.transport!.tempo, 75);
+      controller.dispose();
+    });
 
     test('clearing the overrides falls back to the authored tempo', () {
       overrides['drum'] = 90;

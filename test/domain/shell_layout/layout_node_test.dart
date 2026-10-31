@@ -22,25 +22,21 @@ void main() {
     });
 
     test('fromJson pins active to a live tab', () {
-      final pane =
-          LayoutNode.fromJson(const {
-                'type': 'pane',
-                'id': 'p1',
-                'tabs': ['mix', 'midi'],
-                'active': 'ghost',
-              })
-              as LayoutPane;
+      final pane = LayoutNode.fromJson(const {
+        'type': 'pane',
+        'id': 'p1',
+        'tabs': ['mix', 'midi'],
+        'active': 'ghost',
+      }) as LayoutPane;
       expect(pane.active, 'mix');
     });
 
     test('fromJson keeps only string tabs and defaults a missing active', () {
-      final pane =
-          LayoutNode.fromJson(const {
-                'type': 'pane',
-                'id': 'p1',
-                'tabs': ['mix', 7, null, 'midi'],
-              })
-              as LayoutPane;
+      final pane = LayoutNode.fromJson(const {
+        'type': 'pane',
+        'id': 'p1',
+        'tabs': ['mix', 7, null, 'midi'],
+      }) as LayoutPane;
       expect(pane.tabs, ['mix', 'midi']);
       expect(pane.active, 'mix');
     });
@@ -114,26 +110,24 @@ void main() {
     });
 
     test('fromJson coerces a fractions/children length mismatch', () {
-      final node =
-          LayoutNode.fromJson(const {
-                'type': 'split',
-                'id': 's1',
-                'axis': 'column',
-                'children': [
-                  {
-                    'type': 'pane',
-                    'id': 'p1',
-                    'tabs': ['mix'],
-                  },
-                  {
-                    'type': 'pane',
-                    'id': 'p2',
-                    'tabs': ['midi'],
-                  },
-                ],
-                'fractions': [0.9],
-              })
-              as LayoutSplit;
+      final node = LayoutNode.fromJson(const {
+        'type': 'split',
+        'id': 's1',
+        'axis': 'column',
+        'children': [
+          {
+            'type': 'pane',
+            'id': 'p1',
+            'tabs': ['mix'],
+          },
+          {
+            'type': 'pane',
+            'id': 'p2',
+            'tabs': ['midi'],
+          },
+        ],
+        'fractions': [0.9],
+      }) as LayoutSplit;
       expect(node.axis, SplitAxis.column);
       expect(node.fractions, [0.5, 0.5]);
     });

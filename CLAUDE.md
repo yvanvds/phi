@@ -41,9 +41,11 @@ maintainer-applied.
 
 ## Running locally
 
-Requires Windows, Flutter ≥ 3.44, and `libyse.dll` discoverable via
-`YSE_DLL_PATH` or sitting next to the executable. See [README.md](README.md)
-for the build recipe.
+Requires Windows and Flutter ≥ 3.47.1. `yse` (^0.2.0) comes from pub.dev; its
+native-assets build hook downloads and bundles `libyse.dll` next to the
+executable, so no engine setup is needed. `YSE_DLL_PATH` (a directory) still
+takes precedence, for testing against a local engine build. See
+[README.md](README.md).
 
 ```powershell
 flutter pub get

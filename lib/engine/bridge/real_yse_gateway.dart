@@ -28,7 +28,19 @@ class RealYseGateway implements YseGateway {
 
   @override
   void init() {
-    _system.init();
+    try {
+      _system.init();
+    } on YseException {
+      // Since yse 0.2.0 `init()` throws when no device opens and leaves the
+      // engine closed (libyse 2.4 returned normally with nothing open). Phi's
+      // boot contract is the old one — come up anyway and report
+      // `AudioDeviceState.none` so recovery can take over — so fall back to an
+      // offline session and enumerate the devices without opening one, which
+      // also lets a later `openDevice` work on that session.
+      _system
+        ..initOffline()
+        ..refreshDevices();
+    }
     _openMidiInputs();
   }
 

@@ -534,9 +534,8 @@ String _emValue(String css) {
 
 String _shadow(String css) {
   // `0 0 8px var(--voice-1-soft)` → `Shadow(color: PhiColors.voice1Soft, blurRadius: 8)`
-  final m = RegExp(
-    r'(\d+)\s+(\d+)\s+(\d+)px\s+var\(--([\w-]+)\)',
-  ).firstMatch(css.trim());
+  final m = RegExp(r'(\d+)\s+(\d+)\s+(\d+)px\s+var\(--([\w-]+)\)')
+      .firstMatch(css.trim());
   if (m == null) throw StateError('unsupported text-shadow: $css');
   final blur = m.group(3)!;
   final color = _colorVarToDart(m.group(4)!);

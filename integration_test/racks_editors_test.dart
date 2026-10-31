@@ -96,12 +96,10 @@ void main() {
     // Edit the sine voice count end-to-end.
     await tester.enterText(voiceField, '20');
     await tester.pump();
-    final sine =
-        SynthDefinition.fromJson(
-              (controller.registry.entityAt(synthSine)!.payload as Map)
-                  .cast<String, Object?>(),
-            )
-            as SineSynth;
+    final sine = SynthDefinition.fromJson(
+      (controller.registry.entityAt(synthSine)!.payload as Map)
+          .cast<String, Object?>(),
+    ) as SineSynth;
     expect(sine.voiceCount, 20);
     expect(controller.isDirty.value, isTrue);
 
@@ -122,12 +120,10 @@ void main() {
     await tester.drag(detune, const Offset(80, 0));
     await tester.pumpAndSettle();
 
-    final va =
-        SynthDefinition.fromJson(
-              (controller.registry.entityAt(synthVa)!.payload as Map)
-                  .cast<String, Object?>(),
-            )
-            as VaSynth;
+    final va = SynthDefinition.fromJson(
+      (controller.registry.entityAt(synthVa)!.payload as Map)
+          .cast<String, Object?>(),
+    ) as VaSynth;
     expect(va.oscillators.first.detune, greaterThan(0));
 
     await engine.dispose();

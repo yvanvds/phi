@@ -148,10 +148,21 @@ class _PatcherPaletteState extends State<PatcherPalette> {
         PatchObjectCategory.oscillator => 'oscillators',
         PatchObjectCategory.filter => 'filters',
         PatchObjectCategory.math => 'math',
-        PatchObjectCategory.generic => 'i / o',
+        PatchObjectCategory.generic => 'utility',
         PatchObjectCategory.gui => 'control',
         PatchObjectCategory.time => 'timing',
         PatchObjectCategory.midi => 'midi',
+        PatchObjectCategory.routing => 'routing',
+        PatchObjectCategory.control => 'control flow',
+        PatchObjectCategory.list => 'lists',
+        PatchObjectCategory.string => 'text',
+        PatchObjectCategory.collection => 'collections',
+        PatchObjectCategory.dict => 'dict',
+        PatchObjectCategory.array => 'arrays',
+        PatchObjectCategory.random => 'random',
+        PatchObjectCategory.io => 'i / o',
+        PatchObjectCategory.encapsulation => 'subpatchers',
+        PatchObjectCategory.sequence => 'sequencing',
       };
 }
 

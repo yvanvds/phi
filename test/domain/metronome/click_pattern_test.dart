@@ -8,11 +8,9 @@ void main() {
       for (final meter in [2, 3, 4, 5, 7]) {
         final beats = ClickPattern(beatsPerBar: meter).beats();
         expect(beats, hasLength(meter), reason: '$meter/bar has $meter clicks');
-        expect(
-          beats.map((b) => b.beat).toList(),
-          [for (var i = 0; i < meter; i++) i],
-          reason: 'beats are zero-based and in order',
-        );
+        expect(beats.map((b) => b.beat).toList(), [
+          for (var i = 0; i < meter; i++) i,
+        ], reason: 'beats are zero-based and in order');
       }
     });
 

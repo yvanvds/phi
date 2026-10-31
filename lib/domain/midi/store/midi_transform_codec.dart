@@ -367,9 +367,9 @@ class MidiTransformCodec {
   ScaleTuning _decodeTuning(Object? json) {
     final map = _map(json);
     return ScaleTuning(
-      degreesCents: _list(
-        map['degreesCents'],
-      ).map((e) => _double(e)).toList(growable: false),
+      degreesCents: _list(map['degreesCents'])
+          .map((e) => _double(e))
+          .toList(growable: false),
       periodCents: _double(map['periodCents'], 1200),
     );
   }

@@ -7,12 +7,11 @@ import 'patcher_controller.dart';
 /// How a node body widget is built. Lives in the [NodeDescriptor] so the
 /// surface code is closed against new node types — adding `~lp` is one
 /// new body file plus one registration call.
-typedef NodeBodyBuilder =
-    Widget Function(
-      BuildContext context,
-      PatchNode node,
-      PatcherController controller,
-    );
+typedef NodeBodyBuilder = Widget Function(
+  BuildContext context,
+  PatchNode node,
+  PatcherController controller,
+);
 
 /// Spec for one port on a node type. Used at registration time; the live
 /// port topology on a [PatchNode] is reified from the gateway's

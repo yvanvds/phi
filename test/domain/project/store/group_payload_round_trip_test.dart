@@ -102,9 +102,9 @@ void main() {
         ),
       );
 
-      final json =
-          jsonDecode(store.files['mix/drums/_group.json']!)
-              as Map<String, Object?>;
+      final json = jsonDecode(
+        store.files['mix/drums/_group.json']!,
+      ) as Map<String, Object?>;
       expect(json['kind'], 'mix');
       expect(json['version'], 4);
       // The envelope's `name` is the group's own address leaf, not a payload
@@ -184,9 +184,9 @@ void main() {
       );
 
       // Byte-for-byte the pre-#165 shape: no kind/version/name/payload keys.
-      final json =
-          jsonDecode(store.files['clip/drums/_group.json']!)
-              as Map<String, Object?>;
+      final json = jsonDecode(
+        store.files['clip/drums/_group.json']!,
+      ) as Map<String, Object?>;
       expect(json, {
         'order': ['snare', 'kick'],
         'color': 'red',

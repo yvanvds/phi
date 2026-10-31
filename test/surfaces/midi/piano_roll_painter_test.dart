@@ -80,9 +80,8 @@ void main() {
 
     test('paints a caret without throwing', () {
       final recorder = PictureRecorder();
-      _painter(
-        caret: const PianoRollCaret(beat: 2, pitch: 64),
-      ).paint(Canvas(recorder), const Size(400, 200));
+      _painter(caret: const PianoRollCaret(beat: 2, pitch: 64))
+          .paint(Canvas(recorder), const Size(400, 200));
       recorder.endRecording().dispose();
     });
 

@@ -77,9 +77,8 @@ void main() {
       await store.writeMarker('clean shutdown');
       expect(await store.markerExists(), isTrue);
       expect(
-        await File(
-          p.join(temp.path, RealLogFileStore.markerFileName),
-        ).readAsString(),
+        await File(p.join(temp.path, RealLogFileStore.markerFileName))
+            .readAsString(),
         'clean shutdown\n',
       );
 
@@ -120,9 +119,8 @@ void main() {
         );
         await first.close();
 
-        final logText = await File(
-          p.join(temp.path, first.currentLogName!),
-        ).readAsString();
+        final logText = await File(p.join(temp.path, first.currentLogName!))
+            .readAsString();
         expect(logText, contains('# Phi session log'));
         expect(logText, contains('ERROR   engine device lost'));
 

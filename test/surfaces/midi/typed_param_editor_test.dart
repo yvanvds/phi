@@ -431,14 +431,12 @@ void main() {
 
     await tester.tap(find.byType(TransformChip), buttons: kSecondaryButton);
     await tester.pumpAndSettle();
-    final item =
-        tester.widget(
-              find.ancestor(
-                of: find.text('edit parameters…'),
-                matching: find.byWidgetPredicate((w) => w is PopupMenuItem),
-              ),
-            )
-            as PopupMenuItem;
+    final item = tester.widget(
+      find.ancestor(
+        of: find.text('edit parameters…'),
+        matching: find.byWidgetPredicate((w) => w is PopupMenuItem),
+      ),
+    ) as PopupMenuItem;
     expect(item.enabled, isFalse);
 
     chain.dispose();
@@ -456,14 +454,12 @@ void main() {
 
     await tester.tap(find.byType(TransformChip), buttons: kSecondaryButton);
     await tester.pumpAndSettle();
-    final item =
-        tester.widget(
-              find.ancestor(
-                of: find.text('edit parameters…'),
-                matching: find.byWidgetPredicate((w) => w is PopupMenuItem),
-              ),
-            )
-            as PopupMenuItem;
+    final item = tester.widget(
+      find.ancestor(
+        of: find.text('edit parameters…'),
+        matching: find.byWidgetPredicate((w) => w is PopupMenuItem),
+      ),
+    ) as PopupMenuItem;
     expect(item.enabled, isTrue);
 
     chain.dispose();

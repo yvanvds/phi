@@ -96,41 +96,38 @@ void main() {
     expect(await RealJournalStore(projectDir).isRecovering(), isFalse);
   });
 
-  test(
-    'a crash-loop is flagged and replay-to-previous degrades gracefully',
-    () async {
-      // A saved project plus two journaled-but-unsaved edits; the last one is the
-      // suspected poison.
-      final store = RealProjectStore(projectDir);
-      final live = ProjectRegistry()..createEntity(addr('clip.a'));
-      await store.save(snapshotOf(live));
+  test('a crash-loop is flagged and replay-to-previous degrades gracefully', () async {
+    // A saved project plus two journaled-but-unsaved edits; the last one is the
+    // suspected poison.
+    final store = RealProjectStore(projectDir);
+    final live = ProjectRegistry()..createEntity(addr('clip.a'));
+    await store.save(snapshotOf(live));
 
-      final journal = CommandJournal(RealJournalStore(projectDir));
-      for (final command in <ProjectCommand>[
-        CreateEntityCommand(live, addr('clip.b')),
-        CreateGroupCommand(live, addr('clip.poison')),
-      ]) {
-        command.apply();
-        await journal.record(command);
-      }
-      // A prior replay started but never finished: the sentinel is still on disk.
-      await RealJournalStore(projectDir).markRecovering();
+    final journal = CommandJournal(RealJournalStore(projectDir));
+    for (final command in <ProjectCommand>[
+      CreateEntityCommand(live, addr('clip.b')),
+      CreateGroupCommand(live, addr('clip.poison')),
+    ]) {
+      command.apply();
+      await journal.record(command);
+    }
+    // A prior replay started but never finished: the sentinel is still on disk.
+    await RealJournalStore(projectDir).markRecovering();
 
-      final recovery = CrashRecovery(
-        store: RealProjectStore(projectDir),
-        journal: CommandJournal(RealJournalStore(projectDir)),
-      );
-      final offer = await recovery.detect();
-      expect(offer, isNotNull);
-      expect(offer!.crashLoop, isTrue);
-      expect(offer.entryCount, 2);
+    final recovery = CrashRecovery(
+      store: RealProjectStore(projectDir),
+      journal: CommandJournal(RealJournalStore(projectDir)),
+    );
+    final offer = await recovery.detect();
+    expect(offer, isNotNull);
+    expect(offer!.crashLoop, isTrue);
+    expect(offer.entryCount, 2);
 
-      // Walk back over the last edit to escape the loop.
-      final recovered = await recovery.recover(RecoveryChoice.replayToPrevious);
-      expect(recovered.registry.entityAt(addr('clip.b')), isNotNull);
-      expect(recovered.registry.groupAt(addr('clip.poison')), isNull);
-    },
-  );
+    // Walk back over the last edit to escape the loop.
+    final recovered = await recovery.recover(RecoveryChoice.replayToPrevious);
+    expect(recovered.registry.entityAt(addr('clip.b')), isNotNull);
+    expect(recovered.registry.groupAt(addr('clip.poison')), isNull);
+  });
 
   test('skipping the journal opens the last clean save', () async {
     final store = RealProjectStore(projectDir);

@@ -49,9 +49,8 @@ void main() {
     });
 
     test('a corrupt settings file falls back to defaults', () async {
-      await File(
-        p.join(temp.path, RealAppSettingsStore.fileName),
-      ).writeAsString('{ not json');
+      await File(p.join(temp.path, RealAppSettingsStore.fileName))
+          .writeAsString('{ not json');
       final store = RealAppSettingsStore(directory: temp);
       expect(await store.load(), const AppSettings());
     });

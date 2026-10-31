@@ -141,9 +141,9 @@ void main() {
 
       test('a plain effect emits no patch key', () {
         expect(
-          const FxDefinition(
-            kind: FxKind.lowpass,
-          ).toJson().containsKey('patch'),
+          const FxDefinition(kind: FxKind.lowpass)
+              .toJson()
+              .containsKey('patch'),
           isFalse,
         );
       });

@@ -452,14 +452,12 @@ void main() {
 
       await openMenuOn(tester, find.byType(TransformChip));
 
-      final item =
-          tester.widget(
-                find.ancestor(
-                  of: find.text('edit parameters…'),
-                  matching: find.byWidgetPredicate((w) => w is PopupMenuItem),
-                ),
-              )
-              as PopupMenuItem;
+      final item = tester.widget(
+        find.ancestor(
+          of: find.text('edit parameters…'),
+          matching: find.byWidgetPredicate((w) => w is PopupMenuItem),
+        ),
+      ) as PopupMenuItem;
       expect(item.enabled, isFalse);
 
       chain.dispose();

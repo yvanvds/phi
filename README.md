@@ -22,37 +22,32 @@ planned (Scene · Patcher · Code · State · MIDI · Mix); only Mix has a stub.
 
 - **Engine:** [yse-soundengine](https://github.com/yvanvds/yse-soundengine) (C++).
 - **FFI bridge:** [dart-yse](https://github.com/yvanvds/dart-yse) — package name `yse`.
-- **UI:** Flutter ≥ 3.44, Windows desktop only for now.
+- **UI:** Flutter ≥ 3.47.1, Windows desktop only for now.
 - **Design system:** [`design system/`](design%20system/) — colors, type, motion,
   components. Source-of-truth for the Dart token files under `lib/design/tokens/`.
 
 ## Build
 
-Requires Windows, [Flutter](https://docs.flutter.dev/get-started/install) ≥ 3.44,
-and the `yse-soundengine` build toolchain (MSYS2 Clang64 + CMake).
+Requires Windows and [Flutter](https://docs.flutter.dev/get-started/install) ≥ 3.47.1.
 
 ```powershell
-# 1. Clone phi and dart-yse as siblings.
-cd D:\
-git clone https://github.com/yvanvds/dart-yse
 git clone https://github.com/yvanvds/phi
-
-# 2. Build libyse.dll once (see dart-yse README for the full recipe).
-cd D:\dart-yse
-git submodule update --init --recursive
-cmake -S third_party\yse-soundengine -B third_party\yse-soundengine\build -G Ninja `
-      -DCMAKE_BUILD_TYPE=Release `
-      -DCMAKE_C_COMPILER=C:/msys64/clang64/bin/clang.exe `
-      -DCMAKE_CXX_COMPILER=C:/msys64/clang64/bin/c++.exe
-cmake --build third_party\yse-soundengine\build --target yse
-
-# 3. Point YSE_DLL_PATH at the libyse.dll directory.
-$env:YSE_DLL_PATH = "D:\dart-yse\third_party\yse-soundengine\build\bin"
-
-# 4. Resolve deps and run.
-cd D:\phi
+cd phi
 flutter pub get
 flutter run -d windows
+```
+
+The engine needs no manual setup. `yse` comes from pub.dev, and its
+native-assets build hook downloads the libYSE release that version pins (once
+per project, sha256-checked) and bundles `libyse.dll` and its runtime DLLs
+next to `phi.exe` on every `flutter run` / `flutter build windows`.
+
+To test against a local engine build instead, point `YSE_DLL_PATH` at the
+directory holding its `libyse.dll` (and runtime DLLs) — it still takes
+precedence over the bundled library:
+
+```powershell
+$env:YSE_DLL_PATH = "D:\path\to\yse-soundengine\build\bin"
 ```
 
 ## Develop
@@ -77,8 +72,8 @@ pwsh tool/run_integration_tests.ps1 -Shard 2 -Of 4    # the slice CI runs
 ```
 
 It keeps going after a failure, prints the log of every file that failed, and
-exits non-zero if any did. No `libyse.dll` is needed — the suite injects
-`FakeYseGateway` throughout.
+exits non-zero if any did. The suite injects `FakeYseGateway` throughout, so
+the app under test never opens the engine.
 
 CI runs the same script as a **post-merge sweep**: every push to `develop`
 (i.e. every merged PR) triggers the full suite in the background, so a

@@ -31,38 +31,35 @@ void main() {
     expect(mirror, isA<RealRegistryMirror>());
   });
 
-  test(
-    'the production wiring pushes _sync_* scripts through the shared evaluator',
-    () async {
-      // The exact shape the app composition root builds (issue #314): the engine
-      // wired with a factory-built mirror over the *same* evaluator the Code
-      // surface runs blocks on. A registry edit must surface as the matching
-      // `phi._sync_*` script on that evaluator.
-      final gateway = FakeYseGateway();
-      final evaluator = FakeCodeEvaluator();
-      final engine = PhiEngine(
-        gateway,
-        registryMirror: buildRegistryMirror(evaluator, pythonEnabled: true),
-        telemetryInterval: const Duration(milliseconds: 20),
-      );
-      addTearDown(() async {
-        await engine.dispose();
-        await evaluator.dispose();
-        await gateway.dispose();
-      });
+  test('the production wiring pushes _sync_* scripts through the shared evaluator', () async {
+    // The exact shape the app composition root builds (issue #314): the engine
+    // wired with a factory-built mirror over the *same* evaluator the Code
+    // surface runs blocks on. A registry edit must surface as the matching
+    // `phi._sync_*` script on that evaluator.
+    final gateway = FakeYseGateway();
+    final evaluator = FakeCodeEvaluator();
+    final engine = PhiEngine(
+      gateway,
+      registryMirror: buildRegistryMirror(evaluator, pythonEnabled: true),
+      telemetryInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(() async {
+      await engine.dispose();
+      await evaluator.dispose();
+      await gateway.dispose();
+    });
 
-      engine.start();
-      engine.addChannel(name: 'drums');
-      await pumpEventQueue();
+    engine.start();
+    engine.addChannel(name: 'drums');
+    await pumpEventQueue();
 
-      // The boot full sync of the seeded `intro → verse` states, then the create.
-      expect(
-        evaluator.calls,
-        containsAllInOrder([
-          "phi._sync_replace(['state.intro', 'state.verse'])",
-          "phi._sync_create('mix.drums')",
-        ]),
-      );
-    },
-  );
+    // The boot full sync of the seeded `intro → verse` states, then the create.
+    expect(
+      evaluator.calls,
+      containsAllInOrder([
+        "phi._sync_replace(['state.intro', 'state.verse'])",
+        "phi._sync_create('mix.drums')",
+      ]),
+    );
+  });
 }

@@ -157,19 +157,22 @@ void main() {
       expect(note.start, 3.5); // clip-relative, well inside the 8-beat loop
     });
 
-    test('a punch-in mid-loop does not fire a stale wrap on the first tick', () {
-      // 8-beat loop; punch in at beat 3, then a tick still inside the first lap.
-      target.isPlaying = true;
-      target.recordBeat = 3.0;
-      controller.arm();
-      noteOn(60, 100, at: 3.0);
-      target.recordBeat = 3.9;
-      controller.tick(); // still lap 0 — no wrap, nothing committed yet
-      expect(target.clip.notes, isEmpty);
-      noteOff(60, at: 3.9);
-      controller.onTransportStop();
-      expect(target.clip.notes.single.duration, closeTo(0.9, 1e-9));
-    });
+    test(
+      'a punch-in mid-loop does not fire a stale wrap on the first tick',
+      () {
+        // 8-beat loop; punch in at beat 3, then a tick still inside the first lap.
+        target.isPlaying = true;
+        target.recordBeat = 3.0;
+        controller.arm();
+        noteOn(60, 100, at: 3.0);
+        target.recordBeat = 3.9;
+        controller.tick(); // still lap 0 — no wrap, nothing committed yet
+        expect(target.clip.notes, isEmpty);
+        noteOff(60, at: 3.9);
+        controller.onTransportStop();
+        expect(target.clip.notes.single.duration, closeTo(0.9, 1e-9));
+      },
+    );
   });
 
   group('overdub passes (auto-extend off)', () {
@@ -184,11 +187,9 @@ void main() {
       // Cross the 8-beat loop boundary → wrap commits pass 1.
       target.recordBeat = 8.1;
       controller.tick();
-      expect(
-        target.clip.notes.map((n) => n.pitch),
-        [60.0],
-        reason: 'pass 1 committed live at the wrap (ghost refresh mid-take)',
-      );
+      expect(target.clip.notes.map((n) => n.pitch), [
+        60.0,
+      ], reason: 'pass 1 committed live at the wrap (ghost refresh mid-take)');
       expect(controller.isRecording, isTrue);
 
       // Pass 2 (second lap): note 62 at clip-relative 1..2 (beats 9..10).

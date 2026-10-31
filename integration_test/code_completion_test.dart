@@ -91,9 +91,11 @@ void main() {
           CodeLineSelection.collapsed(index: 0, offset: line.length),
         );
 
-    List<PhiCompletionItem> items(String line) => build(
-      line,
-    )!.prompts.whereType<PhiCompletionPrompt>().map((p) => p.item).toList();
+    List<PhiCompletionItem> items(String line) =>
+        build(line)!.prompts
+            .whereType<PhiCompletionPrompt>()
+            .map((p) => p.item)
+            .toList();
 
     // `voice.` → the seeded starter voice, with its colour swatch token.
     final voiceItems = items('voice.');

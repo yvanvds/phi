@@ -16,13 +16,16 @@ project, Windows desktop only.
 |--------------|-------------------------------------------------------|
 | Audio engine | C++ (`yse-soundengine`)                               |
 | FFI bridge   | `dart-yse` — Dart wrapper, package name `yse`         |
-| UI shell     | Flutter ≥ 3.44, Windows desktop                       |
+| UI shell     | Flutter ≥ 3.47.1, Windows desktop                     |
 | Design       | Dart tokens derived from `design system/colors_and_type.css` |
 | 3D viewport  | macbear_3d (ANGLE / OpenGL ES 3), pub.dev 0.9.0       |
 | Scripting    | Python with DSL (Phase ≥ 2 — not yet)                 |
 
-`dart-yse` lives at `d:\dart-yse` as a sibling on disk and is consumed via
-a path dependency. CI clones both repos as siblings.
+`yse` is consumed from pub.dev (`^0.2.0`, libYSE 3.1.0). Its native-assets
+build hook downloads the pinned engine release and bundles `libyse.dll` plus
+its runtime DLLs next to the executable, locally and in CI; `YSE_DLL_PATH`
+(a directory) overrides it for a local engine build. The `dart-yse` source
+checkout at `d:\dart-yse` is only needed to work on the wrapper itself.
 
 ## Layered folder structure under `lib/`
 

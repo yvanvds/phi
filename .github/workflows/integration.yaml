@@ -26,9 +26,10 @@ name: Integration tests
 #   * One `flutter test integration_test` run does NOT reliably drive the whole
 #     folder on Windows, so tool/run_integration_tests.ps1 runs each file as its
 #     own `flutter test` invocation and aggregates the results.
-#   * No `libyse.dll` is needed: every file in the suite injects
-#     `FakeYseGateway`, so the app under test never opens the native engine.
-#     That is what keeps this job a plain runner with no release download.
+#   * The app under test never opens the native engine: every file in the
+#     suite injects `FakeYseGateway`. `libyse.dll` still lands in the build —
+#     `package:yse`'s native-assets build hook fetches and bundles it as part
+#     of `flutter test -d windows` (#442) — so there is no engine step here.
 #
 # The supply-chain rules this file follows — every `uses:` pinned to a commit
 # SHA, phi's resolve run with `--enforce-lockfile` — are stated once in the
@@ -87,31 +88,19 @@ jobs:
         with:
           path: phi
 
-      - name: Checkout dart-yse (path dep sibling)
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          repository: yvanvds/dart-yse
-          path: dart-yse
-          ref: main
-
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           # This pin, the `environment:` floor in `pubspec.yaml`
-          # (flutter >=3.44.0 / sdk ^3.12.0), and the committed `pubspec.lock`
+          # (flutter >=3.47.1 / sdk ^3.13.1), and the committed `pubspec.lock`
           # are one contract: the lock records the same floors, so
           # --enforce-lockfile below can only be satisfied by an SDK that
           # meets them. Bump the three together, never one alone (#420).
-          flutter-version: '3.44.0'
+          # 3.47 is the floor yse 0.2.0 resolves on: 3.44.x pins meta 1.18.0,
+          # below what its code_assets/hooks/record_use chain needs (#442).
+          flutter-version: '3.47.1'
           channel: stable
           cache: true
-
-      # Unenforced on purpose: dart-yse gitignores its `pubspec.lock`, so there
-      # is nothing to enforce against. Give that repo a committed lockfile and
-      # this becomes `dart pub get --enforce-lockfile` too.
-      - name: Resolve dart-yse deps
-        working-directory: dart-yse
-        run: dart pub get
 
       # --enforce-lockfile makes the committed `pubspec.lock` the contract:
       # pub resolves to exactly those versions and exits 65 if `pubspec.yaml`
