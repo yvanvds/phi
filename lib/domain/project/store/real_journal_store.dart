@@ -40,9 +40,8 @@ class RealJournalStore implements JournalStore {
 
   @override
   Future<void> append(String line) async {
-    await Directory(
-      p.join(directory.path, recoveryDir),
-    ).create(recursive: true);
+    await Directory(p.join(directory.path, recoveryDir))
+        .create(recursive: true);
     await _journalFile.writeAsString(
       '$line\n',
       mode: FileMode.append,
@@ -72,9 +71,8 @@ class RealJournalStore implements JournalStore {
 
   @override
   Future<void> markRecovering() async {
-    await Directory(
-      p.join(directory.path, recoveryDir),
-    ).create(recursive: true);
+    await Directory(p.join(directory.path, recoveryDir))
+        .create(recursive: true);
     await _sentinelFile.writeAsString('', flush: true);
   }
 

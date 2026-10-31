@@ -131,9 +131,9 @@ void main() {
       final store = FakeProjectStore(codecs: const {'synth': _WrappingCodec()});
       await store.save(snapshotOf(registry));
 
-      final json =
-          jsonDecode(store.files['synth/fm_bells.json']!)
-              as Map<String, Object?>;
+      final json = jsonDecode(
+        store.files['synth/fm_bells.json']!,
+      ) as Map<String, Object?>;
       expect(json['version'], 2);
       expect(json['payload'], const {'v': 7});
 

@@ -14,18 +14,18 @@ void main() {
 
     // Grab the tuple body of `_VERB_NAMES = ( ... )` (the assignment, not the
     // later `set(_VERB_NAMES)` use — that has no `= (`).
-    final assignment = RegExp(
-      r'_VERB_NAMES\s*=\s*\(([^)]*)\)',
-    ).firstMatch(source);
+    final assignment = RegExp(r'_VERB_NAMES\s*=\s*\(([^)]*)\)')
+        .firstMatch(source);
     expect(
       assignment,
       isNotNull,
       reason: 'could not find `_VERB_NAMES = (...)` in python/phi/__init__.py',
     );
 
-    final fromLibrary = RegExp(
-      "'([^']*)'",
-    ).allMatches(assignment!.group(1)!).map((m) => m.group(1)!).toList();
+    final fromLibrary = RegExp("'([^']*)'")
+        .allMatches(assignment!.group(1)!)
+        .map((m) => m.group(1)!)
+        .toList();
 
     expect(
       phiMethodTable,

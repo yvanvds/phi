@@ -49,12 +49,9 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
     final id = _nextInstanceId++;
     // [name] is the engine-direct bus name (the kind-stripped `patch.` entity
     // address) the instance should register under so it is reachable at
-    // `patcher.<name>.<slot>` (issue #318). Forwarding it to the native patcher
-    // is blocked on a bridge capability: dart-yse's `Patcher` surfaces no name
-    // setter over the C ABI yet (filed as yvanvds/dart-yse#50). The name is
-    // retained here so the phi side is fully wired; until the capability ships a
-    // phi-created patcher stays anonymous natively, and the wire-up is then one
-    // line below: `if (name.isNotEmpty) inst.patcher.name(name);`.
+    // `patcher.<name>.<slot>` (issue #318). yse 0.2.0 ships the capability
+    // (`Patcher(name: ...)`, yvanvds/dart-yse#50); adopting it is issue #444.
+    // Until then a phi-created patcher stays anonymous natively.
     _instances[id] = _PatcherInstance(
       Patcher(mainOutputs: mainOutputs),
       busName: name,
@@ -80,6 +77,9 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
     final inst = _inst(instanceId);
     final h = inst.patcher.createObject(type, args: args);
     final id = h.id;
+    if (id == null) {
+      throw StateError('RealPatcherGateway: "$type" was created without an id');
+    }
     inst.handles[id] = h;
     return id;
   }
@@ -148,10 +148,12 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
     final inst = _inst(instanceId);
     final objects = <PatcherObjectSnapshot>[];
     final connections = <PatcherConnectionSnapshot>[];
-    for (final h in inst.handles.values) {
+    // Iterate the table's entries: the key is the handle's id, so no
+    // nullable re-read of `PHandle.id` is needed.
+    for (final MapEntry(key: handleId, value: h) in inst.handles.entries) {
       objects.add(
         PatcherObjectSnapshot(
-          handleId: h.id,
+          handleId: handleId,
           type: h.type,
           args: h.params,
           position: _positionOf(h),
@@ -163,12 +165,17 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
       for (var outlet = 0; outlet < h.outputs; outlet++) {
         final count = h.connectionCount(outlet);
         for (var c = 0; c < count; c++) {
+          // `null` is the engine's "nothing here" sentinel (yse 0.2.0); IDs
+          // are 0-based, so 0 is a real target.
+          final toHandleId = h.connectionTargetId(outlet, c);
+          final inlet = h.connectionTargetInlet(outlet, c);
+          if (toHandleId == null || inlet == null) continue;
           connections.add(
             PatcherConnectionSnapshot(
-              fromHandleId: h.id,
+              fromHandleId: handleId,
               outlet: outlet,
-              toHandleId: h.connectionTargetId(outlet, c),
-              inlet: h.connectionTargetInlet(outlet, c),
+              toHandleId: toHandleId,
+              inlet: inlet,
             ),
           );
         }
@@ -270,7 +277,8 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
     inst.handles.clear();
     for (var i = 0; i < inst.patcher.objects; i++) {
       final h = inst.patcher.getHandleAt(i);
-      inst.handles[h.id] = h;
+      final id = h.id;
+      if (id != null) inst.handles[id] = h;
     }
   }
 
@@ -374,6 +382,17 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
     PCategory.gui => PatchObjectCategory.gui,
     PCategory.time => PatchObjectCategory.time,
     PCategory.midi => PatchObjectCategory.midi,
+    PCategory.routing => PatchObjectCategory.routing,
+    PCategory.control => PatchObjectCategory.control,
+    PCategory.list => PatchObjectCategory.list,
+    PCategory.string => PatchObjectCategory.string,
+    PCategory.collection => PatchObjectCategory.collection,
+    PCategory.dict => PatchObjectCategory.dict,
+    PCategory.array => PatchObjectCategory.array,
+    PCategory.random => PatchObjectCategory.random,
+    PCategory.io => PatchObjectCategory.io,
+    PCategory.encapsulation => PatchObjectCategory.encapsulation,
+    PCategory.sequence => PatchObjectCategory.sequence,
   };
 
   PatchOutletType _outletType(OutType t) => switch (t) {
@@ -403,8 +422,8 @@ class _PatcherInstance {
   final Patcher patcher;
 
   /// The engine-direct bus name this instance should register under — the
-  /// kind-stripped `patch.` entity address (issue #318). Retained pending
-  /// dart-yse's `Patcher.name` (yvanvds/dart-yse#50); see [createInstance].
+  /// kind-stripped `patch.` entity address (issue #318). Not yet forwarded to
+  /// `Patcher(name: ...)` (issue #444); see [createInstance].
   final String busName;
 
   final Map<int, PHandle> handles = {};

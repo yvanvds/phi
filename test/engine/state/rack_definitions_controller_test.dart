@@ -349,9 +349,8 @@ void main() {
 
         controller.updateFx(
           _addr('fx.delay'),
-          const FxDefinition(
-            kind: FxKind.lowpassDelay,
-          ).withParam('tap1Time', 250),
+          const FxDefinition(kind: FxKind.lowpassDelay)
+              .withParam('tap1Time', 250),
         );
 
         expect(recorded, hasLength(1));

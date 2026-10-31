@@ -4,14 +4,15 @@ publish_to: 'none'
 version: 0.1.0+1
 
 environment:
-  sdk: ^3.12.0
-  flutter: ">=3.44.0"
+  sdk: ^3.13.1
+  flutter: ">=3.47.1"
 
 dependencies:
   flutter:
     sdk: flutter
-  yse:
-    path: ../dart-yse
+  # dart-yse (libYSE 3.1.0). Its native-assets build hook downloads and
+  # bundles libyse.dll; YSE_DLL_PATH still overrides it for a local engine.
+  yse: ^0.2.0
   google_fonts: ^6.2.1
   vector_math: ^2.1.4
   # Cross-platform path joining for the `.phi` project folder (#121):

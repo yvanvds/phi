@@ -24,12 +24,11 @@ class EvaluateBlockIntent extends Intent {
 /// Reports the block a Ctrl+Enter just dispatched — its editor line range and
 /// whether the `fresh` prefix was applied — so the surface can map a later
 /// traceback line back onto the editor for the error flash (issue #232).
-typedef OnBlockEvaluated =
-    void Function({
-      required int startLine,
-      required int endLine,
-      required bool fresh,
-    });
+typedef OnBlockEvaluated = void Function({
+  required int startLine,
+  required int endLine,
+  required bool fresh,
+});
 
 /// Custom shortcut activator builder: identical to re_editor's default
 /// except Ctrl+Enter is removed from `newLine`, so it falls through to

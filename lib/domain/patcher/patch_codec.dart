@@ -24,16 +24,14 @@ class PatchCodec implements EntityPayloadCodec {
   Object? encode(Object? payload) {
     if (payload == null) return null;
     if (payload is PatchPayload) return payload.toJson();
-    return PatchPayload.fromJson(
-      (payload as Map).cast<String, Object?>(),
-    ).toJson();
+    return PatchPayload.fromJson((payload as Map).cast<String, Object?>())
+        .toJson();
   }
 
   @override
   Object? decode(Object? json, int version) {
     if (json == null) return null;
-    return PatchPayload.fromJson(
-      (json as Map).cast<String, Object?>(),
-    ).toJson();
+    return PatchPayload.fromJson((json as Map).cast<String, Object?>())
+        .toJson();
   }
 }

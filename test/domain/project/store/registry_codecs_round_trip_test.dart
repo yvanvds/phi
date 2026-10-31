@@ -30,30 +30,33 @@ void main() {
     registry: registry,
   );
 
-  test('the seeded default project round-trips clip + domain payloads', () async {
-    final registry = ProjectRegistry();
-    seedDefaultProject(registry);
+  test(
+    'the seeded default project round-trips clip + domain payloads',
+    () async {
+      final registry = ProjectRegistry();
+      seedDefaultProject(registry);
 
-    final store = FakeProjectStore(codecs: defaultEntityCodecs());
-    await store.save(snapshotOf(registry));
-    final loaded = await store.load();
-    addTearDown(loaded.registry.dispose);
+      final store = FakeProjectStore(codecs: defaultEntityCodecs());
+      await store.save(snapshotOf(registry));
+      final loaded = await store.load();
+      addTearDown(loaded.registry.dispose);
 
-    final clip = loaded.registry.entityAt(addr('clip.phrase_a'))!.payload;
-    // The clip payload is a v2 ClipDocument map (source notes + interpretation).
-    final document = ClipDocument.fromJson((clip! as Map).cast());
-    expect(document.source.notes, isNotEmpty);
-    // The loop flag survives the store round trip (issue #184).
-    expect(document.loop, isTrue);
-    // The transform chain round-tripped alongside the source (issue #135).
-    expect(document.chain, isNotEmpty);
+      final clip = loaded.registry.entityAt(addr('clip.phrase_a'))!.payload;
+      // The clip payload is a v2 ClipDocument map (source notes + interpretation).
+      final document = ClipDocument.fromJson((clip! as Map).cast());
+      expect(document.source.notes, isNotEmpty);
+      // The loop flag survives the store round trip (issue #184).
+      expect(document.loop, isTrue);
+      // The transform chain round-tripped alongside the source (issue #135).
+      expect(document.chain, isNotEmpty);
 
-    final domain = loaded.registry.entityAt(addr('domain.drum'))!.payload;
-    expect(domain, isA<TimeDomain>());
-    expect((domain! as TimeDomain).tempo, 124);
+      final domain = loaded.registry.entityAt(addr('domain.drum'))!.payload;
+      expect(domain, isA<TimeDomain>());
+      expect((domain! as TimeDomain).tempo, 124);
 
-    registry.dispose();
-  });
+      registry.dispose();
+    },
+  );
 
   test('mix strip payloads round-trip live state as normalised maps', () async {
     final registry = ProjectRegistry();

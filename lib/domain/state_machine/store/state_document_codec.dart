@@ -22,16 +22,14 @@ class StateDocumentCodec implements EntityPayloadCodec {
   Object? encode(Object? payload) {
     if (payload == null) return null;
     if (payload is StateDocument) return payload.toJson();
-    return StateDocument.fromJson(
-      (payload as Map).cast<String, Object?>(),
-    ).toJson();
+    return StateDocument.fromJson((payload as Map).cast<String, Object?>())
+        .toJson();
   }
 
   @override
   Object? decode(Object? json, int version) {
     if (json == null) return null;
-    return StateDocument.fromJson(
-      (json as Map).cast<String, Object?>(),
-    ).toJson();
+    return StateDocument.fromJson((json as Map).cast<String, Object?>())
+        .toJson();
   }
 }

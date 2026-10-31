@@ -74,15 +74,13 @@ void main() {
       isTrue,
     );
     expect(
-      await File(
-        p.join(projectDir.path, 'clip', 'drums', 'intro_fill.json'),
-      ).exists(),
+      await File(p.join(projectDir.path, 'clip', 'drums', 'intro_fill.json'))
+          .exists(),
       isTrue,
     );
     expect(
-      await File(
-        p.join(projectDir.path, 'clip', 'drums', '_group.json'),
-      ).exists(),
+      await File(p.join(projectDir.path, 'clip', 'drums', '_group.json'))
+          .exists(),
       isTrue,
     );
     expect(await Directory(p.join(projectDir.path, 'assets')).exists(), isTrue);

@@ -129,39 +129,40 @@ void main() {
     app.session.dispose();
   });
 
-  testWidgets('roll audition previews a clicked note through its routed voice', (
-    tester,
-  ) async {
-    final app = buildApp();
-    await tester.pumpWidget(
-      PhiApp(
-        engine: app.engine,
-        session: app.session,
-        projectController: app.controller,
-        directoryPicker: FakeProjectDirectoryPicker(),
-        autoStartProject: true,
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'roll audition previews a clicked note through its routed voice',
+    (tester) async {
+      final app = buildApp();
+      await tester.pumpWidget(
+        PhiApp(
+          engine: app.engine,
+          session: app.session,
+          projectController: app.controller,
+          directoryPicker: FakeProjectDirectoryPicker(),
+          autoStartProject: true,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    // Open the MIDI surface and click in the piano roll: the click previews a
-    // note through its routed voice (unrouted → the seeded default voice), so the
-    // default voice's materialised synth sounds.
-    await tester.tap(railFor(SurfaceId.midi));
-    await tester.pumpAndSettle();
+      // Open the MIDI surface and click in the piano roll: the click previews a
+      // note through its routed voice (unrouted → the seeded default voice), so the
+      // default voice's materialised synth sounds.
+      await tester.tap(railFor(SurfaceId.midi));
+      await tester.pumpAndSettle();
 
-    final synth = app.synths.synths.single;
-    expect(synth.noteLog, isEmpty);
+      final synth = app.synths.synths.single;
+      expect(synth.noteLog, isEmpty);
 
-    await tester.tap(find.byType(PianoRollEditor));
-    await tester.pump();
+      await tester.tap(find.byType(PianoRollEditor));
+      await tester.pump();
 
-    // A note was auditioned through the routed voice's synth.
-    expect(synth.noteLog.where((e) => e.startsWith('on:')), isNotEmpty);
+      // A note was auditioned through the routed voice's synth.
+      expect(synth.noteLog.where((e) => e.startsWith('on:')), isNotEmpty);
 
-    await app.engine.dispose();
-    app.controller.dispose();
-    app.appSettings.dispose();
-    app.session.dispose();
-  });
+      await app.engine.dispose();
+      app.controller.dispose();
+      app.appSettings.dispose();
+      app.session.dispose();
+    },
+  );
 }

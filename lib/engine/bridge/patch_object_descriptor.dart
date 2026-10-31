@@ -18,6 +18,17 @@ enum PatchObjectCategory {
   gui,
   time,
   midi,
+  routing,
+  control,
+  list,
+  string,
+  collection,
+  dict,
+  array,
+  random,
+  io,
+  encapsulation,
+  sequence,
 }
 
 /// Data type an outlet emits. Mirrors yse's `OutType`; the cable layer

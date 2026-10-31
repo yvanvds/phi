@@ -169,29 +169,26 @@ void main() {
   });
 
   group('returns', () {
-    test(
-      'a return entity is created outside the tree, excluded from channels',
-      () {
-        final registry = ProjectRegistry()
-          ..createEntity(
-            mix(['verb']),
-            payload: const MixStrip(voice: 5, isReturn: true).toJson(),
-          );
-        addTearDown(registry.dispose);
-
-        engine.start();
-        engine.bindProject(registry);
-
-        // Returns are not user strips — they get their own section later (#170).
-        expect(engine.channels.value, isEmpty);
-        // But a return channel exists at the gateway.
-        expect(
-          gateway.calls.any((c) => c.startsWith('createReturnChannel:')),
-          isTrue,
+    test('a return entity is created outside the tree, excluded from channels', () {
+      final registry = ProjectRegistry()
+        ..createEntity(
+          mix(['verb']),
+          payload: const MixStrip(voice: 5, isReturn: true).toJson(),
         );
-        expect(gateway.channels[gatewayId('verb')]!.isReturn, isTrue);
-      },
-    );
+      addTearDown(registry.dispose);
+
+      engine.start();
+      engine.bindProject(registry);
+
+      // Returns are not user strips — they get their own section later (#170).
+      expect(engine.channels.value, isEmpty);
+      // But a return channel exists at the gateway.
+      expect(
+        gateway.calls.any((c) => c.startsWith('createReturnChannel:')),
+        isTrue,
+      );
+      expect(gateway.channels[gatewayId('verb')]!.isReturn, isTrue);
+    });
 
     test(
       'send slots auto-upgrade past four for a return with many senders',

@@ -27,11 +27,10 @@ import '../bridge/synth_materialisation.dart';
 /// [ChannelAllocation] and the external-voice channel map; [synths] holds one
 /// live [MaterialisedSynth] per internal voice that resolved a synth, keyed by
 /// the voice's dotted address (matching `MidiNote.voice`).
-typedef VoicesChanged =
-    void Function(
-      VoiceChannelResolver resolver,
-      Map<String, MaterialisedSynth> synths,
-    );
+typedef VoicesChanged = void Function(
+  VoiceChannelResolver resolver,
+  Map<String, MaterialisedSynth> synths,
+);
 
 /// Reconciles the engine's live **racks** — playable voices and their synths,
 /// plus each mix bus's insert-effect chain — against the project registry

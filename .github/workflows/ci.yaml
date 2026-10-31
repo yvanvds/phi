@@ -4,8 +4,8 @@ name: CI
 #
 #   * Every `uses:` is pinned to a full 40-char commit SHA, with the human
 #     version in a trailing comment. A tag like `@v4` is a moving pointer the
-#     upstream owner can repoint at any commit; these jobs hold SONAR_TOKEN and
-#     a GITHUB_TOKEN, so an unreviewed retag would run with our secrets. The
+#     upstream owner can repoint at any commit; these jobs hold a
+#     GITHUB_TOKEN, so an unreviewed retag would run with our secrets. The
 #     comment is what you read; the SHA is what runs. First-party `actions/*`
 #     are pinned on the same terms — being first-party changes who would have
 #     to be compromised, not what a compromise could do.
@@ -16,8 +16,8 @@ name: CI
 #     `pubspec.yaml` moved without a regenerated `pubspec.lock` fails here
 #     (exit 65, "Unable to satisfy `pubspec.yaml` using `pubspec.lock`")
 #     instead of silently building against a set of versions nobody reviewed.
-#     phi commits `pubspec.lock`; dart-yse gitignores its own, so the sibling
-#     `dart pub get` below stays unenforced until that repo commits one.
+#     phi commits `pubspec.lock`; `yse` comes from pub.dev like every other
+#     dependency, so the lock pins it too (issue #442).
 #   * A lockfile only means anything against a fixed SDK: `pubspec.lock` carries
 #     its own `sdks:` block, and pub refuses to honour a lock its SDK cannot
 #     satisfy. So `flutter-version:` here and that block are a single contract —
@@ -50,31 +50,19 @@ jobs:
           path: phi
           fetch-depth: 0
 
-      - name: Checkout dart-yse (path dep sibling)
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          repository: yvanvds/dart-yse
-          path: dart-yse
-          ref: main
-
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           # This pin, the `environment:` floor in `pubspec.yaml`
-          # (flutter >=3.44.0 / sdk ^3.12.0), and the committed `pubspec.lock`
+          # (flutter >=3.47.1 / sdk ^3.13.1), and the committed `pubspec.lock`
           # are one contract: the lock records the same floors, so
           # --enforce-lockfile below can only be satisfied by an SDK that
           # meets them. Bump the three together, never one alone (#420).
-          flutter-version: '3.44.0'
+          # 3.47 is the floor yse 0.2.0 resolves on: 3.44.x pins meta 1.18.0,
+          # below what its code_assets/hooks/record_use chain needs (#442).
+          flutter-version: '3.47.1'
           channel: stable
           cache: true
-
-      # Unenforced on purpose: dart-yse gitignores its `pubspec.lock`, so there
-      # is nothing to enforce against. Give that repo a committed lockfile and
-      # this becomes `dart pub get --enforce-lockfile` too.
-      - name: Resolve dart-yse deps
-        working-directory: dart-yse
-        run: dart pub get
 
       # --enforce-lockfile makes the committed `pubspec.lock` the contract:
       # pub resolves to exactly those versions and exits 65 if `pubspec.yaml`
@@ -92,6 +80,18 @@ jobs:
         working-directory: phi
         run: flutter analyze
 
+      # The yse build hook bundles the Linux engine (libyse.so) for
+      # `flutter test`, but unlike the Windows release it links the audio
+      # runtime dynamically: its DT_NEEDED are libsndfile.so.1,
+      # libportaudio.so.2 and librtmidi.so.6, which the runner image lacks.
+      # Without them the real-engine bridge tests cannot load libyse (#442).
+      # Package names are Ubuntu 24.04's (ubuntu-latest); re-check them if the
+      # image moves to a release where the sonames change.
+      - name: Install libYSE runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libsndfile1 libportaudio2 librtmidi6
+
       - name: Test (with coverage)
         working-directory: phi
         run: flutter test --coverage
@@ -104,13 +104,11 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: SonarCloud scan
-        uses: SonarSource/sonarcloud-github-action@383f7e52eae3ab0510c3cb0e7d9d150bbaeab838 # v3.1.0
-        with:
-          projectBaseDir: phi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      # The SonarCloud scan is switched off for now (issue #447). The job keeps
+      # its "+ SonarCloud" name because main's branch protection requires that
+      # exact check name. To bring it back: a fresh SONAR_TOKEN plus
+      # SonarSource/sonarqube-scan-action pinned by SHA; sonar-project.properties
+      # is still in place.
 
   # Expensive Windows build: produces a runnable .exe bundle carrying libyse.dll.
   # Gated to main (release PRs from develop + pushes to main) and manual dispatch;
@@ -125,41 +123,25 @@ jobs:
     needs: analyze-test-scan
     if: ${{ github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.event_name == 'workflow_dispatch' }}
     runs-on: windows-latest
-    env:
-      # Prebuilt engine binaries come from the yse-soundengine GitHub releases.
-      # Bump this to track the engine version that dart-yse currently wraps.
-      YSE_ENGINE_VERSION: v2.2.0
     steps:
       - name: Checkout phi
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: phi
 
-      - name: Checkout dart-yse (path dep sibling)
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          repository: yvanvds/dart-yse
-          path: dart-yse
-          ref: main
-
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           # This pin, the `environment:` floor in `pubspec.yaml`
-          # (flutter >=3.44.0 / sdk ^3.12.0), and the committed `pubspec.lock`
+          # (flutter >=3.47.1 / sdk ^3.13.1), and the committed `pubspec.lock`
           # are one contract: the lock records the same floors, so
           # --enforce-lockfile below can only be satisfied by an SDK that
           # meets them. Bump the three together, never one alone (#420).
-          flutter-version: '3.44.0'
+          # 3.47 is the floor yse 0.2.0 resolves on: 3.44.x pins meta 1.18.0,
+          # below what its code_assets/hooks/record_use chain needs (#442).
+          flutter-version: '3.47.1'
           channel: stable
           cache: true
-
-      # Unenforced on purpose: dart-yse gitignores its `pubspec.lock`, so there
-      # is nothing to enforce against. Give that repo a committed lockfile and
-      # this becomes `dart pub get --enforce-lockfile` too.
-      - name: Resolve dart-yse deps
-        working-directory: dart-yse
-        run: dart pub get
 
       # --enforce-lockfile makes the committed `pubspec.lock` the contract:
       # pub resolves to exactly those versions and exits 65 if `pubspec.yaml`
@@ -169,34 +151,23 @@ jobs:
         working-directory: phi
         run: flutter pub get --enforce-lockfile
 
+      # No engine download step: `package:yse` (>= 0.2.0) ships a native-assets
+      # build hook that fetches the libYSE release its version pins, checks its
+      # sha256, and has `flutter build` bundle libyse.dll plus every runtime DLL
+      # (libc++, portaudio, sndfile, rtmidi, codecs) next to phi.exe (#442).
+      # The engine version therefore moves with the `yse` entry in
+      # `pubspec.lock`, not with anything in this file.
       - name: Build Windows app (release)
         working-directory: phi
         run: flutter build windows --release
 
-      - name: Fetch prebuilt libyse.dll from the yse-soundengine release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $dest = "$env:RUNNER_TEMP\yse"
-          New-Item -ItemType Directory -Force $dest | Out-Null
-          gh release download $env:YSE_ENGINE_VERSION -R yvanvds/yse-soundengine -p "*windows-x64.zip" -D $dest
-          $zip = Get-ChildItem "$dest\*.zip" | Select-Object -First 1
-          Expand-Archive -Path $zip.FullName -DestinationPath "$dest\extracted" -Force
-
-      - name: Bundle native libraries next to phi.exe and verify
+      - name: Verify the engine was bundled next to phi.exe
         shell: pwsh
         working-directory: phi
         run: |
           $bundle = "build\windows\x64\runner\Release"
-          # The engine's bin/ ships libyse.dll plus every runtime dependency
-          # (libc++, portaudio, sndfile, rtmidi, codecs). Copy them all so the
-          # artifact actually runs. phi's windows CMake already drops the stray
-          # flutter_angle libc++.dll, so libyse's own libc++ wins the loader.
-          Get-ChildItem -Recurse -Filter *.dll "$env:RUNNER_TEMP\yse\extracted" |
-            Copy-Item -Destination $bundle -Force
           if (-not (Test-Path "$bundle\libyse.dll")) {
-            Write-Error "libyse.dll was not bundled into $bundle"
+            Write-Error "libyse.dll was not bundled into $bundle by the yse build hook"
             exit 1
           }
           Write-Host "Bundled DLLs next to phi.exe:"

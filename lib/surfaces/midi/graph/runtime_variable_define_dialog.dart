@@ -64,9 +64,8 @@ class _RuntimeVariableDefineDialogState
       Navigator.of(context).pop();
       return;
     }
-    Navigator.of(
-      context,
-    ).pop(RuntimeVariableDefinition(name: name, values: values));
+    Navigator.of(context)
+        .pop(RuntimeVariableDefinition(name: name, values: values));
   }
 
   /// Split on commas, trim, and drop blanks — so `high, low ,` yields

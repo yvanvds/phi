@@ -66,9 +66,8 @@ void main() {
 
     test('python() tags source python at error level', () {
       final store = LogStore();
-      LogRecorder(
-        store: store,
-      ).python('Traceback (most recent call last): ...');
+      LogRecorder(store: store)
+          .python('Traceback (most recent call last): ...');
 
       expect(store.entries.single.source, LogSource.python);
       expect(store.entries.single.level, LogLevel.error);

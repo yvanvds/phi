@@ -16,13 +16,16 @@ project, Windows desktop only.
 |--------------|-------------------------------------------------------|
 | Audio engine | C++ (`yse-soundengine`)                               |
 | FFI bridge   | `dart-yse` — Dart wrapper, package name `yse`         |
-| UI shell     | Flutter ≥ 3.44, Windows desktop                       |
+| UI shell     | Flutter ≥ 3.47.1, Windows desktop                     |
 | Design       | Dart tokens derived from `design system/colors_and_type.css` |
 | 3D viewport  | macbear_3d (ANGLE / OpenGL ES 3), pub.dev 0.9.0       |
 | Scripting    | Python with DSL (Phase ≥ 2 — not yet)                 |
 
-`dart-yse` lives at `d:\dart-yse` as a sibling on disk and is consumed via
-a path dependency. CI clones both repos as siblings.
+`yse` is consumed from pub.dev (`^0.2.0`, libYSE 3.1.0). Its native-assets
+build hook downloads the pinned engine release and bundles `libyse.dll` plus
+its runtime DLLs next to the executable, locally and in CI; `YSE_DLL_PATH`
+(a directory) overrides it for a local engine build. The `dart-yse` source
+checkout at `d:\dart-yse` is only needed to work on the wrapper itself.
 
 ## Layered folder structure under `lib/`
 
@@ -2676,8 +2679,8 @@ main + app          (orchestration)
   `patcher_retype_object` integration test through the real app (`sine 440` →
   `saw 300` keeps both cables and the reference panel follows; retyping to a
   `.slider` drops both and names them; `Ctrl+Z` puts it all back).
-- Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
-  workflow (waiting on SONAR_TOKEN)
+- Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
+  switched off for now, issue #447)
 
 ## Surfaces
 
@@ -2705,13 +2708,13 @@ main + app          (orchestration)
 - **CI:** `.github/workflows/ci.yaml` (analyze + test + coverage; the Windows
   build is gated to `main`), `.github/workflows/integration.yaml` (the
   `integration_test/` suite on windows-latest — nightly on `develop`, on every
-  release PR into `main`, and on manual dispatch), `.github/workflows/sonar.yaml`
-  (SonarCloud).
+  release PR into `main`, and on manual dispatch).
 - **Integration test driver:** `tool/run_integration_tests.ps1` — runs each
   `integration_test/*.dart` as its own `flutter test` invocation (a single
   folder-wide run under-reports on Windows), with `-Shard`/`-Of` sharding.
   Used both locally and by `integration.yaml`.
-- **SonarCloud:** project key `yvanvds_phi`, organization `yvanvds`.
+- **SonarCloud:** project key `yvanvds_phi`, organization `yvanvds`
+  (`sonar-project.properties`); the CI scan is off for now (issue #447).
 - **Issue templates:** `.github/ISSUE_TEMPLATE/`. Labels: see
   [CLAUDE.md](../CLAUDE.md).
 - **Architecture decision records:** this `docs/` folder —
@@ -2724,5 +2727,5 @@ main + app          (orchestration)
 2. Read or update the relevant GitHub issue.
 3. Branch from `main` as `<issue-number>-<short-slug>`.
 4. Tests first where sensible (pure logic, FFI bridge code, end-to-end).
-5. Open a PR; merge once CI + SonarCloud are green.
+5. Open a PR; merge once CI is green.
 6. If this PR changed the architecture, layout, or stack, update this file.

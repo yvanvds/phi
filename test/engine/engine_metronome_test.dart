@@ -65,41 +65,38 @@ void main() {
     );
   });
 
-  test(
-    'enabling the click lazily materialises a reserved sine voice on master',
-    () {
-      final registry = registryWithDrum();
-      addTearDown(registry.dispose);
+  test('enabling the click lazily materialises a reserved sine voice on master', () {
+    final registry = registryWithDrum();
+    addTearDown(registry.dispose);
 
-      engine.start();
-      engine.bindProject(registry);
-      final metronome = engine.metronome;
+    engine.start();
+    engine.bindProject(registry);
+    final metronome = engine.metronome;
 
-      // Nothing materialised until the click is first enabled — the racks stay
-      // untouched for a project that never clicks.
-      expect(synths.synths, isEmpty);
+    // Nothing materialised until the click is first enabled — the racks stay
+    // untouched for a project that never clicks.
+    expect(synths.synths, isEmpty);
 
-      metronome.domainName = 'drum';
-      metronome.setEnabled(true);
+    metronome.domainName = 'drum';
+    metronome.setEnabled(true);
 
-      // A single reserved click synth, on the reserved channel, bound to master.
-      final clickSynth = synths.synths.single;
-      expect(clickSynth.channel, MetronomeController.clickSynthChannel);
-      expect(clickSynth.boundBus, isNull);
+    // A single reserved click synth, on the reserved channel, bound to master.
+    final clickSynth = synths.synths.single;
+    expect(clickSynth.channel, MetronomeController.clickSynthChannel);
+    expect(clickSynth.boundBus, isNull);
 
-      // The click session runs on its own clock at the bound domain's tempo, its
-      // transport connected to that reserved voice.
-      final click = midi.transports.firstWhere(
-        (t) => t.clockName == MetronomeController.defaultClockName,
-      );
-      expect(click.tempo, 124);
-      expect(click.isPlaying, isTrue);
-      expect(click.connectedSynths, contains(clickSynth));
+    // The click session runs on its own clock at the bound domain's tempo, its
+    // transport connected to that reserved voice.
+    final click = midi.transports.firstWhere(
+      (t) => t.clockName == MetronomeController.defaultClockName,
+    );
+    expect(click.tempo, 124);
+    expect(click.isPlaying, isTrue);
+    expect(click.connectedSynths, contains(clickSynth));
 
-      // Re-enabling does not mint a second click synth (it is cached).
-      metronome.setEnabled(false);
-      metronome.setEnabled(true);
-      expect(synths.synths, hasLength(1));
-    },
-  );
+    // Re-enabling does not mint a second click synth (it is cached).
+    metronome.setEnabled(false);
+    metronome.setEnabled(true);
+    expect(synths.synths, hasLength(1));
+  });
 }

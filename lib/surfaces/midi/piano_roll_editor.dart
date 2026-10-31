@@ -257,9 +257,8 @@ class _PianoRollEditorState extends State<PianoRollEditor> {
     // Empty cell → add a note snapped to the grid at the clicked lane.
     final added = MidiNote(
       pitch: _geo.pitchForY(d.localPosition.dy).toDouble(),
-      start: _snap(
-        _geo.beatForX(d.localPosition.dx),
-      ).clamp(0.0, double.infinity),
+      start: _snap(_geo.beatForX(d.localPosition.dx))
+          .clamp(0.0, double.infinity),
       duration: _step,
       velocity: 0.7,
     );
