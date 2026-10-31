@@ -19,7 +19,7 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 /// must turn the clip's note-ons into live `SceneAgent`s that the scene field
 /// advances each tick and pushes at the wired renderer — the full path:
 /// session transport → shell listener → EngineMidiController → SceneField.step
-/// → SceneAgentSink. A [FakeSceneRenderer] stands in for macbear and records
+/// → SceneAgentSink. A [FakeSceneRenderer] stands in for the renderer and records
 /// every `setAgents` call.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();

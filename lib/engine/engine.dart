@@ -49,13 +49,13 @@ import 'bridge/control_plane_dispatcher.dart';
 import 'bridge/engine_log_source.dart';
 import 'bridge/fx_control_port.dart';
 import 'bridge/fx_gateway.dart';
-import 'bridge/macbear_scene_renderer.dart';
 import 'bridge/materialised_synth.dart';
 import 'bridge/midi_gateway.dart';
 import 'bridge/no_op_bus_tap.dart';
 import 'bridge/no_op_registry_mirror.dart';
 import 'bridge/patcher_gateway.dart';
 import 'bridge/patcher_insert_source.dart';
+import 'bridge/placeholder_scene_renderer.dart';
 import 'bridge/real_engine_log_source.dart';
 import 'bridge/real_fx_gateway.dart';
 import 'bridge/real_midi_gateway.dart';
@@ -134,7 +134,8 @@ class PhiEngine {
   }
 
   /// Production constructor — wires the real `package:yse` gateway and,
-  /// by default, the macbear-backed Scene renderer + the real patcher and
+  /// by default, the placeholder Scene renderer (no 3D renderer for now, issue
+  /// #456) + the real patcher and
   /// MIDI-output gateways. Tests can inject alternates via the named
   /// parameters.
   factory PhiEngine.production({
@@ -161,7 +162,7 @@ class PhiEngine {
         : null;
     return PhiEngine(
       yse,
-      sceneRenderer: sceneRenderer ?? MacbearSceneRenderer(),
+      sceneRenderer: sceneRenderer ?? PlaceholderSceneRenderer(),
       patcherGateway: patcher,
       midiGateway: midiGateway ?? RealMidiGateway(),
       engineLogSource: const RealEngineLogSource(),

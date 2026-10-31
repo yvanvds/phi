@@ -10,8 +10,9 @@ import 'scene_pick_handler.dart';
 ///
 /// `SceneSurface` depends on this interface, not on any concrete 3D engine,
 /// so tests can swap in a fake and the production code is the only place a
-/// real renderer's API is touched. The current production implementation
-/// uses `package:macbear_3d`; see `macbear_scene_renderer.dart`.
+/// real renderer's API is touched. There is no 3D renderer for now: the
+/// `macbear_3d` one was removed (issue #456) and production wires
+/// `PlaceholderSceneRenderer`; bringing 3D back is issue #455.
 ///
 /// Extends [SceneAgentSink] so the MIDI player can push live spawns straight
 /// at a renderer without knowing about cameras or lifecycle.

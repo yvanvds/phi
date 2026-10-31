@@ -20,7 +20,7 @@ project, Windows desktop; a Linux x64 runner is scaffolded (`linux/`, issue
 | FFI bridge   | `dart-yse` — Dart wrapper, package name `yse`         |
 | UI shell     | Flutter ≥ 3.47.1, Windows desktop (Linux x64 in progress, #454) |
 | Design       | Dart tokens derived from `design system/colors_and_type.css` |
-| 3D viewport  | macbear_3d (ANGLE / OpenGL ES 3), pub.dev 0.9.0 — its `flutter_angle` Linux plugin does not build/render yet (#455) |
+| 3D viewport  | none for now — `PlaceholderSceneRenderer` (macbear_3d removed in #456; return tracked in #455) |
 | Scripting    | Python with DSL (Phase ≥ 2 — not yet)                 |
 
 `yse` is consumed from pub.dev (`^0.2.0`, libYSE 3.1.0). Its native-assets
@@ -204,11 +204,15 @@ main + app          (orchestration)
   move-with-impact, issue #212) and a **SENDS** area (aux sends to return buses);
   see the racks-epic and mix-epic entries below.
 - Scene surface: renderer-agnostic `SceneRenderer` bridge in
-  `lib/engine/bridge/`, backed in production by `MacbearSceneRenderer`
-  (`macbear_3d` on ANGLE). Renders one placeholder agent as a
-  voice-coloured sphere; orbit/pan/zoom via macbear's built-in controller.
+  `lib/engine/bridge/`. **There is no 3D renderer for now** (issue #456): the
+  `macbear_3d` proof of concept (and with it `flutter_angle`, whose Linux plugin
+  does not build) was removed on every platform, and production wires
+  `PlaceholderSceneRenderer`, which accepts every renderer call and shows a
+  "3D view unavailable" notice. Bringing 3D back is issue #455. The history
+  below describes the removed renderer; the surface, pick seam, field and pure
+  `SceneUnproject` math are still in the tree.
   Pointer picking + grab landed with issue #86 (surface half of #82): a
-  `PhiScenePickController` (`M3InputController`) unprojects the pointer into a
+  `PhiScenePickController` (`M3InputController`, removed in #456) unprojected the pointer into a
   world `PickRay` via the pure `SceneUnproject` (screen→world math over the
   live camera's view/projection matrices), asks `SceneField.pick` which agent
   sits under it, and — on a hit — selects + grabs it (drag → `moveGrabTo` on a
