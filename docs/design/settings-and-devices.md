@@ -91,22 +91,25 @@ Confirmed against the bridge; no engine work is required for v1:
 
 - **Enumeration:** `System.devices` → `Device` descriptors: name, host
   name, input/output channel names, supported sample rates and buffer
-  sizes, default buffer size, latencies. **Only `init()` enumerates** —
-  the engine builds the list while opening a device and never on its own,
-  so `System.devices` is empty for the whole of an `initOffline()` session
-  (measured against libyse 2.4.0: 0 devices offline, 19 after `init()` —
-  issue #403, dart-yse #51).
+  sizes, default buffer size, latencies. Two calls enumerate: `init()`, as
+  a side effect of opening the default device, and — since yse 0.2.0 —
+  `System.refreshDevices()`, which lists the devices **without opening a
+  stream**, also on an offline session. `initOffline()` on its own lists
+  nothing (re-measured against libYSE 3.1.0: 0 devices offline, 19 after a
+  refresh, nothing opened — issues #403, #445). When `init()` opens no
+  device it throws; `RealYseGateway.init` then falls back to
+  `initOffline()` + `refreshDevices()`, so every boot ends enumerated.
 - **Open/close:** `System.initOffline()` boots the engine with *no*
-  device — and, per the point above, no device *list* either, so it is a
-  headless-rendering path, not a boot path; `openDevice(DeviceSetup,
+  device, and no device *list* until a refresh; `openDevice(DeviceSetup,
   layout:)` opens a chosen one; `closeCurrentDevice()` + `openDevice`
   swaps live — no engine restart. `System.defaultDevice` names the
   platform default.
-- **Two engine limits to design around** (both measured, both filed):
-  a refused `openDevice` is reported as a log line, not a status, so the
-  bridge confirms an open by reading back the live state (dart-yse #52);
-  and the session sample rate is locked from `init()` to `close()`, so a
-  stored rate override cannot reach an open session (dart-yse #53). Since
+- **The session rate is locked** from `init()` to `close()`, so a stored
+  rate override cannot reach an open session (dart-yse #53). (libYSE 2.4
+  also reported a refused `openDevice` only as a log line, so the bridge
+  read the live state back to confirm an open — dart-yse #52. yse 0.2.0
+  throws instead, proven by the real-engine contract test, and the
+  read-back is gone — issue #445.) Since
   yse 0.2.0 (issue #443) Phi sets `System.requestedSampleRate` from
   `settings.json` *before* the engine starts, so the stored rate is the
   session rate; a rate picked while Phi runs is stored and requested for the
@@ -114,50 +117,46 @@ Confirmed against the bridge; no engine work is required for v1:
 - **Live state:** `activeSampleRate`, `activeBufferSize`, output latency
   in samples — the diagnostics section reads these, not the stored
   settings (they can legitimately differ).
-- **Resilience:** `setAutoReconnect(on:, delayMs:)` is **off**, and Phi
-  supervises recovery itself (issue #410). This entry used to read "the
-  engine re-opens a device that disappears. Enabled always (1 s delay)".
-  Measured against the engine sources, it does something else:
-  `system::update()` counts control ticks with no audio callback and, past
-  the threshold, runs `pause()` + `resume()` — which is
-  `managerObject::close()` followed by `addCallback()`, and `addCallback()`
-  hardcodes `Pa_GetDefaultOutputDevice()`. So it reopens the *platform
-  default*, not the device that was lost, dropping the chosen buffer size
-  and channel count; the counter is reset only by a callback that arrives,
-  never by an attempt, so once armed it retries on **every 16 ms tick with
-  no backoff, indefinitely**; and `delayMs` is compared against a tick
-  count, making the specified 1 s really ~16 s. A silent migration onto the
-  built-in output is exactly the lie #408 closed, so it stays off
-  (dart-yse #54).
+- **Resilience:** the engine's `setAutoReconnect` watchdog is **off**, and
+  Phi supervises recovery itself (§5). Under libYSE 2.4 that was forced
+  (issue #410): the watchdog reopened `Pa_GetDefaultOutputDevice()` rather
+  than the lost device, dropped the chosen buffer size, read `delayMs` as a
+  tick count and, once armed, retried on every 16 ms tick with no backoff
+  (dart-yse #54). yse 0.2.0 fixed all of that — wall-clock `delayMs`, it
+  reopens the session's last-opened device, `maxAttempts` bounds it,
+  `reconnectState` / `activeDevice` report the outcome. Re-evaluated in
+  issue #445, it **still stays off**: Phi's run reaches for the chosen
+  device and then settles on the default *with a notice* (#413), where the
+  watchdog does one or the other and falls back silently; the watchdog
+  runs inside `update()` and would be a second supervisor contending with
+  the coordinator's own opens; and it does not refresh the device list, so
+  a replugged device is only found if the host calls `refreshDevices()`
+  anyway — which is what each of Phi's attempts already is. Handing over
+  would add a timer and lose the notice.
 - **No device-change signal at all.** There is no add/remove event on any
-  desktop backend (`serviceReconnect()` is a no-op outside Oboe), and
-  `System.devices` is a cache filled inside `init()` — `closeCurrentDevice()`
-  leaves it untouched, and since `Pa_Terminate()` is never called before
-  process exit even `close()` + `init()` re-reads PortAudio's original
-  snapshot. Recovery therefore **polls**: `activeSampleRate == 0` is the
+  desktop backend, so recovery **polls**: `activeSampleRate == 0` is the
   engine's documented "nothing is open" sentinel, read on Phi's telemetry
   tick.
-- **The device list is a cache, and the whole app is built on that**
-  (issue #412). Enumeration is not a view of the machine, so:
-  - a device unplugged mid-session **keeps its entry**, with its old
-    index — the dropdown goes on offering it, and the only way Phi finds
-    out it is gone is that opening it fails. This is what makes recovery
-    (§5) possible at all: the descriptor the performer asked for stays
-    resolvable through the loss, so every attempt is a real `openDevice`
-    on *that* device and the one after the cable goes back in succeeds.
-  - a device plugged in mid-session **never appears**, and cannot be
-    opened until Phi restarts. So recovery is armed only when the engine
-    enumerated *something*; a boot that saw no hardware at all says so
-    immediately instead of showing RECONNECTING for two minutes about an
-    interface that cannot arrive.
+- **The device list is a snapshot, not a view of the machine** (issues
+  #412, #445). It changes only when the engine enumerates, and nothing can
+  rescan PortAudio while a stream is open, so:
+  - while audio runs, a device unplugged **keeps its entry** — the
+    dropdown goes on offering it, and the only way Phi finds out it is gone
+    is that opening it fails — and a device plugged in **does not appear**;
+  - once nothing is open (a total loss), `refreshDevices()` restarts the
+    backend and reads the machine as it is now. Every recovery attempt
+    starts with one, so an interface that came back — under a new index or
+    not — or one first connected after Phi started is found, and one that
+    is gone drops out of the list.
+  Under libYSE 2.4 the list was frozen at the first `init()` for the whole
+  process, so an empty list meant "restart Phi"; that notice is gone.
   `FakeYseGateway` models both halves: its `devices` is the hardware, and
-  `audioDevices()` is the frozen snapshot `init()` took of it. A fake with
-  one live list let tests recover from hardware the shipped app could
-  never see.
+  `audioDevices()` is the snapshot the last `init()` / `refreshDevices()`
+  took of it — re-read on a refresh only when no stream is open.
 - **Recovery is cheap, re-init is not.** `closeCurrentDevice()` tears down
-  only the stream — PortAudio stays initialised, and every channel, sound
-  and clock survives — so `openDevice` right afterwards is the designed
-  flow and the one recovery libyse genuinely supports from a closed engine.
+  only the stream — every channel, sound and clock survives — so a refresh
+  plus `openDevice` right afterwards is the designed flow from a closed
+  device.
   `System.close()` is a different animal (it joins the worker pools and
   destroys every channel), so recovery never goes near it.
 - **MIDI:** input/output device counts + names by index
@@ -167,11 +166,13 @@ Confirmed against the bridge; no engine work is required for v1:
 
 ## 5. Apply semantics
 
-**Boot.** Two steps, in this order, because the engine gives no other:
+**Boot.** Two steps, in this order — under libYSE 2.4 the only order the
+engine allowed:
 
-1. `PhiEngine.start()` → `init()`, which opens the platform default and is
-   the *only* call that enumerates hardware (§4). Engine auto-reconnect
-   off; Phi's own recovery supervisor takes over (below).
+1. `PhiEngine.start()` → `init()`, which opens the platform default and
+   enumerates hardware (or, when no device opens, comes up offline with
+   the list refreshed — §4). Engine auto-reconnect off; Phi's own recovery
+   supervisor takes over (below).
 2. Once the settings store has loaded, the shell
    (`Workstation._startProject`) applies `audio` as a **live switch** —
    `switchAudioDevice(stored)`, resolving host+name against `devices` and
@@ -198,7 +199,9 @@ yet must not lose their configuration to a helpful fallback.
 > live switch above, and the path that ships is the path that is tested.
 > Revisit if the engine grows an enumerate-without-opening call
 > (dart-yse #51) — then, and only then, is an offline boot worth a second
-> entry point.
+> entry point. *Since yse 0.2.0 it has one* (`refreshDevices()`, issue
+> #445), so booting straight onto the stored device is now possible. It is
+> deliberately left as its own change rather than folded into #445.
 
 **Live change.** Picking a device / rate / buffer in the window applies
 immediately (`closeCurrentDevice` + `openDevice`) through that same
@@ -218,8 +221,10 @@ that came up device-less — it arms a **bounded recovery run**:
   `switchTo` arm it directly. A failed manual pick re-arms with a *fresh*
   budget: a deliberate act deserves another go.
 - **Cadence.** Eight attempts at 1 s, 2 s, 4 s, 8 s, 15 s, 30 s, 30 s, 30 s
-  — about two minutes. Each attempt re-opens through the gateway: the
-  device the performer asked for first, the platform default second.
+  — about two minutes. Each attempt refreshes the device list (nothing is
+  open, so this reads the machine afresh — §4) and re-opens through the
+  gateway: the device the performer asked for first, the platform default
+  second.
   Attempts are silent about rate/buffer fallbacks; eight repetitions of a
   warning would bury the one message that matters.
 - **Giving up.** When the budget is spent it **stops** and raises a
@@ -239,12 +244,14 @@ that came up device-less — it arms a **bounded recovery run**:
   "Alpha" is still unavailable…"), so the green chip never hides a set
   finishing on the wrong output (issue #413). The stored preference is
   untouched, so re-picking the device is one click in Settings › Audio.
-- **What it cannot do.** Reach a device the engine never enumerated
-  (§4, issue #412). Attempts re-open *cached* descriptors, so recovery
-  covers the case that matters — an interface that was there at startup,
-  went away, and came back — but not an interface first connected after
-  Phi started. With nothing enumerated there is nothing to attempt, so no
-  run is armed and the performer is told to connect a device and restart.
+- **What it now can do** (issue #445). Under libYSE 2.4 a run could only
+  re-open devices the engine saw at startup, so a boot with no hardware
+  armed nothing and said "restart Phi" (#412). Since every attempt
+  refreshes, a boot with no device arms a run like any other loss, and an
+  interface first connected after Phi started is picked up by it.
+- **Not verified on hardware.** The offline-refresh half is re-measured on
+  the real engine (contract test); hot-plugging during a run is modelled
+  from the yse 0.2.0 documentation and has not been exercised by hand.
 
 **MIDI.** The chosen output port replaces the hard-coded port 0 in
 `EngineMidiController`; stored name resolves to an index each time the

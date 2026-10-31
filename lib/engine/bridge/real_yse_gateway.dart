@@ -55,9 +55,21 @@ class RealYseGateway implements YseGateway {
     _openMidiInputs();
   }
 
-  void _initOfflineWithDevices() => _system
-    ..initOffline()
-    ..refreshDevices();
+  void _initOfflineWithDevices() {
+    _system.initOffline();
+    refreshDevices();
+  }
+
+  @override
+  bool refreshDevices() {
+    try {
+      return _system.refreshDevices();
+    } on YseException {
+      // Only an unexpected engine error throws; for Phi it means the same as an
+      // unreachable backend — nothing listed, nothing to open.
+      return false;
+    }
+  }
 
   @override
   int get requestedSampleRate => _system.requestedSampleRate;
@@ -152,12 +164,10 @@ class RealYseGateway implements YseGateway {
     // has to find its device again in a *new* process, where the hardware may
     // well have been replugged and renumbered (design §3).
     //
-    // Within one process there is nothing to follow — the list is the frozen
-    // enumeration cache `init()` took, not a view of the machine (issue #412).
-    // So this resolves an unplugged interface just as happily as a present one,
-    // and the `openDevice` below is what fails. That is by design: it is the
-    // only way Phi finds out a device went away, and it is what keeps recovery
-    // able to reach for the device the performer actually asked for.
+    // The list is the engine's last enumeration, not a view of the machine: it
+    // cannot be rescanned while a stream is open (issues #412, #445). So this
+    // can resolve an interface that was unplugged since, and the `openDevice`
+    // below is what fails — the way Phi finds out a device went away.
     //
     // A null descriptor means the platform default.
     final device = descriptor == null
@@ -179,20 +189,12 @@ class RealYseGateway implements YseGateway {
     if (buffer != null) setup.bufferSize = buffer;
     try {
       _system.closeCurrentDevice();
+      // Since yse 0.2.0 a refused open — a device that cannot run the session
+      // rate, an unusable target, a PortAudio error — throws `YseException`.
+      // libYSE 2.4 returned `YSE_OK` and only logged it (dart-yse #52), which
+      // is why this used to read `activeSampleRate` back and treat a zero as a
+      // refusal; the real-engine contract test now proves the throw (#445).
       _system.openDevice(setup, layout: _channelType(layout));
-      // The engine reports a refused open as a log line, not a status: an
-      // `openDevice` that hit a locked session rate, an unusable target, or a
-      // PortAudio error returns `YSE_OK` all the same (dart-yse #52, measured
-      // against libyse 2.4.0). `activeSampleRate` is written from the stream's
-      // own `open` flag, so it is the one honest answer to "did a device come
-      // up?" — a zero here means nothing did, and the caller's documented
-      // fallback (design §5) must run instead of the app booting silent.
-      if (_system.activeSampleRate == 0) {
-        throw AudioDeviceException(
-          'engine reported no open device after opening "${device.name}" on '
-          '"${device.hostName}" — it refused the device without an error',
-        );
-      }
     } on YseException catch (e) {
       // Keep the FFI exception type inside the bridge (project boundary): the
       // caller only ever sees the bridge-level failure.
@@ -216,14 +218,13 @@ class RealYseGateway implements YseGateway {
   void setAutoReconnect({required bool on, int delayMs = 1000}) =>
       _system.setAutoReconnect(on: on, delayMs: delayMs);
 
-  /// The engine [Device] matching [name] + [hostName] in the enumeration cache,
+  /// The engine [Device] matching [name] + [hostName] in the last enumeration,
   /// or `null` when none does.
   ///
-  /// Note what `null` does **not** mean: unplugged. The cache is filled once
-  /// inside `init()` and never refreshed (issue #412), so an interface pulled
-  /// out of the machine still matches here — only the open that follows fails.
-  /// This returns `null` for a device that was not in the machine when the
-  /// engine started, which in-process is the same thing as never.
+  /// `null` does **not** mean unplugged, nor does a match mean present: the
+  /// list is only as fresh as the last `init()` / [refreshDevices] (issues #412,
+  /// #445). An interface pulled out since still matches — only the open that
+  /// follows fails — and one plugged in since is missing until a refresh.
   Device? _findDevice(String name, String hostName) {
     for (final device in _system.devices) {
       if (device.name == name && device.hostName == hostName) return device;

@@ -19,21 +19,18 @@ import 'package:phi/engine/bridge/yse_gateway.dart';
 /// the target has resolved, leaves the machine device-less, because the real
 /// gateway closes the running device before it attempts the new one.
 ///
-/// **Two lists, not one** (issue #412). [devices] is the *hardware*: what is
-/// physically in the machine, which a test reassigns to plug and unplug. What
-/// [audioDevices] hands back is a separate, frozen **enumeration cache**, taken
-/// once at the first [init] — because that is all libyse has. `System.devices`
-/// is a plain accessor over a vector filled by `updateDeviceList()`, whose only
-/// call site is `deviceManager::init(true)`; `closeCurrentDevice()`,
-/// `System::close()` and a later `init()` all leave it alone, and since
-/// `Pa_Terminate()` runs only in the manager's destructor, even a close + init
-/// re-reads the device table PortAudio captured at the *first* `Pa_Initialize()`.
-/// There is no in-process path to a fresh list, and no exported refresh call
-/// (dart-yse #51). So a device unplugged mid-session keeps its cached entry with
-/// its old index and only *fails to open*, and a device plugged in mid-session is
-/// invisible until the process restarts — which, here, means a new
-/// [FakeYseGateway]. A fake whose list shrank and grew let tests recover from
-/// hardware the shipped app could never see.
+/// **Two lists, not one** (issues #412, #445). [devices] is the *hardware*:
+/// what is physically in the machine, which a test reassigns to plug and
+/// unplug. What [audioDevices] hands back is a separate **enumeration
+/// snapshot** — the engine's `System.devices`, which only changes when the
+/// engine enumerates: the first [init], or a [refreshDevices]. A refresh with
+/// no stream open restarts the backend and reads the hardware as it is now; one
+/// with a stream open re-reads the existing enumeration and sees nothing new
+/// (yse 0.2.0 docs; re-measured against libYSE 3.1.0 for the offline half). So
+/// a device unplugged mid-session keeps its entry and only *fails to open*
+/// until something refreshes with nothing playing, and a device plugged in
+/// mid-session is invisible until then. A fake whose list tracked the hardware
+/// let tests recover from hardware the shipped app could not see (#412).
 ///
 /// The rule this double is held to: a call with an *observable state effect* on
 /// the real gateway must reproduce that effect here, not merely append to
@@ -92,13 +89,14 @@ class FakeYseGateway implements YseGateway {
     initialised = true;
     _midiInputsOpen = true;
     _resetPerSessionGauges();
-    // Enumeration is a side effect of *opening* a device, not of initialising:
-    // the engine's device manager only calls `updateDeviceList()` on the
-    // `init(true)` path (issue #403). So this is the call that makes hardware
-    // visible — see [audioDevices]. It snapshots [devices] and never looks
-    // again: a second `init()` re-runs `updateDeviceList()` over PortAudio's
-    // original table, which yields the same list (issue #412).
-    _enumeratedCache ??= List<AudioDeviceDescriptor>.unmodifiable(_devices);
+    // Enumeration is a side effect of *opening* a device, not of initialising
+    // (issue #403): this is one of the two calls that make hardware visible —
+    // see [audioDevices]; [refreshDevices] is the other. It keeps an existing
+    // snapshot rather than rescanning (issue #412) — not re-measured under
+    // libYSE 3.1, so the fake stays with the conservative 2.4 shape.
+    if (backendAvailable) {
+      _enumeratedCache ??= List<AudioDeviceDescriptor>.unmodifiable(_devices);
+    }
     // Lock the session rate (issue #443): exactly the requested one when set —
     // `RealYseGateway.init` re-inits offline rather than let the default
     // negotiate another — else the platform default's own rate.
@@ -126,12 +124,35 @@ class FakeYseGateway implements YseGateway {
     sessionSampleRateValue = requestedSampleRateValue > 0
         ? requestedSampleRateValue.toDouble()
         : _lastSessionRate;
-    // Deliberately *no* enumeration: an offline session sees no hardware at
-    // all (issue #403). Measured against libyse 2.4.0 on Windows —
-    // `initOffline()` then `System.devices` is empty, where `init()` reports
-    // 19 devices on the same machine. The engine skips `Pa_Initialize()` and
-    // `updateDeviceList()` when it is not opening a device, and there is no
-    // lazy refresh behind the accessor.
+    // Deliberately *no* enumeration: an offline session sees no hardware until
+    // [refreshDevices] (issues #403, #445). Re-measured against libYSE 3.1.0
+    // on Windows — `initOffline()` then `System.devices` is empty; a
+    // `refreshDevices()` then lists 19 with nothing opened.
+  }
+
+  /// Whether the audio backend can be started — `false` models a machine where
+  /// PortAudio itself fails, so [refreshDevices] returns `false` and lists
+  /// nothing.
+  bool backendAvailable = true;
+
+  /// `System.refreshDevices()` (yse 0.2.0, issue #445). With no stream open
+  /// the backend restarts and the snapshot becomes the hardware as it is now —
+  /// replugged and newly arrived devices appear, unplugged ones drop out. With
+  /// a stream open it re-reads the existing enumeration, so the snapshot stays
+  /// as it was. Never opens anything. Valid before [init] and offline.
+  @override
+  bool refreshDevices() {
+    calls.add('refreshDevices');
+    if (!backendAvailable) {
+      _enumeratedCache = const [];
+      return false;
+    }
+    if (_liveDevice == null) {
+      _enumeratedCache = List<AudioDeviceDescriptor>.unmodifiable(_devices);
+    } else {
+      _enumeratedCache ??= List<AudioDeviceDescriptor>.unmodifiable(_devices);
+    }
+    return true;
   }
 
   /// Everything `system::initShared()` blanks once it is past the
@@ -266,12 +287,11 @@ class FakeYseGateway implements YseGateway {
   @override
   String? get libraryPath => libraryPathValue;
 
-  /// The engine's enumeration cache: `null` until the first [init] fills it,
-  /// then frozen for the life of this gateway. Measured against libyse 2.4.0 —
-  /// the device list is empty before any init, is filled by `init()` only, then
-  /// *survives* `close()`, a later `initOffline()` and a later `init()` alike
-  /// (issues #403, #412). That survival is why #403's defect hid for so long: an
-  /// in-process engine restart looks healthy, only a cold boot goes silent.
+  /// The engine's enumeration snapshot: `null` until the first [init] or
+  /// [refreshDevices] fills it. It *survives* `close()`, a later
+  /// `initOffline()` and a later `init()` alike (issues #403, #412; the close
+  /// half re-measured against libYSE 3.1.0) — only [refreshDevices] replaces
+  /// it.
   List<AudioDeviceDescriptor>? _enumeratedCache;
 
   /// The hardware this fake fabricates — what is *physically in the machine*,
@@ -296,9 +316,10 @@ class FakeYseGateway implements YseGateway {
   /// - Whether a subsequent [openAudioDevice] on a *cached* descriptor comes up
   ///   or fails. That is the only other thing hardware decides.
   ///
-  /// What it explicitly does **not** do is change [audioDevices]: the engine
-  /// enumerates once and never rescans (issue #412), so an unplugged device
-  /// keeps its entry in the dropdown and a newly plugged one never gets one.
+  /// What it explicitly does **not** do is change [audioDevices]: that takes an
+  /// engine enumeration ([refreshDevices]), so until one runs with nothing
+  /// open an unplugged device keeps its entry in the dropdown and a newly
+  /// plugged one has none (issues #412, #445).
   List<AudioDeviceDescriptor> get devices => _devices;
 
   set devices(List<AudioDeviceDescriptor> value) {
@@ -354,16 +375,15 @@ class FakeYseGateway implements YseGateway {
   /// The layout the last successful [openAudioDevice] opened with.
   SpeakerLayout? openLayout;
 
-  /// The devices the engine can currently see: the cache [init] took, or an
-  /// empty list before any (issue #403).
+  /// The devices the engine can currently see: the snapshot the last [init] /
+  /// [refreshDevices] took, or an empty list before any (issue #403).
   ///
   /// **Not [devices].** This is a snapshot, not a view — it does not track the
-  /// hardware, because libyse's does not either (issue #412). The list the
-  /// settings dropdown is built from, and the list `openAudioDevice` resolves a
-  /// name against, is whatever was plugged in when the engine started. To model
-  /// a machine that enumerates different hardware, set [devices] *before*
-  /// [init]; to model a genuinely fresh enumeration, build a new
-  /// [FakeYseGateway] — a new process is what the real engine needs too.
+  /// hardware, because libyse's does not either (issues #412, #445). The list
+  /// the settings dropdown is built from, and the list `openAudioDevice`
+  /// resolves a name against, is whatever was plugged in at the last
+  /// enumeration. To model a fresh one, call [refreshDevices] with nothing open
+  /// — the same call the real engine needs.
   @override
   List<AudioDeviceDescriptor> audioDevices() => _enumeratedCache ?? const [];
 
@@ -401,23 +421,22 @@ class FakeYseGateway implements YseGateway {
     // *before* it tries the new one — so a refused open leaves the machine
     // with no device at all: `open` goes false and the device manager stores
     // `activeBufferSize = 0` / `activeOutputLatency = 0`, with
-    // `getActiveSampleRate()` gated on the same flag (libyse 2.4.0,
-    // `portaudioDeviceManager.cpp`). A fake that kept reporting the previous
-    // device's rate here would tell the health monitor the audio is fine
-    // through a total loss, and would let `current` be checked against a live
-    // state that agrees with it (issues #398, #399, #408).
+    // `getActiveSampleRate()` gated on the same flag. A fake that kept
+    // reporting the previous device's rate here would tell the health monitor
+    // the audio is fine through a total loss, and would let `current` be
+    // checked against a live state that agrees with it (issues #398, #399,
+    // #408).
     //
-    // Two ways to be refused, and the first one is the ordinary one on real
-    // hardware: the cached entry resolves fine but the interface behind it is
-    // no longer in the machine, so `Pa_OpenStream` errors out on a stale index
-    // (issue #412). `RealYseGateway` catches that by reading `activeSampleRate`
-    // back as 0 and throwing, since the engine reports the failure as a log
-    // line rather than a status (dart-yse #52).
+    // Several ways to be refused, and the first one is the ordinary one on
+    // real hardware: the snapshot entry resolves fine but the interface behind
+    // it is no longer in the machine, so the stream fails to open on a stale
+    // index (issue #412). Since yse 0.2.0 the engine throws for it, and
+    // `RealYseGateway` turns that into [AudioDeviceException] (#445).
     if (!_isPluggedIn(target)) {
       _closeDeviceState();
       throw AudioDeviceException(
-        'engine reported no open device after opening "${target.name}" on '
-        '"${target.hostName}" — it refused the device without an error',
+        'engine failed to open "${target.name}" on "${target.hostName}": '
+        'the device is no longer present',
       );
     }
     if (unopenableDeviceNames.contains(target.name)) {
@@ -512,8 +531,9 @@ class FakeYseGateway implements YseGateway {
       device.sampleRates.isEmpty ||
       device.sampleRates.contains(rate);
 
-  /// Whether the hardware behind a *cached* descriptor is still in the machine
-  /// — the question the cache cannot answer and only an open can (issue #412).
+  /// Whether the hardware behind a *snapshot* descriptor is still in the
+  /// machine — the question the snapshot cannot answer and only an open (or a
+  /// refresh with nothing open) can (issues #412, #445).
   bool _isPluggedIn(AudioDeviceDescriptor device) => _devices.any(
     (d) => d.name == device.name && d.hostName == device.hostName,
   );

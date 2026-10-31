@@ -5,37 +5,41 @@ import 'audio_recovery_status.dart';
 /// The **bounded retry** that brings audio back after a total device loss
 /// (issue #410, design `docs/design/settings-and-devices.md` §4 "Resilience").
 ///
-/// Phi has to supervise its own recovery, because libyse's `setAutoReconnect`
-/// cannot be trusted with it. Measured against the engine sources
-/// (`YseEngine/system.cpp`, `device/portaudioDeviceManager.cpp`):
+/// Phi supervises its own recovery rather than handing it to libyse's
+/// `setAutoReconnect` watchdog.
 ///
-/// ```cpp
-/// if (callbacks == 0) {
-///   currentlyMissedCallbacks++;
-///   if (doAutoReconnect && currentlyMissedCallbacks > reconnectDelay) {
-///     pause();   // == managerObject::close()
-///     resume();  // == addCallback(), which opens Pa_GetDefaultOutputDevice()
-///   }
-/// } else currentlyMissedCallbacks = 0;
-/// ```
+/// Under libYSE 2.4 that was forced (issue #410): the watchdog reopened
+/// `Pa_GetDefaultOutputDevice()` instead of the device that was lost, dropped
+/// the chosen buffer size, read its `delayMs` as a count of control ticks, and
+/// once armed retried on every tick with no backoff.
 ///
-/// - It **does** arm on a closed engine (no stream means no callbacks, so the
-///   gauge only ever climbs) — but what it reopens is `Pa_GetDefaultOutputDevice()`,
-///   never the device that was lost, and it drops the chosen buffer size and
-///   channel count on the way. It would migrate a set onto the built-in speakers
-///   without telling anyone, which is the same lie issue #408 closed.
-/// - The gauge is only reset by a callback that *arrives*, never by an attempt,
-///   so once armed it runs `close()` + `Pa_OpenStream` on **every** engine
-///   control tick — roughly sixty attempts a second, forever, with no backoff.
-/// - `reconnectDelay` is compared against a tick count, not milliseconds, so the
-///   `delayMs: 1000` the design specified is really ~16 s at the 16 ms control
-///   tick (filed as dart-yse #54).
+/// yse 0.2.0 (libYSE 3.1) fixed all of that — `delayMs` is wall-clock, it
+/// reopens the session's last-opened device by name + host with its buffer
+/// size, it can be bounded (`maxAttempts`) and polled (`reconnectState`). It
+/// is re-evaluated in issue #445 and **still stays off**, because handing over
+/// would lose what this class adds and gain nothing it lacks:
 ///
-/// So boot turns it off and this class takes over: a **fixed, finite schedule**
-/// of attempts with growing gaps, each one a real `openDevice` through the
-/// gateway — the one recovery libyse genuinely supports from a closed engine,
-/// since `closeCurrentDevice()` tears down only the stream and leaves PortAudio,
-/// the channel graph and every live handle intact.
+/// - **Two reach-fors, not one.** An attempt here tries the performer's
+///   device and then settles for the platform default *with a notice*
+///   (issue #413). The watchdog does one or the other, and its fallback is
+///   silent — Phi would have to poll `reconnectState` to find out after the
+///   fact.
+/// - **No second supervisor on the device.** The watchdog runs inside
+///   `update()` on the engine's timer and would race the coordinator's own
+///   opens (a manual pick, a revert) for the same stream.
+/// - **It still needs Phi.** A replugged device is only found after
+///   `refreshDevices()`, which the watchdog does not call — the host has to,
+///   while the watchdog reads `reconnecting` (dart-yse docs). Each attempt here
+///   is already a refresh + open, so the watchdog would only add a timer.
+/// - **Observable on Phi's terms.** [status] drives the status-bar chip and
+///   the diagnostics row directly, and the whole run is unit-testable against
+///   the fake under `fakeAsync`.
+///
+/// So boot keeps the watchdog off and this class runs a **fixed, finite
+/// schedule** of attempts with growing gaps, each one a device refresh plus a
+/// real `openDevice` through the gateway. `closeCurrentDevice()` tears down
+/// only the stream and leaves the channel graph and every live handle intact,
+/// so a re-open is all recovery needs.
 ///
 /// Bounded and observable by construction: the run is [limit] attempts long,
 /// [status] says what is happening at every moment, and when the budget is spent
@@ -54,7 +58,8 @@ class AudioDeviceRecovery {
 
   /// Eight attempts over about two minutes: quick enough that a cable pushed
   /// back in within a few seconds is inaudible, patient enough to cover an
-  /// interface that takes a while to re-enumerate, and finite enough that a
+  /// interface that takes a while to re-enumerate (or is plugged in only after
+  /// Phi started), and finite enough that a
   /// machine with no audio hardware at all stops trying and says so.
   static const List<Duration> defaultSchedule = <Duration>[
     Duration(seconds: 1),

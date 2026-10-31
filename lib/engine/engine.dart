@@ -1645,12 +1645,13 @@ class PhiEngine {
   /// [start] (no device surface yet); the shell never touches the gateway, so
   /// this façade method is the only way above the bridge to enumerate devices.
   ///
-  /// A **cache, not a live list** (issue #412): the engine fills it once, while
-  /// starting, and no in-process call refreshes it. So the pickers go on
-  /// offering an interface that has been unplugged — choosing it fails the open,
-  /// which is the intended way to find out — and an interface plugged in after
-  /// startup does not appear here until Phi is restarted. Re-reading this after
-  /// a device change is therefore pointless; it cannot return anything new.
+  /// A **snapshot, not a live list** (issues #412, #445): it is the engine's
+  /// last enumeration, which cannot be rescanned while a device is playing. So
+  /// the pickers go on offering an interface that has been unplugged — choosing
+  /// it fails the open, which is the intended way to find out — and an interface
+  /// plugged in while audio runs does not appear. The list does change after a
+  /// total loss: each recovery attempt re-enumerates with nothing open, so
+  /// hardware that came back (or arrived) is listed once a run has looked.
   List<AudioDeviceDescriptor> audioDevices() =>
       _started ? _gateway.audioDevices() : const [];
 

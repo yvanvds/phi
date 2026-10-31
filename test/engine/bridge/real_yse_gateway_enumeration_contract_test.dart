@@ -3,7 +3,7 @@ import 'package:phi/engine/bridge/audio_device_exception.dart';
 import 'package:phi/engine/bridge/real_yse_gateway.dart';
 
 /// Holds **libyse itself** — not the fake — to the device-enumeration contract
-/// the boot path is built on (issue #403).
+/// the boot and recovery paths are built on (issues #403, #445).
 ///
 /// Why this file exists: the stored-device boot path used `initOffline()` and
 /// resolved the stored device against `audioDevices()`. Every test passed,
@@ -45,8 +45,8 @@ void main() {
     }
   });
 
-  test('initOffline() leaves the engine with no devices to resolve against; '
-      'init() is what enumerates', () {
+  test('initOffline() enumerates nothing on its own; refreshDevices() lists '
+      'the devices without opening one', () {
     if (!engineAvailable) {
       markTestSkipped(
         'libyse is not loadable here — engine contract unchecked',
@@ -72,12 +72,28 @@ void main() {
           'the boot path resolves stored devices against this list',
     );
 
-    // A second init does not repair it — `system::initShared()` early-returns
-    // while the engine is active, so there is no "enumerate later" escape.
+    // yse 0.2.0's `refreshDevices()` is the enumerate-without-opening call
+    // libYSE 2.4 lacked (issue #445): recovery calls it on every attempt, and
+    // relies on it never opening a stream behind the coordinator's back.
+    final reachable = gateway.refreshDevices();
+    expect(
+      gateway.activeAudioState().sampleRate,
+      0,
+      reason: 'refreshDevices() must not open a device',
+    );
+    if (!reachable) {
+      expect(gateway.audioDevices(), isEmpty);
+    }
+    final refreshed = {
+      for (final d in gateway.audioDevices()) '${d.hostName}/${d.name}',
+    };
+
+    // A second init does not turn the offline session into a device session —
+    // the engine ignores it while active, so nothing opens.
     gateway.init();
     expect(
-      gateway.audioDevices(),
-      isEmpty,
+      gateway.activeAudioState().sampleRate,
+      0,
       reason: 'init() after initOffline() is ignored by the engine',
     );
 
@@ -94,11 +110,13 @@ void main() {
       );
       return;
     }
-    // …so the list phi resolves a stored device against exists only because
-    // `init()` opened a device. Every descriptor is usable as an identity
-    // (name + host), which is what the coordinator matches on.
+    // Every descriptor is usable as an identity (name + host), which is what
+    // the coordinator matches on…
     expect(enumerated.every((d) => d.name.isNotEmpty), isTrue);
     expect(enumerated.every((d) => d.hostName.isNotEmpty), isTrue);
+    // …and the offline refresh above saw the same machine `init()` did, so a
+    // recovery attempt's refresh can resolve whatever a boot could.
+    expect(refreshed, {for (final d in enumerated) '${d.hostName}/${d.name}'});
   });
 
   test('a refused open is reported as a failure, not as success', () {
@@ -109,16 +127,16 @@ void main() {
       return;
     }
 
-    // The engine reports a refused `openDevice` to its log and returns
-    // `YSE_OK` regardless (dart-yse #52), so `RealYseGateway` confirms the open
-    // by reading the live state back. Without that, the device rules (design
-    // §5) never see a failure to fall back from: `switchTo` would record a
-    // device that is not playing and the app would sit silent believing it had
-    // audio.
+    // libYSE 2.4 reported a refused `openDevice` only to its log and returned
+    // `YSE_OK` (dart-yse #52), so `RealYseGateway` used to confirm every open
+    // by reading `activeSampleRate` back. yse 0.2.0 throws instead, and the
+    // read-back is gone (issue #445) — this test is what proves the engine's
+    // throw reaches the device rules (design §5) as a failure to fall back
+    // from, rather than a silent "success" on a device that is not playing.
     //
     // The reproducer needs a device the engine will refuse. The session sample
     // rate is locked at `init()` (dart-yse #53), so any device that does not
-    // report that rate is one: `Pa_OpenStream` fails and nothing opens.
+    // report that rate is one: the stream fails to open and nothing opens.
     gateway.init();
     final sessionRate = gateway.activeSampleRate;
     final refusing = gateway

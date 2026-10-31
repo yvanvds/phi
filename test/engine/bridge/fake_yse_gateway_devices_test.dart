@@ -6,6 +6,14 @@ import 'package:phi/engine/bridge/audio_device_state.dart';
 
 import '../test_doubles/fake_yse_gateway.dart';
 
+const _latecomer = AudioDeviceDescriptor(
+  name: 'Latecomer',
+  hostName: 'WASAPI',
+  sampleRates: [48000.0],
+  bufferSizes: [256],
+  defaultBufferSize: 256,
+);
+
 /// The fake's device surface is what the (later) settings window is driven
 /// against without hardware, so its enumeration, open, and — the issue's
 /// explicit ask — open-failure paths are covered here.
@@ -15,11 +23,11 @@ void main() {
   setUp(() => gateway = FakeYseGateway());
   tearDown(() => gateway.dispose());
 
-  // Enumeration is a side effect of *opening* a device: the engine's device
-  // manager only runs `updateDeviceList()` on the `init(true)` path, and the
-  // accessor behind `System.devices` has no lazy refresh (issue #403). Measured
-  // against libyse 2.4.0 on Windows — `initOffline()` → 0 devices, `init()` →
-  // 19 on the same machine. `real_yse_gateway_enumeration_contract_test.dart`
+  // `init()` enumerates as a side effect of opening a device; `initOffline()`
+  // enumerates nothing until `refreshDevices()` (issues #403, #445). Measured
+  // against libYSE 3.1.0 on Windows — `initOffline()` → 0 devices, a refresh
+  // or `init()` → 19 on the same machine.
+  // `real_yse_gateway_enumeration_contract_test.dart`
   // holds the engine itself to this; these hold the fake to the same shape, so
   // the two cannot drift apart the way they did before this issue.
   group('enumeration', () {
@@ -88,15 +96,11 @@ void main() {
     });
   });
 
-  // The list `audioDevices()` returns is a **cache**, not a view of the machine
-  // (issue #412). `updateDeviceList()` has one call site — `deviceManager::
-  // init(true)` — and PortAudio builds the table behind it at `Pa_Initialize()`,
-  // which is never followed by a `Pa_Terminate()` before process exit. So there
-  // is no in-process path to a fresh list at all, and no exported call that asks
-  // for one (dart-yse #51). Held here so the fake cannot drift back into
-  // modelling a live list, which let tests recover from hardware the shipped app
-  // could never see.
-  group('enumeration is a frozen cache, not a view of the hardware', () {
+  // The list `audioDevices()` returns is a **snapshot**, not a view of the
+  // machine (issues #412, #445): it changes only when the engine enumerates.
+  // Held here so the fake cannot drift into modelling a live list, which let
+  // tests recover from hardware the shipped app could not see.
+  group('enumeration is a snapshot, not a view of the hardware', () {
     test('unplugging a device leaves its entry in the list', () {
       gateway.init();
       expect(gateway.audioDevices(), hasLength(2));
@@ -109,49 +113,26 @@ void main() {
       expect(gateway.devices, isEmpty);
     });
 
-    test('a device plugged in after init never appears', () {
+    test('a device plugged in after init does not appear on its own', () {
       gateway.devices = const [];
       gateway.init();
 
-      gateway.devices = const [
-        AudioDeviceDescriptor(
-          name: 'Latecomer',
-          hostName: 'WASAPI',
-          sampleRates: [48000.0],
-          bufferSizes: [256],
-          defaultBufferSize: 256,
-        ),
-      ];
+      gateway.devices = const [_latecomer];
 
       expect(gateway.audioDevices(), isEmpty);
-      // …not even after the engine is torn down and brought back up: `close()`
-      // does not call `Pa_Terminate()`, so a second `init()` re-reads the same
-      // snapshot.
+      // …nor through a close + init, which keeps the existing snapshot.
       gateway.close();
       gateway.init();
       expect(gateway.audioDevices(), isEmpty);
     });
 
-    test('only a new gateway — a new process — enumerates afresh', () {
-      gateway.init();
-      expect(gateway.audioDevices(), hasLength(2));
-
-      final restarted = FakeYseGateway()..devices = const [];
-      addTearDown(restarted.dispose);
-      restarted.init();
-
-      expect(restarted.audioDevices(), isEmpty);
-    });
-
-    test('a cached descriptor whose hardware is gone fails to open', () {
+    test('a snapshot descriptor whose hardware is gone fails to open', () {
       gateway.init();
       final alpha = gateway.audioDevices().first;
       gateway.devices = const [];
 
-      // It still resolves — that is the cache — and the *open* is what fails,
-      // which is how Phi finds out a device went away. `RealYseGateway` reads
-      // this back from `activeSampleRate`, since the engine reports the refusal
-      // as a log line rather than a status (dart-yse #52).
+      // It still resolves — that is the snapshot — and the *open* is what
+      // fails, which is how Phi finds out a device went away.
       expect(gateway.audioDevices(), contains(alpha));
       expect(
         () => gateway.openAudioDevice(alpha),
@@ -174,6 +155,69 @@ void main() {
 
       expect(gateway.activeAudioState().sampleRate, 48000);
       expect(gateway.openedDevice, alpha);
+    });
+  });
+
+  // `System.refreshDevices()` (yse 0.2.0, issue #445): the enumeration that
+  // needs no open stream. `real_yse_gateway_enumeration_contract_test.dart`
+  // holds the engine to the offline half of this.
+  group('refreshDevices', () {
+    test('an offline session lists the hardware and opens nothing', () {
+      gateway.initOffline();
+
+      expect(gateway.refreshDevices(), isTrue);
+
+      expect(gateway.audioDevices(), hasLength(2));
+      expect(gateway.activeAudioState(), AudioDeviceState.none);
+      // …and a device can now be opened on that session.
+      gateway.openAudioDevice(gateway.audioDevices().first);
+      expect(gateway.activeAudioState().sampleRate, 48000);
+    });
+
+    test('works before any init', () {
+      expect(gateway.refreshDevices(), isTrue);
+      expect(gateway.audioDevices(), hasLength(2));
+    });
+
+    test('with nothing open it reads the machine as it is now', () {
+      gateway.devices = const [];
+      gateway.init();
+      expect(gateway.audioDevices(), isEmpty);
+
+      gateway.devices = const [_latecomer];
+      gateway.refreshDevices();
+
+      expect(gateway.audioDevices().map((d) => d.name), ['Latecomer']);
+    });
+
+    test('with nothing open an unplugged device drops out of the list', () {
+      gateway.init();
+      gateway.devices = [gateway.devices[1]]; // the live WASAPI entry pulled
+      expect(gateway.activeAudioState(), AudioDeviceState.none);
+      expect(gateway.audioDevices(), hasLength(2));
+
+      gateway.refreshDevices();
+
+      expect(gateway.audioDevices().map((d) => d.hostName), ['ASIO']);
+    });
+
+    test('with a stream open it sees no hot-plugged hardware', () {
+      gateway.init(); // the default is open
+      gateway.devices = [...gateway.devices, _latecomer];
+
+      expect(gateway.refreshDevices(), isTrue);
+
+      expect(gateway.audioDevices(), hasLength(2));
+      expect(gateway.activeAudioState().sampleRate, 48000); // stream untouched
+    });
+
+    test('an unreachable backend returns false and lists nothing', () {
+      gateway
+        ..backendAvailable = false
+        ..initOffline();
+
+      expect(gateway.refreshDevices(), isFalse);
+      expect(gateway.audioDevices(), isEmpty);
     });
   });
 

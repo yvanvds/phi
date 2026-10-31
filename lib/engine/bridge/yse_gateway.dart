@@ -12,8 +12,11 @@ import 'audio_device_state.dart';
 abstract interface class YseGateway {
   /// Initialise the audio engine and open the default device.
   ///
-  /// This is also what enumerates the hardware: [audioDevices] is empty until an
-  /// `init()` has run (issue #403), so every boot path goes through here.
+  /// Every boot path goes through here, and it always leaves [audioDevices]
+  /// enumerated: either as the side effect of opening the default device, or —
+  /// when no device comes up, which yse 0.2.0 reports by throwing — through an
+  /// offline session plus [refreshDevices] (issues #403, #445). So a stored
+  /// device can always be resolved right after it.
   ///
   /// It also fixes the session's sample rate, which stays locked until [close]
   /// (yse 0.2.0, issue #443). With a [requestedSampleRate] set the session runs
@@ -36,11 +39,31 @@ abstract interface class YseGateway {
   /// Initialise the engine **without** opening any audio device — headless
   /// rendering and benchmarks.
   ///
-  /// **Not a boot path.** An offline session sees **no devices at all**:
-  /// [audioDevices] returns an empty list, and the engine refuses to open one
-  /// (measured against libyse 2.4.0 — issue #403, dart-yse #51). A later [init]
-  /// does not repair it either; the engine ignores a second init until [close].
+  /// **Not a boot path.** An offline session enumerates nothing on its own:
+  /// [audioDevices] stays empty and the engine refuses to open a device until
+  /// [refreshDevices] has started the audio backend and listed them (yse 0.2.0,
+  /// issue #445). A later [init] does not repair it either; the engine ignores
+  /// a second init until [close] (re-measured against libYSE 3.1.0).
   void initOffline();
+
+  /// Re-enumerate the audio devices **without opening a stream** (yse 0.2.0,
+  /// issue #445). Valid before [init], on an [initOffline] session and on a
+  /// running one. Returns `false`, with [audioDevices] empty, when the audio
+  /// backend cannot be started.
+  ///
+  /// What it can see depends on whether a stream is open:
+  ///
+  /// - **None open** (an offline session, or after a device was lost): the
+  ///   backend restarts, so devices plugged in or removed since show up — this
+  ///   is what lets recovery find an interface that came back, or one that was
+  ///   never there at boot.
+  /// - **One open**: the stream is left alone and the list is re-read from the
+  ///   backend's existing enumeration, so hot-plugged hardware stays invisible
+  ///   until the device is closed and this is called again.
+  ///
+  /// The refresh replaces the list; match devices by name + host, never by
+  /// position.
+  bool refreshDevices();
 
   /// Shut the engine down.
   void close();
@@ -57,24 +80,17 @@ abstract interface class YseGateway {
 
   /// The audio devices the engine can see, as pure FFI-free
   /// [AudioDeviceDescriptor]s (design §4) — the list the settings window builds
-  /// its output-device dropdown from. Empty until [init] has run — the engine
-  /// enumerates as part of opening a device, never on its own, so an
-  /// [initOffline] session sees nothing (issue #403).
+  /// its output-device dropdown from. Empty until [init] or [refreshDevices]
+  /// has enumerated — an [initOffline] session on its own sees nothing
+  /// (issue #403).
   ///
-  /// **A cache, not a live list** (issue #412). It is built once, inside
-  /// [init], and nothing refreshes it for the rest of the process:
-  /// `updateDeviceList()` has a single call site, `closeCurrentDevice()` and
-  /// `close()` leave the vector alone, `Pa_Terminate()` runs only at process
-  /// exit so even a [close] + [init] re-reads PortAudio's original table, and
-  /// there is no exported rescan (dart-yse #51). Two consequences callers must
-  /// design around:
-  ///
-  /// - a device that is unplugged **stays listed**, with its old index — the
-  ///   only way to find out it is gone is that [openAudioDevice] on it fails;
-  /// - a device plugged in after [init] **never appears**, and cannot be opened
-  ///   at all until Phi is restarted.
-  ///
-  /// So an empty list here is a restart-level fact, not something to retry.
+  /// **A snapshot, not a live view** (issues #412, #445). It is whatever the
+  /// last [init] or [refreshDevices] read, and survives [close]. While a stream
+  /// is open nothing can rescan it, so a device unplugged mid-session **stays
+  /// listed** (the only way to find out it is gone is that [openAudioDevice] on
+  /// it fails) and a device plugged in mid-session does not appear. Once no
+  /// stream is open, [refreshDevices] reads the machine afresh — which is why an
+  /// empty list is no longer a restart-level fact.
   List<AudioDeviceDescriptor> audioDevices();
 
   /// Open an audio device, or live-swap to it if one is already open
@@ -90,9 +106,9 @@ abstract interface class YseGateway {
   /// device or the engine refuses to open it — the caller reverts to the
   /// previous working device and shows a notice (design §5). The stored
   /// preference is the caller's concern, never dropped by a failed open.
-  /// "Refuses" includes the engine's *silent* refusals: it reports a failed open
-  /// as a log line rather than a status (dart-yse #52), so an implementation
-  /// must confirm a device actually came up before returning normally.
+  /// The engine itself throws on every refusal since yse 0.2.0 (libYSE 2.4
+  /// returned normally and only logged — dart-yse #52); an implementation must
+  /// turn that into [AudioDeviceException].
   void openAudioDevice(
     AudioDeviceDescriptor? descriptor, {
     double? rate,
@@ -105,9 +121,11 @@ abstract interface class YseGateway {
   /// two can legitimately differ. [AudioDeviceState.none] when none is open.
   AudioDeviceState activeAudioState();
 
-  /// Configure engine auto-reconnect (design §4): when [on], the engine re-opens
-  /// a device that disappears after [delayMs] ms. Enabled at boot (1 s) and not
-  /// exposed as a setting in v1. Safe to call after [init] / [initOffline].
+  /// Configure the engine's own auto-reconnect watchdog (design §4): when [on],
+  /// the engine re-opens the session's last-opened device after [delayMs]
+  /// wall-clock milliseconds of silence (yse 0.2.0 semantics). Phi keeps it
+  /// **off** and supervises recovery itself — see `AudioDeviceRecovery` for why
+  /// (issues #410, #445). Safe to call after [init] / [initOffline].
   void setAutoReconnect({required bool on, int delayMs});
 
   /// Begin the periodic engine-update timer at the given [interval].

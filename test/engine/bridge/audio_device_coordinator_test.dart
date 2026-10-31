@@ -67,12 +67,10 @@ void main() {
           isFalse,
         );
         // Design §4 used to arm the engine's own auto-reconnect here. It is off
-        // since issue #410: measured against libyse, it reopens
-        // `Pa_GetDefaultOutputDevice()` rather than the device that was lost,
-        // drops the chosen buffer size, and once armed retries on every 16 ms
-        // control tick forever. Phi supervises recovery instead, bounded and
-        // observable — so a silent migration onto the built-in speakers can no
-        // longer happen behind `current`'s back.
+        // since issue #410 and stays off under yse 0.2.0 (#445): Phi
+        // supervises recovery itself — reach for the chosen device, settle on
+        // the default *with a notice*, refresh the device list each attempt —
+        // so there is one supervisor on the device, not two.
         expect(gateway.autoReconnectOn, isFalse);
         expect(coordinator.current, const AudioSettings());
         expect(coordinator.recovery.retrying, isFalse);
@@ -310,16 +308,17 @@ void main() {
       );
 
       expect(ok, isFalse);
-      // Two things get said, in this order, and both are true. Boot says the
-      // engine enumerated nothing — which, since the list is built once and
-      // never refreshed (issue #412), is a restart-level fact rather than
-      // something to retry. Then the stored device reports itself missing.
-      expect(notices.map((n) => n.kind), <AudioNoticeKind>[
-        AudioNoticeKind.noAudioDevice,
-        AudioNoticeKind.switchReverted,
-      ]);
-      expect(notices.first.message, contains('restart Phi'));
-      expect(notices.last.message, contains('no audio output device is open'));
+      // One thing gets said: the stored device is missing and nothing is
+      // open. Boot no longer says "restart Phi" (issue #412) — since yse 0.2.0
+      // recovery re-enumerates on every attempt, so an empty list is something
+      // to retry, and a run is armed instead (#445).
+      expect(notices.single.kind, AudioNoticeKind.switchReverted);
+      expect(
+        notices.single.message,
+        contains('no audio output device is open'),
+      );
+      expect(notices.single.message, isNot(contains('restart Phi')));
+      expect(coordinator.recovery.retrying, isTrue);
       expect(coordinator.current, isNull);
       expect(gateway.activeAudioState(), AudioDeviceState.none);
     });
@@ -807,68 +806,90 @@ void main() {
       });
     });
 
-    test('a boot that enumerated nothing says so rather than pretending to '
-        'reconnect (#412)', () {
+    test('a boot with no hardware retries, then gives up honestly — no '
+        '"restart Phi" (#445)', () {
       fakeAsync((async) {
-        // A machine whose engine came up seeing no hardware at all. This used to
-        // arm a run, on the theory that an interface still finishing its
-        // enumeration at login would be picked up. It cannot be: libyse fills
-        // its device list once, inside `init()`, from a PortAudio table captured
-        // at the first `Pa_Initialize()`, and nothing refreshes it in-process —
-        // not `closeCurrentDevice()`, not `close()` + `init()`, and there is no
-        // exported rescan (dart-yse #51). An empty list stays empty, so every
-        // attempt would resolve nothing and the chip would read RECONNECTING for
-        // two minutes about hardware that cannot arrive.
+        // A machine whose engine came up seeing no hardware at all. Under
+        // libYSE 2.4 this was a restart-level fact — the list was built once
+        // and never rescanned (#412) — so boot said "restart Phi" and armed
+        // nothing. yse 0.2.0's `refreshDevices()` reads the machine afresh
+        // whenever nothing is open, so a run is real now: it retries, and only
+        // when its budget is spent does it say recovery is the performer's
+        // move.
         gateway.devices = const [];
 
         coordinator.boot();
 
         expect(coordinator.current, isNull);
-        expect(coordinator.recovery.retrying, isFalse);
-        expect(coordinator.recovery.attempts, 0);
-        // The performer is told the one thing that would actually help.
-        expect(notices.single.kind, AudioNoticeKind.noAudioDevice);
-        expect(notices.single.message, contains('restart Phi'));
+        expect(coordinator.recovery.retrying, isTrue);
+        expect(notices, isEmpty);
 
-        // And nothing runs in the background afterwards.
-        final callsAfterBoot = gateway.calls.length;
-        async.elapse(const Duration(minutes: 5));
-        expect(gateway.calls, hasLength(callsAfterBoot));
+        async.elapse(const Duration(seconds: 10));
+
+        expect(coordinator.recovery.gaveUp, isTrue);
+        expect(
+          gateway.calls.where((c) => c == 'refreshDevices'),
+          hasLength(recoverySchedule.length),
+        );
+        expect(notices.single.kind, AudioNoticeKind.noAudioDevice);
+        expect(notices.single.message, contains('Settings'));
+        expect(notices.single.message, isNot(contains('restart Phi')));
 
         coordinator.dispose();
       });
     });
 
-    test('an interface plugged in after the engine started stays invisible — '
-        'no recovery can reach it (#412)', () {
+    test('an interface plugged in after the engine started is found by '
+        'recovery (#445)', () {
       fakeAsync((async) {
         gateway.devices = const [];
         coordinator.boot();
         notices.clear();
 
-        // The interface finishes enumerating a moment after login. On the fake
-        // this used to be enough for recovery to find it; on the engine it is
-        // not, because `System.devices` was already built and is never rebuilt.
+        // The interface finishes enumerating a moment after login. Under
+        // libYSE 2.4 no in-process call could ever list it (#412); now each
+        // recovery attempt refreshes the list with nothing open, so the next
+        // attempt sees it and opens it as the platform default.
         gateway.devices = const [alpha];
-        async.elapse(const Duration(minutes: 5));
+        async.elapse(const Duration(seconds: 2));
 
-        expect(gateway.audioDevices(), isEmpty);
-        expect(coordinator.current, isNull);
-        expect(gateway.activeAudioState(), AudioDeviceState.none);
+        expect(gateway.audioDevices().map((d) => d.name), ['Alpha']);
+        expect(gateway.activeAudioState().sampleRate, 48000);
+        expect(coordinator.current, const AudioSettings());
+        expect(coordinator.recovery.retrying, isFalse);
+        expect(notices, isEmpty);
 
-        // Only a fresh process sees it — which is what the boot notice says.
         coordinator.dispose();
       });
     });
 
-    test('an enumerated device is recovered although the list never changes '
-        '(#412)', () {
+    test('a stored interface that was absent at boot is opened once it '
+        'arrives (#445)', () {
       fakeAsync((async) {
-        // The other half of the cache's behaviour, and the half recovery relies
-        // on: an unplugged interface *keeps* its entry, with its old index. So
-        // the device the performer asked for stays resolvable throughout the
-        // loss, every attempt is a real `openDevice` on it, and the one that
-        // lands after the cable goes back in brings audio up.
+        // The stored device is not plugged in at launch, and neither is
+        // anything else — the switch fails and a run reaches for it by name.
+        gateway.devices = const [];
+        applyStored(storedAlpha);
+        notices.clear();
+
+        gateway.devices = const [beta, alpha];
+        async.elapse(const Duration(seconds: 2));
+
+        // The refresh made Alpha resolvable, so recovery opened *it* — not
+        // Beta, which is what the platform default would have been.
+        expect(gateway.openedDevice?.name, 'Alpha');
+        expect(coordinator.current?.outputDevice, 'Alpha');
+        expect(notices, isEmpty);
+
+        coordinator.dispose();
+      });
+    });
+
+    test('an unplugged device is recovered once it is back (#410, #445)', () {
+      fakeAsync((async) {
+        // While the stream ran, nothing could rescan, so the unplugged
+        // interface still has its entry when the loss is noticed. The attempt
+        // that follows the cable going back in refreshes the list and opens it.
         gateway.devices = const [alpha, beta];
         coordinator.boot();
         coordinator.switchTo(storedAlpha);
@@ -876,7 +897,7 @@ void main() {
         gateway.devices = const [beta]; // Alpha unplugged
         coordinator.observeLiveState();
         expect(coordinator.recovery.retrying, isTrue);
-        // The dropdown still offers it, exactly as the shipped app does.
+        // The dropdown still offers it until the first attempt refreshes.
         expect(gateway.audioDevices(), hasLength(2));
         expect(
           gateway.audioDevices().map((d) => d.name),

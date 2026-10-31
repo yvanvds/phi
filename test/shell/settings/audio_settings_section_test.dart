@@ -138,13 +138,11 @@ void main() {
 
   testWidgets('an unplugged interface is still listed, and picking it reverts '
       '(#412)', (tester) async {
-    // The list the dropdown is built from is the engine's enumeration cache,
-    // filled once inside `init()` and never refreshed — no rescan exists in
-    // libyse or its C API (dart-yse #51). So an interface pulled out of the
-    // machine goes on being offered, with its old index, and the performer can
-    // pick it. This is the shipped shape of the dropdown and it used to be
-    // untested: the fake shortened its list on an unplug, so the entry simply
-    // vanished and this path never ran.
+    // The list the dropdown is built from is the engine's last enumeration,
+    // which cannot be rescanned while a stream is open (issues #412, #445). So
+    // an interface pulled out while Alpha plays goes on being offered and the
+    // performer can pick it. This used to be untested: the fake shortened its
+    // list on an unplug, so the entry simply vanished and this path never ran.
     gateway.devices = const [_alpha]; // Beta pulled out
     await pumpSection(tester);
     final before = store.saveCount;
