@@ -232,9 +232,19 @@ class PhiEngine {
   /// notices flow into [_lastAudioNotice].
   late final AudioDeviceCoordinator _audio = AudioDeviceCoordinator(
     _gateway,
-    onNotice: (notice) => _lastAudioNotice.value = notice,
+    onNotice: (notice) {
+      if (_collectBootNotices) _bootAudioNotices.add(notice);
+      _lastAudioNotice.value = notice;
+    },
     recoverySchedule: _audioRecoverySchedule,
   );
+
+  /// The audio settings the next [start] boots onto — see [requestBootAudio].
+  AudioSettings _bootAudio = const AudioSettings();
+
+  /// Whether a notice the coordinator raises belongs to [start]'s boot.
+  bool _collectBootNotices = false;
+  final List<AudioDeviceNotice> _bootAudioNotices = [];
 
   final ValueNotifier<AudioDeviceNotice?> _lastAudioNotice =
       ValueNotifier<AudioDeviceNotice?>(null);
@@ -948,18 +958,21 @@ class PhiEngine {
 
   /// Initialise the engine, start the update loop, begin emitting telemetry.
   ///
-  /// Brings audio up on the platform default (design §4, §5), with Phi — not the
-  /// engine — supervising recovery if it ever goes away (issue #410). It takes
-  /// **no settings**: the stored device is applied
-  /// afterwards through [switchAudioDevice], once the settings store has loaded
-  /// — that is what the shell does (`Workstation._startProject`) and the only
-  /// sequence the engine supports, because it enumerates its hardware solely
-  /// while opening a device (issue #403). A settings-carrying `start` therefore
-  /// could not open the stored device any sooner; it only duplicated this path,
-  /// unused, which is where #403's defect hid (issue #405).
+  /// Brings audio up straight on the device [requestBootAudio] named — the
+  /// stored one — or the platform default when none was requested (design §4,
+  /// §5, issue #449), with Phi — not the engine — supervising recovery if it
+  /// ever goes away (issue #410). A missing or refusing stored device falls
+  /// back to the default with a [lastAudioNotice]; the notices raised here are
+  /// kept in [bootAudioNotices] for a shell that mounts afterwards.
   void start() {
     if (_started) return;
-    _audio.boot();
+    _bootAudioNotices.clear();
+    _collectBootNotices = true;
+    try {
+      _audio.boot(_bootAudio);
+    } finally {
+      _collectBootNotices = false;
+    }
     // Patcher subsystem is optional — tests that don't inject a
     // PatcherGateway get an engine without a patcher (engine.patcher throws).
     // When wired, the native patchers are created per `patch.` entity by the
@@ -1686,17 +1699,27 @@ class PhiEngine {
   /// [start].
   bool switchAudioDevice(AudioSettings desired) {
     if (!_started) return false;
-    return _audio.switchTo(desired);
+    final ok = _audio.switchTo(desired);
+    // A restart comes back on what the performer picked, as the next launch
+    // does once the caller has persisted it.
+    if (ok) _bootAudio = desired;
+    return ok;
   }
 
-  /// Asks for the sample rate the **next** [start] runs at — the stored
-  /// `AudioSettings.sampleRate`, or `null` for the device's own rate (issue
-  /// #443). The engine locks its rate from start to stop, so a stored rate only
-  /// reaches the device when it is requested before [start]; the composition
-  /// root does that from the settings file. Called on a running engine it only
-  /// stores the request.
-  void requestSessionSampleRate(int? hz) =>
-      _gateway.requestedSampleRate = (hz != null && hz > 0) ? hz : 0;
+  /// Names the audio settings the **next** [start] boots onto — the stored
+  /// `settings.json` audio section, read by the composition root before the
+  /// engine starts (issue #449). Its device is the one opened, and its rate
+  /// the session runs at: the engine locks the rate from start to stop (issue
+  /// #443), so it can only be asked for here. Called on a running engine it only
+  /// affects a later start.
+  void requestBootAudio(AudioSettings stored) => _bootAudio = stored;
+
+  /// The audio notices the last [start] raised while booting — a stored device
+  /// that was missing or refused, an unsupported stored rate or buffer — in
+  /// order. [lastAudioNotice] retains only the latest, and boot runs before the
+  /// shell is listening, so the shell surfaces these once when it mounts.
+  List<AudioDeviceNotice> get bootAudioNotices =>
+      List.unmodifiable(_bootAudioNotices);
 
   /// The rate, in Hz, the running engine session is locked at — what every
   /// device opened in it runs at (issue #443). `0` before [start].

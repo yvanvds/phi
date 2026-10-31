@@ -20,6 +20,10 @@ import 'package:phi/engine/bridge/real_yse_gateway.dart';
 /// `flutter test` there sees no `libyse.so`. A skip is honest: the contract is
 /// still asserted on every machine that has the engine, which is every machine
 /// that could ever run the app.
+///
+/// Since issue #449 boot *is* offline again — `initOffline()` →
+/// `refreshDevices()` → open the stored device — and the second test below is
+/// the real-engine proof that this works where libYSE 2.4's could not.
 void main() {
   late RealYseGateway gateway;
   late bool engineAvailable;
@@ -84,22 +88,6 @@ void main() {
     if (!reachable) {
       expect(gateway.audioDevices(), isEmpty);
     }
-    final refreshed = {
-      for (final d in gateway.audioDevices()) '${d.hostName}/${d.name}',
-    };
-
-    // A second init does not turn the offline session into a device session —
-    // the engine ignores it while active, so nothing opens.
-    gateway.init();
-    expect(
-      gateway.activeAudioState().sampleRate,
-      0,
-      reason: 'init() after initOffline() is ignored by the engine',
-    );
-
-    // ── the other half, where there is hardware ───────────────────────────
-    gateway.close();
-    gateway.init();
     final enumerated = gateway.audioDevices();
     if (enumerated.isEmpty) {
       // A machine with no audio hardware at all: nothing more to prove, and
@@ -111,12 +99,58 @@ void main() {
       return;
     }
     // Every descriptor is usable as an identity (name + host), which is what
-    // the coordinator matches on…
+    // the coordinator matches a stored device on.
     expect(enumerated.every((d) => d.name.isNotEmpty), isTrue);
     expect(enumerated.every((d) => d.hostName.isNotEmpty), isTrue);
-    // …and the offline refresh above saw the same machine `init()` did, so a
-    // recovery attempt's refresh can resolve whatever a boot could.
-    expect(refreshed, {for (final d in enumerated) '${d.hostName}/${d.name}'});
+  });
+
+  test('boot opens exactly the chosen device from an offline session, at the '
+      'requested rate (#449)', () {
+    if (!engineAvailable) {
+      markTestSkipped(
+        'libyse is not loadable here — engine contract unchecked',
+      );
+      return;
+    }
+    _closeQuietly(gateway);
+
+    // The boot sequence `AudioDeviceCoordinator.boot` runs: request a rate,
+    // start offline, list the devices, resolve, open exactly that one. Under
+    // libYSE 2.4 the open had nothing to resolve against (#403); this proves
+    // yse 0.2.0's refresh is enough to open on an offline session, which no
+    // test against the fake can.
+    gateway.initOffline();
+    gateway.refreshDevices();
+    var target = gateway.defaultAudioDevice();
+    if (target == null || target.outputChannelNames.isEmpty) {
+      markTestSkipped(
+        'no platform-default output device on this machine — offline-boot '
+        'open unchecked',
+      );
+      return;
+    }
+    // Ask for a rate the device reports, the way the coordinator fits the
+    // session to the device before it opens (#443).
+    final rate = target.sampleRates.contains(48000.0)
+        ? 48000
+        : target.sampleRates.first.toInt();
+    _closeQuietly(gateway);
+    gateway.requestedSampleRate = rate;
+    gateway.initOffline();
+    gateway.refreshDevices();
+    expect(gateway.sessionSampleRate, rate);
+    expect(
+      gateway.activeAudioState().sampleRate,
+      0,
+      reason: 'nothing may open before the chosen device does',
+    );
+    target = gateway.defaultAudioDevice();
+    expect(target, isNotNull, reason: 'the default survives a re-enumeration');
+
+    // Opened by name + host — how a stored device is opened.
+    gateway.openAudioDevice(target);
+    expect(gateway.activeAudioState().sampleRate, rate);
+    gateway.requestedSampleRate = 0;
   });
 
   test('a refused open is reported as a failure, not as success', () {
@@ -135,10 +169,13 @@ void main() {
     // from, rather than a silent "success" on a device that is not playing.
     //
     // The reproducer needs a device the engine will refuse. The session sample
-    // rate is locked at `init()` (dart-yse #53), so any device that does not
-    // report that rate is one: the stream fails to open and nothing opens.
-    gateway.init();
-    final sessionRate = gateway.activeSampleRate;
+    // rate is locked from `initOffline()` (dart-yse #53), so any device that
+    // does not report that rate is one: the stream fails to open and nothing
+    // opens.
+    _closeQuietly(gateway);
+    gateway.initOffline();
+    gateway.refreshDevices();
+    final sessionRate = gateway.sessionSampleRate;
     final refusing = gateway
         .audioDevices()
         .where(
@@ -166,4 +203,14 @@ void main() {
     // And the read-back agrees with the exception: nothing is open.
     expect(gateway.activeAudioState().sampleRate, 0);
   });
+}
+
+/// Ends whatever session a previous test left running; closing an engine that
+/// is not up is not a failure.
+void _closeQuietly(RealYseGateway gateway) {
+  try {
+    gateway.close();
+  } catch (_) {
+    // Nothing was running.
+  }
 }

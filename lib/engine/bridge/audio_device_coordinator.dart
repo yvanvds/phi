@@ -8,11 +8,10 @@ import 'audio_recovery_status.dart';
 import 'yse_gateway.dart';
 
 /// Drives the device rules (design `docs/design/settings-and-devices.md` §5,
-/// §9.3) over a [YseGateway]: [boot] brings audio up on the platform default,
-/// and [switchTo] moves it to a chosen device — both when the stored preference
-/// arrives at launch and when the performer picks one in the settings window.
-/// There is deliberately no second, settings-carrying boot entry point; see
-/// [boot] for why the engine cannot offer one (issues #403, #405).
+/// §9.3) over a [YseGateway]: [boot] starts a session straight on the stored
+/// device (falling back to the platform default), and [switchTo] moves a
+/// running session to a device the performer picks in the settings window.
+/// There is one boot path, and it is the one the app runs (issues #405, #449).
 ///
 /// Pure orchestration — it never touches `package:yse` or Flutter, so every
 /// fallback path is unit-tested end to end against the fake gateway. It holds a
@@ -78,49 +77,145 @@ class AudioDeviceCoordinator {
   /// the diagnostics row read this to tell "coming back" from "your move".
   AudioRecoveryStatus get recovery => _recovery.status;
 
-  /// Brings audio up on the platform default: `init()` (design §4, §5). Takes no
-  /// settings — the stored device is applied afterwards, as a [switchTo] once the
-  /// settings store has loaded (`Workstation._startProject`).
+  /// Brings audio up **straight on [stored]** — the performer's saved device,
+  /// or the platform default when none is saved (design §5, issue #449).
+  /// Returns `true` when [stored] itself is what opened.
   ///
-  /// Under libYSE 2.4 that ordering was the only one the engine supported:
-  /// devices were enumerated only while opening one, so `initOffline()` listed
-  /// nothing and any boot had to open the platform default before it could
-  /// resolve a stored name (issue #403). A settings-carrying `boot` would then
-  /// have been the same sequence as `init()` + [switchTo], and the copy the app
-  /// never ran is where #403's defect sat (issue #405) — so there is one boot
-  /// path and the app runs it.
+  /// The sequence is `requestedSampleRate` → `initOffline()` →
+  /// `refreshDevices()` → resolve [stored] → open exactly that device. So boot
+  /// never opens a device the performer did not ask for, and the session rate
+  /// is never negotiated against the wrong one. If [stored] is missing or
+  /// refuses, it falls back to the platform default with a notice and leaves
+  /// the stored preference alone — the caller never persists from here — so an
+  /// interface that is not plugged in yet keeps its configuration. If nothing
+  /// opens at all, a recovery run is armed.
   ///
-  /// yse 0.2.0 lifted the constraint: `refreshDevices()` enumerates without
-  /// opening a stream, and the gateway already uses it when `init()` opens
-  /// nothing (issue #445). Booting straight onto the stored device is now
-  /// possible but is a separate change; this path stays until then.
-  void boot() {
-    _gateway.init();
-    // `init()` brings the platform default up with it — but only on a machine
-    // that *has* one. Ask the engine what actually came up rather than assuming,
-    // so [current] never claims the default device on a box with no audio
-    // hardware (issue #408).
-    _current = _gateway.activeAudioState() == AudioDeviceState.none
-        ? null
-        : const AudioSettings();
+  /// Under libYSE 2.4 this was impossible: devices were enumerated only while
+  /// opening one, so an offline boot had nothing to resolve against (issue
+  /// #403), and boot had to open the default with `init()` and then switch.
+  /// yse 0.2.0's `refreshDevices()` lists devices without opening a stream
+  /// (issue #445), which is what this rests on — proven against the real
+  /// engine in `real_yse_gateway_enumeration_contract_test.dart`.
+  bool boot([AudioSettings stored = const AudioSettings()]) =>
+      _startSession(stored);
+
+  /// Starts an engine session and opens [target] in it, falling back to the
+  /// platform default — the "open the stored device from an offline session"
+  /// step. [boot] is its first caller; a live restart for a rate change (issue
+  /// #448) is the second: `close()` the running session, then this.
+  bool _startSession(AudioSettings target) {
+    // What the performer wants, even if it fails to open: recovery reaches for
+    // it first, and after a total loss this is the only record of it.
+    _intended = target;
+    _current = null;
+    _gateway.requestedSampleRate = target.sampleRate ?? 0;
+    _initSession();
     // The engine's own watchdog stays off; Phi supervises recovery instead —
     // see [AudioDeviceRecovery] for why, under yse 0.2.0 too (issues #410,
     // #445). Called explicitly rather than left to the engine's default so the
     // decision is visible on the wire.
     _gateway.setAutoReconnect(on: false);
-    // A machine whose engine came up with no device at all is already the state
-    // recovery exists for — an interface held by another process, a default
-    // that refused, or no hardware *yet* — so start trying rather than sitting
-    // silent. Under libYSE 2.4 an empty device list was a restart-level fact
-    // and boot said "restart Phi" instead (issue #412); since yse 0.2.0 every
-    // attempt re-enumerates, so a device plugged in later is found (#445).
-    if (_current == null) _recovery.arm();
+
+    final name = target.outputDevice;
+    if (name == null) {
+      if (_openInSession(null, target)) return true;
+      // Nothing opened and nothing named: the machine has no usable output
+      // (an interface held by another process, a default that refused, or no
+      // hardware *yet*) — the state recovery exists for. Quietly: the status
+      // chip already says RECONNECTING, and every attempt re-enumerates, so a
+      // device plugged in later is found (issues #412, #445).
+      _recovery.arm();
+      return false;
+    }
+
+    final descriptor = _resolve(target.outputHost, name);
+    if (descriptor != null && _openInSession(descriptor, target)) return true;
+    final problem = descriptor == null
+        ? 'is not available'
+        : 'could not be opened';
+    if (_openInSession(null, const AudioSettings(), quiet: true)) {
+      _notify(
+        AudioNoticeKind.switchReverted,
+        'Audio device "$name" $problem — using the default device.',
+      );
+      return false;
+    }
+    _current = null;
+    _notify(
+      AudioNoticeKind.switchReverted,
+      'Audio device "$name" $problem — no audio output device is open.',
+    );
+    _recovery.arm();
+    return false;
   }
 
-  /// Applies a device change (design §5, §9.3): close the open device and open
-  /// [desired]. This is both the launch-time apply of the stored preference —
-  /// the shell calls it once settings have loaded, over the platform default
-  /// [boot] left running — and the live change from the settings window. On any
+  /// `initOffline()` + `refreshDevices()`: a session with no device open but
+  /// every device listed, so one can be resolved and opened in it (#445).
+  void _initSession() {
+    _gateway.initOffline();
+    _gateway.refreshDevices();
+  }
+
+  /// Opens [descriptor] — or the platform default when `null` — in the fresh
+  /// session [_startSession] just started, first making sure the session runs
+  /// at a rate the device accepts. Returns `false` when there is no such device
+  /// or it refuses.
+  bool _openInSession(
+    AudioDeviceDescriptor? descriptor,
+    AudioSettings settings, {
+    bool quiet = false,
+  }) {
+    final device = descriptor ?? _gateway.defaultAudioDevice();
+    if (device == null) return false;
+    _fitSessionRate(device, settings.sampleRate);
+    return _open(descriptor, settings, quiet: quiet);
+  }
+
+  /// Restarts the not-yet-used session when [device] cannot run at its rate,
+  /// or when [stored] is a rate the device accepts and the session is not at
+  /// it. The session rate is locked from `initOffline()` to `close()`, and a
+  /// device that cannot run at it refuses to open (yse 0.2.0, issue #443) — so
+  /// a 44.1 kHz-only interface with no stored rate would otherwise never open
+  /// on a 48 kHz session. Nothing is open and nothing has been built on the
+  /// session yet, so the restart costs only a re-enumeration.
+  void _fitSessionRate(AudioDeviceDescriptor device, int? stored) {
+    final session = _gateway.sessionSampleRate;
+    final double wanted;
+    if (stored != null && device.sampleRates.contains(stored.toDouble())) {
+      wanted = stored.toDouble();
+    } else if (_runsAt(device, session)) {
+      return;
+    } else {
+      wanted = _ownRate(device);
+    }
+    if (wanted == session) return;
+    _gateway.close();
+    _gateway.requestedSampleRate = wanted.toInt();
+    _initSession();
+    _gateway.setAutoReconnect(on: false);
+  }
+
+  /// Whether [device] can run at [rate]. A device that reports no rates is
+  /// taken at its word, as is a session with no rate yet.
+  static bool _runsAt(AudioDeviceDescriptor device, double rate) =>
+      rate <= 0 ||
+      device.sampleRates.isEmpty ||
+      device.sampleRates.contains(rate);
+
+  /// The rate a session for [device] runs at when the performer chose none:
+  /// the engine's 48 kHz default when the device takes it, else 44.1 kHz, else
+  /// the first rate it reports.
+  static double _ownRate(AudioDeviceDescriptor device) {
+    final rates = device.sampleRates;
+    if (rates.isEmpty || rates.contains(48000.0)) return 48000;
+    if (rates.contains(44100.0)) return 44100;
+    return rates.first;
+  }
+
+  /// Applies a live device change from the settings window (design §5, §9.3):
+  /// close the open device and open [desired] in the running session. (The
+  /// stored preference is no longer applied this way at launch — [boot] opens
+  /// it directly, issue #449.) On any
   /// failure the previous working device is kept (target missing) or restored
   /// (open failed), a notice is raised, and `false` is returned so the caller
   /// knows **not** to persist [desired] — the stored choice updates only on
@@ -370,7 +465,7 @@ class AudioDeviceCoordinator {
   /// the request for the next session (issue #443). The device just opened at
   /// the running session's rate — it is locked from init until close — so a
   /// rate that differs from it cannot apply now, only at the next launch, when
-  /// the shell requests the stored rate before the engine starts. Says so,
+  /// [boot] requests the stored rate before the session starts. Says so,
   /// unless [quiet]: otherwise the picker would show a rate the engine is not
   /// running at, with nothing to explain it.
   void _requestSessionRate(double? rate, {required bool quiet}) {

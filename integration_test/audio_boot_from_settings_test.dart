@@ -20,12 +20,12 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 /// stored device is opened when present, and a missing one falls back to the
 /// default while the stored preference is kept intact.
 ///
-/// This drives the *whole* boot path, not a slice of it — `PhiApp.initState`
-/// starting the engine on the platform default, then
-/// `Workstation._startProject` applying the just-loaded settings. Since issue
-/// #405 that is the only such path: `PhiEngine.start()` takes no settings, so
-/// there is no second, uncalled boot for a test to agree with while production
-/// runs something else (which is how #403's defect survived).
+/// This drives the *whole* boot path, not a slice of it: `PhiApp.initState`
+/// reads the stored audio section through the settings controller's store and
+/// boots the engine straight onto it — offline session, refresh, open exactly
+/// the stored device (issue #449). It is the only such path (#405): the shell
+/// no longer re-applies the stored device once settings have loaded, so there
+/// is no second boot for a test to agree with while production runs another.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -69,9 +69,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // The stored ASIO device (not its WASAPI namesake) was opened …
+    // The stored ASIO device (not its WASAPI namesake) was opened — and it is
+    // the only device boot ever opened: the platform default never came up
+    // first to negotiate the session (issue #449) …
     expect(gateway.openedDevice?.name, 'Fake Interface');
     expect(gateway.openedDevice?.hostName, 'ASIO');
+    expect(gateway.calls, isNot(contains('init')));
+    expect(gateway.calls.where((c) => c.startsWith('openAudioDevice')), [
+      'openAudioDevice:Fake Interface:def:def:auto',
+    ]);
     expect(engine.activeAudioSettings?.outputDevice, 'Fake Interface');
     expect(engine.lastAudioNotice.value, isNull);
     // … the engine's own auto-reconnect is left off (issue #410 — it reopens the
@@ -125,6 +131,9 @@ void main() {
     // is on nothing (issue #408).
     expect(engine.activeAudioSettings, const AudioSettings());
     expect(engine.lastAudioNotice.value?.kind, AudioNoticeKind.switchReverted);
+    // Raised while booting, before the shell existed — and still toasted once
+    // the shell mounted (issue #449).
+    expect(find.textContaining('using the default device'), findsOneWidget);
     // … and the stored preference survives an unplugged interface (design §5).
     expect(settingsStore.saveCount, 0);
     expect(settings.value.audio.outputDevice, 'Unplugged Interface');

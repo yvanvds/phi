@@ -113,7 +113,8 @@ void main() {
 
   // yse 0.2.0 locks the session rate from init to close (issue #443): the
   // stored rate reaches the device only when requested before the engine
-  // starts, and a rate picked while Phi runs applies at the next launch.
+  // starts — which boot does from the stored settings (#449) — and a rate
+  // picked while Phi runs applies at the next launch.
   testWidgets('the stored sample rate is the running rate; a new pick is '
       'stored for the next launch and says so', (tester) async {
     final gateway = FakeYseGateway()..devices = const [_alpha, _beta];
@@ -139,9 +140,8 @@ void main() {
       journalStoreFactory: (_) => FakeJournalStore(),
       autosaveIntervalOverride: const Duration(hours: 1),
     );
-    // What the composition root does from settings.json before `start()`.
-    engine.requestSessionSampleRate(44100);
-
+    // No rate requested here: `PhiApp` reads the stored audio section and boots
+    // the engine onto it, rate included (issues #443, #449).
     await tester.pumpWidget(
       PhiApp(
         engine: engine,

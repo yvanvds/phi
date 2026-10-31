@@ -10,45 +10,38 @@ import 'audio_device_state.dart';
 /// place the real FFI surface is touched. See `real_yse_gateway.dart` for
 /// the production implementation.
 abstract interface class YseGateway {
-  /// Initialise the audio engine and open the default device.
-  ///
-  /// Every boot path goes through here, and it always leaves [audioDevices]
-  /// enumerated: either as the side effect of opening the default device, or —
-  /// when no device comes up, which yse 0.2.0 reports by throwing — through an
-  /// offline session plus [refreshDevices] (issues #403, #445). So a stored
-  /// device can always be resolved right after it.
-  ///
-  /// It also fixes the session's sample rate, which stays locked until [close]
-  /// (yse 0.2.0, issue #443). With a [requestedSampleRate] set the session runs
-  /// at exactly that rate, and the platform default only comes up when it can
-  /// run at it; otherwise the session takes the platform default's own rate.
-  void init();
-
-  /// The sample rate, in Hz, asked for the **next** session, or `0` for none
-  /// (the device's own rate). It has no effect on a running session: the rate
-  /// is locked from [init] until [close], so it is read only when [init] runs.
+  /// The sample rate, in Hz, asked for the **next** session, or `0` for none.
+  /// It has no effect on a running session: the rate is locked from
+  /// [initOffline] until [close], so it is read only when a session starts.
   /// Survives [close]. Issue #443.
   int get requestedSampleRate;
   set requestedSampleRate(int hz);
 
-  /// The running session's sample rate in Hz, locked from [init] until
-  /// [close]. Every device opened in the session runs at it. `0` when the
-  /// engine is not initialised.
+  /// The running session's sample rate in Hz, locked from [initOffline] until
+  /// [close]. Every device opened in the session runs at it, and one that
+  /// cannot refuses. `0` when the engine is not initialised.
   double get sessionSampleRate;
 
-  /// Initialise the engine **without** opening any audio device — headless
-  /// rendering and benchmarks.
+  /// Start an engine session **without** opening any audio device. The
+  /// session runs at exactly [requestedSampleRate], or — with none requested —
+  /// at the previous session's rate (48 kHz in a fresh process, yse #1033).
   ///
-  /// **Not a boot path.** An offline session enumerates nothing on its own:
-  /// [audioDevices] stays empty and the engine refuses to open a device until
-  /// [refreshDevices] has started the audio backend and listed them (yse 0.2.0,
-  /// issue #445). A later [init] does not repair it either; the engine ignores
-  /// a second init until [close] (re-measured against libYSE 3.1.0).
+  /// This is how Phi boots (issue #449): `initOffline()` → [refreshDevices] →
+  /// resolve the stored device → [openAudioDevice] on exactly that one. An
+  /// offline session enumerates nothing on its own — [audioDevices] stays
+  /// empty and the engine refuses to open a device until [refreshDevices] has
+  /// started the audio backend and listed them (yse 0.2.0, issue #445).
+  ///
+  /// There is deliberately no `init()` here. The engine's own `System.init()`
+  /// opens the platform default as it starts, so the session rate is
+  /// negotiated against a device the performer may never have asked for —
+  /// under libYSE 2.4 it was the only way to enumerate, and the reason boot
+  /// used to open the default and then switch (issues #403, #405).
   void initOffline();
 
   /// Re-enumerate the audio devices **without opening a stream** (yse 0.2.0,
-  /// issue #445). Valid before [init], on an [initOffline] session and on a
-  /// running one. Returns `false`, with [audioDevices] empty, when the audio
+  /// issue #445). Valid before [initOffline], on an offline session and on one
+  /// with a device open. Returns `false`, with [audioDevices] empty, when the audio
   /// backend cannot be started.
   ///
   /// What it can see depends on whether a stream is open:
@@ -80,18 +73,25 @@ abstract interface class YseGateway {
 
   /// The audio devices the engine can see, as pure FFI-free
   /// [AudioDeviceDescriptor]s (design §4) — the list the settings window builds
-  /// its output-device dropdown from. Empty until [init] or [refreshDevices]
-  /// has enumerated — an [initOffline] session on its own sees nothing
+  /// its output-device dropdown from. Empty until [refreshDevices] has
+  /// enumerated — an [initOffline] session on its own sees nothing
   /// (issue #403).
   ///
   /// **A snapshot, not a live view** (issues #412, #445). It is whatever the
-  /// last [init] or [refreshDevices] read, and survives [close]. While a stream
+  /// last [refreshDevices] read, and survives [close]. While a stream
   /// is open nothing can rescan it, so a device unplugged mid-session **stays
   /// listed** (the only way to find out it is gone is that [openAudioDevice] on
   /// it fails) and a device plugged in mid-session does not appear. Once no
   /// stream is open, [refreshDevices] reads the machine afresh — which is why an
   /// empty list is no longer a restart-level fact.
   List<AudioDeviceDescriptor> audioDevices();
+
+  /// The platform-default output device as it appears in [audioDevices] — what
+  /// [openAudioDevice] opens for a null descriptor — or `null` when the last
+  /// enumeration did not list it (nothing enumerated yet, or no hardware).
+  /// Lets the boot check that the default can run at the session rate before
+  /// it opens it (issue #449).
+  AudioDeviceDescriptor? defaultAudioDevice();
 
   /// Open an audio device, or live-swap to it if one is already open
   /// (`closeCurrentDevice` + `openDevice`, design §5 — a brief dropout is
@@ -100,7 +100,7 @@ abstract interface class YseGateway {
   /// chooses the speaker layout. [rate] is the rate the caller *wants*, kept
   /// for the record only: the device always opens at [sessionSampleRate], and
   /// a device that cannot run at it refuses (issue #443). A different rate
-  /// needs a new session — set [requestedSampleRate] before [init].
+  /// needs a new session — set [requestedSampleRate] before [initOffline].
   ///
   /// Throws [AudioDeviceException] when the descriptor resolves to no visible
   /// device or the engine refuses to open it — the caller reverts to the
@@ -125,7 +125,7 @@ abstract interface class YseGateway {
   /// the engine re-opens the session's last-opened device after [delayMs]
   /// wall-clock milliseconds of silence (yse 0.2.0 semantics). Phi keeps it
   /// **off** and supervises recovery itself — see `AudioDeviceRecovery` for why
-  /// (issues #410, #445). Safe to call after [init] / [initOffline].
+  /// (issues #410, #445). Safe to call after [initOffline].
   void setAutoReconnect({required bool on, int delayMs});
 
   /// Begin the periodic engine-update timer at the given [interval].

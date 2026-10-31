@@ -27,40 +27,6 @@ class RealYseGateway implements YseGateway {
   System get _system => _sys ??= System.instance;
 
   @override
-  void init() {
-    final requested = _system.requestedSampleRate;
-    try {
-      _system.init();
-      // A device session asks the platform default for the requested rate, and
-      // a default that refuses negotiates its own instead — a log line, not an
-      // error. The rate is then locked for the whole session, so the device the
-      // performer chose (opened right after boot) would be stuck at the
-      // default's rate too. Re-init offline instead: an offline session runs at
-      // exactly the requested rate, and `openDevice` works on it once the
-      // devices are listed (issue #443). The default stays closed; the stored
-      // device's switch, or recovery, opens one.
-      if (requested > 0 && _system.sessionSampleRate != requested) {
-        _system.close();
-        _initOfflineWithDevices();
-      }
-    } on YseException {
-      // Since yse 0.2.0 `init()` throws when no device opens and leaves the
-      // engine closed (libyse 2.4 returned normally with nothing open). Phi's
-      // boot contract is the old one — come up anyway and report
-      // `AudioDeviceState.none` so recovery can take over — so fall back to an
-      // offline session and enumerate the devices without opening one, which
-      // also lets a later `openDevice` work on that session.
-      _initOfflineWithDevices();
-    }
-    _openMidiInputs();
-  }
-
-  void _initOfflineWithDevices() {
-    _system.initOffline();
-    refreshDevices();
-  }
-
-  @override
   bool refreshDevices() {
     try {
       return _system.refreshDevices();
@@ -138,19 +104,27 @@ class RealYseGateway implements YseGateway {
 
   @override
   List<AudioDeviceDescriptor> audioDevices() => [
-    for (final device in _system.devices)
-      AudioDeviceDescriptor(
-        name: device.name,
-        hostName: device.hostName,
-        inputChannelNames: device.inputChannelNames,
-        outputChannelNames: device.outputChannelNames,
-        sampleRates: device.sampleRates,
-        bufferSizes: device.bufferSizes,
-        defaultBufferSize: device.defaultBufferSize,
-        outputLatency: device.outputLatency,
-        inputLatency: device.inputLatency,
-      ),
+    for (final device in _system.devices) _describe(device),
   ];
+
+  @override
+  AudioDeviceDescriptor? defaultAudioDevice() {
+    final device = _defaultDevice();
+    return device == null ? null : _describe(device);
+  }
+
+  /// The FFI-free descriptor for an engine [Device] (design §4).
+  AudioDeviceDescriptor _describe(Device device) => AudioDeviceDescriptor(
+    name: device.name,
+    hostName: device.hostName,
+    inputChannelNames: device.inputChannelNames,
+    outputChannelNames: device.outputChannelNames,
+    sampleRates: device.sampleRates,
+    bufferSizes: device.bufferSizes,
+    defaultBufferSize: device.defaultBufferSize,
+    outputLatency: device.outputLatency,
+    inputLatency: device.inputLatency,
+  );
 
   @override
   void openAudioDevice(
@@ -222,7 +196,7 @@ class RealYseGateway implements YseGateway {
   /// or `null` when none does.
   ///
   /// `null` does **not** mean unplugged, nor does a match mean present: the
-  /// list is only as fresh as the last `init()` / [refreshDevices] (issues #412,
+  /// list is only as fresh as the last [refreshDevices] (issues #412,
   /// #445). An interface pulled out since still matches — only the open that
   /// follows fails — and one plugged in since is missing until a refresh.
   Device? _findDevice(String name, String hostName) {

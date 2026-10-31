@@ -48,10 +48,9 @@ class RealAppSettingsStore implements AppSettingsStore {
     return _decode(await file.readAsString());
   }
 
-  /// A synchronous [load], for the one read that must happen before the engine
-  /// starts: the stored sample rate, which the engine can only take at init
-  /// (issue #443). Same fallbacks as [load] — a missing, unreadable or corrupt
-  /// file yields the defaults rather than bricking launch.
+  /// Same fallbacks as [load] — a missing, unreadable or corrupt file yields
+  /// the defaults rather than bricking launch.
+  @override
   AppSettings loadSync() {
     final file = _file;
     try {

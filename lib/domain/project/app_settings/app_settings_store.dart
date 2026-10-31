@@ -11,6 +11,11 @@ abstract interface class AppSettingsStore {
   /// been written yet.
   Future<AppSettings> load();
 
+  /// A synchronous [load], with the same fallbacks, for the one read that must
+  /// happen before the engine starts: the stored audio device and rate, which
+  /// the engine boots straight onto (issues #443, #449).
+  AppSettings loadSync();
+
   /// Persists [settings], creating the settings folder if needed.
   Future<void> save(AppSettings settings);
 }

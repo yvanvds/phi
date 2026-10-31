@@ -78,12 +78,11 @@ void main() {
     final session = SessionState();
     // Store a device so the app ends up on it, giving a real live-device
     // read-back — a healthy start. This walks the production sequence, and since
-    // issue #405 the only one: `engine.start()` on the platform default, then
-    // `switchAudioDevice(stored)` once the workstation has loaded settings
-    // (`Workstation._startProject`). Since issue #403 the fake enumerates its
-    // hardware on `init()` only, the way the engine does, so reaching 'Alpha'
-    // here also proves the sequence never resolves a stored device against an
-    // un-enumerated engine.
+    // issue #405 the only one: `PhiApp` hands the stored settings to the engine,
+    // whose `start()` opens exactly that device from an offline session (#449).
+    // The fake lists no hardware offline until `refreshDevices()`, the way the
+    // engine does (#403), so reaching 'Alpha' here also proves the sequence
+    // never resolves a stored device against an un-enumerated engine.
     final settingsStore = FakeAppSettingsStore(
       const AppSettings(
         audio: AudioSettings(outputHost: 'WASAPI', outputDevice: 'Alpha'),

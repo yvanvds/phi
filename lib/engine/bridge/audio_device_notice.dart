@@ -46,9 +46,8 @@ enum AudioNoticeKind {
 
   /// A device switch failed (target missing or refused) — the previous working
   /// device was kept / restored and the stored choice left unchanged. Covers the
-  /// launch-time apply of the stored preference too, since that runs through the
-  /// same switch (issue #405): a device that isn't plugged in leaves the app on
-  /// the platform default `init()` opened, with the preference intact.
+  /// boot too (issue #449): a stored device that isn't plugged in, or refuses,
+  /// leaves the app on the platform default, with the preference intact.
   switchReverted,
 
   /// No audio device could be opened at all, not even the platform default — the

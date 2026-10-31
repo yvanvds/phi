@@ -167,12 +167,6 @@ class _PhiAppState extends State<PhiApp> {
         registryMirror: buildRegistryMirror(evaluator),
       );
       _ownsEngine = true;
-      // The engine locks its sample rate at start (yse 0.2.0, issue #443), and
-      // the settings controller only loads after the shell is up — too late. So
-      // read the stored rate here, synchronously, and request it first.
-      _engine.requestSessionSampleRate(
-        RealAppSettingsStore().loadSync().audio.sampleRate,
-      );
       // Production only: mirror the unified log to a per-session file under
       // `%APPDATA%/phi/logs/` (design §2). Skipped when a test injected a notice
       // center — it owns its own recorder and wants no disk. Booting is
@@ -186,7 +180,6 @@ class _PhiAppState extends State<PhiApp> {
         _crashReport = sessionLog.boot();
       }
     }
-    _engine.start();
 
     final injectedSession = widget.session;
     if (injectedSession != null) {
@@ -218,6 +211,15 @@ class _PhiAppState extends State<PhiApp> {
       );
       _ownsProjectController = true;
     }
+    // Boot audio straight onto the stored device (design §5, issue #449). The
+    // engine opens it as it starts — and locks its sample rate there (#443) —
+    // while the settings controller only loads once the shell is up, too late.
+    // So read the stored audio section synchronously, without adopting it, and
+    // hand it over first. The only boot path: the shell no longer re-applies it.
+    _engine.requestBootAudio(
+      _projectController.settingsController.readStoredSync().audio,
+    );
+    _engine.start();
     _directoryPicker =
         widget.directoryPicker ?? const FileSelectorProjectDirectoryPicker();
   }

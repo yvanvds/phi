@@ -77,7 +77,12 @@ class FakeYseGateway implements YseGateway {
   @override
   Stream<void> get midiActivity => _midiActivity.stream;
 
-  @override
+  /// `System.init()` — a session that opens the platform default as it starts.
+  ///
+  /// **Not on [YseGateway] since issue #449**: the app boots offline and opens
+  /// exactly the stored device ([initOffline] → [refreshDevices] →
+  /// [openAudioDevice]). Kept as a test convenience for a running engine with
+  /// the default already open, modelling the native call faithfully.
   void init() {
     calls.add('init');
     // `system::initShared()` early-returns on `Global().active` ("You're trying
@@ -97,9 +102,8 @@ class FakeYseGateway implements YseGateway {
     if (backendAvailable) {
       _enumeratedCache ??= List<AudioDeviceDescriptor>.unmodifiable(_devices);
     }
-    // Lock the session rate (issue #443): exactly the requested one when set —
-    // `RealYseGateway.init` re-inits offline rather than let the default
-    // negotiate another — else the platform default's own rate.
+    // Lock the session rate (issue #443): the requested one when set, else the
+    // platform default's own rate.
     final visible = audioDevices();
     sessionSampleRateValue = requestedSampleRateValue > 0
         ? requestedSampleRateValue.toDouble()
@@ -386,6 +390,14 @@ class FakeYseGateway implements YseGateway {
   /// — the same call the real engine needs.
   @override
   List<AudioDeviceDescriptor> audioDevices() => _enumeratedCache ?? const [];
+
+  /// The platform default is the first enumerated entry — what
+  /// [openAudioDevice] opens for a null descriptor.
+  @override
+  AudioDeviceDescriptor? defaultAudioDevice() {
+    final visible = audioDevices();
+    return visible.isEmpty ? null : visible.first;
+  }
 
   @override
   void openAudioDevice(

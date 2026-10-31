@@ -96,15 +96,16 @@ Confirmed against the bridge; no engine work is required for v1:
   `System.refreshDevices()`, which lists the devices **without opening a
   stream**, also on an offline session. `initOffline()` on its own lists
   nothing (re-measured against libYSE 3.1.0: 0 devices offline, 19 after a
-  refresh, nothing opened — issues #403, #445). When `init()` opens no
-  device it throws; `RealYseGateway.init` then falls back to
-  `initOffline()` + `refreshDevices()`, so every boot ends enumerated.
+  refresh, nothing opened — issues #403, #445). Phi boots with
+  `initOffline()` + `refreshDevices()` and never calls `init()` (§5, issue
+  #449); `YseGateway` no longer exposes it.
 - **Open/close:** `System.initOffline()` boots the engine with *no*
   device, and no device *list* until a refresh; `openDevice(DeviceSetup,
   layout:)` opens a chosen one; `closeCurrentDevice()` + `openDevice`
   swaps live — no engine restart. `System.defaultDevice` names the
   platform default.
-- **The session rate is locked** from `init()` to `close()`, so a stored
+- **The session rate is locked** from `init()` / `initOffline()` to
+  `close()`, so a stored
   rate override cannot reach an open session (dart-yse #53). (libYSE 2.4
   also reported a refused `openDevice` only as a log line, so the bridge
   read the live state back to confirm an open — dart-yse #52. yse 0.2.0
@@ -166,23 +167,37 @@ Confirmed against the bridge; no engine work is required for v1:
 
 ## 5. Apply semantics
 
-**Boot.** Two steps, in this order — under libYSE 2.4 the only order the
-engine allowed:
+**Boot** (issue #449). One step, straight onto the stored device:
 
-1. `PhiEngine.start()` → `init()`, which opens the platform default and
-   enumerates hardware (or, when no device opens, comes up offline with
-   the list refreshed — §4). Engine auto-reconnect off; Phi's own recovery
-   supervisor takes over (below).
-2. Once the settings store has loaded, the shell
-   (`Workstation._startProject`) applies `audio` as a **live switch** —
-   `switchAudioDevice(stored)`, resolving host+name against `devices` and
-   opening it with overrides and layout. A no-op when no device is stored.
+1. The composition root (`PhiApp.initState`) reads the `audio` section
+   synchronously (`AppSettingsController.readStoredSync`) and hands it to
+   `PhiEngine.requestBootAudio` before `start()`.
+2. `start()` → `AudioDeviceCoordinator.boot(stored)`:
+   `requestedSampleRate = stored.sampleRate` → `initOffline()` →
+   `refreshDevices()` → resolve host+name → `openDevice` on **exactly that
+   device**, with overrides and layout. Nothing else is ever opened first,
+   so the session rate is never negotiated against a device the performer
+   did not ask for. If the device cannot run the session rate (no stored
+   rate, a 44.1 kHz-only interface on a 48 kHz session), the still-empty
+   session is restarted at a rate it offers before the open. Engine
+   auto-reconnect off; Phi's own recovery supervisor takes over (below).
 
-If the stored device is **missing or fails to open**, the app stays on the
-default opened in step 1, shows a non-blocking notice, and **keeps the
-stored preference intact** — a performer whose interface wasn't plugged in
-yet must not lose their configuration to a helpful fallback.
+If the stored device is **missing or fails to open**, boot opens the
+platform default instead, shows a non-blocking notice ("… — using the
+default device"), and **keeps the stored preference intact** — a performer
+whose interface wasn't plugged in yet must not lose their configuration to a
+helpful fallback. Boot runs before the shell exists, so its notices are
+retained (`PhiEngine.bootAudioNotices`) and toasted when the shell mounts.
+The shell no longer re-applies the stored device after settings load.
 
+The "start a session and open this device in it" step is a reusable piece
+of the coordinator (`_startSession`), so a live restart for a rate change
+(#448) can be `close()` + the same step.
+
+> **History.** Before #449 boot was two steps: `init()` opened the platform
+> default, then the shell applied the stored device as a live switch once
+> settings had loaded. The note below is why.
+>
 > This originally read `initOffline()` → resolve → `openDevice`, so that
 > boot never opened a device the performer didn't ask for. It cannot work:
 > an offline engine has no device list to resolve against (§4), so *every*
@@ -200,8 +215,8 @@ yet must not lose their configuration to a helpful fallback.
 > Revisit if the engine grows an enumerate-without-opening call
 > (dart-yse #51) — then, and only then, is an offline boot worth a second
 > entry point. *Since yse 0.2.0 it has one* (`refreshDevices()`, issue
-> #445), so booting straight onto the stored device is now possible. It is
-> deliberately left as its own change rather than folded into #445.
+> #445), and #449 made the offline boot the one boot path again — replacing
+> the two-step sequence rather than adding a second entry point next to it.
 
 **Live change.** Picking a device / rate / buffer in the window applies
 immediately (`closeCurrentDevice` + `openDevice`) through that same
@@ -308,9 +323,9 @@ File/app menu and the command palette later.
   the whole window is testable without hardware.
 - `MidiGateway` already enumerates outputs; it grows input enumeration +
   open/close and an activity callback, same Real/Fake split.
-- The engine façade (`PhiEngine`) exposes `start()` (default device up) and
-  `switchAudioDevice(AudioSettings)`; the shell applies the stored choice
-  through the latter once settings have loaded (§5). One device path, not
+- The engine façade (`PhiEngine`) exposes `requestBootAudio(AudioSettings)`
+  + `start()` (boot straight onto the stored device, §5) and
+  `switchAudioDevice(AudioSettings)` for live picks. One boot path, not
   two — see the note in §5.
 
 ## 8. Out of scope

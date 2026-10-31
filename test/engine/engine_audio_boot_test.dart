@@ -6,11 +6,11 @@ import 'package:phi/engine/engine.dart';
 
 import 'test_doubles/fake_yse_gateway.dart';
 
-/// PhiEngine's audio-device surface (design §5). Since issue #405 there is one
-/// entry point per step and no unused twin: `start()` takes no settings and
-/// brings the platform default up, `switchAudioDevice` applies a chosen device —
-/// the stored one once settings have loaded, or a live pick — with
-/// revert-on-failure. Both surface through `activeAudioSettings` /
+/// PhiEngine's audio-device surface (design §5). One boot path (issues #405,
+/// #449): `requestBootAudio(stored)` names the stored settings, and `start()`
+/// opens exactly that device from an offline session — falling back to the
+/// platform default with a notice. `switchAudioDevice` applies a live pick on
+/// top, with revert-on-failure. Both surface through `activeAudioSettings` /
 /// `lastAudioNotice`.
 void main() {
   late FakeYseGateway gateway;
@@ -29,13 +29,14 @@ void main() {
     await gateway.dispose();
   });
 
-  test('start() opens the platform default (init)', () {
+  test('start() with nothing requested opens the platform default', () {
     engine.start();
 
-    expect(gateway.calls, contains('init'));
-    expect(gateway.calls.any((c) => c.startsWith('initOffline')), isFalse);
+    expect(gateway.calls, contains('initOffline'));
+    expect(gateway.calls, isNot(contains('init')));
     expect(engine.activeAudioSettings, const AudioSettings());
     expect(engine.lastAudioNotice.value, isNull);
+    expect(engine.bootAudioNotices, isEmpty);
     // The engine's own auto-reconnect is off since issue #410 — it reopens the
     // platform default rather than the lost device, on every control tick with
     // no backoff. Phi supervises recovery instead, and has nothing to recover
@@ -49,43 +50,61 @@ void main() {
     expect(PhiEngine(unstarted).audioRecovery, AudioRecoveryStatus.idle);
   });
 
-  test('the launch sequence opens the stored device', () {
-    // Exactly what `PhiApp` + `Workstation._startProject` run: start the engine,
-    // then apply the settings the store has just handed over. `init()`, not
-    // `initOffline()` — the engine enumerates devices only while opening one, so
-    // an offline boot has nothing to resolve the stored name against and ends in
-    // silence (issue #403). There is no `start(audioSettings:)` to test instead;
-    // it was the unrun duplicate of these two lines (issue #405).
-    engine.start();
-    final ok = engine.switchAudioDevice(
+  test('the launch sequence opens the stored device, and only it', () {
+    // Exactly what `PhiApp` runs: hand over the stored settings, then start.
+    engine.requestBootAudio(
       const AudioSettings(outputHost: 'ASIO', outputDevice: 'Fake Interface'),
     );
+    engine.start();
 
-    expect(ok, isTrue);
-    expect(gateway.calls, contains('init'));
-    expect(gateway.calls.any((c) => c.startsWith('initOffline')), isFalse);
     expect(gateway.openedDevice, gateway.devices[1]);
+    expect(gateway.calls.where((c) => c.startsWith('openAudioDevice')), [
+      'openAudioDevice:Fake Interface:def:def:auto',
+    ]);
     expect(engine.activeAudioSettings?.outputDevice, 'Fake Interface');
     expect(engine.lastAudioNotice.value, isNull);
   });
 
-  test('a stored device that is missing stays on the default and notifies', () {
+  test('a stored device that is missing falls back to the default, notifies, '
+      'and keeps the notice for the shell', () {
     const stored = AudioSettings(
       outputHost: 'ASIO',
       outputDevice: 'Ghost Device',
     );
+    engine.requestBootAudio(stored);
     engine.start();
-    final ok = engine.switchAudioDevice(stored);
 
-    expect(ok, isFalse);
-    // Stayed on the platform default `start()` opened — a device *is* open, it
-    // just has no chosen name, which is not the same as the `null` that means
-    // nothing is open (issue #408).
+    // On the platform default — a device *is* open, it just has no chosen
+    // name, which is not the same as the `null` that means nothing is open
+    // (issue #408).
     expect(engine.activeAudioSettings, const AudioSettings());
     expect(engine.lastAudioNotice.value?.kind, AudioNoticeKind.switchReverted);
+    // Boot runs before the shell listens, so the notice is retained for it.
+    expect(engine.bootAudioNotices.map((n) => n.kind), [
+      AudioNoticeKind.switchReverted,
+    ]);
     // … while the stored preference (an immutable value) is untouched.
     expect(stored.outputDevice, 'Ghost Device');
   });
+
+  test(
+    'a live switch is not a boot notice, and a restart comes back on it',
+    () {
+      engine.start();
+      engine.switchAudioDevice(
+        const AudioSettings(outputHost: 'ASIO', outputDevice: 'Ghost Device'),
+      );
+      expect(engine.lastAudioNotice.value, isNotNull);
+      expect(engine.bootAudioNotices, isEmpty);
+
+      engine.switchAudioDevice(
+        const AudioSettings(outputHost: 'ASIO', outputDevice: 'Fake Interface'),
+      );
+      engine.stop();
+      engine.start();
+      expect(engine.activeAudioSettings?.outputHost, 'ASIO');
+    },
+  );
 
   test('switchAudioDevice is a no-op returning false before start()', () {
     final ok = engine.switchAudioDevice(

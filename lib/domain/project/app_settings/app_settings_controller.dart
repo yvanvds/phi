@@ -38,6 +38,12 @@ class AppSettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The persisted settings, read synchronously **without** adopting them as
+  /// [value] — for the composition root, which must hand the stored audio
+  /// device to the engine before the engine starts, long before [load] has run
+  /// (issues #443, #449). Never writes.
+  AppSettings readStoredSync() => _store.loadSync();
+
   /// Sets the live [value] to [next] and persists it immediately — settings
   /// writes are tiny (design §7). No-ops when [next] already equals the live
   /// value, so a redundant update neither writes the file nor notifies. The
