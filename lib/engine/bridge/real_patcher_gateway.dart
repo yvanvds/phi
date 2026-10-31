@@ -48,15 +48,24 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
   int createInstance({int mainOutputs = 2, String name = ''}) {
     final id = _nextInstanceId++;
     // [name] is the engine-direct bus name (the kind-stripped `patch.` entity
-    // address) the instance should register under so it is reachable at
-    // `patcher.<name>.<slot>` (issue #318). yse 0.2.0 ships the capability
-    // (`Patcher(name: ...)`, yvanvds/dart-yse#50); adopting it is issue #444.
-    // Until then a phi-created patcher stays anonymous natively.
+    // address): naming the native patcher publishes its `.s` / `.r` slots at
+    // `patcher.<name>.<slot>` (issues #318, #444). An empty name leaves the
+    // engine's auto-generated `patcher_<N>`, which phi never addresses.
     _instances[id] = _PatcherInstance(
-      Patcher(mainOutputs: mainOutputs),
-      busName: name,
+      Patcher(mainOutputs: mainOutputs, name: nativeNameFor(name)),
     );
     return id;
+  }
+
+  /// The name handed to `Patcher(name: ...)` for bus name [name], or `null`
+  /// for an anonymous (auto-named) patcher.
+  ///
+  /// The engine refuses names over [Patcher.maxNameLength] by throwing, but a
+  /// valid project address can be longer (issue #452). Such a patch falls
+  /// back to anonymous rather than failing to open at all.
+  static String? nativeNameFor(String name) {
+    if (name.isEmpty || name.length > Patcher.maxNameLength) return null;
+    return name;
   }
 
   @override
@@ -417,14 +426,9 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
 /// One open patcher: its native [Patcher], handle table, and at most one
 /// [Sound] mounting it on a mix bus.
 class _PatcherInstance {
-  _PatcherInstance(this.patcher, {this.busName = ''});
+  _PatcherInstance(this.patcher);
 
   final Patcher patcher;
-
-  /// The engine-direct bus name this instance should register under — the
-  /// kind-stripped `patch.` entity address (issue #318). Not yet forwarded to
-  /// `Patcher(name: ...)` (issue #444); see [createInstance].
-  final String busName;
 
   final Map<int, PHandle> handles = {};
   Sound? mounted;

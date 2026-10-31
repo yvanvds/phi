@@ -54,6 +54,39 @@ void main() {
     expect(cable.inlet, 0);
   });
 
+  group('named instances (issue #444)', () {
+    Future<void> flush() => Future<void>.delayed(Duration.zero);
+
+    Future<List<BusValue>> sendThroughSlot(String name, String address) async {
+      final inst = gateway.createInstance(name: name);
+      final send = gateway.createObject(inst, Obj.gSend, args: 'cutoff');
+      final values = <BusValue>[];
+      final sub = Bus.subscribe(address).listen((f) => values.add(f.value));
+      addTearDown(sub.cancel);
+      gateway.sendFloat(inst, send, 0, 0.25);
+      await flush();
+      return values;
+    }
+
+    test('a .s slot of a named patch publishes at patcher.<name>.<slot>', () {
+      expect(
+        sendThroughSlot('fx.swirl', 'patcher.fx.swirl.cutoff'),
+        completion([const BusFloat(0.25)]),
+      );
+    });
+
+    test('an over-long name opens anonymous instead of throwing', () async {
+      final long = 'x' * (Patcher.maxNameLength + 1);
+      expect(RealPatcherGateway.nativeNameFor(long), isNull);
+      expect(await sendThroughSlot(long, 'patcher.$long.cutoff'), isEmpty);
+    });
+
+    test('an empty name stays anonymous', () {
+      expect(RealPatcherGateway.nativeNameFor(''), isNull);
+      expect(RealPatcherGateway.nativeNameFor('fx.swirl'), 'fx.swirl');
+    });
+  });
+
   test('objectTypes carries the engine categories through one-to-one', () {
     final byType = {for (final d in gateway.objectTypes()) d.type: d};
     expect(byType['.route']?.category, PatchObjectCategory.routing);
