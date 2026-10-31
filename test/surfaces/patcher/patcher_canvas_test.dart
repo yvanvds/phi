@@ -3566,4 +3566,91 @@ void main() {
       expect(activeCursor(), SystemMouseCursors.move);
     });
   });
+
+  group('note right-edge resize (issue #488)', () {
+    const textDesc = PatchObjectDescriptor(
+      type: Obj.gText,
+      description: 'text label',
+      category: PatchObjectCategory.gui,
+      isDsp: false,
+      inlets: [],
+      outlets: [],
+      params: [
+        PatchParamDescriptor(
+          name: 'text',
+          doc: 'label text',
+          defaultValue: '',
+          range: 'any string',
+        ),
+      ],
+    );
+    const paragraph =
+        'A sine runs into the dac. Drag the slider to sweep its frequency '
+        'and listen to how the pitch follows.';
+
+    PatchNode note() => controller.addObject(
+      desc: textDesc,
+      position: const Offset(200, 200),
+      args: paragraph,
+    );
+
+    Offset rightEdge(WidgetTester tester, PatchNode n) =>
+        canvasTL(tester) +
+        Offset(
+          n.position.dx + n.size.width - 1,
+          n.position.dy + n.size.height / 2,
+        );
+
+    testWidgets('the edge offers a resize and a drag re-wraps in one undo', (
+      tester,
+    ) async {
+      final n = note();
+      final before = n.size;
+      await pumpCanvas(tester);
+      final g = await mouse(tester);
+
+      await g.moveTo(rightEdge(tester, n));
+      await tester.pumpAndSettle();
+      expect(activeCursor(), SystemMouseCursors.resizeLeftRight);
+
+      await g.down(rightEdge(tester, n));
+      await tester.pump();
+      await g.moveBy(const Offset(60, 0));
+      await tester.pump();
+      await g.moveBy(const Offset(60, 0));
+      await tester.pump();
+      await g.up();
+      await tester.pumpAndSettle();
+
+      expect(n.size.width, before.width + 120);
+      expect(n.size.height, lessThan(before.height));
+      expect(n.position, const Offset(200, 200), reason: 'resized, not moved');
+      expect(tester.getSize(find.byType(PatcherNodeView)), n.size);
+
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(n.size, before);
+    });
+
+    testWidgets('inside the note a press still drags it', (tester) async {
+      final n = note();
+      final before = n.size;
+      await pumpCanvas(tester);
+
+      await tester.dragFrom(nodeCenter(tester, n), const Offset(40, 0));
+      await tester.pumpAndSettle();
+
+      expect(n.position, const Offset(240, 200));
+      expect(n.size, before);
+    });
+
+    testWidgets('run mode has no resize handle', (tester) async {
+      final n = note();
+      await pumpCanvas(tester, initialMode: PatchCanvasMode.run);
+      final g = await mouse(tester);
+
+      await g.moveTo(rightEdge(tester, n));
+      await tester.pumpAndSettle();
+      expect(activeCursor(), isNot(SystemMouseCursors.resizeLeftRight));
+    });
+  });
 }

@@ -213,6 +213,15 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
     return _positionOf(h);
   }
 
+  @override
+  void setGuiProperty(int instanceId, int handleId, String key, String value) {
+    _inst(instanceId).handles[handleId]?.setGuiProperty(key, value);
+  }
+
+  @override
+  String guiProperty(int instanceId, int handleId, String key) =>
+      _inst(instanceId).handles[handleId]?.getGuiProperty(key) ?? '';
+
   /// The stored `(x, y)` of one native [PHandle], or `null` when either
   /// coordinate is missing or malformed — shared by [getNodePosition] and
   /// [enumerate].

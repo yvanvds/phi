@@ -17,6 +17,7 @@ import '../../domain/patcher/patch_node_id.dart';
 import '../../domain/patcher/patch_port.dart';
 import '../../domain/patcher/patch_port_id.dart';
 import '../../domain/patcher/patch_port_kind.dart';
+import '../../domain/patcher/patch_type_name.dart';
 import '../../engine/bridge/patch_object_descriptor.dart';
 import '../../engine/state/patcher_controller.dart';
 import 'create/patch_inline_object_box.dart';
@@ -225,6 +226,14 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   Offset _nodeDragScene = Offset.zero;
   bool _draggingNode = false;
 
+  // Note right-edge resize (issue #488): the note whose edge the press landed
+  // on, the scene x of the press and the note's width at that moment. The
+  // drag moves the edge by the pointer's horizontal travel; the release
+  // journals one step.
+  PatchNodeId? _resizeNote;
+  double _resizePressX = 0;
+  double _resizeFromWidth = 0;
+
   // Whether the press currently in flight belongs to a widget under the canvas
   // rather than to the canvas itself — the open inline object box, or (since
   // issue #378) any node body while the canvas is in run mode. The canvas
@@ -314,6 +323,9 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   Timer? _rejectTimer;
 
   static const double _clickSlop = 4;
+
+  /// Half-width, in scene pixels, of a note's right-edge resize band.
+  static const double _noteEdgeBand = 4;
 
   /// Zoom range the view is held inside, however it got there — the wheel, a
   /// pinch, or the `Ctrl+0` fit.
@@ -1014,6 +1026,18 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       _controller.beginCableDrag(port);
       return;
     }
+    // The right edge of a note: resize its wrap width (issue #488). Ahead of
+    // the cable grab and the node itself, because the band sits on the very
+    // pixels that would otherwise drag the note.
+    final edge = _noteEdgeAt(scene);
+    if (edge != null) {
+      _invalidatePendingTap();
+      _resizeNote = edge.id;
+      _resizePressX = scene.dx;
+      _resizeFromWidth = edge.size.width;
+      _controller.beginNoteResize(edge.id);
+      return;
+    }
     // Just off a port, along an existing cable: arm a re-route of that cable.
     // Only *armed* here — the detach waits for the pointer to clear the click
     // slop, so a click near an endpoint still selects the cable it is on.
@@ -1065,6 +1089,11 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       return;
     }
     _trackGhost(event.localPosition);
+    if (_resizeNote != null) {
+      final scene = _toScene(event.localPosition);
+      _controller.previewNoteWidth(_resizeFromWidth + scene.dx - _resizePressX);
+      return;
+    }
     if (_pressCable != null) {
       _moveCableGrab(_toScene(event.localPosition));
       return;
@@ -1150,6 +1179,15 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       return;
     }
     final scene = _toScene(event.localPosition);
+
+    // A note resize ends where the pointer let go — one journaled step, or
+    // nothing when the edge came back to where it started.
+    if (_resizeNote != null) {
+      _resizeNote = null;
+      _controller.endNoteResize();
+      _applyHover(event.localPosition);
+      return;
+    }
 
     // A cable-end press that never cleared the slop is not a re-route: it is
     // the click that selects the cable it landed on (issue #359).
@@ -1292,11 +1330,24 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
         objectTypes: widget.objectTypes,
         editing: editing,
         initialText: editing == null ? '' : _controller.objectLineOf(id!),
+        // A note is edited in a field as wide as the note, so its paragraph
+        // reads at the measure it wraps at on the canvas (issue #488).
+        width: _inlineWidthFor(id),
         onCommit: _commitInline,
         onDismiss: _closeInline,
         onResolve: widget.onTypeResolved,
       ),
     );
+  }
+
+  /// The inline box's width: the default, or — editing a note wider than
+  /// that — the note's own width.
+  double _inlineWidthFor(PatchNodeId? id) {
+    final node = id == null ? null : _controller.graph.nodeById(id);
+    if (node == null || !PatchTypeName.isNote(node.type)) {
+      return PatchInlineObjectBox.defaultWidth;
+    }
+    return math.max(PatchInlineObjectBox.defaultWidth, node.size.width);
   }
 
   void _openInlineCreate(Offset scene) {
@@ -1464,6 +1515,8 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // them and nothing is journaled. Unconditional — the point of this path is
     // that it clears drag origins however they got there.
     _controller.abortNodeDrag();
+    // A cancelled resize puts the note back at the width the press found.
+    _controller.abortNoteResize();
     // A cancelled re-route puts its cable back. Ordered before the drag is
     // dropped because a cable that quietly vanished — the window lost capture
     // mid-gesture — is the worst thing this path could leave behind (#359).
@@ -1497,6 +1550,9 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       _nodePressScene = Offset.zero;
       _nodeDragScene = Offset.zero;
       _draggingNode = false;
+      _resizeNote = null;
+      _resizePressX = 0;
+      _resizeFromWidth = 0;
       // A press the user never completed is never half of a double-click — and
       // it invalidates the press before it, exactly as a moved press does.
       //
@@ -1573,6 +1629,10 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       _setHover(SystemMouseCursors.precise, port);
       return;
     }
+    if (_noteEdgeAt(scene) != null) {
+      _setHover(SystemMouseCursors.resizeLeftRight, null);
+      return;
+    }
     if (_cableEndAt(scene) != null) {
       _setHover(SystemMouseCursors.grab, null);
       return;
@@ -1645,6 +1705,32 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   }
 
   // ─── hit-testing (scene coordinates) ─────────────────────────────────────
+
+  /// The note whose **right edge** is under [scene] — the resize handle of
+  /// issue #488 — topmost first, or null. A band [_noteEdgeBand] wide either
+  /// side of the edge, the note's full height; only notes have one, and only
+  /// in edit mode, where the canvas owns the presses.
+  PatchNode? _noteEdgeAt(Offset scene) {
+    if (widget.mode.isRun) return null;
+    for (final n in _controller.graph.nodes.toList().reversed) {
+      if (!PatchTypeName.isNote(n.type)) {
+        // A node drawn over a note owns its pixels, edge or not.
+        if (_rectOf(n).contains(scene)) return null;
+        continue;
+      }
+      final right = n.position.dx + n.size.width;
+      if ((scene.dx - right).abs() <= _noteEdgeBand &&
+          scene.dy >= n.position.dy &&
+          scene.dy <= n.position.dy + n.size.height) {
+        return n;
+      }
+      if (_rectOf(n).contains(scene)) return null;
+    }
+    return null;
+  }
+
+  static Rect _rectOf(PatchNode n) =>
+      Rect.fromLTWH(n.position.dx, n.position.dy, n.size.width, n.size.height);
 
   /// The node under [scene], topmost first: nodes paint in graph order, so a
   /// press on an overlap belongs to the last one drawn — the one the user sees.

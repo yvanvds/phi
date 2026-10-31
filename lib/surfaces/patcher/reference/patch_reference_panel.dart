@@ -291,10 +291,18 @@ class _PortEntry extends StatelessWidget {
                 ),
               ),
               if (current != null)
-                Text(
-                  '= $current',
-                  key: valueKey,
-                  style: PhiType.monoS().copyWith(color: PhiColors.voice1),
+                // Flexible and one line: a note's value is its whole text — a
+                // paragraph since issue #488 — and must ellipsise, not push the
+                // row off the panel.
+                Flexible(
+                  child: Text(
+                    '= $current',
+                    key: valueKey,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: PhiType.monoS().copyWith(color: PhiColors.voice1),
+                  ),
                 ),
             ],
           ),

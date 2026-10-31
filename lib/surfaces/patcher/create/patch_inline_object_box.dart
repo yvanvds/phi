@@ -50,6 +50,10 @@ import '../../../engine/bridge/patch_object_descriptor.dart';
 /// - **A refusal keeps the box open** with the reason under it, so a typo is
 ///   corrected in place rather than costing the whole gesture. **Escape**
 ///   dismisses and leaves the canvas exactly as it was.
+/// - **A note may span lines** (issue #488): once the line names the note
+///   object, Shift+Enter inserts a line break into its text and the field
+///   grows to show it, while Enter still commits. For any other object
+///   Shift+Enter is simply Enter.
 /// - **The reference panel follows the name as it settles** (issue #437):
 ///   the moment the typed name unambiguously names one catalogue type — typed
 ///   out in full, a bare name only one object answers to, a completion list
@@ -87,6 +91,7 @@ class PatchInlineObjectBox extends StatefulWidget {
     this.editing,
     this.initialText = '',
     this.onResolve,
+    this.width = PatchInlineObjectBox.defaultWidth,
     super.key,
   });
 
@@ -125,8 +130,12 @@ class PatchInlineObjectBox extends StatefulWidget {
   /// object, values and all.
   final void Function(PatchObjectDescriptor desc)? onResolve;
 
-  /// Width of the typing field. The completion list matches it.
-  static const double width = 190;
+  /// Default width of the typing field. The completion list matches it.
+  static const double defaultWidth = 190;
+
+  /// This box's field width — [defaultWidth], or wider when the canvas opens
+  /// it over a note wider than that (issue #488).
+  final double width;
 
   /// Key on the type-in field.
   static const Key fieldKey = Key('PatchInlineObjectBox.field');
@@ -396,6 +405,36 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
     _notifyResolve();
   }
 
+  /// Whether the line names the **note** object (issue #488) — the one type
+  /// whose argument is free text that may span lines. Only a settled answer
+  /// counts, so a half-typed `te` with `.text` merely highlighted is not one.
+  bool get _isNote => PatchTypeName.isNote(_resolvedUnambiguously?.type ?? '');
+
+  /// Whether the field is showing more than one line — a note, or a line that
+  /// already holds a break.
+  bool get _multiline => _isNote || _text.text.contains('\n');
+
+  /// Shift+Enter: a line break in a note's text (issue #488). Anywhere else it
+  /// is Enter — there is no other object whose arguments may hold one.
+  void _shiftEnter() {
+    if (!_isNote) {
+      _submit();
+      return;
+    }
+    final value = _text.value;
+    final sel = value.selection.isValid
+        ? value.selection
+        : TextSelection.collapsed(offset: value.text.length);
+    final text = value.text.replaceRange(sel.start, sel.end, '\n');
+    _text.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: sel.start + 1),
+    );
+    // The name before the first whitespace is untouched, so the completion
+    // and whatever was chosen stand; only a standing refusal is now stale.
+    setState(() => _reject = null);
+  }
+
   /// Enter: resolve the name, check the arguments, and commit — or refuse
   /// inline and stay open.
   void _submit() {
@@ -450,13 +489,25 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
       // Enter is bound as well as handled through `onSubmitted`: the submit
       // action is a platform round-trip that a test (and a headless run) never
       // makes, and this is the gesture's whole point.
+      //
+      // Shift+Enter is its own activator (a `SingleActivator` matches its
+      // modifiers exactly, so plain Enter never sees it): a line break in a
+      // note, Enter for everything else (issue #488). Once a note's text runs
+      // over several lines the arrows are the caret's again — moving between
+      // lines of a paragraph is what they mean there, not the completion list.
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): widget.onDismiss,
-        const SingleActivator(LogicalKeyboardKey.arrowDown): () => _move(1),
-        const SingleActivator(LogicalKeyboardKey.arrowUp): () => _move(-1),
+        if (!(_isNote && _text.text.contains('\n'))) ...{
+          const SingleActivator(LogicalKeyboardKey.arrowDown): () => _move(1),
+          const SingleActivator(LogicalKeyboardKey.arrowUp): () => _move(-1),
+        },
         const SingleActivator(LogicalKeyboardKey.tab): _insertCompletion,
         const SingleActivator(LogicalKeyboardKey.enter): _submit,
         const SingleActivator(LogicalKeyboardKey.numpadEnter): _submit,
+        const SingleActivator(LogicalKeyboardKey.enter, shift: true):
+            _shiftEnter,
+        const SingleActivator(LogicalKeyboardKey.numpadEnter, shift: true):
+            _shiftEnter,
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -472,7 +523,7 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
 
   Widget _field() {
     return Container(
-      width: PatchInlineObjectBox.width,
+      width: widget.width,
       decoration: BoxDecoration(
         color: PhiColors.bg2,
         borderRadius: PhiRadii.all1,
@@ -487,6 +538,13 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
         focusNode: _focus,
         onChanged: _onChanged,
         onSubmitted: (_) => _submit(),
+        // A note's text wraps and keeps its breaks (issue #488); every other
+        // line stays one line. Enter is still the submit either way — it is
+        // claimed by the bindings above before the platform could turn it into
+        // a newline.
+        maxLines: _multiline ? null : 1,
+        keyboardType: TextInputType.text,
+        textInputAction: TextInputAction.done,
         decoration: InputDecoration(
           isDense: true,
           border: InputBorder.none,
@@ -503,7 +561,7 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
   Widget _rejectLine(String message) {
     return Container(
       key: PatchInlineObjectBox.rejectKey,
-      width: PatchInlineObjectBox.width,
+      width: widget.width,
       padding: const EdgeInsets.only(top: PhiSpacing.s0),
       child: Text(
         message,
@@ -515,7 +573,7 @@ class _PatchInlineObjectBoxState extends State<PatchInlineObjectBox> {
   Widget _completions() {
     final height = math.min(_rowHeight * _matches.length, _maxListHeight);
     return Container(
-      width: PatchInlineObjectBox.width,
+      width: widget.width,
       height: height,
       margin: const EdgeInsets.only(top: PhiSpacing.s1),
       decoration: BoxDecoration(
