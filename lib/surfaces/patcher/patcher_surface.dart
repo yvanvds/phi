@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:yse/yse.dart';
 
 import '../../design/tokens/phi_colors.dart';
 import '../../design/tokens/phi_type.dart';
 import '../../domain/patcher/patch_node.dart';
 import '../../domain/patcher/patch_node_id.dart';
+import '../../domain/patcher/patch_object_types.dart';
 import '../../domain/patcher/patch_port.dart';
 import '../../domain/patcher/patch_port_id.dart';
 import '../../engine/bridge/patch_object_descriptor.dart';
@@ -236,17 +236,17 @@ class _PatcherViewportState extends State<_PatcherViewport> {
     // sub-audible. A math-node mapping arrives in a follow-up; for now
     // the demo proves the architecture, not the musicality.
     final slider = controller.addNode(
-      desc: registry.find(Obj.gSlider)!,
+      desc: registry.find(PatchObjectTypes.gSlider)!,
       position: const Offset(120, 180),
       voice: 1,
     );
     final sine = controller.addNode(
-      desc: registry.find(Obj.dSine)!,
+      desc: registry.find(PatchObjectTypes.dSine)!,
       position: const Offset(280, 220),
       voice: 2,
     );
     final dac = controller.addNode(
-      desc: registry.find(Obj.dDac)!,
+      desc: registry.find(PatchObjectTypes.dDac)!,
       position: const Offset(500, 240),
       voice: 3,
     );

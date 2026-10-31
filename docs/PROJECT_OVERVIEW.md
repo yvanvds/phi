@@ -2561,6 +2561,12 @@ main + app          (orchestration)
   Two new one-fact helpers keep it from being restated five times: pure-Dart
   `PatchTypeName` (`lib/domain/patcher/`, `bare` / `isDsp`) and
   `PatchTypeStyle` (`lib/design/widgets/patcher/`, `color(isDsp)`).
+  The surfaces name engine type ids (node-body registrations, the seed patch)
+  through `PatchObjectTypes` (`lib/domain/patcher/`, issue #483), a pure-Dart
+  mirror of the `Obj.*` constants they need, so `package:yse` stays inside
+  `lib/engine/bridge/`; a drift guard checks each id against `Obj.all`, and
+  `test/engine/bridge/yse_import_boundary_test.dart` fails any `package:yse`
+  import elsewhere under `lib/`.
   `PatcherController.objectLine` now bares the type it is handed, so the box is
   *measured* from the line it actually prints; `PatchObjectBox` takes an `isDsp`
   and colours its line with it. The palette and the inline create box's
