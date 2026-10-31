@@ -17,8 +17,8 @@ import 'real_midi_transport.dart';
 /// MIDI **input** surface: name-addressed enumeration, open/close of the enabled
 /// input ports (each mapped to a live [MidiIn]), and an [inputActivity] tick per
 /// received message. Nothing routes MIDI-in anywhere yet (design §8); this only
-/// opens the hardware and reports activity. Requires `libyse.dll` discoverable
-/// at runtime — see README.md for the Windows setup.
+/// opens the hardware and reports activity. Requires the engine library
+/// (`libyse.dll` / `libyse.so`) discoverable at runtime — see README.md.
 class RealMidiGateway implements MidiGateway {
   System? _sys;
   MidiOut? _out;

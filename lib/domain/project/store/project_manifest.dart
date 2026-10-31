@@ -16,7 +16,7 @@ import '../../shell_layout/shell_layout.dart';
 /// here because a set's arrangement is part of the set, yet it is **journal-free
 /// and not undoable** — workspace arrangement, not authored content, so recovery
 /// replay ignores it (§7 decision 1). The recent-projects list deliberately does
-/// *not* live here; it belongs to app settings (`%APPDATA%/phi/`).
+/// *not* live here; it belongs to the per-user app settings.
 ///
 /// A plain, immutable value type: it (de)serialises to a JSON map and compares
 /// by value so a save/load round-trip is easy to assert.

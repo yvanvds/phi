@@ -8,7 +8,9 @@
 
 Phi is a flexible workstation for live electronic music performance — see
 [phi-vision.md](phi-vision.md) for the full vision. Personal years-long
-project, Windows desktop only.
+project, Windows desktop; a Linux x64 runner is scaffolded (`linux/`, issue
+#454) but `flutter build linux` is blocked on `flutter_angle`'s Linux plugin
+(issue #455).
 
 ## Stack at a glance
 
@@ -16,14 +18,16 @@ project, Windows desktop only.
 |--------------|-------------------------------------------------------|
 | Audio engine | C++ (`yse-soundengine`)                               |
 | FFI bridge   | `dart-yse` — Dart wrapper, package name `yse`         |
-| UI shell     | Flutter ≥ 3.47.1, Windows desktop                     |
+| UI shell     | Flutter ≥ 3.47.1, Windows desktop (Linux x64 in progress, #454) |
 | Design       | Dart tokens derived from `design system/colors_and_type.css` |
-| 3D viewport  | macbear_3d (ANGLE / OpenGL ES 3), pub.dev 0.9.0       |
+| 3D viewport  | macbear_3d (ANGLE / OpenGL ES 3), pub.dev 0.9.0 — its `flutter_angle` Linux plugin does not build/render yet (#455) |
 | Scripting    | Python with DSL (Phase ≥ 2 — not yet)                 |
 
 `yse` is consumed from pub.dev (`^0.2.0`, libYSE 3.1.0). Its native-assets
 build hook downloads the pinned engine release and bundles `libyse.dll` plus
-its runtime DLLs next to the executable, locally and in CI; `YSE_DLL_PATH`
+its runtime DLLs next to the executable on Windows (`libyse.so` into
+`bundle/lib/` on Linux, which links libsndfile/portaudio/rtmidi from the
+system), locally and in CI; `YSE_DLL_PATH`
 (a directory) overrides it for a local engine build. The `dart-yse` source
 checkout at `d:\dart-yse` is only needed to work on the wrapper itself.
 
@@ -39,7 +43,8 @@ main + app          (orchestration)
 ├── design          (tokens + reusable widgets — no domain knowledge)
 ├── domain          (pure-Dart models — session/ wired; more arrives later)
 ├── platform        (windows-specific bits — empty for now)
-└── core            (cross-cutting helpers — `Clock` wall-clock seam)
+└── core            (cross-cutting helpers — `Clock` wall-clock seam,
+                     `PerUserFolders` settings/logs folder resolver)
 ```
 
 ## Current phase
@@ -1013,7 +1018,8 @@ main + app          (orchestration)
   recent-projects list, and an autosave timer (default 60 s, cadence in settings,
   which keeps running while the transport plays). `AppSettings` (a `version` field,
   recent projects, pinned projects, autosave cadence, plus `AudioSettings` and
-  `MidiSettings` value sections) persists to `%APPDATA%/phi/settings.json` through
+  `MidiSettings` value sections) persists to `%APPDATA%/phi/settings.json` (Linux: `$XDG_CONFIG_HOME/phi/`,
+  default `~/.config/phi/`, resolved by `lib/core/per_user_folders.dart`, #454) through
   a Real/Fake `AppSettingsStore` seam (`lib/domain/project/app_settings/`); each
   section parses tolerantly (missing/malformed keys fall back to defaults) so an
   older file still loads, and pinned projects are listed first in the File menu and
@@ -2086,6 +2092,7 @@ main + app          (orchestration)
   and `format()`s to one plain readable file line. A `LogStore` (ChangeNotifier)
   is the ~2000-entry ring buffer the panel will watch, dropping the oldest when
   full. `SessionLog` mirrors the store to `%APPDATA%/phi/logs/phi-<timestamp>.log`
+  (Linux: `$XDG_STATE_HOME/phi/logs/`, default `~/.local/state/phi/logs/`)
   over a `LogFileStore` seam (`RealLogFileStore` on `dart:io`, faked in tests):
   `boot` opens the session file, prunes to the newest 20 sessions, and turns the
   **clean-shutdown marker** into crash detection — a marker *present* at boot means

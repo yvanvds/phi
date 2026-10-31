@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../../../core/per_user_folders.dart';
+
 import 'app_settings.dart';
 import 'app_settings_store.dart';
 
@@ -11,10 +13,9 @@ import 'app_settings_store.dart';
 /// `docs/design/project-registry.md` §5 — `dart:io` is fine in this non-Flutter
 /// layer).
 ///
-/// On Windows the folder is `%APPDATA%/phi/`; elsewhere it falls back to
-/// `$HOME/.phi/` (or the current directory as a last resort) so the same code
-/// runs under a Linux CI without a real `%APPDATA%`. The [directory] can be
-/// overridden for tests that want a real temp folder.
+/// The folder comes from [PerUserFolders]: `%APPDATA%/phi/` on Windows,
+/// `$XDG_CONFIG_HOME/phi/` (default `~/.config/phi/`) on Linux. The [directory]
+/// can be overridden for tests that want a real temp folder.
 class RealAppSettingsStore implements AppSettingsStore {
   /// Binds the store to a settings [directory], defaulting to the platform's
   /// per-user app-data folder ([defaultDirectory]).
@@ -27,17 +28,10 @@ class RealAppSettingsStore implements AppSettingsStore {
   /// The settings file's name inside [directory].
   static const String fileName = 'settings.json';
 
-  /// The default per-user settings folder: `%APPDATA%/phi/` on Windows, else
-  /// `$HOME/.phi/`, else `./.phi/`.
-  static Directory defaultDirectory() {
-    final env = Platform.environment;
-    final base =
-        env['APPDATA'] ??
-        env['HOME'] ??
-        env['USERPROFILE'] ??
-        Directory.current.path;
-    return Directory(p.join(base, 'phi'));
-  }
+  /// The default per-user settings folder for the running platform — see
+  /// [PerUserFolders.settingsDirectory].
+  static Directory defaultDirectory() =>
+      Directory(PerUserFolders.host().settingsDirectory());
 
   File get _file => File(p.join(directory.path, fileName));
 

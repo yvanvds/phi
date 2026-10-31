@@ -46,7 +46,7 @@ class PhiApp extends StatefulWidget {
   });
 
   /// Optional engine override — tests inject a fake-backed engine here so
-  /// the production `PhiEngine.production()` (and its libyse.dll load)
+  /// the production `PhiEngine.production()` (and its engine-library load)
   /// never runs in a test process.
   final PhiEngine? engine;
 
@@ -55,7 +55,8 @@ class PhiApp extends StatefulWidget {
 
   /// Optional project-lifecycle controller. `null` lets the app build a
   /// production controller over the real project/journal stores and
-  /// `%APPDATA%/phi/` settings; tests inject one wired to fakes.
+  /// per-user settings (`%APPDATA%/phi/`, or `~/.config/phi/` on Linux); tests
+  /// inject one wired to fakes.
   final ProjectController? projectController;
 
   /// Optional folder picker for the project menu. `null` uses the real
@@ -118,7 +119,8 @@ class _PhiAppState extends State<PhiApp> {
 
   /// The production session-file mirror (design `docs/design/diagnostics.md`
   /// §2): booted on the production path so engine / Python / app log entries
-  /// land under `%APPDATA%/phi/logs/`, closed with a clean-shutdown marker on
+  /// land in the per-user logs folder (`%APPDATA%/phi/logs/`, or
+  /// `~/.local/state/phi/logs/` on Linux), closed with a clean-shutdown marker on
   /// orderly exit. `null` when a test injected an engine (no disk in tests) or a
   /// notice center (it owns its own recorder).
   SessionLog? _sessionLog;
@@ -168,7 +170,7 @@ class _PhiAppState extends State<PhiApp> {
       );
       _ownsEngine = true;
       // Production only: mirror the unified log to a per-session file under
-      // `%APPDATA%/phi/logs/` (design §2). Skipped when a test injected a notice
+      // the per-user logs folder (design §2). Skipped when a test injected a notice
       // center — it owns its own recorder and wants no disk. Booting is
       // fire-and-forget; early entries that predate it stay in the ring buffer.
       if (widget.noticeCenter == null) {

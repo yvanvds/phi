@@ -12,9 +12,10 @@ import 'yse_gateway.dart';
 
 /// Production [YseGateway] that forwards every call to `System.instance`.
 ///
-/// Requires `libyse.dll` discoverable at runtime — either next to the
-/// executable or pointed at by the `YSE_DLL_PATH` environment variable. See
-/// README.md for the Windows setup.
+/// Requires the engine library (`libyse.dll` on Windows, `libyse.so` on Linux)
+/// discoverable at runtime — bundled with the executable by the `yse` build
+/// hook, or pointed at by the `YSE_DLL_PATH` environment variable. See
+/// README.md.
 class RealYseGateway implements YseGateway {
   System? _sys;
   final List<MidiIn> _midiInputs = [];

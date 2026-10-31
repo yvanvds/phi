@@ -2,15 +2,17 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../../core/per_user_folders.dart';
+
 import 'log_file_store.dart';
 
 /// The production [LogFileStore]: session logs and the clean-shutdown marker on
-/// the real filesystem, under `%APPDATA%/phi/logs/` (design
+/// the real filesystem, in the per-user logs folder (design
 /// `docs/design/diagnostics.md` §2, §6, §8 decision 1 — per-machine diagnostics).
 ///
-/// Mirrors `RealAppSettingsStore`: on Windows the folder is `%APPDATA%/phi/logs/`;
-/// elsewhere it falls back to `$HOME/.phi/logs/` so the same code runs on a Linux
-/// CI. The [directory] can be overridden for tests that want a real temp folder.
+/// The folder comes from [PerUserFolders]: `%APPDATA%/phi/logs/` on Windows,
+/// `$XDG_STATE_HOME/phi/logs/` (default `~/.local/state/phi/logs/`) on Linux.
+/// The [directory] can be overridden for tests that want a real temp folder.
 class RealLogFileStore implements LogFileStore {
   /// Binds the store to a logs [directory], defaulting to [defaultDirectory].
   RealLogFileStore({Directory? directory})
@@ -23,17 +25,10 @@ class RealLogFileStore implements LogFileStore {
   /// mistaken for a session file.
   static const String markerFileName = 'clean-shutdown.marker';
 
-  /// The default per-user logs folder: `%APPDATA%/phi/logs/` on Windows, else
-  /// `$HOME/.phi/logs/`, else `./.phi/logs/`.
-  static Directory defaultDirectory() {
-    final env = Platform.environment;
-    final base =
-        env['APPDATA'] ??
-        env['HOME'] ??
-        env['USERPROFILE'] ??
-        Directory.current.path;
-    return Directory(p.join(base, 'phi', 'logs'));
-  }
+  /// The default per-user logs folder for the running platform — see
+  /// [PerUserFolders.logsDirectory].
+  static Directory defaultDirectory() =>
+      Directory(PerUserFolders.host().logsDirectory());
 
   bool _isSessionLog(String name) =>
       name.startsWith('phi-') && name.endsWith('.log');

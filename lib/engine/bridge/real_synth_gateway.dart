@@ -14,7 +14,7 @@ import 'synth_gateway.dart';
 /// loaders. Both default to no-ops (master bus, identity path) so a bare gateway
 /// still constructs — the engine wires the real resolvers in issue #208.
 ///
-/// Requires `libyse.dll` discoverable at runtime — see README.md. The heavy
+/// Requires the engine library (`libyse.dll` / `libyse.so`) discoverable at runtime — see README.md. The heavy
 /// lifting lives on the [RealMaterialisedSynth] handle each call mints.
 class RealSynthGateway implements SynthGateway {
   RealSynthGateway({MixBusResolver? busResolver, this._resolveAsset})

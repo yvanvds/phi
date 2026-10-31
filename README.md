@@ -22,7 +22,9 @@ planned (Scene · Patcher · Code · State · MIDI · Mix); only Mix has a stub.
 
 - **Engine:** [yse-soundengine](https://github.com/yvanvds/yse-soundengine) (C++).
 - **FFI bridge:** [dart-yse](https://github.com/yvanvds/dart-yse) — package name `yse`.
-- **UI:** Flutter ≥ 3.47.1, Windows desktop only for now.
+- **UI:** Flutter ≥ 3.47.1, Windows desktop. Linux x64 is in progress (#454):
+  the runner is scaffolded, but the build is blocked on the 3D viewport's
+  `flutter_angle` Linux plugin (#455).
 - **Design system:** [`design system/`](design%20system/) — colors, type, motion,
   components. Source-of-truth for the Dart token files under `lib/design/tokens/`.
 
@@ -49,6 +51,11 @@ precedence over the bundled library:
 ```powershell
 $env:YSE_DLL_PATH = "D:\path\to\yse-soundengine\build\bin"
 ```
+
+Per-user settings and session logs live in `%APPDATA%\phi\` on Windows. On
+Linux they follow the XDG spec: `$XDG_CONFIG_HOME/phi/` (default
+`~/.config/phi/`) for `settings.json` and `$XDG_STATE_HOME/phi/logs/` (default
+`~/.local/state/phi/logs/`) for logs.
 
 ## Develop
 

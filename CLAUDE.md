@@ -41,8 +41,9 @@ maintainer-applied.
 
 ## Running locally
 
-Requires Windows and Flutter ≥ 3.47.1. `yse` (^0.2.0) comes from pub.dev; its
-native-assets build hook downloads and bundles `libyse.dll` next to the
+Requires Windows and Flutter ≥ 3.47.1 (a Linux x64 runner exists under
+`linux/`, but its build is blocked on `flutter_angle` — see #455). `yse`
+(^0.2.0) comes from pub.dev; its native-assets build hook downloads and bundles `libyse.dll` next to the
 executable, so no engine setup is needed. `YSE_DLL_PATH` (a directory) still
 takes precedence, for testing against a local engine build. See
 [README.md](README.md).
