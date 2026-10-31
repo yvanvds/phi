@@ -2,7 +2,7 @@ import 'audio_settings.dart';
 import 'midi_settings.dart';
 
 /// The app-wide settings that live outside any project — the contents of the
-/// settings file in `%APPDATA%/phi/` (design
+/// per-user settings file (`%APPDATA%/phi/`, `~/.config/phi/` on Linux; design
 /// `docs/design/project-registry.md` §5, §9 and
 /// `docs/design/settings-and-devices.md` §3).
 ///

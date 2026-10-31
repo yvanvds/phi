@@ -22,25 +22,33 @@ planned (Scene · Patcher · Code · State · MIDI · Mix); only Mix has a stub.
 
 - **Engine:** [yse-soundengine](https://github.com/yvanvds/yse-soundengine) (C++).
 - **FFI bridge:** [dart-yse](https://github.com/yvanvds/dart-yse) — package name `yse`.
-- **UI:** Flutter ≥ 3.47.1, Windows desktop only for now.
+- **UI:** Flutter ≥ 3.47.1, Windows and Linux (x64) desktop. There is no 3D
+  Scene renderer on any platform for now (#455).
 - **Design system:** [`design system/`](design%20system/) — colors, type, motion,
   components. Source-of-truth for the Dart token files under `lib/design/tokens/`.
 
 ## Build
 
-Requires Windows and [Flutter](https://docs.flutter.dev/get-started/install) ≥ 3.47.1.
+Requires Windows or Linux (x64) and [Flutter](https://docs.flutter.dev/get-started/install) ≥ 3.47.1.
 
 ```powershell
 git clone https://github.com/yvanvds/phi
 cd phi
 flutter pub get
-flutter run -d windows
+flutter run -d windows   # or: flutter run -d linux
 ```
+
+On Linux, install Flutter's desktop toolchain (clang, cmake, ninja, pkg-config,
+GTK 3 headers) plus the libraries libYSE links at runtime: libsndfile,
+PortAudio, RtMidi and JACK (e.g. Fedora: `libsndfile portaudio rtmidi
+pipewire-jack-audio-connection-kit-libs`; Ubuntu: `libsndfile1 libportaudio2
+librtmidi6 libjack-jackd2-0`).
 
 The engine needs no manual setup. `yse` comes from pub.dev, and its
 native-assets build hook downloads the libYSE release that version pins (once
 per project, sha256-checked) and bundles `libyse.dll` and its runtime DLLs
-next to `phi.exe` on every `flutter run` / `flutter build windows`.
+next to `phi.exe` on every `flutter run` / `flutter build windows` (on Linux,
+`libyse.so` into `build/linux/x64/<mode>/bundle/lib/`).
 
 To test against a local engine build instead, point `YSE_DLL_PATH` at the
 directory holding its `libyse.dll` (and runtime DLLs) — it still takes
@@ -49,6 +57,11 @@ precedence over the bundled library:
 ```powershell
 $env:YSE_DLL_PATH = "D:\path\to\yse-soundengine\build\bin"
 ```
+
+Per-user settings and session logs live in `%APPDATA%\phi\` on Windows. On
+Linux they follow the XDG spec: `$XDG_CONFIG_HOME/phi/` (default
+`~/.config/phi/`) for `settings.json` and `$XDG_STATE_HOME/phi/logs/` (default
+`~/.local/state/phi/logs/`) for logs.
 
 ## Develop
 

@@ -24,7 +24,7 @@ import 'real_materialised_synth.dart' show MixBusResolver;
 /// live native [Patcher] from it to build a `DspObject.patcherInsert`, keyed by
 /// the same instance id.
 ///
-/// Requires `libyse.dll` discoverable at runtime — see README.md.
+/// Requires the engine library (`libyse.dll` / `libyse.so`) discoverable at runtime — see README.md.
 class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
   RealPatcherGateway({MixBusResolver? busResolver})
     : _busResolver = busResolver ?? _masterBus;

@@ -13,13 +13,15 @@ import '../../engine/bridge/scene_renderer.dart';
 import '../../engine/engine.dart';
 import '../surface.dart';
 
-/// Phase 1 Scene surface — hosts the macbear-backed 3D viewport.
+/// Phase 1 Scene surface — hosts the [SceneRenderer]'s view. There is no 3D
+/// renderer for now (issue #456): production wires `PlaceholderSceneRenderer`,
+/// which shows a notice, and bringing 3D back is issue #455.
 ///
 /// Seeds the renderer with one placeholder agent at the origin and an
 /// initial orbit camera, then wires pointer picking + grab (issue #86): a
 /// left-click picks the live agent under the cursor (selecting + grabbing it),
 /// a drag pulls it, and a release throws or settles it — with misses, pan,
-/// zoom, and keyboard navigation still handled by macbear's own orbit
+/// zoom, and keyboard navigation left to the renderer's own orbit
 /// controller. The screen→world unprojection lives in the engine bridge with
 /// the live camera; this surface owns the selection and tracks the halo on the
 /// moving agent from its own ticker. Field motion itself is stepped by the
@@ -94,7 +96,7 @@ class _SceneViewportState extends State<_SceneViewport>
     widget.renderer.setAgents([
       SceneAgent(position: Vector3.zero(), voiceIndex: 0),
     ]);
-    // Route the viewport's pointer through our pick/grab handler; macbear's
+    // Route the viewport's pointer through our pick/grab handler; a renderer's
     // orbit controller still runs for misses and non-left-button gestures.
     widget.renderer.installPicking(this);
     // The ticker only spins while a grab or selection is live; an idle Scene

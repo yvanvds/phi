@@ -2,7 +2,7 @@
 /// that keeps retention, crash detection, and the marker lifecycle testable
 /// without touching a real disk (design `docs/design/diagnostics.md` §2, §6).
 ///
-/// `RealLogFileStore` (`dart:io`) reads and writes `%APPDATA%/phi/logs/`; an
+/// `RealLogFileStore` (`dart:io`) reads and writes the per-user logs folder; an
 /// in-memory fake stands in for unit tests. The orchestration (which files to
 /// prune, when a crash happened, when to write the marker) lives in [SessionLog]
 /// so that logic is exercised against the fake — this interface only moves bytes.

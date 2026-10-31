@@ -13,7 +13,7 @@ import '../engine/test_doubles/fake_yse_gateway.dart';
 /// Widget tests for the workstation's Scene-surface wiring.
 ///
 /// Unlike the other surfaces (kept resident in the [IndexedStack]), Scene
-/// mounts only while selected so macbear's `M3View` stays out of the tree when
+/// mounts only while selected so a renderer's view stays out of the tree when
 /// offstage (issue #19). The shell also signals the renderer's on-/off-stage
 /// state (issue #18). These tests assert both — the lazy mount/unmount and the
 /// `setVisible` signal — driving a [FakeSceneRenderer] so no real 3D engine is
@@ -97,8 +97,8 @@ void main() {
     await tester.pumpWidget(PhiApp(engine: engine, session: session));
     await tester.pumpAndSettle();
 
-    // App boots on Mix → the Scene surface (and macbear's M3View) never entered
-    // the tree, so ANGLE init stays off the boot path.
+    // App boots on Mix → the Scene surface (and the renderer's view) never
+    // entered the tree, so renderer init stays off the boot path.
     expect(find.byType(SceneSurface), findsNothing);
     expect(renderer.viewMounted, isFalse);
     expect(renderer.viewMounts, 0);
@@ -110,7 +110,7 @@ void main() {
     expect(renderer.viewMounted, isTrue);
     expect(renderer.viewMounts, 1);
 
-    // Leave Scene → both unmount (the fork keeps M3AppEngine warm underneath).
+    // Leave Scene → both unmount.
     await tester.tap(railFor(SurfaceId.mix));
     await tester.pumpAndSettle();
     expect(find.byType(SceneSurface), findsNothing);

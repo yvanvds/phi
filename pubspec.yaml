@@ -18,17 +18,6 @@ dependencies:
   # Cross-platform path joining for the `.phi` project folder (#121):
   # RealProjectStore maps registry addresses to on-disk paths and back.
   path: ^1.9.0
-  # Pinned to our fork (yvanvds/macbear_3d) at the remount-safety fix
-  # (phi#19 / fork#2). Upstream 0.9.x tears down the process-wide
-  # `M3AppEngine` singleton when an `M3View` unmounts but never resets its
-  # init flag, so remounting the Scene surface crashes. The fork adds
-  # `M3AppEngine.unmount()`/`remount()` so `M3View` can leave and re-enter
-  # the tree safely. Ref-pinned to the merge commit for a reproducible
-  # resolve; move back to a published version once the fork tags one.
-  macbear_3d:
-    git:
-      url: https://github.com/yvanvds/macbear_3d.git
-      ref: dddb55100978414b798b1a3c671a641dcdba793b
   re_editor: ^0.9.0
   re_highlight: ^0.0.3
   # SMF import/export (#30): drag a `.mid` onto the MIDI surface

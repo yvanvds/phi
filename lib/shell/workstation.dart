@@ -803,10 +803,10 @@ class _WorkstationState extends State<Workstation> {
   bool get _sceneOnstage =>
       _layout.layout.panes.any((p) => p.active == SurfaceId.scene.name);
 
-  /// Pause macbear's render ticker whenever Scene is offstage; resume it when
-  /// Scene is the visible surface. Only signals the renderer on an actual flip,
-  /// so a layout change elsewhere stays silent. Keeps the shell
-  /// renderer-agnostic — the macbear specifics stay inside `MacbearSceneRenderer`.
+  /// Tell the Scene renderer whenever Scene goes offstage or comes back, so a
+  /// real renderer can pause its render loop. Only signals the renderer on an
+  /// actual flip, so a layout change elsewhere stays silent. Keeps the shell
+  /// renderer-agnostic.
   void _syncSceneVisibility() {
     final visible = _sceneOnstage;
     if (visible == _sceneVisible) return;
@@ -932,12 +932,11 @@ class _WorkstationState extends State<Workstation> {
   /// surface is wrapped in its stable [GlobalKey] so moving it between panes
   /// re-parents the element (its state survives) instead of rebuilding.
   ///
-  /// Scene is the exception: its `M3View` drives a process-wide GL context, so
-  /// it mounts only while it is its pane's [active] (visible) tab — keeping ANGLE
-  /// init off the boot path when the app opens elsewhere and letting the GPU
-  /// context idle when Scene is a background tab or closed. Re-parenting an
-  /// *active* Scene between panes is the one interaction verified by hand (the
-  /// GL path is not CI-testable); the fork's `M3AppEngine` keeps the engine warm.
+  /// Scene is the exception: it mounts only while it is its pane's [active]
+  /// (visible) tab. That was for the former `macbear_3d` view, which drove a
+  /// process-wide GL context (removed in issue #456); it is kept so a future
+  /// 3D renderer (#455) keeps GPU init off the boot path and can idle when
+  /// Scene is a background tab or closed.
   ///
   /// Patcher takes the milder version of the same treatment: it stays mounted
   /// offstage (its canvas state, selection and pan/zoom are worth keeping) but

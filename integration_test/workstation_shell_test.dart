@@ -208,8 +208,8 @@ void main() {
   ) async {
     // Inject a fake renderer so the real left rail → workstation → renderer
     // visibility wiring (issue #18) is driven through the real app, without a
-    // native 3D context. The macbear ticker itself can only run against a live
-    // GL context, so this asserts the *signal*, which is what the shell owns.
+    // native 3D context. This asserts the *signal*, which is what the shell
+    // owns.
     final renderer = FakeSceneRenderer();
     final engine = PhiEngine(
       FakeYseGateway(),
@@ -250,11 +250,9 @@ void main() {
   testWidgets(
     'scene: mounts lazily and survives unmount/remount end to end (issue #19)',
     (tester) async {
-      // Drives the real app + left rail. macbear's real `M3View` can't run
-      // against a headless CI GL context, so this uses a fake renderer to prove
-      // the *shell wiring* mounts the Scene surface only while selected and
-      // tears it down when it leaves — the M3AppEngine unmount/remount safety
-      // itself is covered by the fork's own `-d windows` remount test.
+      // Drives the real app + left rail with a fake renderer, to prove the
+      // *shell wiring* mounts the Scene surface only while selected and tears
+      // it down when it leaves.
       final renderer = FakeSceneRenderer();
       final engine = PhiEngine(
         FakeYseGateway(),

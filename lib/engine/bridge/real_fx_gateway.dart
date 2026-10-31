@@ -21,7 +21,7 @@ import 'real_materialised_synth.dart' show MixBusResolver;
 /// [FxKind.patcherInsert] handle borrow the live native patcher for its wrapped
 /// `patch.` entity (issue #225); `null` leaves patcher inserts non-placeable.
 ///
-/// Requires `libyse.dll` discoverable at runtime — see README.md. The heavy
+/// Requires the engine library (`libyse.dll` / `libyse.so`) discoverable at runtime — see README.md. The heavy
 /// lifting lives on the [RealMaterialisedFx] handles and [RealFxChain]s each
 /// call mints.
 class RealFxGateway implements FxGateway {

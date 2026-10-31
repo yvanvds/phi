@@ -180,3 +180,66 @@ jobs:
           path: phi/build/windows/x64/runner/Release
           if-no-files-found: error
           retention-days: 7
+
+  # Linux desktop build (issue #454): produces a runnable bundle carrying
+  # libyse.so. Runs on every PR and push — ubuntu-latest is the cheap tier, so
+  # unlike build-windows it is not gated to main.
+  build-linux:
+    name: build linux (bundle + libyse.so)
+    needs: analyze-test-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout phi
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          path: phi
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          # Same pin as analyze-test-scan: this, `pubspec.yaml`'s `environment:`
+          # floor and `pubspec.lock` are one contract (#420, #442).
+          flutter-version: '3.47.1'
+          channel: stable
+          cache: true
+
+      # Flutter's Linux desktop toolchain (docs.flutter.dev, Linux setup).
+      # Package names are Ubuntu 24.04's (ubuntu-latest). Nothing here loads
+      # libyse.so, so its runtime libraries (libsndfile1, libportaudio2,
+      # librtmidi6, libjack) are not needed; analyze-test-scan installs them
+      # for the real-engine tests.
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+
+      - name: Resolve phi deps
+        working-directory: phi
+        run: flutter pub get --enforce-lockfile
+
+      # As on Windows, no engine download step: `package:yse`'s build hook
+      # fetches the pinned libYSE Linux release and bundles libyse.so into
+      # bundle/lib/ (#442, #454).
+      - name: Build Linux app (release)
+        working-directory: phi
+        run: flutter build linux --release
+
+      - name: Verify the engine was bundled into bundle/lib
+        working-directory: phi
+        run: |
+          bundle=build/linux/x64/release/bundle
+          if [ ! -f "$bundle/lib/libyse.so" ]; then
+            echo "::error::libyse.so was not bundled into $bundle/lib by the yse build hook"
+            exit 1
+          fi
+          echo "Bundled libraries in $bundle/lib:"
+          ls -1 "$bundle/lib"
+
+      - name: Upload Linux build artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: phi-linux-x64
+          path: phi/build/linux/x64/release/bundle
+          if-no-files-found: error
+          retention-days: 7

@@ -76,7 +76,7 @@ class FakeSceneRenderer implements SceneRenderer {
   );
 }
 
-/// Stand-in for macbear's `M3View` in tests: renders nothing but reports its
+/// Stand-in for a renderer's view widget in tests: renders nothing but reports its
 /// mount / unmount so a test can observe the Scene view's widget lifecycle.
 class _FakeSceneView extends StatefulWidget {
   const _FakeSceneView({required this.onMount, required this.onDispose});
