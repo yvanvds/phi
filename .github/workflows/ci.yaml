@@ -4,8 +4,8 @@ name: CI
 #
 #   * Every `uses:` is pinned to a full 40-char commit SHA, with the human
 #     version in a trailing comment. A tag like `@v4` is a moving pointer the
-#     upstream owner can repoint at any commit; these jobs hold SONAR_TOKEN and
-#     a GITHUB_TOKEN, so an unreviewed retag would run with our secrets. The
+#     upstream owner can repoint at any commit; these jobs hold a
+#     GITHUB_TOKEN, so an unreviewed retag would run with our secrets. The
 #     comment is what you read; the SHA is what runs. First-party `actions/*`
 #     are pinned on the same terms — being first-party changes who would have
 #     to be compromised, not what a compromise could do.
@@ -104,13 +104,11 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: SonarCloud scan
-        uses: SonarSource/sonarcloud-github-action@383f7e52eae3ab0510c3cb0e7d9d150bbaeab838 # v3.1.0
-        with:
-          projectBaseDir: phi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      # The SonarCloud scan is switched off for now (issue #447). The job keeps
+      # its "+ SonarCloud" name because main's branch protection requires that
+      # exact check name. To bring it back: a fresh SONAR_TOKEN plus
+      # SonarSource/sonarqube-scan-action pinned by SHA; sonar-project.properties
+      # is still in place.
 
   # Expensive Windows build: produces a runnable .exe bundle carrying libyse.dll.
   # Gated to main (release PRs from develop + pushes to main) and manual dispatch;

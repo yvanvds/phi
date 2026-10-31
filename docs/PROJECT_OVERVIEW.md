@@ -2679,8 +2679,8 @@ main + app          (orchestration)
   `patcher_retype_object` integration test through the real app (`sine 440` →
   `saw 300` keeps both cables and the reference panel follows; retyping to a
   `.slider` drops both and names them; `Ctrl+Z` puts it all back).
-- Unit + widget + integration tests; CI on GitHub Actions; SonarCloud
-  workflow (waiting on SONAR_TOKEN)
+- Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
+  switched off for now, issue #447)
 
 ## Surfaces
 
@@ -2708,13 +2708,13 @@ main + app          (orchestration)
 - **CI:** `.github/workflows/ci.yaml` (analyze + test + coverage; the Windows
   build is gated to `main`), `.github/workflows/integration.yaml` (the
   `integration_test/` suite on windows-latest — nightly on `develop`, on every
-  release PR into `main`, and on manual dispatch), `.github/workflows/sonar.yaml`
-  (SonarCloud).
+  release PR into `main`, and on manual dispatch).
 - **Integration test driver:** `tool/run_integration_tests.ps1` — runs each
   `integration_test/*.dart` as its own `flutter test` invocation (a single
   folder-wide run under-reports on Windows), with `-Shard`/`-Of` sharding.
   Used both locally and by `integration.yaml`.
-- **SonarCloud:** project key `yvanvds_phi`, organization `yvanvds`.
+- **SonarCloud:** project key `yvanvds_phi`, organization `yvanvds`
+  (`sonar-project.properties`); the CI scan is off for now (issue #447).
 - **Issue templates:** `.github/ISSUE_TEMPLATE/`. Labels: see
   [CLAUDE.md](../CLAUDE.md).
 - **Architecture decision records:** this `docs/` folder —
@@ -2727,5 +2727,5 @@ main + app          (orchestration)
 2. Read or update the relevant GitHub issue.
 3. Branch from `main` as `<issue-number>-<short-slug>`.
 4. Tests first where sensible (pure logic, FFI bridge code, end-to-end).
-5. Open a PR; merge once CI + SonarCloud are green.
+5. Open a PR; merge once CI is green.
 6. If this PR changed the architecture, layout, or stack, update this file.
