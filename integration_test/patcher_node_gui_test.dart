@@ -4,11 +4,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
 import 'package:phi/design/widgets/fader/phi_fader.dart';
+import 'package:phi/design/widgets/patcher/patch_dial_knob.dart';
+import 'package:phi/design/widgets/patcher/patch_incdec_stepper.dart';
+import 'package:phi/design/widgets/patcher/patch_led_lamp.dart';
+import 'package:phi/design/widgets/patcher/patch_list_box.dart';
+import 'package:phi/design/widgets/patcher/patch_text_button.dart';
+import 'package:phi/design/widgets/patcher/patch_text_edit_box.dart';
+import 'package:phi/domain/patcher/patch_node.dart';
 import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/engine.dart';
+import 'package:phi/engine/state/node_type_registry.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
 import 'package:phi/surfaces/patcher/create/patch_inline_object_box.dart';
+import 'package:phi/surfaces/patcher/patch_canvas_mode.dart';
+import 'package:phi/surfaces/patcher/patcher_canvas.dart';
+import 'package:phi/surfaces/patcher/placement/patch_placement_bar.dart';
 import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
@@ -88,6 +99,145 @@ void main() {
       patcherGateway.calls.where((c) => c.startsWith('setParams')),
       isNotEmpty,
     );
+
+    session.dispose();
+    await engine.dispose();
+  });
+
+  testWidgets('the libYSE 3.0 single-value controls render and operate in run '
+      'mode (issue #470)', (tester) async {
+    final patcherGateway = FakePatcherGateway();
+    final engine = PhiEngine(
+      FakeYseGateway(),
+      patcherGateway: patcherGateway,
+      telemetryInterval: const Duration(milliseconds: 20),
+    );
+    final session = SessionState();
+
+    await tester.pumpWidget(PhiApp(engine: engine, session: session));
+    await tester.pumpAndSettle();
+    await tester.tap(railFor(SurfaceId.patcher));
+    await tester.pumpAndSettle();
+
+    final patcher = engine.patcher;
+
+    /// Add [type] with [args] through its real registration — sized exactly as
+    /// one dropped from the palette.
+    PatchNode gui(String type, Offset position, {String args = ''}) {
+      final d = NodeTypeRegistry.instance.find(type)!;
+      return patcher.addNode(
+        desc: NodeDescriptor(
+          type: d.type,
+          defaultSize: d.defaultSize,
+          defaultArgs: args,
+          inputs: d.inputs,
+          outputs: d.outputs,
+          buildBody: d.buildBody,
+          readsGuiValue: d.readsGuiValue,
+          guiValueRead: d.guiValueRead,
+        ),
+        position: position,
+      );
+    }
+
+    final dial = gui(Obj.gDial, const Offset(30, 30), args: '0 127 1 1');
+    final led = gui(Obj.gLed, const Offset(110, 30), args: 'mute');
+    gui(Obj.gIncdec, const Offset(230, 30));
+    gui(Obj.gTextbutton, const Offset(30, 120), args: 'go');
+    gui(Obj.gTextedit, const Offset(150, 120), args: 'hello');
+    gui(Obj.gList, const Offset(300, 120));
+    await tester.pumpAndSettle();
+
+    // ─── all six render as their controls, in the real font ────────────────
+    expect(find.byType(PatchDialKnob), findsOneWidget);
+    expect(find.byType(PatchLedLamp), findsOneWidget);
+    expect(find.byType(PatchIncdecStepper), findsOneWidget);
+    expect(find.byType(PatchTextButton), findsOneWidget);
+    expect(find.byType(PatchTextEditBox), findsOneWidget);
+    expect(find.byType(PatchListBox), findsOneWidget);
+    expect(find.text('mute'), findsOneWidget);
+    expect(find.text('go'), findsOneWidget);
+    // The dial's readout is the mapped value: 0 at position 0 of 0–127.
+    expect(
+      find.descendant(of: find.byType(PatchDialKnob), matching: find.text('0')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull, reason: 'nothing overflows');
+
+    List<String> callsLike(String prefix) =>
+        patcherGateway.calls.where((c) => c.startsWith(prefix)).toList();
+    int handleOf(String type) => patcherGateway.nodes.entries
+        .firstWhere((e) => e.value.type == type)
+        .key;
+    double knob() =>
+        tester.widget<PatchDialKnob>(find.byType(PatchDialKnob)).position;
+    bool lamp() => tester.widget<PatchLedLamp>(find.byType(PatchLedLamp)).on;
+
+    // ─── edit mode: the controls are grab handles, not live ────────────────
+    // `warnIfMissed: false`: in edit mode the body sits under an IgnorePointer
+    // on purpose (issue #378), so the press lands on the canvas, not on it.
+    patcherGateway.calls.clear();
+    final before = dial.position;
+    await tester.drag(
+      find.byType(PatchDialKnob),
+      const Offset(0, 32),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(dial.position, isNot(before), reason: 'the drag moved the node');
+    expect(callsLike('sendFloat'), isEmpty);
+    await tester.tap(find.byType(PatchLedLamp), warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(callsLike('sendInt'), isEmpty);
+    expect(lamp(), isFalse);
+
+    // ─── run mode: operate the dial and the led ────────────────────────────
+    await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<PatcherCanvas>(find.byType(PatcherCanvas)).mode,
+      PatchCanvasMode.run,
+    );
+
+    patcherGateway.calls.clear();
+    await tester.drag(find.byType(PatchDialKnob), const Offset(0, -90));
+    await tester.pumpAndSettle();
+    final sent = callsLike('sendFloat:${handleOf(Obj.gDial)}:0:');
+    expect(sent, isNotEmpty);
+    final position = double.parse(sent.last.split(':').last);
+    expect(position, greaterThan(0));
+    expect(knob(), closeTo(position, 0.001));
+    // The readout under the knob says what the dial now sends.
+    expect(
+      find.descendant(
+        of: find.byType(PatchDialKnob),
+        matching: find.text('${(position * 127).round()}'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byType(PatchLedLamp));
+    await tester.pumpAndSettle();
+    expect(callsLike('sendInt:${handleOf(Obj.gLed)}:0:'), [
+      'sendInt:${handleOf(Obj.gLed)}:0:1',
+    ]);
+    expect(lamp(), isTrue);
+
+    // ─── values driven from the graph reach both through the poll ──────────
+    patcherGateway.nodes[handleOf(Obj.gDial)]!.guiValue = '1';
+    patcherGateway.nodes[handleOf(Obj.gLed)]!.guiValue = '0';
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    expect(knob(), 1);
+    expect(
+      find.descendant(
+        of: find.byType(PatchDialKnob),
+        matching: find.text('127'),
+      ),
+      findsOneWidget,
+    );
+    expect(lamp(), isFalse);
+    expect(led.type, Obj.gLed);
 
     session.dispose();
     await engine.dispose();

@@ -6,9 +6,14 @@ import '../../domain/patcher/patch_object_types.dart';
 import '../../domain/patcher/patch_port_kind.dart';
 import '../../engine/state/node_type_registry.dart';
 import 'nodes/button_node_body.dart';
+import 'nodes/dial_node_body.dart';
+import 'nodes/incdec_node_body.dart';
+import 'nodes/label_switch_node_body.dart';
+import 'nodes/list_node_body.dart';
 import 'nodes/message_node_body.dart';
 import 'nodes/number_node_body.dart';
 import 'nodes/slider_node_body.dart';
+import 'nodes/textedit_node_body.dart';
 import 'nodes/toggle_node_body.dart';
 
 /// Register the node types this PR supports. Idempotent — re-registering
@@ -143,6 +148,108 @@ void registerBuiltInPatcherNodes() {
           MessageNodeBody(node: node, controller: controller),
     ),
   );
+
+  // ─── libYSE 3.0 single-value controls (issue #470) ─────────────────────
+  // The pattern every later control follows (#471–#473): a `PatchObjectTypes`
+  // id (with its drift-guard line), a visual-only `Patch…` widget under
+  // `lib/design/widgets/patcher/`, a body under `nodes/` that writes through
+  // the controller and follows the engine with a `GuiValueLink`, and one
+  // block here. `defaultArgs` is the object's empty default — each of these
+  // registers its parameters, so an empty string parses safely — and a body
+  // that shows engine state sets `readsGuiValue` (all six do: `.l`'s stored
+  // list is live state, unlike a `.m`'s arguments). One value each, so the
+  // whole-state read (`GuiValueRead.whole`, the default) is the right one.
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gDial,
+      // Square: the knob is the largest circle the node holds.
+      defaultSize: const Size(_dialSize, _dialSize),
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [PortSpec(kind: PatchPortKind.control)],
+      buildBody: (ctx, node, controller) =>
+          DialNodeBody(node: node, controller: controller),
+      readsGuiValue: true,
+    ),
+  );
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gIncdec,
+      // Wide enough for its three inlets (value · nudge · step), and a
+      // control's height so each half is a target of its own.
+      defaultSize: Size(PatchCanvasConstants.minWidthForPorts(3), square),
+      defaultArgs: '',
+      inputs: const [
+        PortSpec(kind: PatchPortKind.control, label: 'value'),
+        PortSpec(kind: PatchPortKind.control, label: 'nudge'),
+        PortSpec(kind: PatchPortKind.control, label: 'step'),
+      ],
+      outputs: const [PortSpec(kind: PatchPortKind.control)],
+      buildBody: (ctx, node, controller) =>
+          IncdecNodeBody(node: node, controller: controller),
+      readsGuiValue: true,
+    ),
+  );
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gLed,
+      defaultSize: Size(_labelledControlWidth, lineHeight),
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [
+        PortSpec(kind: PatchPortKind.control, label: 'state'),
+        PortSpec(kind: PatchPortKind.control, label: 'label'),
+      ],
+      buildBody: (ctx, node, controller) =>
+          LabelSwitchNodeBody.led(node: node, controller: controller),
+      readsGuiValue: true,
+    ),
+  );
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gTextbutton,
+      defaultSize: Size(_labelledControlWidth, lineHeight),
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [
+        PortSpec(kind: PatchPortKind.control, label: 'state'),
+        PortSpec(kind: PatchPortKind.control, label: 'label'),
+      ],
+      buildBody: (ctx, node, controller) =>
+          LabelSwitchNodeBody.textButton(node: node, controller: controller),
+      readsGuiValue: true,
+    ),
+  );
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gTextedit,
+      defaultSize: Size(_textFieldWidth, lineHeight),
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [PortSpec(kind: PatchPortKind.control)],
+      buildBody: (ctx, node, controller) =>
+          TexteditNodeBody(node: node, controller: controller),
+      readsGuiValue: true,
+    ),
+  );
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gList,
+      defaultSize: Size(_messageBoxWidth, lineHeight),
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [PortSpec(kind: PatchPortKind.control)],
+      buildBody: (ctx, node, controller) =>
+          ListNodeBody(node: node, controller: controller),
+      readsGuiValue: true,
+    ),
+  );
 }
 
 /// Width a bare number box opens at — room for a few digits and their sign
@@ -154,8 +261,20 @@ const double _numberBoxWidth = 64;
 /// goes in it is words rather than digits.
 const double _messageBoxWidth = 96;
 
+/// Side of a `.dial` — room for the knob and, in the gap at its foot, a
+/// readout of a few digits (issue #470).
+const double _dialSize = 56;
+
+/// Width a `.led` / `.textbutton` opens at — a short label's worth beside the
+/// lamp, or across the button.
+const double _labelledControlWidth = 96;
+
+/// Width a `.textedit` opens at — a few words.
+const double _textFieldWidth = 128;
+
 /// Height of the one-line GUI controls — the two number boxes and the message
-/// box (issue #381).
+/// box (issue #381), and since #470 the `.led`, `.textbutton`, `.textedit` and
+/// `.l`.
 ///
 /// **Measured**, not chosen: it is exactly what an object box spends on its own
 /// single line, so a row of mixed nodes sits on one baseline instead of stepping

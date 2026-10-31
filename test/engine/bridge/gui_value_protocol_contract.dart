@@ -115,6 +115,59 @@ void guiValueProtocolContract(PatcherGateway Function() makeGateway) {
     expect(gateway.guiValueIsSettable(inst, list), isFalse);
   });
 
+  // ─── the single-value control bodies (issue #470) ──────────────────
+
+  test('.incdec steps by its step argument inside a clamped range', () {
+    final stepper = gateway.createObject(inst, Obj.gIncdec, args: '2 0 5 0');
+    expect(num.parse(gateway.guiValue(inst, stepper)), 0);
+    for (var i = 0; i < 4; i++) {
+      gateway.sendMessage(inst, stepper, 0, 'inc');
+    }
+    expect(gateway.guiValue(inst, stepper), '5', reason: 'clamped at max');
+    gateway.sendMessage(inst, stepper, 0, 'dec');
+    expect(gateway.guiValue(inst, stepper), '3');
+  });
+
+  test('.incdec wraps when asked to', () {
+    final stepper = gateway.createObject(inst, Obj.gIncdec, args: '1 0 2 1');
+    for (var i = 0; i < 3; i++) {
+      gateway.sendMessage(inst, stepper, 0, 'inc');
+    }
+    expect(gateway.guiValue(inst, stepper), '0');
+    gateway.sendMessage(inst, stepper, 0, 'dec');
+    expect(gateway.guiValue(inst, stepper), '2');
+  });
+
+  test('a .dial reports its position, clamped to 0-1', () {
+    final dial = gateway.createObject(inst, Obj.gDial, args: '0 127 1 1');
+    gateway.sendFloat(inst, dial, 0, 0.25);
+    expect(num.parse(gateway.guiValue(inst, dial)), 0.25);
+    gateway.sendFloat(inst, dial, 0, 2);
+    expect(num.parse(gateway.guiValue(inst, dial)), 1);
+    expect(gateway.guiValueIsSettable(inst, dial), isTrue);
+  });
+
+  for (final type in [Obj.gLed, Obj.gTextbutton]) {
+    test('a latching $type takes an int as its state and flips on a bang', () {
+      final lamp = gateway.createObject(inst, type, args: 'mute');
+      gateway.sendInt(inst, lamp, 0, 1);
+      expect(gateway.guiValue(inst, lamp), '1');
+      gateway.sendBang(inst, lamp, 0);
+      expect(gateway.guiValue(inst, lamp), '0');
+      gateway.sendBang(inst, lamp, 0);
+      expect(gateway.guiValue(inst, lamp), '1');
+      gateway.sendInt(inst, lamp, 0, 0);
+      expect(gateway.guiValue(inst, lamp), '0');
+    });
+  }
+
+  test('a .textedit starts with its text and takes a whole new one back', () {
+    final text = gateway.createObject(inst, Obj.gTextedit, args: 'hello world');
+    expect(gateway.guiValue(inst, text), 'hello world');
+    expect(gateway.restoreGuiValue(inst, text, 'foo bar'), isTrue);
+    expect(gateway.guiValue(inst, text), 'foo bar');
+  });
+
   test('an unknown handle answers the empty protocol', () {
     expect(gateway.guiValueCount(inst, 999), 0);
     expect(gateway.guiValueAt(inst, 999, 0), '');

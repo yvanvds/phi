@@ -2742,6 +2742,32 @@ main + app          (orchestration)
   `setGuiValueAt` → `guiValueAt`, a list resizes a `.multislider`, `.b` refuses
   writes, ...), an engine-only selector test (`.incdec` `inc`/`dec`), and
   controller unit tests for the per-cell poll, the window and the wrappers.
+- **Single-value control bodies** (issue #470, on the #469 protocol) — six
+  libYSE 3.0 GUI objects stop rendering as object boxes and become their
+  controls, operable in run mode and followed through the GUI poll: `.dial`
+  (`PatchDialKnob`; a vertical drag `sendFloat`s the 0–1 position, the readout
+  is the value it sends, mapped by the pure-Dart `DialMapping` mirror of the
+  engine's `MapRange` because no read reports it), `.incdec`
+  (`PatchIncdecStepper`; top half `inc`, bottom half `dec` via
+  `sendControlMessage`), `.led` / `.textbutton` (one `LabelSwitchNodeBody`
+  with `.led` / `.textButton` constructors over `PatchLedLamp` /
+  `PatchTextButton`; `LabelSwitchArgs` reads `[momentary] label…`; latching
+  clicks `sendInt` 1/0, momentary presses `sendInt` 1 while held), `.textedit`
+  (`PatchTextEditBox`; the number box's focus rules, Enter commits through
+  `restoreGuiValueOf`) and `.l` (`PatchListBox`; shows its live stored list, a
+  tap bangs it). **The pattern for every later control body (#471–#473):** a
+  `PatchObjectTypes` id plus its drift-guard line, a visual-only `Patch…`
+  widget in `lib/design/widgets/patcher/`, a `…NodeBody` in
+  `lib/surfaces/patcher/nodes/` that writes through the controller and follows
+  the engine with a `GuiValueLink`, and one `register(...)` block in
+  `patcher_node_types.dart`. `FakePatcherGateway` now models `.incdec`
+  `inc`/`dec`, a `.dial`'s clamp, a latching `.led`'s bang flip and a
+  `.textedit`'s initial text, all pinned to the engine by the shared contract.
+  Covered by domain unit tests, widget tests per body
+  (`test/surfaces/patcher/nodes/single_value_control_bodies_test.dart`) and the
+  `patcher_node_gui` integration test (all six render in the real app; a
+  `.dial` and a `.led` operate in run mode, stay inert in edit mode, and follow
+  values driven from the graph).
 - Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
   switched off for now, issue #447)
 

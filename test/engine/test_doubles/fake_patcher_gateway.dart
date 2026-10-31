@@ -251,6 +251,11 @@ class FakePatcherGateway implements PatcherGateway {
     // it too is what lets a test catch a body pushing through the wrong verb.
     if (node.type == Obj.gToggle) return;
     node.lastValueByInlet[inlet] = value;
+    // A `.dial` stores its position clamped to 0–1, as `gDial::Store` does.
+    if (node.type == Obj.gDial && inlet == 0) {
+      node.guiValue = _formatGui(value.clamp(0.0, 1.0));
+      return;
+    }
     // A control object's "hot" inlet (0) drives its display value — a slider
     // or number reflects the last value set into it, exactly what the native
     // side reports back through `guiValue`.
@@ -275,7 +280,16 @@ class FakePatcherGateway implements PatcherGateway {
   @override
   void sendBang(int instanceId, int handleId, int inlet) {
     calls.add('sendBang:$handleId:$inlet');
-    _inst(instanceId).nodes[handleId]?.bangedInlets.add(inlet);
+    final node = _inst(instanceId).nodes[handleId];
+    if (node == null) return;
+    node.bangedInlets.add(inlet);
+    // A latching `.led` / `.textbutton` flips on a bang (`gLabelSwitchBase`).
+    // Momentary presses are not modelled.
+    if (inlet == 0 &&
+        (node.type == Obj.gLed || node.type == Obj.gTextbutton) &&
+        !node.args.trim().startsWith('momentary')) {
+      node.guiValue = node.guiValue == '1' ? '0' : '1';
+    }
   }
 
   @override
@@ -663,13 +677,15 @@ class FakeNode {
   /// Only inlet 0 of a settable control moves the GUI state, the way the
   /// real objects do: `set <i> <v>` writes one cell (dropped past the count),
   /// a `.textedit` takes the whole text as its one cell, and a list of numbers
-  /// becomes the cells — so a list resizes a `.multislider` bank. Any other
-  /// selector (`inc`, `clear`, ...) is object-specific behaviour the fake does
-  /// not model: it is recorded and leaves the state alone. A `.l` (not
+  /// becomes the cells — so a list resizes a `.multislider` bank. `.incdec`'s
+  /// `inc` / `dec` step it ([_stepIncdec]); any other selector (`clear`, ...)
+  /// is object-specific behaviour the fake does not model: it is recorded and
+  /// leaves the state alone. A `.l` (not
   /// settable) stores the list as its one cell.
   void receiveList(int inlet, String list) {
     listsByInlet.putIfAbsent(inlet, () => []).add(list);
     if (inlet != 0) return;
+    if (type == Obj.gIncdec && _stepIncdec(list.trim())) return;
     if (type == Obj.gList) {
       guiCells = [list];
       return;
@@ -689,6 +705,36 @@ class FakeNode {
     if (tokens.every((t) => num.tryParse(t) != null)) guiCells = tokens;
   }
 
+  /// Model `.incdec`'s `inc` / `dec` selectors (`gIncDec::Move`): one step of
+  /// its `step` argument, bounded by `minimum` / `maximum` (swapped when
+  /// reversed), clamping or — with `wrap` — wrapping. Returns whether [message]
+  /// was one of the two.
+  bool _stepIncdec(String message) {
+    if (message != 'inc' && message != 'dec') return false;
+    final parts = args.trim().isEmpty
+        ? const <String>[]
+        : args.trim().split(RegExp(r'\s+'));
+    int at(int i, int fallback) => i < parts.length
+        ? (num.tryParse(parts[i])?.truncate() ?? fallback)
+        : fallback;
+    final step = at(0, 1);
+    var lo = at(1, -2147483648);
+    var hi = at(2, 2147483647);
+    if (lo > hi) (lo, hi) = (hi, lo);
+    final wrap = at(3, 0) != 0;
+    final current = int.tryParse(guiValue) ?? 0;
+    final next = current + (message == 'inc' ? step : -step);
+    final int bounded;
+    if (!wrap) {
+      bounded = next.clamp(lo, hi);
+    } else {
+      final span = hi - lo + 1;
+      bounded = lo + (next - lo) % span;
+    }
+    guiValue = '$bounded';
+    return true;
+  }
+
   /// Objects whose GUI value the engine does not accept back.
   static const Set<String> _unsettable = {Obj.gButton, Obj.gMessage, Obj.gList};
 
@@ -700,6 +746,16 @@ class FakeNode {
         return ['0', '0'];
       case Obj.gKslider:
         return List.filled(128, '0');
+      // The #470 scalar controls start at 0 / off, as the engine reports them
+      // (a `.dial` spells it `0.000000`; callers compare numbers).
+      case Obj.gDial:
+      case Obj.gIncdec:
+      case Obj.gLed:
+      case Obj.gTextbutton:
+        return ['0'];
+      // A fresh `.textedit` holds its `text` argument, joined with spaces.
+      case Obj.gTextedit:
+        return [args.trim().split(RegExp(r'\s+')).join(' ')];
       case Obj.gMultislider:
         final size = int.tryParse(args.trim().split(RegExp(r'\s+')).first);
         return List.filled(size ?? 8, '0');

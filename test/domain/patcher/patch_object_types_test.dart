@@ -21,6 +21,12 @@ void main() {
     expect(PatchObjectTypes.gFloat, Obj.gFloat);
     expect(PatchObjectTypes.gInt, Obj.gInt);
     expect(PatchObjectTypes.gMessage, Obj.gMessage);
+    expect(PatchObjectTypes.gDial, Obj.gDial);
+    expect(PatchObjectTypes.gIncdec, Obj.gIncdec);
+    expect(PatchObjectTypes.gLed, Obj.gLed);
+    expect(PatchObjectTypes.gTextbutton, Obj.gTextbutton);
+    expect(PatchObjectTypes.gTextedit, Obj.gTextedit);
+    expect(PatchObjectTypes.gList, Obj.gList);
   });
 
   test('the list holds each id exactly once', () {

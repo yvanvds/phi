@@ -49,12 +49,13 @@ void main() {
     });
 
     test('an unmodelled selector is recorded and leaves the state alone', () {
+      // `.incdec`'s inc / dec are modelled (issue #470); `clear` is not.
       final stepper = gateway.createObject(inst, Obj.gIncdec);
       gateway.nodes[stepper]!.guiValue = '3';
 
-      gateway.sendMessage(inst, stepper, 0, 'inc');
+      gateway.sendMessage(inst, stepper, 0, 'clear');
 
-      expect(gateway.nodes[stepper]!.listsByInlet[0], ['inc']);
+      expect(gateway.nodes[stepper]!.listsByInlet[0], ['clear']);
       expect(gateway.guiValue(inst, stepper), '3');
     });
 
