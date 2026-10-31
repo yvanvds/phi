@@ -63,4 +63,10 @@ enum AudioNoticeKind {
   /// built-in speakers with nobody told. The stored preference is untouched —
   /// re-picking the device in Settings › Audio once it returns is the way back.
   recoveredOnDefault,
+
+  /// The chosen sample rate differs from the running session's, which is locked
+  /// from engine init until close (yse 0.2.0, issue #443). The device opened at
+  /// the session rate; the choice is stored and takes effect the next time Phi
+  /// starts.
+  sampleRateOnRestart,
 }

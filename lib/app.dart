@@ -167,6 +167,12 @@ class _PhiAppState extends State<PhiApp> {
         registryMirror: buildRegistryMirror(evaluator),
       );
       _ownsEngine = true;
+      // The engine locks its sample rate at start (yse 0.2.0, issue #443), and
+      // the settings controller only loads after the shell is up — too late. So
+      // read the stored rate here, synchronously, and request it first.
+      _engine.requestSessionSampleRate(
+        RealAppSettingsStore().loadSync().audio.sampleRate,
+      );
       // Production only: mirror the unified log to a per-session file under
       // `%APPDATA%/phi/logs/` (design §2). Skipped when a test injected a notice
       // center — it owns its own recorder and wants no disk. Booting is

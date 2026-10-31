@@ -172,7 +172,7 @@ void main() {
       gateway.devices = [alpha];
       gateway.openAudioDevice(alpha);
 
-      expect(gateway.activeAudioState().sampleRate, 44100);
+      expect(gateway.activeAudioState().sampleRate, 48000);
       expect(gateway.openedDevice, alpha);
     });
   });
@@ -186,7 +186,7 @@ void main() {
       gateway.init();
       expect(gateway.initialised, isTrue);
       final state = gateway.activeAudioState();
-      expect(state.sampleRate, 44100); // first device, first reported rate
+      expect(state.sampleRate, 48000); // libYSE 3's default, which it lists
       expect(state.bufferSize, 256); // its default buffer
       expect(state.outputLatency, 256);
     });
@@ -223,7 +223,7 @@ void main() {
   group('close — the engine goes down with it', () {
     test('close releases the device', () {
       gateway.init();
-      expect(gateway.activeAudioState().sampleRate, 44100);
+      expect(gateway.activeAudioState().sampleRate, 48000);
 
       gateway.close();
 
@@ -236,8 +236,8 @@ void main() {
 
     test('close releases an explicitly opened device too', () {
       gateway.init();
-      gateway.openAudioDevice(gateway.devices[1], rate: 96000, buffer: 256);
-      expect(gateway.activeAudioState().sampleRate, 96000);
+      gateway.openAudioDevice(gateway.devices[1], buffer: 256);
+      expect(gateway.activeAudioState().bufferSize, 256);
 
       gateway.close();
 
@@ -377,7 +377,7 @@ void main() {
       expect(
         gateway.activeAudioState(),
         const AudioDeviceState(
-          sampleRate: 44100,
+          sampleRate: 48000,
           bufferSize: 256,
           outputLatency: 256,
         ),
@@ -494,6 +494,62 @@ void main() {
     });
   });
 
+  // yse 0.2.0 locks the session rate from init to close (issue #443): a rate
+  // reaches the device only through `requestedSampleRate` before init.
+  group('session sample rate', () {
+    test('init runs the session at the requested rate', () {
+      gateway.requestedSampleRate = 96000;
+      gateway.init();
+      expect(gateway.sessionSampleRate, 96000);
+      expect(gateway.activeAudioState().sampleRate, 96000);
+    });
+
+    test('a default that cannot run the requested rate stays closed, and the '
+        'session keeps the rate for the device chosen next', () {
+      gateway.requestedSampleRate = 44100; // the ASIO entry lacks it
+      gateway.devices = [gateway.devices[1], gateway.devices[0]];
+      gateway.init();
+      expect(gateway.sessionSampleRate, 44100);
+      expect(gateway.activeAudioState(), AudioDeviceState.none);
+
+      gateway.openAudioDevice(gateway.devices[1]); // WASAPI lists 44100
+      expect(gateway.activeAudioState().sampleRate, 44100);
+    });
+
+    test('a device that cannot run the session rate refuses to open', () {
+      gateway.requestedSampleRate = 44100;
+      gateway.init(); // WASAPI default at 44100
+      expect(
+        () => gateway.openAudioDevice(gateway.devices[1]), // ASIO: 48k / 96k
+        throwsA(isA<AudioDeviceException>()),
+      );
+      expect(gateway.activeAudioState(), AudioDeviceState.none);
+    });
+
+    test('the request survives close and applies to the next init', () {
+      gateway.init();
+      expect(gateway.sessionSampleRate, 48000);
+      gateway.requestedSampleRate = 96000;
+      expect(gateway.sessionSampleRate, 48000); // running session unchanged
+
+      gateway.close();
+      expect(gateway.sessionSampleRate, 0);
+      gateway.init();
+
+      expect(gateway.requestedSampleRate, 96000);
+      expect(gateway.sessionSampleRate, 96000);
+    });
+
+    test('an offline session runs at the request, else the previous rate', () {
+      gateway.requestedSampleRate = 96000;
+      gateway.init();
+      gateway.close();
+      gateway.requestedSampleRate = 0;
+      gateway.initOffline();
+      expect(gateway.sessionSampleRate, 96000); // carried over (yse #1033)
+    });
+  });
+
   group('openAudioDevice — success', () {
     // Every open runs on an enumerated engine, because that is the only kind
     // there is: the device list exists because `init()` opened one (#403).
@@ -506,7 +562,7 @@ void main() {
       // device defaults surface in the active state.
       expect(gateway.calls, contains('openAudioDevice:<default>:def:def:auto'));
       final state = gateway.activeAudioState();
-      expect(state.sampleRate, 44100); // first reported rate
+      expect(state.sampleRate, 48000); // the session rate
       expect(state.bufferSize, 256); // device default buffer
     });
 
@@ -529,12 +585,15 @@ void main() {
       },
     );
 
-    test('rate + buffer overrides win over the device defaults', () {
-      gateway.openAudioDevice(gateway.devices.first, rate: 96000, buffer: 64);
-      final state = gateway.activeAudioState();
-      expect(state.sampleRate, 96000);
-      expect(state.bufferSize, 64);
-    });
+    test(
+      'a buffer override wins; a rate cannot leave the session rate (#443)',
+      () {
+        gateway.openAudioDevice(gateway.devices.first, rate: 96000, buffer: 64);
+        final state = gateway.activeAudioState();
+        expect(state.sampleRate, 48000);
+        expect(state.bufferSize, 64);
+      },
+    );
   });
 
   group('openAudioDevice — failure paths', () {

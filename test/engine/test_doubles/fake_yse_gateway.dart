@@ -99,6 +99,13 @@ class FakeYseGateway implements YseGateway {
     // again: a second `init()` re-runs `updateDeviceList()` over PortAudio's
     // original table, which yields the same list (issue #412).
     _enumeratedCache ??= List<AudioDeviceDescriptor>.unmodifiable(_devices);
+    // Lock the session rate (issue #443): exactly the requested one when set —
+    // `RealYseGateway.init` re-inits offline rather than let the default
+    // negotiate another — else the platform default's own rate.
+    final visible = audioDevices();
+    sessionSampleRateValue = requestedSampleRateValue > 0
+        ? requestedSampleRateValue.toDouble()
+        : (visible.isEmpty ? _lastSessionRate : _deviceRate(visible.first));
     // The native `System::init()` brings the platform-default device up with
     // it — only `initOffline()` comes up device-less. Reflect that here, or a
     // fake that booted the default device reads back as "no device open" and
@@ -114,6 +121,11 @@ class FakeYseGateway implements YseGateway {
     initialised = true;
     _midiInputsOpen = true;
     _resetPerSessionGauges();
+    // An offline session runs exactly at the requested rate, else at the
+    // previous session's (48 kHz in a fresh process — yse #1033).
+    sessionSampleRateValue = requestedSampleRateValue > 0
+        ? requestedSampleRateValue.toDouble()
+        : _lastSessionRate;
     // Deliberately *no* enumeration: an offline session sees no hardware at
     // all (issue #403). Measured against libyse 2.4.0 on Windows —
     // `initOffline()` then `System.devices` is empty, where `init()` reports
@@ -174,10 +186,9 @@ class FakeYseGateway implements YseGateway {
     final target = visible.first;
     if (!_isPluggedIn(target)) return;
     if (unopenableDeviceNames.contains(target.name)) return;
+    if (!_runsAt(target, sessionSampleRateValue)) return;
     _liveDevice = target;
-    activeSampleRateValue = target.sampleRates.isNotEmpty
-        ? target.sampleRates.first
-        : 0;
+    activeSampleRateValue = sessionSampleRateValue;
     activeBufferSizeValue = target.defaultBufferSize;
     activeOutputLatencyValue = target.outputLatency;
   }
@@ -208,6 +219,11 @@ class FakeYseGateway implements YseGateway {
     // sees a device that is not there (issue #399).
     _midiInputsOpen = false;
     channels.clear();
+    // The session — and its locked rate — ends here. The engine carries the
+    // rate into the next session that requests none (yse #1033); the request
+    // itself survives too, as `System.requestedSampleRate` does.
+    if (sessionSampleRateValue > 0) _lastSessionRate = sessionSampleRateValue;
+    sessionSampleRateValue = 0;
     // Deliberately *not* reset: `_nextChannelId`. `RealYseGateway` keeps
     // counting up across a close, so an id is never recycled onto a different
     // channel; a fake that restarted at 1 would hide a stale-id bug.
@@ -408,6 +424,15 @@ class FakeYseGateway implements YseGateway {
       _closeDeviceState();
       throw AudioDeviceException('engine failed to open "${target.name}"');
     }
+    // The stream opens at the locked session rate, whatever [rate] asks for,
+    // and a device that cannot run at it refuses (yse 0.2.0, issue #443).
+    if (!_runsAt(target, sessionSampleRateValue)) {
+      _closeDeviceState();
+      throw AudioDeviceException(
+        'engine failed to open "${target.name}": it does not run at the '
+        'session rate of ${sessionSampleRateValue.toStringAsFixed(0)} Hz',
+      );
+    }
     calls.add(
       'openAudioDevice:${descriptor?.name ?? '<default>'}:'
       '${rate?.toStringAsFixed(0) ?? 'def'}:${buffer ?? 'def'}:'
@@ -417,9 +442,9 @@ class FakeYseGateway implements YseGateway {
     openLayout = layout;
     _liveDevice = target;
     // Reflect the choice into the live state so activeAudioState() reads back
-    // what was opened — overrides win, else the device's own defaults.
-    activeSampleRateValue =
-        rate ?? (target.sampleRates.isNotEmpty ? target.sampleRates.first : 0);
+    // what was opened — a buffer override wins, else the device's default; the
+    // rate is always the session's.
+    activeSampleRateValue = sessionSampleRateValue;
     activeBufferSizeValue = buffer ?? target.defaultBufferSize;
     activeOutputLatencyValue = target.outputLatency;
   }
@@ -449,6 +474,43 @@ class FakeYseGateway implements YseGateway {
     }
     return null;
   }
+
+  /// The sample rate asked for the next session — `System.requestedSampleRate`.
+  /// `0` means none. Read by [init] / [initOffline] only; survives [close].
+  int requestedSampleRateValue = 0;
+
+  /// The running session's locked rate — `System.sessionSampleRate`. `0` when
+  /// not initialised.
+  double sessionSampleRateValue = 0;
+
+  /// The rate the engine carries into a session that requests none: 48 kHz in
+  /// a fresh process, else the previous session's (yse #1033).
+  double _lastSessionRate = 48000;
+
+  @override
+  int get requestedSampleRate => requestedSampleRateValue;
+
+  @override
+  set requestedSampleRate(int hz) => requestedSampleRateValue = hz;
+
+  @override
+  double get sessionSampleRate => sessionSampleRateValue;
+
+  /// A device's own rate when nothing is requested: libYSE 3's 48 kHz default
+  /// when the device reports it, else the first rate it reports.
+  double _deviceRate(AudioDeviceDescriptor device) {
+    if (device.sampleRates.isEmpty || device.sampleRates.contains(48000.0)) {
+      return 48000;
+    }
+    return device.sampleRates.first;
+  }
+
+  /// Whether [device] can run at [rate] — a device reporting no rates is
+  /// taken at its word, as is an engine with no session rate yet.
+  bool _runsAt(AudioDeviceDescriptor device, double rate) =>
+      rate <= 0 ||
+      device.sampleRates.isEmpty ||
+      device.sampleRates.contains(rate);
 
   /// Whether the hardware behind a *cached* descriptor is still in the machine
   /// — the question the cache cannot answer and only an open can (issue #412).

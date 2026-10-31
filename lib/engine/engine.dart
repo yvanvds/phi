@@ -1688,6 +1688,19 @@ class PhiEngine {
     return _audio.switchTo(desired);
   }
 
+  /// Asks for the sample rate the **next** [start] runs at — the stored
+  /// `AudioSettings.sampleRate`, or `null` for the device's own rate (issue
+  /// #443). The engine locks its rate from start to stop, so a stored rate only
+  /// reaches the device when it is requested before [start]; the composition
+  /// root does that from the settings file. Called on a running engine it only
+  /// stores the request.
+  void requestSessionSampleRate(int? hz) =>
+      _gateway.requestedSampleRate = (hz != null && hz > 0) ? hz : 0;
+
+  /// The rate, in Hz, the running engine session is locked at — what every
+  /// device opened in it runs at (issue #443). `0` before [start].
+  double get sessionSampleRate => _started ? _gateway.sessionSampleRate : 0;
+
   // ─── MIDI ports (design §5, §6) ──────────────────────────────────────────
   //
   // The settings dialog's MIDI section reaches the hardware only through these

@@ -142,18 +142,71 @@ void main() {
       );
     });
 
-    test('valid rate + buffer overrides are passed through', () {
+    test('a stored rate requested before boot is the rate the device runs at '
+        '(#443)', () {
       const stored = AudioSettings(
         outputHost: 'WASAPI',
         outputDevice: 'Fake Interface',
         sampleRate: 96000,
         bufferSize: 128,
       );
+      // What the composition root does from the settings file: the session
+      // rate is locked at init, so the stored rate has to be asked for first.
+      gateway.requestedSampleRate = 96000;
       applyStored(stored);
 
       final state = gateway.activeAudioState();
       expect(state.sampleRate, 96000);
       expect(state.bufferSize, 128);
+      expect(gateway.sessionSampleRate, 96000);
+      expect(notices, isEmpty);
+    });
+
+    test('a rate picked on a running session is requested for the next one, '
+        'and says so (#443)', () {
+      // yse 0.2.0 locks the session rate from init to close: the device opens
+      // at the session's 48 kHz whatever the switch asks for. Before #443 the
+      // rate went into `DeviceSetup.sampleRate` and was silently dropped.
+      const picked = AudioSettings(
+        outputHost: 'WASAPI',
+        outputDevice: 'Fake Interface',
+        sampleRate: 96000,
+        bufferSize: 128,
+      );
+      final ok = applyStored(picked);
+
+      expect(ok, isTrue);
+      expect(gateway.activeAudioState().sampleRate, 48000);
+      expect(gateway.activeAudioState().bufferSize, 128);
+      expect(gateway.requestedSampleRate, 96000);
+      // The choice is what [current] reports — it is what gets persisted, so
+      // the next launch requests it.
+      expect(coordinator.current?.sampleRate, 96000);
+      expect(notices.single.kind, AudioNoticeKind.sampleRateOnRestart);
+      expect(notices.single.message, contains('96000 Hz'));
+      expect(notices.single.message, contains('48000 Hz'));
+    });
+
+    test('picking the running rate, or the device default, raises nothing and '
+        'clears a stale request (#443)', () {
+      coordinator.boot();
+      gateway.requestedSampleRate = 96000;
+
+      coordinator.switchTo(
+        const AudioSettings(
+          outputHost: 'WASAPI',
+          outputDevice: 'Fake Interface',
+          sampleRate: 48000,
+        ),
+      );
+      expect(gateway.requestedSampleRate, 48000);
+      coordinator.switchTo(
+        const AudioSettings(
+          outputHost: 'WASAPI',
+          outputDevice: 'Fake Interface',
+        ),
+      );
+      expect(gateway.requestedSampleRate, 0);
       expect(notices, isEmpty);
     });
 
@@ -203,10 +256,7 @@ void main() {
       // The platform default `init()` opened is still the live device — the
       // failed switch never touched it (§9.3).
       expect(gateway.openedDevice, isNull); // no explicit open happened
-      expect(
-        gateway.activeSampleRateValue,
-        gateway.devices.first.sampleRates.first,
-      );
+      expect(gateway.activeSampleRateValue, 48000); // the default's own rate
       // A device *is* open — the unnamed platform default — which reads as an
       // empty [AudioSettings], never as the `null` that means nothing is open.
       expect(coordinator.current, const AudioSettings());

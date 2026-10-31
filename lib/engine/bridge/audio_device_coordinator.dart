@@ -59,7 +59,9 @@ class AudioDeviceCoordinator {
   /// The settings describing the device currently open — what a failed live
   /// switch reverts to (design §9.3). Its stored rate / buffer are normalised to
   /// what the device actually accepted (an unsupported override reads back as
-  /// `null`, i.e. the device default).
+  /// `null`, i.e. the device default). The rate is the performer's accepted
+  /// *choice*: it can differ from the engine's locked session rate until Phi
+  /// restarts (issue #443), and it is what gets persisted.
   ///
   /// **`null` means no device is open at all** (issue #408) — the total loss a
   /// [AudioNoticeKind.noAudioDevice] notice announces, or a [boot] on a machine
@@ -398,10 +400,30 @@ class AudioDeviceCoordinator {
         bufferSize: buffer,
         layout: settings.layout,
       );
+      _requestSessionRate(rate, quiet: quiet);
       return true;
     } on AudioDeviceException {
       return false;
     }
+  }
+
+  /// Carries the accepted [rate] (`null` = the device's own) to the engine as
+  /// the request for the next session (issue #443). The device just opened at
+  /// the running session's rate — it is locked from init until close — so a
+  /// rate that differs from it cannot apply now, only at the next launch, when
+  /// the shell requests the stored rate before the engine starts. Says so,
+  /// unless [quiet]: otherwise the picker would show a rate the engine is not
+  /// running at, with nothing to explain it.
+  void _requestSessionRate(double? rate, {required bool quiet}) {
+    _gateway.requestedSampleRate = rate?.toInt() ?? 0;
+    final session = _gateway.sessionSampleRate;
+    if (quiet || rate == null || session <= 0 || rate == session) return;
+    _notify(
+      AudioNoticeKind.sampleRateOnRestart,
+      'Sample rate ${rate.toInt()} Hz takes effect the next time Phi starts — '
+      'the audio engine keeps its rate while it runs (now '
+      '${session.toStringAsFixed(0)} Hz).',
+    );
   }
 
   /// Resolves [settings]' device and opens it quietly — the revert of a failed

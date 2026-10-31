@@ -28,8 +28,21 @@ class RealYseGateway implements YseGateway {
 
   @override
   void init() {
+    final requested = _system.requestedSampleRate;
     try {
       _system.init();
+      // A device session asks the platform default for the requested rate, and
+      // a default that refuses negotiates its own instead — a log line, not an
+      // error. The rate is then locked for the whole session, so the device the
+      // performer chose (opened right after boot) would be stuck at the
+      // default's rate too. Re-init offline instead: an offline session runs at
+      // exactly the requested rate, and `openDevice` works on it once the
+      // devices are listed (issue #443). The default stays closed; the stored
+      // device's switch, or recovery, opens one.
+      if (requested > 0 && _system.sessionSampleRate != requested) {
+        _system.close();
+        _initOfflineWithDevices();
+      }
     } on YseException {
       // Since yse 0.2.0 `init()` throws when no device opens and leaves the
       // engine closed (libyse 2.4 returned normally with nothing open). Phi's
@@ -37,12 +50,23 @@ class RealYseGateway implements YseGateway {
       // `AudioDeviceState.none` so recovery can take over — so fall back to an
       // offline session and enumerate the devices without opening one, which
       // also lets a later `openDevice` work on that session.
-      _system
-        ..initOffline()
-        ..refreshDevices();
+      _initOfflineWithDevices();
     }
     _openMidiInputs();
   }
+
+  void _initOfflineWithDevices() => _system
+    ..initOffline()
+    ..refreshDevices();
+
+  @override
+  int get requestedSampleRate => _system.requestedSampleRate;
+
+  @override
+  set requestedSampleRate(int hz) => _system.requestedSampleRate = hz;
+
+  @override
+  double get sessionSampleRate => _system.sessionSampleRate;
 
   @override
   void initOffline() {
@@ -147,8 +171,11 @@ class RealYseGateway implements YseGateway {
                   '"${descriptor.hostName}" is available',
       );
     }
+    // No `setup.sampleRate`: since yse 0.2.0 it cannot change the locked
+    // session rate — the stream opens at `sessionSampleRate` regardless, and a
+    // differing value only logs a warning (issue #443). [rate] reaches the
+    // device through `requestedSampleRate` on the next session instead.
     final setup = DeviceSetup()..output = device;
-    if (rate != null) setup.sampleRate = rate;
     if (buffer != null) setup.bufferSize = buffer;
     try {
       _system.closeCurrentDevice();

@@ -297,8 +297,13 @@ class _AudioSettingsSectionState extends State<AudioSettingsSection> {
             style: PhiType.mono().copyWith(color: PhiColors.fg3),
           );
         }
+        // The session's locked rate, not the stored choice (issue #443): a
+        // changed rate only applies at the next launch, and the notice below
+        // says so.
+        final session = widget.engine.sessionSampleRate;
+        final rate = session > 0 ? session : state.sampleRate;
         final text =
-            '${state.sampleRate.toStringAsFixed(0)} Hz'
+            '${rate.toStringAsFixed(0)} Hz'
             '   ·   ${state.bufferSize} frames'
             '   ·   ${state.outputLatencyMs.toStringAsFixed(1)} ms';
         return Text(text, style: PhiType.readout());

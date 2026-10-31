@@ -105,8 +105,12 @@ Confirmed against the bridge; no engine work is required for v1:
 - **Two engine limits to design around** (both measured, both filed):
   a refused `openDevice` is reported as a log line, not a status, so the
   bridge confirms an open by reading back the live state (dart-yse #52);
-  and the session sample rate is locked at `init()`, so a stored rate
-  override cannot reach the device (dart-yse #53).
+  and the session sample rate is locked from `init()` to `close()`, so a
+  stored rate override cannot reach an open session (dart-yse #53). Since
+  yse 0.2.0 (issue #443) Phi sets `System.requestedSampleRate` from
+  `settings.json` *before* the engine starts, so the stored rate is the
+  session rate; a rate picked while Phi runs is stored and requested for the
+  next launch, with a notice, and the read-back shows `sessionSampleRate`.
 - **Live state:** `activeSampleRate`, `activeBufferSize`, output latency
   in samples — the diagnostics section reads these, not the stored
   settings (they can legitimately differ).

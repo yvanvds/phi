@@ -87,8 +87,9 @@ void main() {
     expect(find.text('ACTIVE'), findsOneWidget);
     // The stored device shows as the current choice …
     expect(find.text('Alpha'), findsOneWidget);
-    // … and the read-back reflects the actually-open device (44100 / 256).
-    expect(find.textContaining('44100 Hz'), findsOneWidget);
+    // … and the read-back reflects the actually-open device, at the session's
+    // locked rate (48000 / 256).
+    expect(find.textContaining('48000 Hz'), findsOneWidget);
     expect(find.textContaining('256 frames'), findsOneWidget);
   });
 
@@ -163,7 +164,7 @@ void main() {
     expect(store.saveCount, before);
     expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
     // Audio really is back on Alpha, not merely reported as such.
-    expect(engine.activeAudioState().sampleRate, 44100);
+    expect(engine.activeAudioState().sampleRate, 48000);
   });
 
   testWidgets('the rate picker is populated from the selected device', (
@@ -181,6 +182,26 @@ void main() {
     expect(find.text('device default'), findsWidgets);
     // Beta's exclusive rate must not leak in.
     expect(find.text('96000 Hz'), findsNothing);
+  });
+
+  testWidgets('picking a rate persists it and says it applies at the next '
+      'launch, while the read-back keeps the session rate (#443)', (
+    tester,
+  ) async {
+    await pumpSection(tester);
+
+    await tester.tap(find.byType(PhiSelect<int>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('44100 Hz').last);
+    await tester.pumpAndSettle();
+
+    // Stored, and requested for the next session …
+    expect(settings.value.audio.sampleRate, 44100);
+    expect(gateway.requestedSampleRate, 44100);
+    // … but the running session is locked at 48 kHz, and the section says so
+    // instead of showing a rate the engine is not running at.
+    expect(find.textContaining('48000 Hz   ·'), findsOneWidget);
+    expect(find.textContaining('next time Phi starts'), findsOneWidget);
   });
 
   testWidgets('changing the speaker layout applies and persists', (

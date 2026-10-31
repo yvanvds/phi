@@ -110,4 +110,77 @@ void main() {
     await engine.dispose();
     await gateway.dispose();
   });
+
+  // yse 0.2.0 locks the session rate from init to close (issue #443): the
+  // stored rate reaches the device only when requested before the engine
+  // starts, and a rate picked while Phi runs applies at the next launch.
+  testWidgets('the stored sample rate is the running rate; a new pick is '
+      'stored for the next launch and says so', (tester) async {
+    final gateway = FakeYseGateway()..devices = const [_alpha, _beta];
+    final engine = PhiEngine(
+      gateway,
+      telemetryInterval: const Duration(milliseconds: 20),
+    );
+    final session = SessionState();
+    final settingsStore = FakeAppSettingsStore(
+      const AppSettings(
+        audio: AudioSettings(
+          outputHost: 'WASAPI',
+          outputDevice: 'Alpha',
+          sampleRate: 44100,
+        ),
+      ),
+    );
+    final settings = AppSettingsController(settingsStore);
+    final controller = ProjectController(
+      session: session,
+      settings: settings,
+      storeFactory: (_) => FakeProjectStore(),
+      journalStoreFactory: (_) => FakeJournalStore(),
+      autosaveIntervalOverride: const Duration(hours: 1),
+    );
+    // What the composition root does from settings.json before `start()`.
+    engine.requestSessionSampleRate(44100);
+
+    await tester.pumpWidget(
+      PhiApp(
+        engine: engine,
+        session: session,
+        projectController: controller,
+        directoryPicker: FakeProjectDirectoryPicker(),
+        autoStartProject: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(engine.activeAudioSettings?.outputDevice, 'Alpha');
+    expect(engine.sessionSampleRate, 44100);
+    expect(gateway.activeSampleRate, 44100);
+
+    await tester.tap(find.byIcon(Icons.expand_more));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings…'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('44100 Hz   ·'), findsOneWidget);
+
+    // Pick 48000 Hz on the rate picker.
+    await tester.tap(find.byType(PhiSelect<int>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('48000 Hz').last);
+    await tester.pumpAndSettle();
+
+    // Stored and requested for the next launch; the engine stays at 44100 and
+    // the dialog says why.
+    expect(settingsStore.current.audio.sampleRate, 48000);
+    expect(gateway.requestedSampleRate, 48000);
+    expect(gateway.activeSampleRate, 44100);
+    expect(find.textContaining('44100 Hz   ·'), findsOneWidget);
+    expect(find.textContaining('next time Phi starts'), findsWidgets);
+
+    controller.dispose();
+    settings.dispose();
+    session.dispose();
+    await engine.dispose();
+    await gateway.dispose();
+  });
 }

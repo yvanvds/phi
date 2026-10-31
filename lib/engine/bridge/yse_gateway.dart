@@ -14,7 +14,24 @@ abstract interface class YseGateway {
   ///
   /// This is also what enumerates the hardware: [audioDevices] is empty until an
   /// `init()` has run (issue #403), so every boot path goes through here.
+  ///
+  /// It also fixes the session's sample rate, which stays locked until [close]
+  /// (yse 0.2.0, issue #443). With a [requestedSampleRate] set the session runs
+  /// at exactly that rate, and the platform default only comes up when it can
+  /// run at it; otherwise the session takes the platform default's own rate.
   void init();
+
+  /// The sample rate, in Hz, asked for the **next** session, or `0` for none
+  /// (the device's own rate). It has no effect on a running session: the rate
+  /// is locked from [init] until [close], so it is read only when [init] runs.
+  /// Survives [close]. Issue #443.
+  int get requestedSampleRate;
+  set requestedSampleRate(int hz);
+
+  /// The running session's sample rate in Hz, locked from [init] until
+  /// [close]. Every device opened in the session runs at it. `0` when the
+  /// engine is not initialised.
+  double get sessionSampleRate;
 
   /// Initialise the engine **without** opening any audio device — headless
   /// rendering and benchmarks.
@@ -63,8 +80,11 @@ abstract interface class YseGateway {
   /// Open an audio device, or live-swap to it if one is already open
   /// (`closeCurrentDevice` + `openDevice`, design §5 — a brief dropout is
   /// accepted). Passing a null [descriptor] opens the platform-default device.
-  /// [rate] / [buffer] override the device's own defaults when non-null;
-  /// [layout] chooses the speaker layout.
+  /// [buffer] overrides the device's own default when non-null; [layout]
+  /// chooses the speaker layout. [rate] is the rate the caller *wants*, kept
+  /// for the record only: the device always opens at [sessionSampleRate], and
+  /// a device that cannot run at it refuses (issue #443). A different rate
+  /// needs a new session — set [requestedSampleRate] before [init].
   ///
   /// Throws [AudioDeviceException] when the descriptor resolves to no visible
   /// device or the engine refuses to open it — the caller reverts to the
