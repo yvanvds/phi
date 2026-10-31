@@ -43,6 +43,7 @@ class PhiApp extends StatefulWidget {
     this.layoutController,
     this.commandRegistry,
     this.noticeCenter,
+    this.sessionLog,
     this.crashReport,
   });
 
@@ -99,6 +100,12 @@ class PhiApp extends StatefulWidget {
   /// fallback raised and the entries the sources logged.
   final NoticeCenter? noticeCenter;
 
+  /// Optional session-file mirror (design `docs/design/diagnostics.md` §2).
+  /// `null` lets the production path build and boot the real one; tests inject
+  /// one over a fake file store (already booted by the test) to observe the
+  /// clean-shutdown marker an orderly exit writes (issue #462).
+  final SessionLog? sessionLog;
+
   /// Optional crashed-last-session report (design §6, issue #272). `null` on the
   /// production path lets the app boot the session log and derive it; tests
   /// inject a resolved future to drive the crash notice without touching disk.
@@ -131,6 +138,9 @@ class _PhiAppState extends State<PhiApp> {
   /// injected a notice center (no disk boot ran); a test can still inject its own
   /// via [PhiApp.crashReport].
   Future<CrashReport?>? _crashReport;
+
+  /// Set once [_shutdownForExit] has run, so it runs at most once.
+  bool _exitShutdownDone = false;
 
   late final SessionState _session;
   late final bool _ownsSession;
@@ -181,7 +191,7 @@ class _PhiAppState extends State<PhiApp> {
       // the per-user logs folder (design §2). Skipped when a test injected a notice
       // center — it owns its own recorder and wants no disk. Booting is
       // fire-and-forget; early entries that predate it stay in the ring buffer.
-      if (widget.noticeCenter == null) {
+      if (widget.noticeCenter == null && widget.sessionLog == null) {
         final sessionLog = SessionLog(files: RealLogFileStore());
         _sessionLog = sessionLog;
         // Capture the boot's crash verdict (design §6, issue #272): a non-null
@@ -190,6 +200,10 @@ class _PhiAppState extends State<PhiApp> {
         _crashReport = sessionLog.boot();
       }
     }
+
+    // An injected session log (tests) replaces the production one; the test
+    // boots it itself.
+    _sessionLog ??= widget.sessionLog;
 
     final injectedSession = widget.session;
     if (injectedSession != null) {
@@ -232,6 +246,24 @@ class _PhiAppState extends State<PhiApp> {
     _engine.start();
     _directoryPicker =
         widget.directoryPicker ?? const FileSelectorProjectDirectoryPicker();
+  }
+
+  /// The orderly shutdown for a granted OS close (issue #462), handed to the
+  /// workstation's exit path. The embedder ends the process as soon as the exit
+  /// is answered, without tearing the widget tree down — so [dispose] never runs
+  /// on a real close, and neither did the engine stop nor the clean-shutdown
+  /// marker that used to live only there. Stops the engine first (audio device,
+  /// native voices and patchers closed in order rather than torn from under a
+  /// running audio thread at process exit — that segfaulted on Linux), then
+  /// writes the marker, so a crash in the teardown still reads as a crash at
+  /// the next boot. Stopping an injected engine too is deliberate: the process
+  /// is ending either way, and `stop` is idempotent for its owner's later
+  /// `dispose`.
+  Future<void> _shutdownForExit() async {
+    if (_exitShutdownDone) return;
+    _exitShutdownDone = true;
+    _engine.stop();
+    await _sessionLog?.close();
   }
 
   @override
@@ -281,6 +313,7 @@ class _PhiAppState extends State<PhiApp> {
         noticeCenter: widget.noticeCenter,
         sessionLog: _sessionLog,
         crashReport: widget.crashReport ?? _crashReport,
+        onExit: _shutdownForExit,
       ),
     );
   }
