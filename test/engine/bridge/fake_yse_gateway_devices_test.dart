@@ -525,6 +525,26 @@ void main() {
       expect(gateway.appliedMasterVolume, closeTo(1.0, 1e-9));
     });
 
+    test('a write while stopped is a no-op (#421)', () {
+      gateway.init();
+      gateway.masterVolume = 0.3;
+      gateway.close();
+
+      gateway.masterVolume = 0.7;
+
+      // The real gateway must not forward this: the master's implementation
+      // is gone, and `setVolume()` dereferences it unconditionally.
+      expect(gateway.masterVolume, closeTo(0.3, 1e-9));
+      expect(gateway.appliedMasterVolume, closeTo(0.3, 1e-9));
+    });
+
+    test('a write before the first init is a no-op (#421)', () {
+      gateway.masterVolume = 0.4;
+
+      expect(gateway.masterVolume, closeTo(1.0, 1e-9));
+      expect(gateway.appliedMasterVolume, closeTo(1.0, 1e-9));
+    });
+
     test('writing the volume again re-converges the two', () {
       gateway.init();
       gateway.masterVolume = 0.3;
