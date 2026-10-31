@@ -283,6 +283,59 @@ class FakePatcherGateway implements PatcherGateway {
       _inst(instanceId).nodes[handleId]?.guiValue ?? '';
 
   @override
+  void sendList(int instanceId, int handleId, int inlet, String list) {
+    calls.add('sendList:$handleId:$inlet:$list');
+    _inst(instanceId).nodes[handleId]?.receiveList(inlet, list);
+  }
+
+  @override
+  void sendMessage(int instanceId, int handleId, int inlet, String message) {
+    calls.add('sendMessage:$handleId:$inlet:$message');
+    // Same native call as a list, exactly as the real gateway sends it.
+    _inst(instanceId).nodes[handleId]?.receiveList(inlet, message);
+  }
+
+  @override
+  int guiValueCount(int instanceId, int handleId) =>
+      _inst(instanceId).nodes[handleId]?.guiCells.length ?? 0;
+
+  @override
+  String guiValueAt(int instanceId, int handleId, int index) {
+    final cells = _inst(instanceId).nodes[handleId]?.guiCells;
+    if (cells == null || index < 0 || index >= cells.length) return '';
+    return cells[index];
+  }
+
+  @override
+  bool guiValueIsSettable(int instanceId, int handleId) =>
+      _inst(instanceId).nodes[handleId]?.guiSettable ?? false;
+
+  @override
+  bool restoreGuiValue(int instanceId, int handleId, String state) {
+    final node = _inst(instanceId).nodes[handleId];
+    if (node == null || !node.guiSettable) return false;
+    // A restore *is* a list on inlet 0 (yse's `restoreGuiValue`), so it is
+    // logged — and lands — as one.
+    sendList(instanceId, handleId, 0, state);
+    return true;
+  }
+
+  @override
+  bool setGuiValueAt(int instanceId, int handleId, int index, String value) {
+    final node = _inst(instanceId).nodes[handleId];
+    if (node == null || !node.guiSettable) return false;
+    if (index < 0 || index >= node.guiCells.length) return false;
+    // yse's `setGuiValueAt`: `set <i> <v>`, or the whole text on a .textedit.
+    sendList(
+      instanceId,
+      handleId,
+      0,
+      node.type == Obj.gTextedit ? value : 'set $index $value',
+    );
+    return true;
+  }
+
+  @override
   void setParams(int instanceId, int handleId, String args) {
     calls.add('setParams:$handleId:$args');
     _inst(instanceId).nodes[handleId]?.args = args;
@@ -566,16 +619,36 @@ class FakeInstance {
 }
 
 class FakeNode {
-  FakeNode({required this.type, required this.args});
+  FakeNode({required this.type, required this.args})
+    : guiCells = _initialCells(type, args),
+      guiSettable = !_unsettable.contains(type) && type.startsWith('.');
   final String type;
 
   /// Creation-argument string — mutable so [FakePatcherGateway.setParams] can
   /// reconfigure the object, mirroring yse's `setParams`.
   String args;
 
-  /// Live GUI display value (yse's `guiValue`). Updated by a `sendFloat` into
-  /// inlet 0; a test can also set it directly to simulate a cable-driven change.
-  String guiValue = '';
+  /// The live GUI state as cells (the GUI value protocol, issue #469) — one
+  /// cell for a scalar control or an object without GUI state (that cell is
+  /// then empty), two for `.rslider` / `.xyslider`, 128 for `.kslider`, the
+  /// bank size for `.multislider`. A test may assign it directly to simulate a
+  /// cable-driven change to a multi-cell control.
+  List<String> guiCells;
+
+  /// Whether the object accepts its GUI state back (yse's
+  /// `guiValueIsSettable`). Defaults to the engine's answer: every `.`-control
+  /// except `.b`, `.m` and `.l`; a test may override it.
+  bool guiSettable;
+
+  /// Live GUI display value (yse's `guiValue`): every cell, space-separated.
+  /// Updated by a `sendFloat` into inlet 0; a test can also set it directly to
+  /// simulate a cable-driven change, which makes it a one-cell state.
+  String get guiValue => guiCells.join(' ');
+  set guiValue(String value) => guiCells = [value];
+
+  /// Every list (and selector message) sent to the object, in order, keyed by
+  /// inlet.
+  final Map<int, List<String>> listsByInlet = {};
 
   Offset? position;
 
@@ -584,6 +657,55 @@ class FakeNode {
   final Map<String, String> gui = {};
   final Map<int, double> lastValueByInlet = {};
   final List<int> bangedInlets = [];
+
+  /// Model the engine taking a list (or selector message) on [inlet].
+  ///
+  /// Only inlet 0 of a settable control moves the GUI state, the way the
+  /// real objects do: `set <i> <v>` writes one cell (dropped past the count),
+  /// a `.textedit` takes the whole text as its one cell, and a list of numbers
+  /// becomes the cells — so a list resizes a `.multislider` bank. Any other
+  /// selector (`inc`, `clear`, ...) is object-specific behaviour the fake does
+  /// not model: it is recorded and leaves the state alone. A `.l` (not
+  /// settable) stores the list as its one cell.
+  void receiveList(int inlet, String list) {
+    listsByInlet.putIfAbsent(inlet, () => []).add(list);
+    if (inlet != 0) return;
+    if (type == Obj.gList) {
+      guiCells = [list];
+      return;
+    }
+    if (!guiSettable) return;
+    if (type == Obj.gTextedit) {
+      guiCells = [list];
+      return;
+    }
+    final tokens = list.trim().split(RegExp(r'\s+'));
+    if (tokens.first == 'set' && tokens.length >= 3) {
+      final index = int.tryParse(tokens[1]);
+      if (index == null || index < 0 || index >= guiCells.length) return;
+      guiCells = [...guiCells]..[index] = tokens.skip(2).join(' ');
+      return;
+    }
+    if (tokens.every((t) => num.tryParse(t) != null)) guiCells = tokens;
+  }
+
+  /// Objects whose GUI value the engine does not accept back.
+  static const Set<String> _unsettable = {Obj.gButton, Obj.gMessage, Obj.gList};
+
+  /// The cell layout a fresh object reports, mirroring the engine's.
+  static List<String> _initialCells(String type, String args) {
+    switch (type) {
+      case Obj.gRslider:
+      case Obj.gXyslider:
+        return ['0', '0'];
+      case Obj.gKslider:
+        return List.filled(128, '0');
+      case Obj.gMultislider:
+        final size = int.tryParse(args.trim().split(RegExp(r'\s+')).first);
+        return List.filled(size ?? 8, '0');
+    }
+    return [''];
+  }
 }
 
 class FakeCable {

@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/widgets.dart';
 
 import '../../design/widgets/patcher/patch_canvas_constants.dart';
@@ -20,6 +21,7 @@ import '../bridge/patch_object_descriptor.dart';
 import '../bridge/patch_pin_compatibility.dart';
 import '../bridge/patcher_gateway.dart';
 import '../bridge/patcher_node_snapshot.dart';
+import 'gui_value_read.dart';
 import 'node_type_registry.dart';
 import 'patch_clipboard.dart';
 import 'patch_clipboard_cable.dart';
@@ -133,6 +135,21 @@ class PatcherController {
   /// absent from the map counts as the empty display a fresh object has, so a
   /// value that arrived before the first poll still registers as a change.
   final Map<PatchNodeId, String> _guiValueByNode = {};
+
+  /// Logical node id → the cells [refreshGuiValues] last read for a
+  /// [GuiValueRead.cells] node (issue #469): the poll's own read, which the
+  /// cell accessors answer from so a body never reads the engine a second time
+  /// in the same frame. Cells outside the node's window keep their last value.
+  final Map<PatchNodeId, List<String>> _guiCellsByNode = {};
+
+  /// Logical node id → the `[start, end)` cell window a large control repaints
+  /// ([setGuiCellWindow]); a node without one is read in full.
+  final Map<PatchNodeId, (int, int)> _guiCellWindowByNode = {};
+
+  /// Nodes whose cached cells a write through this controller has outdated —
+  /// the next cell accessor re-reads them rather than answering the pre-write
+  /// state (the next poll then settles them without a second wake-up).
+  final Set<PatchNodeId> _guiCellsStale = {};
 
   /// Logical node id → its **decoration** GUI properties ([PatchGuiProperty]:
   /// a note's width today), mirrored here so a spec can carry them through
@@ -443,6 +460,9 @@ class PatcherController {
     _nativeByNode.clear();
     _argsByNode.clear();
     _guiValueByNode.clear();
+    _guiCellsByNode.clear();
+    _guiCellWindowByNode.clear();
+    _guiCellsStale.clear();
     _guiByNode.clear();
 
     final snapshot = _gateway.enumerate(instanceId);
@@ -582,6 +602,7 @@ class PatcherController {
     final native = _nativeByNode[id];
     if (native == null) return;
     _gateway.sendFloat(instanceId, native, inlet, value);
+    _guiCellsStale.add(id);
   }
 
   /// Drop an **integer** control value into a node's inlet — used by the
@@ -592,6 +613,7 @@ class PatcherController {
     final native = _nativeByNode[id];
     if (native == null) return;
     _gateway.sendInt(instanceId, native, inlet, value);
+    _guiCellsStale.add(id);
   }
 
   /// Bang a node's inlet — used by trigger-style control bodies (`.b`,
@@ -601,15 +623,142 @@ class PatcherController {
     final native = _nativeByNode[id];
     if (native == null) return;
     _gateway.sendBang(instanceId, native, inlet);
+    _guiCellsStale.add(id);
+  }
+
+  /// Send a list (`0.2 0.8`) into a node's inlet — the multi-value controls'
+  /// push (`.rslider`, `.multislider`) and a `.l`'s stored list (issue #469).
+  void setControlList(
+    PatchNodeId id, {
+    required int inlet,
+    required String list,
+  }) {
+    final native = _nativeByNode[id];
+    if (native == null) return;
+    _gateway.sendList(instanceId, native, inlet, list);
+    _guiCellsStale.add(id);
+  }
+
+  /// Send a selector message (`inc`, `store 3`, `clear`) into a node's inlet
+  /// (issue #469).
+  void sendControlMessage(
+    PatchNodeId id, {
+    required int inlet,
+    required String message,
+  }) {
+    final native = _nativeByNode[id];
+    if (native == null) return;
+    _gateway.sendMessage(instanceId, native, inlet, message);
+    _guiCellsStale.add(id);
   }
 
   /// The live GUI display value of a node (`guiValue`) — what a control body
   /// (`.slider`, `.f`, `.i`, `.t`) shows. Empty for a node with no native
   /// handle or no display value.
+  ///
+  /// For a [GuiValueRead.cells] node this is its cells joined by spaces (the
+  /// spelling `guiValue` itself uses), answered from the per-cell read rather
+  /// than a second, whole-state read — the engine's one-read-form rule.
   String guiValueOf(PatchNodeId id) {
     final native = _nativeByNode[id];
     if (native == null) return '';
+    if (_guiValueReadOf(id) == GuiValueRead.cells) {
+      return guiValueCellsOf(id).join(' ');
+    }
     return _gateway.guiValue(instanceId, native);
+  }
+
+  // ─── GUI value protocol, per cell (issue #469) ──────────────────────
+
+  /// The cells of a [GuiValueRead.cells] node's GUI state, as the last poll
+  /// read them — read now (and remembered) if no poll has yet. Empty for a
+  /// node with no native handle. Cells outside the node's [setGuiCellWindow]
+  /// hold the last value read for them (`''` if never read).
+  List<String> guiValueCellsOf(PatchNodeId id) {
+    final cached = _guiCellsByNode[id];
+    if (cached != null && !_guiCellsStale.contains(id)) return cached;
+    final native = _nativeByNode[id];
+    if (native == null) return const [];
+    _guiCellsStale.remove(id);
+    return _guiCellsByNode[id] = List.unmodifiable(
+      _readCells(id, native, cached ?? const []),
+    );
+  }
+
+  /// How many cells [id]'s GUI state has (1 for a scalar control) — from the
+  /// same read as [guiValueCellsOf].
+  int guiValueCountOf(PatchNodeId id) => guiValueCellsOf(id).length;
+
+  /// Cell [index] of [id]'s GUI state, or `''` past the end — from the same
+  /// read as [guiValueCellsOf].
+  String guiValueCellOf(PatchNodeId id, int index) {
+    final cells = guiValueCellsOf(id);
+    return index >= 0 && index < cells.length ? cells[index] : '';
+  }
+
+  /// Limit the per-cell poll of [id] to cells `[start, end)` — the ones a large
+  /// control (`.kslider`, `.multislider`) actually repaints. `null` for both
+  /// reads every cell again. The window is clamped to the live count at each
+  /// read, so it may run past a bank that has since shrunk.
+  void setGuiCellWindow(PatchNodeId id, {int? start, int? end}) {
+    if (start == null && end == null) {
+      _guiCellWindowByNode.remove(id);
+      return;
+    }
+    _guiCellWindowByNode[id] = (math.max(0, start ?? 0), end ?? 1 << 30);
+  }
+
+  /// Whether [id]'s object takes its own GUI state back, so [restoreGuiValueOf]
+  /// and [setGuiValueCell] can reach it.
+  bool guiValueIsSettableOf(PatchNodeId id) {
+    final native = _nativeByNode[id];
+    if (native == null) return false;
+    return _gateway.guiValueIsSettable(instanceId, native);
+  }
+
+  /// Put a whole GUI state (as `guiValue` spells it) back into [id]'s object —
+  /// sent as a list on inlet 0, so it passes the object's clamps and may emit.
+  /// Returns whether it was sent (false for an unsettable or unbound node).
+  bool restoreGuiValueOf(PatchNodeId id, String state) {
+    final native = _nativeByNode[id];
+    if (native == null) return false;
+    final sent = _gateway.restoreGuiValue(instanceId, native, state);
+    if (sent) _guiCellsStale.add(id);
+    return sent;
+  }
+
+  /// Write cell [index] of [id]'s GUI state (`set <index> <value>`). Returns
+  /// whether it was sent (false for an unsettable or unbound node, or an index
+  /// outside the live count).
+  bool setGuiValueCell(PatchNodeId id, int index, String value) {
+    final native = _nativeByNode[id];
+    if (native == null) return false;
+    final sent = _gateway.setGuiValueAt(instanceId, native, index, value);
+    if (sent) _guiCellsStale.add(id);
+    return sent;
+  }
+
+  /// Read [id]'s cell count, then the cells in its window, carrying
+  /// [previous] values over for the cells outside it.
+  List<String> _readCells(PatchNodeId id, int native, List<String> previous) {
+    final count = _gateway.guiValueCount(instanceId, native);
+    final (start, end) = _guiCellWindowByNode[id] ?? (0, count);
+    final from = math.min(start, count);
+    final to = math.min(end, count);
+    return [
+      for (var i = 0; i < count; i++)
+        if (i >= from && i < to)
+          _gateway.guiValueAt(instanceId, native, i)
+        else
+          i < previous.length ? previous[i] : '',
+    ];
+  }
+
+  GuiValueRead _guiValueReadOf(PatchNodeId id) {
+    final node = graph.nodeById(id);
+    if (node == null) return GuiValueRead.whole;
+    return NodeTypeRegistry.instance.find(node.type)?.guiValueRead ??
+        GuiValueRead.whole;
   }
 
   /// The creation-argument string a node was last made / reconfigured with —
@@ -736,6 +885,10 @@ class PatcherController {
     var woken = 0;
     for (final node in graph.nodes) {
       if (!_readsGuiValue(node)) continue;
+      if (_guiValueReadOf(node.id) == GuiValueRead.cells) {
+        if (_refreshCells(node)) woken++;
+        continue;
+      }
       final value = guiValueOf(node.id);
       final previous = _guiValueByNode[node.id] ?? '';
       _guiValueByNode[node.id] = value;
@@ -744,6 +897,24 @@ class PatcherController {
       woken++;
     }
     return woken;
+  }
+
+  /// The per-cell poll of one [GuiValueRead.cells] node: re-read its count and
+  /// windowed cells, and wake it if any of them (or the count) moved. Returns
+  /// whether it was woken. A node never read before compares against an empty
+  /// state, like the whole-value path.
+  bool _refreshCells(PatchNode node) {
+    final native = _nativeByNode[node.id];
+    if (native == null) return false;
+    final previous = _guiCellsByNode[node.id] ?? const <String>[];
+    final cells = List<String>.unmodifiable(
+      _readCells(node.id, native, previous),
+    );
+    _guiCellsByNode[node.id] = cells;
+    _guiCellsStale.remove(node.id);
+    if (listEquals(previous, cells)) return false;
+    node.markGuiValueChanged();
+    return true;
   }
 
   /// Whether [node]'s registered body displays a `guiValue`. An object box
@@ -1372,6 +1543,9 @@ class PatcherController {
     _nativeByNode.remove(id);
     _argsByNode.remove(id);
     _guiValueByNode.remove(id);
+    _guiCellsByNode.remove(id);
+    _guiCellWindowByNode.remove(id);
+    _guiCellsStale.remove(id);
     _guiByNode.remove(id);
   }
 
@@ -1428,6 +1602,7 @@ class PatcherController {
     // The new object has a display value of its own (or none at all); the one
     // the poll last read belonged to the object that just went.
     _guiValueByNode.remove(id);
+    _guiCellsByNode.remove(id);
     _gateway.setNodePosition(instanceId, native, node.position);
     // Decoration is the canvas's, not the object's: it is carried to the
     // replacement like the position, so a retype's undo finds it intact.

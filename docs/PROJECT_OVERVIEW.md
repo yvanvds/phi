@@ -2721,6 +2721,27 @@ main + app          (orchestration)
   `patcher_retype_object` integration test through the real app (`sine 440` →
   `saw 300` keeps both cables and the reference panel follows; retyping to a
   `.slider` drops both and names them; `Ctrl+Z` puts it all back).
+- **GUI value protocol in the patcher gateway** (issue #469, prerequisite for
+  the libYSE 3.x control bodies #470–#473) — every new GUI control keeps its
+  state as a list of **cells**, so `PatcherGateway` (real + fake) grows
+  `guiValueCount` / `guiValueAt` / `guiValueIsSettable`, `restoreGuiValue` /
+  `setGuiValueAt` (both return whether they were sent: an unsettable object, an
+  out-of-range cell or an unknown handle sends nothing instead of throwing), and
+  `sendList` / `sendMessage` (a selector such as `inc` or `store 3`, the same
+  native list call). The engine's **one read form per object per frame** rule
+  is a `NodeDescriptor.guiValueRead` (`GuiValueRead.whole` | `.cells`,
+  `lib/engine/state/gui_value_read.dart`): `PatcherController.refreshGuiValues`
+  polls a `cells` node by count + cells only, limited to the window a large
+  control repaints (`setGuiCellWindow`), and `guiValueOf` answers such a node
+  from those cells rather than reading the whole state a second time. Controller
+  wrappers: `guiValueCellsOf` / `guiValueCountOf` / `guiValueCellOf`,
+  `guiValueIsSettableOf`, `restoreGuiValueOf`, `setGuiValueCell`,
+  `setControlList`, `sendControlMessage`. No UI yet. Covered by one shared
+  contract (`test/engine/bridge/gui_value_protocol_contract.dart`) run against
+  both the real engine and `FakePatcherGateway` (an `.rslider` round-trips
+  `setGuiValueAt` → `guiValueAt`, a list resizes a `.multislider`, `.b` refuses
+  writes, ...), an engine-only selector test (`.incdec` `inc`/`dec`), and
+  controller unit tests for the per-cell poll, the window and the wrappers.
 - Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
   switched off for now, issue #447)
 

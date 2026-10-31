@@ -134,6 +134,62 @@ abstract interface class PatcherGateway {
   /// handle.
   String guiValue(int instanceId, int handleId);
 
+  /// Send a list — a whitespace-separated token string such as `0.2 0.8` — to
+  /// [inlet] of [handleId] (yse's `sendList`). A list sets a multi-value
+  /// control's whole state (`.rslider`, `.multislider`) or replaces a `.l`'s
+  /// stored list (issue #469).
+  void sendList(int instanceId, int handleId, int inlet, String list);
+
+  /// Send a **selector message** — a symbol, optionally followed by
+  /// arguments: `inc`, `store 3`, `clear`, `set 2 0.5` — to [inlet] of
+  /// [handleId]. The engine dispatches a list whose first token is a symbol by
+  /// that selector, so this rides the same native list call as [sendList];
+  /// it is its own verb so a body names what it means (issue #469).
+  void sendMessage(int instanceId, int handleId, int inlet, String message);
+
+  // ─── GUI value protocol (multi-cell controls, issue #469) ────────────
+  //
+  // Every libYSE GUI control keeps its live state as a list of **cells**: one
+  // for a scalar control (`.slider`, `.i`), two for `.rslider`, one per bar of
+  // a `.multislider`, 128 for a `.kslider`. A cell is not always one token
+  // (a `.function` cell is `<x> <y> <curve>`).
+  //
+  // **One read form per object per frame.** Poll either [guiValue] (the
+  // coherent snapshot of every cell, space-separated) or the per-cell reads
+  // ([guiValueCount] + [guiValueAt]) — never both: some reads are destructive
+  // (`.b` reports a pending press and clears it), and per-cell reads are not
+  // atomic across cells. `NodeDescriptor.guiValueRead` says which form a body
+  // uses, and `PatcherController.refreshGuiValues` honours it.
+
+  /// How many cells [handleId]'s GUI state has — 1 for a scalar control and
+  /// for an object with no GUI state (its one cell is empty), the bank size of
+  /// a `.multislider`, and so on. 0 for an unknown handle.
+  int guiValueCount(int instanceId, int handleId);
+
+  /// Cell [index] of [handleId]'s GUI state, or `''` for an index at or past
+  /// [guiValueCount], a negative index, or an unknown handle. Cell 0 of a
+  /// scalar control equals its [guiValue].
+  String guiValueAt(int instanceId, int handleId, int index);
+
+  /// Whether [handleId] accepts its own GUI state back on inlet 0 — what
+  /// [restoreGuiValue] and [setGuiValueAt] need. `false` for `.b` (a press is
+  /// an event, not a state), `.m`, `.l`, non-GUI objects and unknown handles.
+  bool guiValueIsSettable(int instanceId, int handleId);
+
+  /// Put back a whole GUI state previously read from [guiValue]. It travels as
+  /// an ordinary list on inlet 0, so it passes the object's own clamps and may
+  /// emit on its outlets like any other input. Returns whether it was sent:
+  /// `false` (and nothing is sent) when the object is not
+  /// [guiValueIsSettable] or the handle is unknown.
+  bool restoreGuiValue(int instanceId, int handleId, String state);
+
+  /// Write one cell: `set <index> <value>` on inlet 0 (a `.textedit`, whose
+  /// single cell is free text, takes [value] as its whole state). Returns
+  /// whether it was sent: `false` (and nothing is sent) when the object is not
+  /// [guiValueIsSettable], [index] is outside `0 <= index < guiValueCount`, or
+  /// the handle is unknown.
+  bool setGuiValueAt(int instanceId, int handleId, int index, String value);
+
   // ─── creation parameters (the metadata-driven params dialog) ─────────
 
   /// Reconfigure [handleId] with a new whitespace-joined creation-argument
