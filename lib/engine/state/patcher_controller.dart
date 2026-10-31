@@ -107,10 +107,18 @@ class PatcherController {
   /// Pan/zoom state for the [InteractiveViewer] in the canvas.
   final TransformationController transform = TransformationController();
 
+  /// The [UndoScope.id] every patch editor's [undoScope] carries — the
+  /// patcher surface's key in the shell's `UndoScopes` router (#512). Shared by
+  /// all editors on purpose: the surface registers whichever one is open under
+  /// it, replacing the previous patch's.
+  static const String undoScopeId = 'patcher';
+
   /// This surface's undo/redo stack — the patcher scope in the undo-follows-
-  /// focus model. Canvas gestures `run` a command here; the canvas routes
-  /// Ctrl+Z/Y to [undo]/[redo].
-  final UndoScope undoScope = UndoScope(id: 'patcher', label: 'Patcher');
+  /// focus model. Canvas gestures `run` a command here; the focused canvas
+  /// routes Ctrl+Z/Y to [undo]/[redo] itself, and the shell's `edit.undo` /
+  /// `edit.redo` reach it from anywhere else in the pane once the surface has
+  /// registered it (#512).
+  final UndoScope undoScope = UndoScope(id: undoScopeId, label: 'Patcher');
 
   /// Logical node id → current native handle. Rebuilt on restore so a logical
   /// id outlives the native object it names.

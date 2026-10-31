@@ -128,7 +128,7 @@ void main() {
     scope.dispose();
   });
 
-  test('unregister drops the scope and clears focus if it held it', () {
+  test('unregister drops the scope but keeps focus on its id (#512)', () {
     final scope = UndoScope(id: 'midi');
     router
       ..register(scope)
@@ -136,7 +136,24 @@ void main() {
     router.unregister('midi');
     expect(router.scopes, isEmpty);
     expect(router.focused, isNull);
-    expect(router.focusedId, isNull);
+    expect(router.focusedId, 'midi');
+    router.undo(); // must not throw
     scope.dispose();
+  });
+
+  test('a scope re-registered under the focused id is focused again', () {
+    final first = UndoScope(id: 'patcher');
+    final second = UndoScope(id: 'patcher');
+    router
+      ..register(first)
+      ..focus('patcher')
+      ..unregister('patcher')
+      ..register(second);
+    expect(router.focused, same(second));
+    // A same-id register replaces without any unregister in between, too.
+    router.register(first);
+    expect(router.focused, same(first));
+    first.dispose();
+    second.dispose();
   });
 }

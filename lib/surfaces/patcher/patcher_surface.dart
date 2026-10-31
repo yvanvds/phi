@@ -7,9 +7,12 @@ import '../../domain/patcher/patch_node_id.dart';
 import '../../domain/patcher/patch_object_types.dart';
 import '../../domain/patcher/patch_port.dart';
 import '../../domain/patcher/patch_port_id.dart';
+import '../../domain/project/undo_scope.dart';
+import '../../domain/project/undo_scopes.dart';
 import '../../engine/bridge/patch_object_descriptor.dart';
 import '../../engine/engine.dart';
 import '../../engine/state/node_type_registry.dart';
+import '../../engine/state/patch_library_controller.dart';
 import '../../engine/state/patcher_controller.dart';
 import '../surface.dart';
 import 'library/patch_entity_strip.dart';
@@ -31,9 +34,21 @@ enum _NodeAction { duplicate, delete }
 /// in [PhiEngine.start] and torn down in `stop`. Before start the surface
 /// renders a low-key placeholder.
 class PatcherSurface extends Surface {
-  const PatcherSurface({required this.engine, this.active = true, super.key});
+  const PatcherSurface({
+    required this.engine,
+    this.active = true,
+    this.undoScopes,
+    super.key,
+  });
 
   final PhiEngine engine;
+
+  /// The shell's undo router (#512). The surface registers the open patch's
+  /// [UndoScope] here under [PatcherController.undoScopeId], so the shell's
+  /// Ctrl+Z/Y reach the patch from anywhere in the pane — after a click in the
+  /// palette, the placement bar or the reference panel has taken the keyboard
+  /// off the canvas. Null (a surface mounted on its own) registers nothing.
+  final UndoScopes? undoScopes;
 
   /// Whether this surface is the visible tab of its pane. The shell keeps
   /// background tabs mounted (so their state survives a switch), so a surface
@@ -49,7 +64,11 @@ class PatcherSurface extends Surface {
     return Container(
       color: PhiColors.bg0,
       child: engine.patcherOrNull != null
-          ? _PatcherViewport(engine: engine, active: active)
+          ? _PatcherViewport(
+              engine: engine,
+              active: active,
+              undoScopes: undoScopes,
+            )
           : const _Offline(),
     );
   }
@@ -60,12 +79,19 @@ class PatcherSurface extends Surface {
 /// Kept separate so the seed runs once on first mount, not on every
 /// Flutter rebuild of the surrounding chrome.
 class _PatcherViewport extends StatefulWidget {
-  const _PatcherViewport({required this.engine, required this.active});
+  const _PatcherViewport({
+    required this.engine,
+    required this.active,
+    this.undoScopes,
+  });
 
   final PhiEngine engine;
 
   /// Passed through to the [PatchGuiPoller] — see [PatcherSurface.active].
   final bool active;
+
+  /// See [PatcherSurface.undoScopes].
+  final UndoScopes? undoScopes;
 
   @override
   State<_PatcherViewport> createState() => _PatcherViewportState();
@@ -88,8 +114,9 @@ class _PatcherViewportState extends State<_PatcherViewport> {
 
   /// The canvas's keyboard focus, held here so a pick in the reference panel
   /// can hand the keyboard straight back to the canvas (issue #511): the pane
-  /// takes focus on any press inside it, and the `Ctrl+Z` after a colour pick
-  /// must still reach the patch's undo.
+  /// takes focus on any press inside it. Undo no longer depends on it — the
+  /// shell reaches the patch's stack from the pane too (#512) — but the canvas's
+  /// own keys (`N`, the arrows, `Delete`) do, so the hand-back stays.
   final FocusNode _canvasFocus = FocusNode(debugLabel: 'patcher-canvas');
 
   /// Whether the canvas quantises a node drop to the grid (issue #368). A view
@@ -107,18 +134,70 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   /// the canvas is re-keyed per open patch, while the mode deliberately is not.
   PatchCanvasMode _mode = PatchCanvasMode.edit;
 
+  /// The engine's patch library, held so its listener can be detached on
+  /// dispose. Stable for the viewport's lifetime: a project swap rebinds it
+  /// and a session restart re-opens through it, neither replaces it.
+  late final PatchLibraryController _library;
+
+  /// The stack this surface last registered with [_PatcherViewport.undoScopes],
+  /// or null when it has none registered.
+  UndoScope? _registeredScope;
+
   @override
   void initState() {
     super.initState();
     registerBuiltInPatcherNodes();
     _seedDefaultGraphIfEmpty(widget.engine.patcher);
     _objectTypes = widget.engine.patcher.objectTypes();
+    _library = widget.engine.patchLibrary;
+    _library.addListener(_syncUndoScope);
+    _syncUndoScope();
+  }
+
+  @override
+  void didUpdateWidget(_PatcherViewport oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.undoScopes, widget.undoScopes)) {
+      _withdrawUndoScope(oldWidget.undoScopes);
+      _syncUndoScope();
+    }
   }
 
   @override
   void dispose() {
+    _library.removeListener(_syncUndoScope);
+    _withdrawUndoScope(widget.undoScopes);
     _canvasFocus.dispose();
     super.dispose();
+  }
+
+  /// Keeps the shell's undo router pointed at the open patch's stack (#512):
+  /// re-registered on a patch switch, a project swap and a session restart
+  /// (each hands the library a different editor, and the library notifies),
+  /// and withdrawn while there is no patch open or the canvas is in run mode —
+  /// a played patch cannot be rearranged by a mistyped chord (design §6), from
+  /// the canvas or from the shell.
+  void _syncUndoScope() {
+    final scopes = widget.undoScopes;
+    if (scopes == null) return;
+    final scope = _mode.isRun ? null : _library.openEditor?.undoScope;
+    if (identical(scope, _registeredScope)) return;
+    if (scope == null) {
+      scopes.unregister(PatcherController.undoScopeId);
+    } else {
+      scopes.register(scope);
+    }
+    _registeredScope = scope;
+  }
+
+  /// Drops this surface's stack from [scopes], if it is still the one there.
+  void _withdrawUndoScope(UndoScopes? scopes) {
+    final mine = _registeredScope;
+    _registeredScope = null;
+    if (scopes == null || mine == null) return;
+    if (scopes.scopes.any((s) => identical(s, mine))) {
+      scopes.unregister(mine.id);
+    }
   }
 
   /// Switch the canvas between editing and playing (issue #378) — from the
@@ -131,6 +210,7 @@ class _PatcherViewportState extends State<_PatcherViewport> {
     if (mode == _mode) return;
     if (mode.isRun) widget.engine.patchLibrary.openEditor?.clearSelection();
     setState(() => _mode = mode);
+    _syncUndoScope();
   }
 
   void _select(PatchObjectDescriptor desc) => setState(() {

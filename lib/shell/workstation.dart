@@ -26,6 +26,7 @@ import '../engine/bridge/no_op_code_evaluator.dart';
 import '../engine/engine.dart';
 import '../engine/state/clip_library_controller.dart';
 import '../engine/state/code_library_controller.dart';
+import '../engine/state/patcher_controller.dart';
 import '../engine/state/rack_definitions_controller.dart';
 import '../engine/state/voice_audition_controller.dart';
 import '../surfaces/code/code_surface.dart';
@@ -242,8 +243,8 @@ class _WorkstationState extends State<Workstation> {
   /// Per-surface undo stacks with a focused one — *undo follows focus* (#119).
   /// The shell routes Ctrl+Z/Y here (see [build]) and points the focus at the
   /// active surface's scope in [_onSelect], so an undo never yanks an edit from
-  /// a surface you're not looking at. The MIDI editor is the first (and, today,
-  /// only) registered scope.
+  /// a surface you're not looking at. The shell registers the MIDI editor's
+  /// scope; the patcher surface registers its open patch's (#512).
   final UndoScopes _undoScopes = UndoScopes();
 
   /// The project-menu action orchestrator, present only when a project
@@ -804,10 +805,16 @@ class _WorkstationState extends State<Workstation> {
   }
 
   /// The undo-scope id owned by the surface with layout id [surfaceId], or `null`
-  /// for surfaces (or an empty focus) with no undo stack yet. Only the MIDI
-  /// surface has one today.
-  String? _scopeIdFor(String? surfaceId) =>
-      surfaceId == SurfaceId.midi.name ? _midiEditor.undoScope.id : null;
+  /// for surfaces (or an empty focus) with no undo stack yet. The MIDI editor's
+  /// scope is registered here; the patcher's is registered by its surface,
+  /// per open patch (#512), so focus names its id whether or not one is in.
+  String? _scopeIdFor(String? surfaceId) {
+    if (surfaceId == SurfaceId.midi.name) return _midiEditor.undoScope.id;
+    if (surfaceId == SurfaceId.patcher.name) {
+      return PatcherController.undoScopeId;
+    }
+    return null;
+  }
 
   /// The focused surface as a [SurfaceId], or null when the active pane is empty
   /// — what the rail highlights.
@@ -995,7 +1002,11 @@ class _WorkstationState extends State<Workstation> {
           bankReader: _fmBankReader,
         );
       case SurfaceId.patcher:
-        return PatcherSurface(engine: widget.engine, active: active);
+        return PatcherSurface(
+          engine: widget.engine,
+          active: active,
+          undoScopes: _undoScopes,
+        );
       case SurfaceId.code:
         return CodeSurface(
           engine: widget.engine,

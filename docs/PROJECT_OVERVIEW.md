@@ -952,7 +952,13 @@ main + app          (orchestration)
   implement `ProjectCommand` and its stack *is* an `UndoScope` (exposed as
   `ClipEditor.undoScope`), making the MIDI surface the first registered scope;
   the piano roll no longer handles Ctrl+Z itself, letting the combo bubble to
-  the shell. Gesture coalescing stays a convention (a drag mutates transient
+  the shell. Issue #512 registers the patcher's stack too: `PatcherSurface`
+  registers the open patch editor's `undoScope` under
+  `PatcherController.undoScopeId` (re-registered on a patch switch / project
+  swap / session restart, withdrawn in run mode or with no patch open), so
+  Ctrl+Z reaches the patch after a click in the palette or reference panel;
+  `UndoScopes.unregister` keeps focus on the id so a re-register resumes it.
+  Gesture coalescing stays a convention (a drag mutates transient
   state and commits one command on release). `entitiesTouched` is the seam
   save/autosave dirty-tracking (#121) and the recovery journal (#122) will
   consume. Issue #120 adds references and refactoring (design §4): each entity
