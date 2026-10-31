@@ -2361,6 +2361,13 @@ main + app          (orchestration)
   it opens holding the keyboard, Escape / click-away, Ctrl+Z), and an end-to-end
   `patcher_inline_create` integration test that makes an object by keyboard
   alone, corrects a typo in place, and undoes the result.
+- **`N` inserts an object** (issue #468) — a plain `N` on the focused canvas in
+  edit mode opens the same inline object box as a double-click on empty canvas,
+  placed under the mouse (`_hoverLocal`, now cleared when the pointer leaves the
+  viewport) or at the viewport centre. Matched logically like `Ctrl+Z/C/V`,
+  declined with Alt/Meta, in run mode, without a catalogue, and on key repeat.
+  Covered by `patcher_canvas_test.dart` ("N inserts an object") and the
+  `patcher_insert_object_key` integration test.
 - **Patcher canvas interaction polish** (issue #359, patcher epic #217, design
   `docs/design/patcher.md` §6–7): the three gaps that made the canvas feel
   unlearnable next to Max, all riding the existing raw-pointer pipeline rather

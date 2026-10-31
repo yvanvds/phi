@@ -185,6 +185,13 @@ live-code control).
   on release, so `Ctrl+Z` walks back the whole burst rather than one
   repeat of it — and, like every canvas shortcut, it stays quiet while a
   number box or the inline create box holds the keyboard.
+- **`N` inserts an object** — the keyboard way into the inline object
+  box a double-click on empty canvas opens, and the key Max uses. The box
+  lands under the pointer when it is over the canvas, otherwise in the
+  middle of the viewport. Edit mode only; a plain `N` (no Ctrl/Alt/Meta),
+  matched on the letter like `Ctrl+Z`, since `N` sits in the same place on
+  QWERTY, AZERTY and QWERTZ. A held `N` opens one box, never a second, and
+  an `n` typed into a text field is text.
 - **Grid snap is optional,** off by default, toggled from the placement
   bar: with it on, a node **drop** (the release of a drag or of a nudge)
   quantises onto the 16px lattice the backdrop paints. The anchor node

@@ -263,8 +263,9 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
 
   // Where the pointer last hovered, in viewport pixels — the point the cursor
   // is re-resolved against when something other than a pointer move changes
-  // what the canvas would do there (space taken or released). Null until a
-  // mouse has actually been over the viewport.
+  // what the canvas would do there (space taken or released), and where `N`
+  // drops an object box (issue #468). Null until a mouse has actually been
+  // over the viewport, and again once it leaves.
   Offset? _hoverLocal;
 
   // Keyboard nudge (issue #368). A held arrow delivers a `KeyDownEvent` and
@@ -370,7 +371,12 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       // own gestures still sets its own cursor — it sits deeper, so it wins.
       child: MouseRegion(
         cursor: _hoverCursor,
-        onExit: (_) => _setHover(SystemMouseCursors.basic, null),
+        onExit: (_) {
+          // The pointer is no longer over the canvas, so `N` has no pointer to
+          // place a box under and falls back to the viewport centre (#468).
+          _hoverLocal = null;
+          _setHover(SystemMouseCursors.basic, null);
+        },
         child: Listener(
           // Opaque so empty scene areas (grid, gaps between nodes) still deliver
           // pointer events for marquee, panning and click-to-clear.
@@ -650,6 +656,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     if (widget.mode.isRun) return KeyEventResult.ignored;
     final step = _nudgeStep(key);
     if (step != null) return _nudge(step);
+    if (key == LogicalKeyboardKey.keyN) return _insertObjectKey(event);
     switch (key) {
       case LogicalKeyboardKey.delete:
       case LogicalKeyboardKey.backspace:
@@ -688,6 +695,44 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       default:
         return null;
     }
+  }
+
+  /// `N` opens the inline object box (issue #468) — the keyboard way into the
+  /// same box a double-click on empty canvas opens, and the key Max uses.
+  ///
+  /// A letter, so matched **logically** like `Ctrl+Z/C/V`: `N` sits in the
+  /// same position on QWERTY, AZERTY and QWERTZ, and the logical key is the
+  /// glyph on the cap either way. Ctrl was taken by the chord branch above;
+  /// Alt and Meta are declined here too, because Windows reports AltGr as
+  /// Ctrl+Alt and a modified `N` is somebody else's shortcut. Reaching this
+  /// method at all means the canvas holds primary focus in edit mode, so a
+  /// typed `n` in a text field never gets here.
+  ///
+  /// Only the first press opens: a held `N` delivers a stream of repeats, and
+  /// none of them may open (or re-open) a box — so they are swallowed, as is a
+  /// press while a box is already up.
+  KeyEventResult _insertObjectKey(KeyEvent event) {
+    final keys = HardwareKeyboard.instance;
+    if (keys.isAltPressed || keys.isMetaPressed) return KeyEventResult.ignored;
+    if (widget.objectTypes.isEmpty || widget.onCreateObject == null) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyDownEvent && _inlineAt == null) {
+      _commitNudge();
+      _openInlineCreate(_insertionPoint());
+    }
+    return KeyEventResult.handled;
+  }
+
+  /// Where a keyboard-opened object box lands, in scene space: under the mouse
+  /// when it is over the canvas, otherwise in the middle of what is visible.
+  Offset _insertionPoint() {
+    final local = _hoverLocal;
+    if (local != null) return _toScene(local);
+    final viewport = (context.findRenderObject() as RenderBox?)?.size;
+    return _toScene(
+      viewport == null ? Offset.zero : viewport.center(Offset.zero),
+    );
   }
 
   /// Move the selected nodes by [step], opening a burst on the first press and

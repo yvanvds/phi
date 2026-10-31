@@ -1728,6 +1728,231 @@ void main() {
     });
   });
 
+  // ─── `N` opens the inline object box (issue #468) ─────────────────────────
+
+  group('N inserts an object', () {
+    Finder box() => find.byKey(PatcherCanvas.inlineCreateKey);
+    Finder field() => find.byKey(PatchInlineObjectBox.fieldKey);
+
+    /// Give the canvas the keyboard the way a user does: one click on empty
+    /// grid. A touch tap, so no mouse is left hovering over the canvas.
+    Future<void> focusCanvas(WidgetTester tester) async {
+      await tester.tapAt(canvasTL(tester) + const Offset(40, 40));
+      await tester.pump();
+    }
+
+    Future<void> pressN(WidgetTester tester) async {
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.pump();
+      await tester.pump();
+    }
+
+    testWidgets('opens the box under the mouse, focused, and Enter creates '
+        'the typed object there', (tester) async {
+      Offset? madeAt;
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (d, at, {args}) {
+          madeAt = at;
+          controller.createObject(desc: d, position: at, args: args);
+        },
+      );
+      final at = canvasTL(tester) + const Offset(300, 200);
+      final g = await mouse(tester);
+      await g.moveTo(at);
+      await tester.pump();
+      await g.down(at);
+      await tester.pump();
+      await g.up();
+      await tester.pump();
+
+      expect(box(), findsNothing);
+      await pressN(tester);
+
+      expect(box(), findsOneWidget);
+      expect(tester.getTopLeft(find.byType(PatchInlineObjectBox)), at);
+      expect(
+        tester.widget<TextField>(field()).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+
+      await tester.enterText(field(), 'sine 220');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      expect(box(), findsNothing);
+      expect(madeAt, const Offset(300, 200));
+      expect(controller.graph.nodes.single.type, Obj.dSine);
+      expect(controller.argsOf(controller.graph.nodes.single.id), '220');
+    });
+
+    testWidgets('with no mouse over the canvas, opens at the viewport centre', (
+      tester,
+    ) async {
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (_, _, {args}) {},
+      );
+      await focusCanvas(tester);
+
+      await pressN(tester);
+
+      expect(box(), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byType(PatchInlineObjectBox)),
+        tester.getCenter(find.byType(PatcherCanvas)),
+      );
+    });
+
+    testWidgets('a mouse that left the canvas no longer places the box', (
+      tester,
+    ) async {
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (_, _, {args}) {},
+      );
+      final g = await mouse(tester);
+      await g.moveTo(canvasTL(tester) + const Offset(300, 200));
+      await tester.pump();
+      await focusCanvas(tester);
+      // Off the canvas entirely: outside the window.
+      await g.moveTo(const Offset(-10, -10));
+      await tester.pump();
+
+      await pressN(tester);
+
+      expect(
+        tester.getTopLeft(find.byType(PatchInlineObjectBox)),
+        tester.getCenter(find.byType(PatcherCanvas)),
+      );
+    });
+
+    testWidgets('pans and zooms are honoured — the box lands in the scene '
+        'under the pointer', (tester) async {
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (_, _, {args}) {},
+      );
+      controller.transform.value = Matrix4.identity()
+        ..translateByDouble(50, 30, 0, 1)
+        ..scaleByDouble(2, 2, 1, 1);
+      await tester.pump();
+      final at = canvasTL(tester) + const Offset(250, 230);
+      final g = await mouse(tester);
+      await g.moveTo(at);
+      await tester.pump();
+      await focusCanvas(tester);
+      await g.moveTo(at);
+      await tester.pump();
+
+      await pressN(tester);
+
+      // (250 − 50) / 2, (230 − 30) / 2 in scene space, drawn back at the
+      // pointer.
+      expect(box(), findsOneWidget);
+      expect(tester.getTopLeft(find.byType(PatchInlineObjectBox)), at);
+    });
+
+    testWidgets('run mode declines it', (tester) async {
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (_, _, {args}) {},
+        initialMode: PatchCanvasMode.run,
+      );
+      await focusCanvas(tester);
+
+      await pressN(tester);
+
+      expect(box(), findsNothing);
+    });
+
+    testWidgets('a modified N is not the shortcut', (tester) async {
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (_, _, {args}) {},
+      );
+      await focusCanvas(tester);
+
+      for (final mod in [
+        LogicalKeyboardKey.controlLeft,
+        LogicalKeyboardKey.altLeft,
+        LogicalKeyboardKey.metaLeft,
+      ]) {
+        await tester.sendKeyDownEvent(mod);
+        await pressN(tester);
+        await tester.sendKeyUpEvent(mod);
+        await tester.pump();
+        expect(box(), findsNothing, reason: '$mod+N');
+      }
+    });
+
+    testWidgets('typed into the open box, n is text — no second box', (
+      tester,
+    ) async {
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (_, _, {args}) {},
+      );
+      await focusCanvas(tester);
+      await pressN(tester);
+      final first = tester.getTopLeft(find.byType(PatchInlineObjectBox));
+
+      await pressN(tester);
+
+      expect(box(), findsOneWidget);
+      expect(tester.getTopLeft(find.byType(PatchInlineObjectBox)), first);
+      expect(
+        tester.widget<TextField>(field()).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+    });
+
+    testWidgets('key repeat never opens a box', (tester) async {
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: (_, _, {args}) {},
+      );
+      await focusCanvas(tester);
+
+      // An `N` still held after its box was dismissed keeps repeating at the
+      // canvas: none of those repeats is a fresh press.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.keyN);
+      await tester.pump();
+      await tester.pump();
+      expect(box(), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(box(), findsNothing);
+
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.keyN);
+      await tester.pump();
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.keyN);
+      await tester.pump();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.keyN);
+      await tester.pump();
+
+      expect(box(), findsNothing);
+    });
+
+    testWidgets('without a catalogue there is nothing to open', (tester) async {
+      await pumpCanvas(tester, onCreateObject: (_, _, {args}) {});
+      await focusCanvas(tester);
+
+      await pressN(tester);
+
+      expect(box(), findsNothing);
+    });
+  });
+
   // ─── editing an object box in place (issue #382) ─────────────────────────
   //
   // The same box, opened over an existing object: double-click, type, Enter.
