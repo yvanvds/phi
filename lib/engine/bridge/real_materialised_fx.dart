@@ -87,6 +87,18 @@ class RealMaterialisedFx implements MaterialisedFx {
   }
 
   @override
+  void setLiveParam(String name, double value) {
+    final dsp = _dsp;
+    if (dsp == null) return;
+    // Apply just this key through the same setter map a full definition uses,
+    // leaving [_definition] (the authored state) untouched.
+    _applyParams(
+      dsp,
+      FxDefinition(kind: _definition.kind, params: {name: value}),
+    );
+  }
+
+  @override
   void dispose() {
     _dsp?.dispose();
     _dsp = null;

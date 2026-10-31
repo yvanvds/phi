@@ -2077,16 +2077,23 @@ main + app          (orchestration)
   with no open session yet), and `voice` via `AuditionVoiceControlPort` over the
   racks audition path (tracking held notes so a bare `off()` releases them all).
   The adapters live in `lib/engine/state/`, tolerate an absent MIDI subsystem, and
-  no-op gracefully on unknown targets. The `fx` leg is decoded and routed but its
-  real fx-param controller is deferred (issue #348) — production wires a
-  no-op `_UnwiredFxControlPort` for now. Still silent in production until the tap C
+  no-op gracefully on unknown targets. The `fx` leg (issue #348) goes through
+  `LiveFxControlPort` → `PhiEngine._applyLiveFxParam` →
+  `RackMaterialiser.setLiveFxParam`, which writes the param onto the live
+  `MaterialisedFx` handle via `MaterialisedFx.setLiveParam` — the same click-free
+  setter a definition edit uses, but **unjournaled** and leaving the handle's
+  authored `definition` untouched, so an unrelated re-sync keeps the live value
+  while a journaled edit of the effect re-applies over it (performance, not
+  authorship, like `applyLiveBusLevel`). Still silent in production until the tap C
   API lands (the default `NoOpBusTap` yields no frames, mirroring #229's
   present-but-silent seam), but live the moment a frame arrives. The dispatcher is
   torn down first on `stop`, cancelling its subscription before the controllers it
   routes to. Covered by unit tests for each adapter (`lib/engine/state/*_control_port`)
   and an end-to-end `control_plane_activation_test.dart` that drives a fake tap
   through the *engine-constructed* dispatcher — no test scaffolding — to each real
-  port (state fire, var move, domain override, clip play, voice note/off).
+  port (state fire, var move, domain override, clip play, voice note/off);
+  `control_plane_fx_dispatch_test.dart` does the same for an fx param set onto a
+  live insert placed on a bus.
 - **The diagnostics log domain** (issue #268, epic #267, design
   `docs/design/diagnostics.md` §2, §6) — the pure-Dart foundation for the unified
   log, seams + fakes, no UI yet (the panel is #270, source wiring #269). A
