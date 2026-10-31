@@ -103,6 +103,28 @@ void main() {
     }
     expect(find.byKey(ChannelStrip.outputMeterKey(6)), findsNothing);
 
+    // A device with many outputs — ALSA's `default` / `pipewire` PCM under
+    // PipeWire reports 128 — keeps every bar inside the real master strip
+    // instead of overflowing it (issue #458).
+    gateway.masterOutputCountValue = 128;
+    gateway.masterPeakOutputs = List<double>.filled(128, 0.5);
+    await tickTelemetry();
+    expect(tester.takeException(), isNull);
+    final masterStrip = find.ancestor(
+      of: find.byKey(ChannelStrip.outputMeterKey(0)),
+      matching: find.byType(ChannelStrip),
+    );
+    final stripRect = tester.getRect(masterStrip);
+    expect(
+      tester.getRect(find.byKey(ChannelStrip.outputMeterKey(0))).left,
+      greaterThanOrEqualTo(stripRect.left),
+    );
+    expect(
+      tester.getRect(find.byKey(ChannelStrip.outputMeterKey(127))).right,
+      lessThanOrEqualTo(stripRect.right),
+    );
+    expect(find.byKey(ChannelStrip.outputMeterKey(128)), findsNothing);
+
     // ── 2. Return delete-impact ──────────────────────────────────────────────
 
     Future<void> addFromMenu(String item) async {

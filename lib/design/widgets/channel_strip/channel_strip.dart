@@ -396,24 +396,44 @@ class ChannelStrip extends StatelessWidget {
   /// output's peak. The bar count is [outputPeaks.length] — the live output
   /// count — so a device/layout swap re-renders it (two bars on stereo, six on
   /// 5.1).
+  ///
+  /// The bars share the strip's width, and the [PhiSpacing.s0] gap between
+  /// them is kept only while every bar is still at least that wide. A device
+  /// that opens many outputs (an ALSA `default` / `pipewire` PCM reports 128)
+  /// collapses the gaps instead of overflowing the strip — fixed-width gaps
+  /// alone outgrew the 68px row past ~34 outputs (issue #458).
   Widget _outputMeters() {
+    final count = outputPeaks.length;
     return SizedBox(
       height: 44,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var i = 0; i < outputPeaks.length; i++) ...[
-            if (i > 0) const SizedBox(width: 2),
-            Expanded(
-              child: _OutputMeterBar(
-                key: outputMeterKey(i),
-                peak: outputPeaks[i].clamp(0.0, 1.0),
-              ),
-            ),
-          ],
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final gap = _outputMeterGap(count, constraints.maxWidth);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < count; i++) ...[
+                if (i > 0 && gap > 0) SizedBox(width: gap),
+                Expanded(
+                  child: _OutputMeterBar(
+                    key: outputMeterKey(i),
+                    peak: outputPeaks[i].clamp(0.0, 1.0),
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
       ),
     );
+  }
+
+  /// The gap between [count] output bars sharing [width]: [PhiSpacing.s0]
+  /// while each bar still gets at least that much width, else none.
+  static double _outputMeterGap(int count, double width) {
+    if (count < 2 || !width.isFinite) return PhiSpacing.s0;
+    final needed = (2 * count - 1) * PhiSpacing.s0;
+    return needed <= width ? PhiSpacing.s0 : 0;
   }
 
   Widget _muteSoloButtons() {
