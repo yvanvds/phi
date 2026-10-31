@@ -64,6 +64,43 @@ void main() {
       expect(find.byKey(ChannelStrip.outputMeterKey(3)), findsNothing);
     });
 
+    // Issue #458: a device with many outputs (ALSA `default` under PipeWire
+    // reports 128) overflowed the master strip, because the fixed 2px gaps
+    // alone outgrew the 68px meter row. Every output keeps its bar, inside the
+    // strip, for any count; the gaps survive only while they fit.
+    for (final count in const [2, 6, 17, 18, 94, 128]) {
+      testWidgets('keeps $count output bars within the master strip', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          host(
+            name: 'master',
+            isMaster: true,
+            outputPeaks: List<double>.generate(count, (i) => (i % 10) / 10),
+          ),
+        );
+
+        expect(tester.takeException(), isNull);
+        final strip = tester.getRect(find.byType(ChannelStrip));
+        final first = tester.getRect(
+          find.byKey(ChannelStrip.outputMeterKey(0)),
+        );
+        final last = tester.getRect(
+          find.byKey(ChannelStrip.outputMeterKey(count - 1)),
+        );
+        expect(find.byKey(ChannelStrip.outputMeterKey(count)), findsNothing);
+        expect(first.left, greaterThanOrEqualTo(strip.left));
+        expect(last.right, lessThanOrEqualTo(strip.right));
+
+        final second = tester.getRect(
+          find.byKey(ChannelStrip.outputMeterKey(1)),
+        );
+        final gap = second.left - first.right;
+        // 68px of meter row fits 17 bars with 2px gaps (each bar >= 2px).
+        expect(gap, closeTo(count <= 17 ? 2.0 : 0.0, 0.01));
+      });
+    }
+
     testWidgets('renders no per-output bars when output peaks are empty', (
       tester,
     ) async {
