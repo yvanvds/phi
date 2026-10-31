@@ -31,6 +31,15 @@ abstract interface class PatcherGateway {
   /// bus-addressable.
   int createInstance({int mainOutputs = 2, String name = ''});
 
+  /// The longest [createInstance] `name` the engine accepts, in characters.
+  ///
+  /// A longer name cannot be registered on the engine-direct bus, so the
+  /// instance opens **anonymous** instead (it still sounds, but nothing reaches
+  /// it at `patcher.<name>.<slot>`). Project addresses may exceed this — a name
+  /// segment alone may be 64 characters — so callers check against it and
+  /// surface the unreachable patch rather than let it go silent (issue #452).
+  int get maxInstanceNameLength;
+
   /// Dispose one instance, tearing down its native patcher and any mounted
   /// [Sound] first. No-op for an unknown id.
   void disposeInstance(int instanceId);

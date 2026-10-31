@@ -10,11 +10,10 @@ import 'package:phi/engine/bridge/audio_device_state.dart';
 import '../test_doubles/fake_yse_gateway.dart';
 
 /// The device rules (design §5, §9.3) exercised end to end against the fake
-/// gateway. Since issue #405 there is one device path, so every case runs it the
-/// way the app does: `boot()` brings the platform default up, then `switchTo`
-/// applies a choice — the stored preference at launch (`applyStored` below) or a
-/// live pick from the settings window. Both spellings are the *same* call; the
-/// grouping only records which moment each rule belongs to.
+/// gateway. There is one boot path and every case runs it the way the app
+/// does: `boot(stored)` opens the stored preference straight from an offline
+/// session (`applyStored` below, issue #449), and `switchTo` applies a live
+/// pick from the settings window on top of it.
 void main() {
   late FakeYseGateway gateway;
   late List<AudioDeviceNotice> notices;
@@ -47,56 +46,89 @@ void main() {
     return gateway.dispose();
   });
 
-  /// The launch sequence `PhiApp` + `Workstation._startProject` run: engine up
-  /// on the platform default, then the just-loaded [stored] settings applied.
-  bool applyStored(AudioSettings stored) {
-    coordinator.boot();
-    return coordinator.switchTo(stored);
-  }
+  /// The launch sequence `PhiApp` runs: the engine boots straight onto the
+  /// [stored] settings it read from `settings.json` (issue #449).
+  bool applyStored(AudioSettings stored) => coordinator.boot(stored);
 
   group('boot', () {
-    test(
-      'opens the platform default via init(), engine auto-reconnect off',
-      () {
-        coordinator.boot();
+    test('starts offline, lists the devices, then opens the platform default '
+        '— engine auto-reconnect off (#449)', () {
+      coordinator.boot();
 
-        expect(gateway.calls, contains('init'));
-        expect(gateway.calls.any((c) => c.startsWith('initOffline')), isFalse);
-        expect(
-          gateway.calls.any((c) => c.startsWith('openAudioDevice')),
-          isFalse,
-        );
-        // Design §4 used to arm the engine's own auto-reconnect here. It is off
-        // since issue #410: measured against libyse, it reopens
-        // `Pa_GetDefaultOutputDevice()` rather than the device that was lost,
-        // drops the chosen buffer size, and once armed retries on every 16 ms
-        // control tick forever. Phi supervises recovery instead, bounded and
-        // observable — so a silent migration onto the built-in speakers can no
-        // longer happen behind `current`'s back.
-        expect(gateway.autoReconnectOn, isFalse);
-        expect(coordinator.current, const AudioSettings());
-        expect(coordinator.recovery.retrying, isFalse);
-        expect(notices, isEmpty);
-      },
-    );
+      // Never `System.init()`, which opens the platform default *as it
+      // starts* and so negotiates the session rate against it.
+      expect(gateway.calls, isNot(contains('init')));
+      expect(
+        gateway.calls.where(
+          (c) =>
+              c == 'initOffline' ||
+              c == 'refreshDevices' ||
+              c.startsWith('openAudioDevice'),
+        ),
+        [
+          'initOffline',
+          'refreshDevices',
+          'openAudioDevice:<default>:def:def:auto',
+        ],
+      );
+      // Design §4 used to arm the engine's own auto-reconnect here. It is off
+      // since issue #410 and stays off under yse 0.2.0 (#445): Phi
+      // supervises recovery itself — reach for the chosen device, settle on
+      // the default *with a notice*, refresh the device list each attempt —
+      // so there is one supervisor on the device, not two.
+      expect(gateway.autoReconnectOn, isFalse);
+      expect(coordinator.current, const AudioSettings());
+      expect(gateway.activeAudioState().sampleRate, 48000);
+      expect(coordinator.recovery.retrying, isFalse);
+      expect(notices, isEmpty);
+    });
 
-    test(
-      'takes no settings — the stored device cannot be resolved yet (#405)',
-      () {
-        // `boot()` deliberately has no settings-carrying twin. The engine
-        // enumerates hardware only while opening a device (#403), so nothing
-        // could be resolved before this `init()` anyway; a second entry point
-        // would only be an unrun copy of boot + switch, which is how #403's
-        // defect survived. Guarded here by pinning the observable contract:
-        // boot opens *no* named device, whatever is stored.
-        coordinator.boot();
+    test('a stored device is the only device ever opened — the default never '
+        'comes up first (#449)', () {
+      // The point of the offline boot: under libYSE 2.4 boot had to open the
+      // platform default before it could resolve a stored name (#403), so the
+      // performer's interface was always the *second* device opened, in a
+      // session whose rate the default had negotiated.
+      final ok = applyStored(
+        const AudioSettings(outputHost: 'ASIO', outputDevice: 'Fake Interface'),
+      );
 
-        expect(gateway.openedDevice, isNull);
-        expect(coordinator.current, const AudioSettings());
-        // …but it has enumerated, so the very next switch can resolve a name.
-        expect(gateway.audioDevices(), isNotEmpty);
-      },
-    );
+      expect(ok, isTrue);
+      expect(gateway.calls.where((c) => c.startsWith('openAudioDevice')), [
+        'openAudioDevice:Fake Interface:def:def:auto',
+      ]);
+      expect(gateway.openedDevice, gateway.devices[1]);
+    });
+
+    test('a device that cannot run the session rate gets a session it can '
+        '(#449)', () {
+      // No stored rate, a fresh process: the offline session would run at the
+      // engine's 48 kHz default, which this interface does not offer. `init()`
+      // used to let the default negotiate its own rate; the offline boot fits
+      // the session to the device instead, before anything has been built on
+      // it.
+      gateway.devices = const [
+        AudioDeviceDescriptor(
+          name: 'Old Card',
+          hostName: 'MME',
+          sampleRates: [22050.0, 44100.0],
+          bufferSizes: [512],
+          defaultBufferSize: 512,
+        ),
+      ];
+
+      final ok = applyStored(
+        const AudioSettings(outputHost: 'MME', outputDevice: 'Old Card'),
+      );
+
+      expect(ok, isTrue);
+      expect(gateway.sessionSampleRate, 44100);
+      expect(gateway.activeAudioState().sampleRate, 44100);
+      expect(coordinator.current?.outputDevice, 'Old Card');
+      expect(notices, isEmpty);
+      // The stored "device default" rate is what is requested next time.
+      expect(gateway.requestedSampleRate, 0);
+    });
   });
 
   group('boot-from-settings — the stored device applied at launch', () {
@@ -109,7 +141,10 @@ void main() {
       final ok = applyStored(stored);
 
       expect(ok, isTrue);
-      expect(gateway.calls, containsAllInOrder(<String>['init']));
+      expect(
+        gateway.calls,
+        containsAllInOrder(<String>['initOffline', 'refreshDevices']),
+      );
       // The ASIO entry (not the WASAPI namesake) is the one that opened.
       expect(gateway.openedDevice, gateway.devices[1]);
       expect(gateway.openLayout, SpeakerLayout.quad);
@@ -118,20 +153,25 @@ void main() {
       expect(coordinator.current?.outputHost, 'ASIO');
     });
 
-    test('runs through init(), never initOffline() — an offline engine '
-        'enumerates nothing (#403)', () {
-      // The regression #403 was about, now pinned on the path the app runs.
-      // `initOffline()` leaves the engine with an empty device list (measured
-      // against libyse 2.4.0: 0 devices vs 19 after `init()`), so a stored
-      // device resolved to "not available", the fallback searched the same
-      // empty list, and the app booted silent — while every test passed,
-      // because the fake used to hand its fabricated list back on the offline
-      // path too.
+    test('refreshes the device list before resolving — an offline engine '
+        'enumerates nothing on its own (#403, #449)', () {
+      // The regression #403 was about, pinned on the offline boot that now
+      // ships. `initOffline()` leaves the engine with an empty device list
+      // (re-measured against libYSE 3.1.0: 0 devices, 19 after
+      // `refreshDevices()`), so a boot that resolved straight after it found
+      // "not available", the fallback searched the same empty list, and the
+      // app booted silent — while every test passed, because the fake used to
+      // hand its fabricated list back on the offline path too.
       applyStored(
         const AudioSettings(outputHost: 'ASIO', outputDevice: 'Fake Interface'),
       );
 
-      expect(gateway.calls.any((c) => c.startsWith('initOffline')), isFalse);
+      final refresh = gateway.calls.indexOf('refreshDevices');
+      expect(refresh, greaterThan(gateway.calls.indexOf('initOffline')));
+      expect(
+        gateway.calls.indexWhere((c) => c.startsWith('openAudioDevice')),
+        greaterThan(refresh),
+      );
       // The device the performer stored is the device that is open — no
       // "unavailable" notice, no silent boot.
       expect(gateway.audioDevices(), isNotEmpty);
@@ -142,18 +182,193 @@ void main() {
       );
     });
 
-    test('valid rate + buffer overrides are passed through', () {
+    test('a stored rate is the rate the session and the device run at '
+        '(#443, #449)', () {
       const stored = AudioSettings(
         outputHost: 'WASAPI',
         outputDevice: 'Fake Interface',
         sampleRate: 96000,
         bufferSize: 128,
       );
+      // The session rate is locked from `initOffline()`, so boot requests the
+      // stored rate before it starts the session.
       applyStored(stored);
 
       final state = gateway.activeAudioState();
       expect(state.sampleRate, 96000);
       expect(state.bufferSize, 128);
+      expect(gateway.sessionSampleRate, 96000);
+      expect(notices, isEmpty);
+    });
+
+    test('a rate picked on a running session needs a new session; a buffer '
+        'or the running rate does not (#448)', () {
+      coordinator.boot();
+      const device = AudioSettings(
+        outputHost: 'WASAPI',
+        outputDevice: 'Fake Interface',
+      );
+
+      expect(
+        coordinator.needsSessionRestart(
+          const AudioSettings(
+            outputHost: 'WASAPI',
+            outputDevice: 'Fake Interface',
+            sampleRate: 96000,
+          ),
+        ),
+        isTrue,
+      );
+      expect(coordinator.needsSessionRestart(device), isFalse);
+      expect(
+        coordinator.needsSessionRestart(
+          const AudioSettings(
+            outputHost: 'WASAPI',
+            outputDevice: 'Fake Interface',
+            sampleRate: 48000,
+            bufferSize: 128,
+          ),
+        ),
+        isFalse,
+      );
+      // A device that is not listed is [switchTo]'s to explain.
+      expect(
+        coordinator.needsSessionRestart(
+          const AudioSettings(outputDevice: 'Ghost', sampleRate: 96000),
+        ),
+        isFalse,
+      );
+    });
+
+    test('restartTo applies a picked rate live: the session and the device '
+        'run at it, no notice (#448)', () {
+      // yse 0.2.0 locks the session rate from init to close, so before #448 a
+      // picked rate waited for the next launch behind a notice.
+      const picked = AudioSettings(
+        outputHost: 'WASAPI',
+        outputDevice: 'Fake Interface',
+        sampleRate: 96000,
+        bufferSize: 128,
+      );
+      coordinator.boot();
+      gateway.calls.clear();
+
+      final ok = coordinator.restartTo(picked);
+
+      expect(ok, isTrue);
+      expect(
+        gateway.calls.where(
+          (c) =>
+              c == 'close' ||
+              c == 'initOffline' ||
+              c == 'refreshDevices' ||
+              c.startsWith('openAudioDevice'),
+        ),
+        [
+          'close',
+          'initOffline',
+          'refreshDevices',
+          'openAudioDevice:Fake Interface:96000:128:auto',
+        ],
+      );
+      expect(gateway.sessionSampleRate, 96000);
+      expect(gateway.activeAudioState().sampleRate, 96000);
+      expect(gateway.activeAudioState().bufferSize, 128);
+      expect(coordinator.current, picked);
+      expect(gateway.autoReconnectOn, isFalse);
+      expect(notices, isEmpty);
+    });
+
+    test('a device that cannot run the session rate restarts it at one it '
+        'offers, with its own notice (#448)', () {
+      gateway.devices = [
+        ...gateway.devices,
+        const AudioDeviceDescriptor(
+          name: 'Old Card',
+          hostName: 'MME',
+          sampleRates: [22050.0, 44100.0],
+          bufferSizes: [512],
+          defaultBufferSize: 512,
+        ),
+      ];
+      coordinator.boot();
+      expect(gateway.sessionSampleRate, 48000);
+      const oldCard = AudioSettings(
+        outputHost: 'MME',
+        outputDevice: 'Old Card',
+      );
+
+      // Before #448 the open was refused at 48 kHz and the switch reverted with
+      // a generic "could not be opened".
+      expect(coordinator.needsSessionRestart(oldCard), isTrue);
+      final ok = coordinator.restartTo(oldCard);
+
+      expect(ok, isTrue);
+      expect(gateway.sessionSampleRate, 44100);
+      expect(coordinator.current?.outputDevice, 'Old Card');
+      expect(notices.single.kind, AudioNoticeKind.sessionRateUnsupported);
+      expect(notices.single.message, contains('"Old Card"'));
+      expect(notices.single.message, contains('48000 Hz'));
+      expect(notices.single.message, contains('44100 Hz'));
+    });
+
+    test('a restart whose device refuses reverts to the previous device at '
+        'the previous rate (#448)', () {
+      gateway.devices = [
+        ...gateway.devices,
+        const AudioDeviceDescriptor(
+          name: 'Flaky',
+          hostName: 'ASIO',
+          sampleRates: [96000.0],
+          bufferSizes: [256],
+          defaultBufferSize: 256,
+        ),
+      ];
+      gateway.unopenableDeviceNames.add('Flaky');
+      const previous = AudioSettings(
+        outputHost: 'WASAPI',
+        outputDevice: 'Fake Interface',
+      );
+      applyStored(previous);
+
+      final ok = coordinator.restartTo(
+        const AudioSettings(
+          outputHost: 'ASIO',
+          outputDevice: 'Flaky',
+          sampleRate: 96000,
+        ),
+      );
+
+      expect(ok, isFalse);
+      expect(coordinator.current, previous);
+      expect(gateway.sessionSampleRate, 48000);
+      expect(gateway.activeAudioState().sampleRate, 48000);
+      expect(notices.single.kind, AudioNoticeKind.switchReverted);
+      expect(notices.single.message, contains('"Flaky"'));
+      expect(notices.single.message, contains('reverting to "Fake Interface"'));
+      expect(coordinator.recovery.retrying, isFalse);
+    });
+
+    test('picking the running rate, or the device default, raises nothing and '
+        'clears a stale request (#443)', () {
+      coordinator.boot();
+      gateway.requestedSampleRate = 96000;
+
+      coordinator.switchTo(
+        const AudioSettings(
+          outputHost: 'WASAPI',
+          outputDevice: 'Fake Interface',
+          sampleRate: 48000,
+        ),
+      );
+      expect(gateway.requestedSampleRate, 48000);
+      coordinator.switchTo(
+        const AudioSettings(
+          outputHost: 'WASAPI',
+          outputDevice: 'Fake Interface',
+        ),
+      );
+      expect(gateway.requestedSampleRate, 0);
       expect(notices, isEmpty);
     });
 
@@ -199,18 +414,19 @@ void main() {
       final ok = applyStored(stored);
 
       expect(ok, isFalse);
-      expect(gateway.calls, contains('init'));
-      // The platform default `init()` opened is still the live device — the
-      // failed switch never touched it (§9.3).
-      expect(gateway.openedDevice, isNull); // no explicit open happened
-      expect(
-        gateway.activeSampleRateValue,
-        gateway.devices.first.sampleRates.first,
-      );
+      // Boot fell back to the platform default (§5) — opened only once the
+      // stored device was known to be missing.
+      expect(gateway.openedDevice, gateway.devices[0]);
+      expect(gateway.activeSampleRateValue, 48000); // the default's own rate
       // A device *is* open — the unnamed platform default — which reads as an
       // empty [AudioSettings], never as the `null` that means nothing is open.
       expect(coordinator.current, const AudioSettings());
       expect(notices.single.kind, AudioNoticeKind.switchReverted);
+      expect(
+        notices.single.message,
+        'Audio device "Ghost Device" is not available — using the default '
+        'device.',
+      );
       // Keep-preference: the coordinator never rewrote the stored value.
       expect(stored.outputDevice, 'Ghost Device');
     });
@@ -240,13 +456,13 @@ void main() {
       );
 
       expect(ok, isFalse);
-      // The failed open closed the default first, so it was reopened (§9.3).
+      // The refused open left nothing running, so boot fell back to the
+      // default (§5).
       expect(gateway.openedDevice?.name, 'Default Card');
       expect(coordinator.current, const AudioSettings());
-      // The revert put a device back, so the live state is honest again — the
-      // fake zeroes it while the open is failing, as `closeCurrentDevice()` does.
       expect(gateway.activeAudioState().sampleRate, 48000);
       expect(notices.single.kind, AudioNoticeKind.switchReverted);
+      expect(notices.single.message, contains('could not be opened'));
     });
 
     test('no devices at all — the switch fails and nothing is open', () {
@@ -260,16 +476,17 @@ void main() {
       );
 
       expect(ok, isFalse);
-      // Two things get said, in this order, and both are true. Boot says the
-      // engine enumerated nothing — which, since the list is built once and
-      // never refreshed (issue #412), is a restart-level fact rather than
-      // something to retry. Then the stored device reports itself missing.
-      expect(notices.map((n) => n.kind), <AudioNoticeKind>[
-        AudioNoticeKind.noAudioDevice,
-        AudioNoticeKind.switchReverted,
-      ]);
-      expect(notices.first.message, contains('restart Phi'));
-      expect(notices.last.message, contains('no audio output device is open'));
+      // One thing gets said: the stored device is missing and nothing is
+      // open. Boot no longer says "restart Phi" (issue #412) — since yse 0.2.0
+      // recovery re-enumerates on every attempt, so an empty list is something
+      // to retry, and a run is armed instead (#445).
+      expect(notices.single.kind, AudioNoticeKind.switchReverted);
+      expect(
+        notices.single.message,
+        contains('no audio output device is open'),
+      );
+      expect(notices.single.message, isNot(contains('restart Phi')));
+      expect(coordinator.recovery.retrying, isTrue);
       expect(coordinator.current, isNull);
       expect(gateway.activeAudioState(), AudioDeviceState.none);
     });
@@ -284,14 +501,14 @@ void main() {
       expect(notices, isEmpty);
     });
 
-    test('nothing stored is a no-op — no needless dropout at launch', () {
+    test('nothing stored opens the platform default once — no needless '
+        'dropout at launch', () {
       final ok = applyStored(const AudioSettings());
 
       expect(ok, isTrue);
-      expect(
-        gateway.calls.any((c) => c.startsWith('openAudioDevice')),
-        isFalse,
-      );
+      expect(gateway.calls.where((c) => c.startsWith('openAudioDevice')), [
+        'openAudioDevice:<default>:def:def:auto',
+      ]);
       expect(notices, isEmpty);
     });
   });
@@ -757,68 +974,91 @@ void main() {
       });
     });
 
-    test('a boot that enumerated nothing says so rather than pretending to '
-        'reconnect (#412)', () {
+    test('a boot with no hardware retries, then gives up honestly — no '
+        '"restart Phi" (#445)', () {
       fakeAsync((async) {
-        // A machine whose engine came up seeing no hardware at all. This used to
-        // arm a run, on the theory that an interface still finishing its
-        // enumeration at login would be picked up. It cannot be: libyse fills
-        // its device list once, inside `init()`, from a PortAudio table captured
-        // at the first `Pa_Initialize()`, and nothing refreshes it in-process —
-        // not `closeCurrentDevice()`, not `close()` + `init()`, and there is no
-        // exported rescan (dart-yse #51). An empty list stays empty, so every
-        // attempt would resolve nothing and the chip would read RECONNECTING for
-        // two minutes about hardware that cannot arrive.
+        // A machine whose engine came up seeing no hardware at all. Under
+        // libYSE 2.4 this was a restart-level fact — the list was built once
+        // and never rescanned (#412) — so boot said "restart Phi" and armed
+        // nothing. yse 0.2.0's `refreshDevices()` reads the machine afresh
+        // whenever nothing is open, so a run is real now: it retries, and only
+        // when its budget is spent does it say recovery is the performer's
+        // move.
         gateway.devices = const [];
 
         coordinator.boot();
 
         expect(coordinator.current, isNull);
-        expect(coordinator.recovery.retrying, isFalse);
-        expect(coordinator.recovery.attempts, 0);
-        // The performer is told the one thing that would actually help.
-        expect(notices.single.kind, AudioNoticeKind.noAudioDevice);
-        expect(notices.single.message, contains('restart Phi'));
+        expect(coordinator.recovery.retrying, isTrue);
+        expect(notices, isEmpty);
 
-        // And nothing runs in the background afterwards.
-        final callsAfterBoot = gateway.calls.length;
-        async.elapse(const Duration(minutes: 5));
-        expect(gateway.calls, hasLength(callsAfterBoot));
+        async.elapse(const Duration(seconds: 10));
+
+        expect(coordinator.recovery.gaveUp, isTrue);
+        // One refresh is the boot's own (#449); every attempt adds one.
+        expect(
+          gateway.calls.where((c) => c == 'refreshDevices'),
+          hasLength(recoverySchedule.length + 1),
+        );
+        expect(notices.single.kind, AudioNoticeKind.noAudioDevice);
+        expect(notices.single.message, contains('Settings'));
+        expect(notices.single.message, isNot(contains('restart Phi')));
 
         coordinator.dispose();
       });
     });
 
-    test('an interface plugged in after the engine started stays invisible — '
-        'no recovery can reach it (#412)', () {
+    test('an interface plugged in after the engine started is found by '
+        'recovery (#445)', () {
       fakeAsync((async) {
         gateway.devices = const [];
         coordinator.boot();
         notices.clear();
 
-        // The interface finishes enumerating a moment after login. On the fake
-        // this used to be enough for recovery to find it; on the engine it is
-        // not, because `System.devices` was already built and is never rebuilt.
+        // The interface finishes enumerating a moment after login. Under
+        // libYSE 2.4 no in-process call could ever list it (#412); now each
+        // recovery attempt refreshes the list with nothing open, so the next
+        // attempt sees it and opens it as the platform default.
         gateway.devices = const [alpha];
-        async.elapse(const Duration(minutes: 5));
+        async.elapse(const Duration(seconds: 2));
 
-        expect(gateway.audioDevices(), isEmpty);
-        expect(coordinator.current, isNull);
-        expect(gateway.activeAudioState(), AudioDeviceState.none);
+        expect(gateway.audioDevices().map((d) => d.name), ['Alpha']);
+        expect(gateway.activeAudioState().sampleRate, 48000);
+        expect(coordinator.current, const AudioSettings());
+        expect(coordinator.recovery.retrying, isFalse);
+        expect(notices, isEmpty);
 
-        // Only a fresh process sees it — which is what the boot notice says.
         coordinator.dispose();
       });
     });
 
-    test('an enumerated device is recovered although the list never changes '
-        '(#412)', () {
+    test('a stored interface that was absent at boot is opened once it '
+        'arrives (#445)', () {
       fakeAsync((async) {
-        // The other half of the cache's behaviour, and the half recovery relies
-        // on: an unplugged interface *keeps* its entry, with its old index. So
-        // the device the performer asked for stays resolvable throughout the
-        // loss, every attempt is a real `openDevice` on it, and the one that
-        // lands after the cable goes back in brings audio up.
+        // The stored device is not plugged in at launch, and neither is
+        // anything else — the switch fails and a run reaches for it by name.
+        gateway.devices = const [];
+        applyStored(storedAlpha);
+        notices.clear();
+
+        gateway.devices = const [beta, alpha];
+        async.elapse(const Duration(seconds: 2));
+
+        // The refresh made Alpha resolvable, so recovery opened *it* — not
+        // Beta, which is what the platform default would have been.
+        expect(gateway.openedDevice?.name, 'Alpha');
+        expect(coordinator.current?.outputDevice, 'Alpha');
+        expect(notices, isEmpty);
+
+        coordinator.dispose();
+      });
+    });
+
+    test('an unplugged device is recovered once it is back (#410, #445)', () {
+      fakeAsync((async) {
+        // While the stream ran, nothing could rescan, so the unplugged
+        // interface still has its entry when the loss is noticed. The attempt
+        // that follows the cable going back in refreshes the list and opens it.
         gateway.devices = const [alpha, beta];
         coordinator.boot();
         coordinator.switchTo(storedAlpha);
@@ -826,7 +1066,7 @@ void main() {
         gateway.devices = const [beta]; // Alpha unplugged
         coordinator.observeLiveState();
         expect(coordinator.recovery.retrying, isTrue);
-        // The dropdown still offers it, exactly as the shipped app does.
+        // The dropdown still offers it until the first attempt refreshes.
         expect(gateway.audioDevices(), hasLength(2));
         expect(
           gateway.audioDevices().map((d) => d.name),

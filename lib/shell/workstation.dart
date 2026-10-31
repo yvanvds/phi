@@ -341,6 +341,10 @@ class _WorkstationState extends State<Workstation> {
     // — surface through the one channel instead of vanishing on an unread
     // notifier. One listener each; behaviour-preserving.
     widget.engine.lastAudioNotice.addListener(_onAudioNotice);
+    // The engine booted audio before this shell existed (issue #449), so a
+    // launch-time fallback — the stored interface not plugged in — was raised
+    // with nobody listening. Surface those once, in order.
+    widget.engine.bootAudioNotices.forEach(_surfaceAudioNotice);
     widget.engine.lastStateNotice.addListener(_onStateNotice);
     widget.engine.lastPatchNotice.addListener(_onPatchNotice);
     _ownsCustomTransforms = widget.customTransformRegistry == null;
@@ -490,6 +494,10 @@ class _WorkstationState extends State<Workstation> {
   void _onAudioNotice() {
     final notice = widget.engine.lastAudioNotice.value;
     if (notice == null) return;
+    _surfaceAudioNotice(notice);
+  }
+
+  void _surfaceAudioNotice(AudioDeviceNotice notice) {
     final level = notice.kind == AudioNoticeKind.noAudioDevice
         ? LogLevel.error
         : LogLevel.warning;
@@ -613,15 +621,11 @@ class _WorkstationState extends State<Workstation> {
     if (controller == null || actions == null) return;
     await controller.loadSettings();
     if (!mounted) return;
-    // Boot audio from the just-loaded settings (design §5). This is *the*
-    // boot-from-settings path — the only one (issue #405): the engine came up on
-    // the platform default in `start()`, because it enumerates hardware only
-    // while opening a device (#403), so the stored name can be resolved no
-    // earlier than here. Move it to the stored device now, staying on the
-    // default (with a notice) if that device is missing or refuses to open. A
-    // no-op when no device was chosen.
-    widget.engine.switchAudioDevice(controller.audioSettings);
-    // Apply the stored MIDI choice too (design §5): set the output port by name
+    // No audio apply here: the engine booted straight onto the stored device in
+    // `start()` (design §5, issue #449), which the composition root fed from
+    // the settings file before the shell existed.
+    //
+    // Apply the stored MIDI choice (design §5): set the output port by name
     // and open the enabled input ports. A no-op when nothing was chosen.
     widget.engine.applyMidiSettings(controller.midiSettings);
     final recents = controller.recentProjects.value;

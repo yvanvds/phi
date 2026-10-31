@@ -220,6 +220,31 @@ void main() {
       });
     });
 
+    test('an engine session restart keeps the count on a fresh clock '
+        '(#448)', () {
+      fakeAsync((async) {
+        controller.connect(a, b);
+        controller.setTrigger(a, b, TimedTrigger(beats: 2, domain: drum));
+        enter(a);
+        final before = timedClockFor(b);
+
+        // One beat counted, then the session's native clocks go away.
+        async.elapse(const Duration(milliseconds: 500));
+        scheduler.releaseClocks();
+        expect(before.calls, contains('dispose'));
+        scheduler.restoreClocks();
+
+        final after = timedClockFor(b);
+        expect(after, isNot(same(before)));
+        expect(after.isPlaying, isTrue);
+        expect(scheduler.armedTimedTargets, [b]);
+        // Only the remaining beat elapses — the count was not started over.
+        async.elapse(const Duration(milliseconds: 600));
+        expect(controller.activeStateAddress, b);
+        expect(notices, isEmpty);
+      });
+    });
+
     test('degrades to a notice without a clock source', () {
       fakeAsync((async) {
         final bare = StateTriggerScheduler(

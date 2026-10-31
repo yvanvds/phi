@@ -59,13 +59,13 @@ main + app          (orchestration)
   native notion of them. Since issue #150 `YseGateway` also carries the
   **device surface** the settings epic (design `settings-and-devices.md`)
   consumes: `audioDevices()` hands out FFI-free `AudioDeviceDescriptor`s (name +
-  host identity, reported rates/buffers/latencies) from the engine's **frozen
-  enumeration cache** — built once inside `init()` and never refreshed
-  in-process, so an unplugged device keeps its entry and a newly plugged one is
-  invisible until restart (issue #412) — `openAudioDevice()` does the
+  host identity, reported rates/buffers/latencies) from the engine's **last
+  enumeration** — a snapshot that cannot be rescanned while a stream is open,
+  so an unplugged device keeps its entry and a newly plugged one is invisible
+  until `refreshDevices()` (yse 0.2.0) runs with nothing open (issues #412,
+  #445) — `openAudioDevice()` does the
   `closeCurrentDevice`+`openDevice` live-swap (throwing a bridge-level
-  `AudioDeviceException` the caller falls back on — including for the engine's
-  *silent* refusals, which it detects by reading the live state back), and
+  `AudioDeviceException` the caller falls back on), and
   `activeAudioState()` reads back the live device state — the `SpeakerLayout`
   domain enum maps to yse's `ChannelType` only inside the bridge.
 - `SessionState` in `lib/domain/session/` — pure-Dart cross-cutting state
@@ -152,13 +152,15 @@ main + app          (orchestration)
     not on.
   - **Device-loss recovery** (issue #410, `audio_device_recovery.dart` +
     `audio_recovery_status.dart` in `lib/engine/bridge/`): the engine's own
-    `setAutoReconnect` is now **off** — measured, it reopens
-    `Pa_GetDefaultOutputDevice()` rather than the lost device, on every 16 ms
-    control tick with no backoff. `AudioDeviceCoordinator` supervises instead. It
+    `setAutoReconnect` is **off** — under libYSE 2.4 it reopened the default
+    device on every control tick; yse 0.2.0 fixed that, and #445 re-evaluated
+    and kept Phi's own supervisor (it settles on the default *with a notice* and
+    refreshes the device list each attempt). `AudioDeviceCoordinator` supervises. It
     watches for the loss on the telemetry tick (`observeLiveState` — libyse has no
     device-change event, so `activeSampleRate == 0` is the only signal) as well as
     on the failure exits of `switchTo`, then runs a **bounded** `AudioDeviceRecovery`:
-    eight `openAudioDevice` attempts over about two minutes, the performer's device
+    eight refresh + `openAudioDevice` attempts over about two minutes (so a device
+    plugged in after boot is found too), the performer's device
     first and the platform default second, standing down the moment a stream comes
     up and raising a give-up notice when the budget is spent. `PhiEngine.audioRecovery`
     publishes the run as an `AudioRecoveryStatus`, which is what lets the status
@@ -1757,7 +1759,11 @@ main + app          (orchestration)
   clips). A running source is kept mounted on its current bus across re-syncs; a
   placement naming a bus absent from the live mix **degrades gracefully** — the
   source is left unplaced and a `PatchPlacementNotice` surfaces through
-  `PhiEngine.lastPatchNotice` (the `AudioDeviceNotice` shape). **Dump-to-payload on
+  `PhiEngine.lastPatchNotice` (the `AudioDeviceNotice` shape). A patch whose
+  dotted path exceeds `PatcherGateway.maxInstanceNameLength` (the engine's 55-char
+  patcher-name cap) opens anonymous and raises the same notice with a `null` bus,
+  so it is never silently unreachable on `patcher.<name>.<slot>` (issue #452).
+  **Dump-to-payload on
   save:** the reconciler's `flushToPayloads` re-dumps each open patcher into its
   entity payload (via `UpdateEntityPayloadCommand`, only when the dump changed),
   wired to a new `ProjectController.onBeforeSave` hook the shell sets to

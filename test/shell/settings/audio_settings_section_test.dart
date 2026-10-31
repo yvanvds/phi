@@ -87,8 +87,9 @@ void main() {
     expect(find.text('ACTIVE'), findsOneWidget);
     // The stored device shows as the current choice …
     expect(find.text('Alpha'), findsOneWidget);
-    // … and the read-back reflects the actually-open device (44100 / 256).
-    expect(find.textContaining('44100 Hz'), findsOneWidget);
+    // … and the read-back reflects the actually-open device, at the session's
+    // locked rate (48000 / 256).
+    expect(find.textContaining('48000 Hz'), findsOneWidget);
     expect(find.textContaining('256 frames'), findsOneWidget);
   });
 
@@ -137,13 +138,11 @@ void main() {
 
   testWidgets('an unplugged interface is still listed, and picking it reverts '
       '(#412)', (tester) async {
-    // The list the dropdown is built from is the engine's enumeration cache,
-    // filled once inside `init()` and never refreshed — no rescan exists in
-    // libyse or its C API (dart-yse #51). So an interface pulled out of the
-    // machine goes on being offered, with its old index, and the performer can
-    // pick it. This is the shipped shape of the dropdown and it used to be
-    // untested: the fake shortened its list on an unplug, so the entry simply
-    // vanished and this path never ran.
+    // The list the dropdown is built from is the engine's last enumeration,
+    // which cannot be rescanned while a stream is open (issues #412, #445). So
+    // an interface pulled out while Alpha plays goes on being offered and the
+    // performer can pick it. This used to be untested: the fake shortened its
+    // list on an unplug, so the entry simply vanished and this path never ran.
     gateway.devices = const [_alpha]; // Beta pulled out
     await pumpSection(tester);
     final before = store.saveCount;
@@ -163,7 +162,49 @@ void main() {
     expect(store.saveCount, before);
     expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
     // Audio really is back on Alpha, not merely reported as such.
-    expect(engine.activeAudioState().sampleRate, 44100);
+    expect(engine.activeAudioState().sampleRate, 48000);
+  });
+
+  testWidgets('Rescan devices lists hardware plugged in and drops hardware '
+      'pulled while Alpha plays, and changes no choice (#450)', (tester) async {
+    const gamma = AudioDeviceDescriptor(
+      name: 'Gamma',
+      hostName: 'ASIO',
+      sampleRates: [48000.0],
+      bufferSizes: [128],
+      defaultBufferSize: 128,
+      outputLatency: 128,
+    );
+    gateway.devices = const [_alpha, gamma]; // Gamma in, Beta out
+    await pumpSection(tester);
+    final before = store.saveCount;
+
+    // Without a rescan the list is the stale one (issue #445).
+    await tester.tap(find.byType(PhiSelect<String>));
+    await tester.pumpAndSettle();
+    expect(find.text('Gamma'), findsNothing);
+    expect(find.text('Beta'), findsOneWidget);
+    await tester.tap(find.text('Alpha').last);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('audio stops briefly'), findsOneWidget);
+    await tester.tap(find.byKey(AudioSettingsSection.rescanKey));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(PhiSelect<String>));
+    await tester.pumpAndSettle();
+    expect(find.text('Gamma'), findsOneWidget);
+    expect(find.text('Beta'), findsNothing);
+    await tester.tap(find.text('Alpha').last);
+    await tester.pumpAndSettle();
+
+    // Alpha is open again, in the same session, and nothing was persisted.
+    expect(gateway.calls, contains('closeAudioDevice'));
+    expect(engine.activeAudioSettings?.outputDevice, 'Alpha');
+    expect(engine.activeAudioState().sampleRate, 48000);
+    expect(settings.value.audio, onAlpha);
+    expect(store.saveCount, before);
+    expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
   });
 
   testWidgets('the rate picker is populated from the selected device', (
@@ -181,6 +222,25 @@ void main() {
     expect(find.text('device default'), findsWidgets);
     // Beta's exclusive rate must not leak in.
     expect(find.text('96000 Hz'), findsNothing);
+  });
+
+  testWidgets('picking a rate applies it live and persists it — the read-back '
+      'shows the new session rate (#443, #448)', (tester) async {
+    await pumpSection(tester);
+
+    await tester.tap(find.byType(PhiSelect<int>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('44100 Hz').last);
+    await tester.pumpAndSettle();
+
+    // Stored …
+    expect(settings.value.audio.sampleRate, 44100);
+    // … and running: the session restarted at the picked rate, so the
+    // read-back and the engine agree with the picker. No notice is needed.
+    expect(engine.sessionSampleRate, 44100);
+    expect(find.textContaining('44100 Hz   ·'), findsOneWidget);
+    expect(find.textContaining('next time Phi starts'), findsNothing);
+    expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
   });
 
   testWidgets('changing the speaker layout applies and persists', (

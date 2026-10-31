@@ -180,7 +180,6 @@ class _PhiAppState extends State<PhiApp> {
         _crashReport = sessionLog.boot();
       }
     }
-    _engine.start();
 
     final injectedSession = widget.session;
     if (injectedSession != null) {
@@ -212,6 +211,15 @@ class _PhiAppState extends State<PhiApp> {
       );
       _ownsProjectController = true;
     }
+    // Boot audio straight onto the stored device (design §5, issue #449). The
+    // engine opens it as it starts — and locks its sample rate there (#443) —
+    // while the settings controller only loads once the shell is up, too late.
+    // So read the stored audio section synchronously, without adopting it, and
+    // hand it over first. The only boot path: the shell no longer re-applies it.
+    _engine.requestBootAudio(
+      _projectController.settingsController.readStoredSync().audio,
+    );
+    _engine.start();
     _directoryPicker =
         widget.directoryPicker ?? const FileSelectorProjectDirectoryPicker();
   }

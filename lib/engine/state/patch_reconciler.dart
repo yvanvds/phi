@@ -114,10 +114,14 @@ class PatchReconciler {
         // `patcher.<address>.<slot>` and the `patch.<name>.send` verb reaches it
         // (issue #318). A rename lands here as a fresh address, so the new
         // instance re-registers under the new name.
+        final name = address.segments.join('.');
         final instanceId = _gateway.createInstance(
           mainOutputs: _mainOutputs,
-          name: address.segments.join('.'),
+          name: name,
         );
+        if (name.length > _gateway.maxInstanceNameLength) {
+          _warnUnaddressable(address, name);
+        }
         _gateway.parseJson(instanceId, jsonEncode(payload.dump));
         _open[address] = _OpenPatch(instanceId, payload.placement);
       } else {
@@ -248,6 +252,26 @@ class PatchReconciler {
         message:
             'Bus "${bus.format()}" is no longer in the mix — '
             '"${address.format()}" is unplaced.',
+      ),
+    );
+  }
+
+  /// A valid project address can outgrow the engine's patcher-name cap (a
+  /// single segment may be 64 characters; the engine takes
+  /// [PatcherGateway.maxInstanceNameLength] for the whole dotted path). The
+  /// gateway then opens the patcher anonymous — it still sounds, but nothing
+  /// reaches it on the bus — so say so instead of leaving it silently
+  /// unreachable (issue #452). Raised each time such a patcher is opened:
+  /// project load, rename, and an audio-session restart alike.
+  void _warnUnaddressable(EntityAddress address, String name) {
+    final max = _gateway.maxInstanceNameLength;
+    _onNotice(
+      PatchPlacementNotice(
+        patch: address,
+        message:
+            '"${address.format()}" cannot be reached on the bus: its path is '
+            '${name.length} characters and the engine allows at most $max. '
+            'Shorten the patch or group name.',
       ),
     );
   }

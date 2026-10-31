@@ -45,8 +45,25 @@ class RealAppSettingsStore implements AppSettingsStore {
   Future<AppSettings> load() async {
     final file = _file;
     if (!await file.exists()) return const AppSettings();
+    return _decode(await file.readAsString());
+  }
+
+  /// Same fallbacks as [load] — a missing, unreadable or corrupt file yields
+  /// the defaults rather than bricking launch.
+  @override
+  AppSettings loadSync() {
+    final file = _file;
     try {
-      final decoded = jsonDecode(await file.readAsString());
+      if (!file.existsSync()) return const AppSettings();
+      return _decode(file.readAsStringSync());
+    } on FileSystemException {
+      return const AppSettings();
+    }
+  }
+
+  AppSettings _decode(String text) {
+    try {
+      final decoded = jsonDecode(text);
       if (decoded is! Map<String, Object?>) return const AppSettings();
       return AppSettings.fromJson(decoded);
     } on FormatException {

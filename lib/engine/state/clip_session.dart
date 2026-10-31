@@ -639,6 +639,21 @@ class ClipSession implements RecordTarget {
 
   static const double _bendRangeSemitones = 2.0; // GM default: ±2 semitones.
 
+  /// Stop and drop the engine transport ahead of an engine session restart
+  /// (issue #448) — the session's `close()` frees it — keeping every authored
+  /// object (chain, editor, graph, playhead) this session owns, so the surfaces
+  /// bound to them stay bound. The next [play] mints a fresh transport on the
+  /// new session. Returns whether the session was playing, so the caller can
+  /// start it again once the session is back.
+  bool releaseTransport() {
+    final wasPlaying = _playing;
+    stop();
+    _transport?.dispose();
+    _transport = null;
+    _appliedTempo = null;
+    return wasPlaying;
+  }
+
   /// Release the transport, playhead, graph controller, editor and chain this
   /// session owns. Silencing the shared output is the manager's concern.
   void dispose() {

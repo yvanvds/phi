@@ -212,6 +212,23 @@ class MetronomeController extends ChangeNotifier {
     _disconnectSynth();
   }
 
+  /// Drop the click's engine transport ahead of an engine session restart
+  /// (issue #448) — the session's `close()` frees it, and the click voice it is
+  /// connected to goes with the racks. [enabled] is kept, so [resumeTransport]
+  /// brings a running click straight back on the new session.
+  void releaseTransport() {
+    if (_enabled) _stopClick();
+    _transport?.dispose();
+    _transport = null;
+    _appliedTempo = null;
+  }
+
+  /// Re-mint the transport [releaseTransport] dropped and restart the click
+  /// when it was running (issue #448). A no-op while the click is off.
+  void resumeTransport() {
+    if (_enabled) _start();
+  }
+
   MidiTransport _mintTransport() {
     final tempo = _baseTempo;
     _appliedTempo = tempo;

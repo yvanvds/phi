@@ -480,6 +480,48 @@ class EngineMidiController implements ClipSessionHost {
     _syncTicker();
   }
 
+  /// Drop every engine transport this controller holds ahead of an engine
+  /// session restart (issue #448) — the session's `close()` frees them all.
+  /// Ends an armed take (keeping its notes) and aborts a count-in like a stop,
+  /// stops each session and releases its transport and the count clock, and
+  /// closes the MIDI-out port the transports route to. Every session, chain,
+  /// editor and graph survives, so the surfaces bound to them stay bound.
+  ///
+  /// Returns what [resumeTransports] needs to bring playback back: the
+  /// addresses of the sessions that were playing, and whether the output port
+  /// was open.
+  ({Set<EntityAddress?> playing, bool outputOpen}) releaseTransports() {
+    _record.onTransportStop();
+    _abortCountIn();
+    final playing = <EntityAddress?>{
+      for (final entry in _sessions.entries)
+        if (entry.value.releaseTransport()) entry.key,
+    };
+    _countClock?.dispose();
+    _countClock = null;
+    final outputOpen = _gateway.isOpen;
+    _gateway.allNotesOff();
+    _gateway.close();
+    _syncTicker();
+    return (playing: playing, outputOpen: outputOpen);
+  }
+
+  /// Bring playback back after [releaseTransports] once the new session is up
+  /// (issue #448): reopen the output port when it was open, then start the
+  /// sessions that were playing again — from the top, on fresh transports.
+  void resumeTransports(
+    ({Set<EntityAddress?> playing, bool outputOpen}) released,
+  ) {
+    if (released.outputOpen && !_gateway.isOpen) {
+      final port = resolveOutputPort();
+      if (port != null) _gateway.open(port);
+    }
+    for (final address in released.playing) {
+      _sessions[address]?.play();
+    }
+    _syncTicker();
+  }
+
   /// Apply [action] to every open session whose address is [group] or nests
   /// beneath it, then re-sync the ticker once. A group holds only descendants;
   /// the boot session (`null` address) is never part of a group.

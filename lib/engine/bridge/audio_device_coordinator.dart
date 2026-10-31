@@ -8,11 +8,10 @@ import 'audio_recovery_status.dart';
 import 'yse_gateway.dart';
 
 /// Drives the device rules (design `docs/design/settings-and-devices.md` §5,
-/// §9.3) over a [YseGateway]: [boot] brings audio up on the platform default,
-/// and [switchTo] moves it to a chosen device — both when the stored preference
-/// arrives at launch and when the performer picks one in the settings window.
-/// There is deliberately no second, settings-carrying boot entry point; see
-/// [boot] for why the engine cannot offer one (issues #403, #405).
+/// §9.3) over a [YseGateway]: [boot] starts a session straight on the stored
+/// device (falling back to the platform default), and [switchTo] moves a
+/// running session to a device the performer picks in the settings window.
+/// There is one boot path, and it is the one the app runs (issues #405, #449).
 ///
 /// Pure orchestration — it never touches `package:yse` or Flutter, so every
 /// fallback path is unit-tested end to end against the fake gateway. It holds a
@@ -24,9 +23,9 @@ import 'yse_gateway.dart';
 ///
 /// It also **supervises recovery** from a total loss (issue #410): whenever it
 /// ends up with nothing open it arms an [AudioDeviceRecovery], a bounded run of
-/// re-open attempts, and stands it down as soon as a device is back. That is
-/// Phi's job rather than the engine's — see [AudioDeviceRecovery] for what
-/// libyse's own `setAutoReconnect` really does and why boot now turns it off.
+/// re-open attempts, and stands it down as soon as a device is back. That stays
+/// Phi's job rather than the engine watchdog's — see [AudioDeviceRecovery] for
+/// why boot keeps libyse's `setAutoReconnect` off (issues #410, #445).
 /// Owning a timer makes this class disposable: call [dispose] with the engine.
 class AudioDeviceCoordinator {
   /// Binds the coordinator to its [gateway]. [_onNotice] receives every
@@ -59,7 +58,9 @@ class AudioDeviceCoordinator {
   /// The settings describing the device currently open — what a failed live
   /// switch reverts to (design §9.3). Its stored rate / buffer are normalised to
   /// what the device actually accepted (an unsupported override reads back as
-  /// `null`, i.e. the device default).
+  /// `null`, i.e. the device default). The rate is the performer's accepted
+  /// *choice* and is what gets persisted; picking a different one restarts the
+  /// engine session at it ([restartTo], issue #448).
   ///
   /// **`null` means no device is open at all** (issue #408) — the total loss a
   /// [AudioNoticeKind.noAudioDevice] notice announces, or a [boot] on a machine
@@ -76,66 +77,273 @@ class AudioDeviceCoordinator {
   /// the diagnostics row read this to tell "coming back" from "your move".
   AudioRecoveryStatus get recovery => _recovery.status;
 
-  /// Brings audio up on the platform default: `init()` (design §4, §5). Takes no
-  /// settings — the stored device is applied afterwards, as a [switchTo] once the
-  /// settings store has loaded (`Workstation._startProject`).
+  /// Brings audio up **straight on [stored]** — the performer's saved device,
+  /// or the platform default when none is saved (design §5, issue #449).
+  /// Returns `true` when [stored] itself is what opened.
   ///
-  /// That ordering is not a shortcut, it is the only one the engine supports.
-  /// **Devices are enumerated only while opening one** (issue #403):
-  /// `initOffline()` — which design §5 originally specified, so that boot never
-  /// opened a device the performer hadn't asked for — takes
-  /// `deviceManager::init(false)`, skipping both `Pa_Initialize()` and
-  /// `updateDeviceList()`. Measured against libyse 2.4.0 on Windows:
-  /// `initOffline()` then `audioDevices()` returns **0** devices (and `init()`
-  /// afterwards is a no-op, the engine refusing a second init), where `init()`
-  /// returns 19. So *any* boot has to open the platform default before it can
-  /// resolve a stored name, which makes a settings-carrying `boot` and an
-  /// `init()` + [switchTo] literally the same sequence — this class used to
-  /// implement both, and the branch the app never ran is where #403's defect sat
-  /// (issue #405). Revisit if the engine grows an enumerate-without-opening call
-  /// (dart-yse #51); until then there is one boot path and the app runs it.
-  void boot() {
-    _gateway.init();
-    // `init()` brings the platform default up with it — but only on a machine
-    // that *has* one. Ask the engine what actually came up rather than assuming,
-    // so [current] never claims the default device on a box with no audio
-    // hardware (issue #408).
-    _current = _gateway.activeAudioState() == AudioDeviceState.none
-        ? null
-        : const AudioSettings();
-    // Design §4 used to enable the engine's auto-reconnect here. It is off
-    // (issue #410): measured, it reopens `Pa_GetDefaultOutputDevice()` rather
-    // than the device that was lost, discards the chosen buffer size, retries on
-    // every 16 ms control tick with no backoff once armed, and reads its
-    // `delayMs` as a tick count. Phi supervises instead — see
-    // [AudioDeviceRecovery]. Called explicitly rather than left to the engine's
-    // own default so the decision is visible on the wire.
+  /// The sequence is `requestedSampleRate` → `initOffline()` →
+  /// `refreshDevices()` → resolve [stored] → open exactly that device. So boot
+  /// never opens a device the performer did not ask for, and the session rate
+  /// is never negotiated against the wrong one. If [stored] is missing or
+  /// refuses, it falls back to the platform default with a notice and leaves
+  /// the stored preference alone — the caller never persists from here — so an
+  /// interface that is not plugged in yet keeps its configuration. If nothing
+  /// opens at all, a recovery run is armed.
+  ///
+  /// Under libYSE 2.4 this was impossible: devices were enumerated only while
+  /// opening one, so an offline boot had nothing to resolve against (issue
+  /// #403), and boot had to open the default with `init()` and then switch.
+  /// yse 0.2.0's `refreshDevices()` lists devices without opening a stream
+  /// (issue #445), which is what this rests on — proven against the real
+  /// engine in `real_yse_gateway_enumeration_contract_test.dart`.
+  bool boot([AudioSettings stored = const AudioSettings()]) =>
+      _startSession(stored);
+
+  /// Starts an engine session and opens [target] in it, falling back to the
+  /// platform default — the "open the stored device from an offline session"
+  /// step. [boot] is its caller; [restartTo] runs the same steps live for a
+  /// rate change (issue #448), with a revert to the previous device on failure.
+  bool _startSession(AudioSettings target) {
+    // What the performer wants, even if it fails to open: recovery reaches for
+    // it first, and after a total loss this is the only record of it.
+    _intended = target;
+    _current = null;
+    _gateway.requestedSampleRate = target.sampleRate ?? 0;
+    _initSession();
+    // The engine's own watchdog stays off; Phi supervises recovery instead —
+    // see [AudioDeviceRecovery] for why, under yse 0.2.0 too (issues #410,
+    // #445). Called explicitly rather than left to the engine's default so the
+    // decision is visible on the wire.
     _gateway.setAutoReconnect(on: false);
-    // A machine whose engine came up with no device at all is already the state
-    // recovery exists for — an interface that is enumerated but held by another
-    // process, or one whose default refused, is the ordinary cause — so start
-    // trying rather than sitting silent.
-    //
-    // Unless the engine enumerated *nothing*, in which case there is provably
-    // nothing to reach for and a run would be theatre: the device list is built
-    // once, inside `init()`, from a PortAudio table that is never rescanned, and
-    // no in-process call refreshes either (issue #412, dart-yse #51). An empty
-    // list stays empty until Phi is restarted, so say that now instead of
-    // spending two minutes of RECONNECTING on hardware that cannot appear.
-    if (_current == null && !_armRecovery()) {
-      _notify(
-        AudioNoticeKind.noAudioDevice,
-        'No audio output device is available — the engine found none at '
-        'startup. Connect one and restart Phi: the device list is built once, '
-        'when the engine starts.',
-      );
+
+    final name = target.outputDevice;
+    if (name == null) {
+      if (_openInSession(null, target)) return true;
+      // Nothing opened and nothing named: the machine has no usable output
+      // (an interface held by another process, a default that refused, or no
+      // hardware *yet*) — the state recovery exists for. Quietly: the status
+      // chip already says RECONNECTING, and every attempt re-enumerates, so a
+      // device plugged in later is found (issues #412, #445).
+      _recovery.arm();
+      return false;
     }
+
+    final descriptor = _resolve(target.outputHost, name);
+    if (descriptor != null && _openInSession(descriptor, target)) return true;
+    final problem = descriptor == null
+        ? 'is not available'
+        : 'could not be opened';
+    if (_openInSession(null, const AudioSettings(), quiet: true)) {
+      _notify(
+        AudioNoticeKind.switchReverted,
+        'Audio device "$name" $problem — using the default device.',
+      );
+      return false;
+    }
+    _current = null;
+    _notify(
+      AudioNoticeKind.switchReverted,
+      'Audio device "$name" $problem — no audio output device is open.',
+    );
+    _recovery.arm();
+    return false;
   }
 
-  /// Applies a device change (design §5, §9.3): close the open device and open
-  /// [desired]. This is both the launch-time apply of the stored preference —
-  /// the shell calls it once settings have loaded, over the platform default
-  /// [boot] left running — and the live change from the settings window. On any
+  /// `initOffline()` + `refreshDevices()`: a session with no device open but
+  /// every device listed, so one can be resolved and opened in it (#445).
+  void _initSession() {
+    _gateway.initOffline();
+    _gateway.refreshDevices();
+  }
+
+  /// Opens [descriptor] — or the platform default when `null` — in the fresh
+  /// session [_startSession] just started, first making sure the session runs
+  /// at a rate the device accepts. Returns `false` when there is no such device
+  /// or it refuses.
+  ///
+  /// [sessionRate] is the rate to fit the session to when it differs from
+  /// [settings]' own — a revert asks for the rate the session ran at before.
+  bool _openInSession(
+    AudioDeviceDescriptor? descriptor,
+    AudioSettings settings, {
+    bool quiet = false,
+    int? sessionRate,
+  }) {
+    final device = descriptor ?? _gateway.defaultAudioDevice();
+    if (device == null) return false;
+    _fitSessionRate(device, sessionRate ?? settings.sampleRate);
+    return _open(descriptor, settings, quiet: quiet);
+  }
+
+  /// Restarts the not-yet-used session when it is not at the rate
+  /// [_rateFor] picks for [device] — [stored] when the device accepts it, else
+  /// the session's own when the device can run at it, else one the device
+  /// offers. The session rate is locked from `initOffline()` to `close()`, and
+  /// a device that cannot run at it refuses to open (yse 0.2.0, issue #443) —
+  /// so a 44.1 kHz-only interface with no stored rate would otherwise never
+  /// open on a 48 kHz session. Nothing is open and nothing has been built on
+  /// the session yet, so the restart costs only a re-enumeration.
+  void _fitSessionRate(AudioDeviceDescriptor device, int? stored) {
+    final session = _gateway.sessionSampleRate;
+    final wanted = _rateFor(device, stored, session);
+    if (wanted == session) return;
+    _gateway.close();
+    _gateway.requestedSampleRate = wanted.toInt();
+    _initSession();
+    _gateway.setAutoReconnect(on: false);
+  }
+
+  /// The session rate [device] should open on: [stored] when the device
+  /// reports it, else [session] when the device can run at it, else the
+  /// device's own rate ([_ownRate]).
+  static double _rateFor(
+    AudioDeviceDescriptor device,
+    int? stored,
+    double session,
+  ) {
+    if (stored != null && device.sampleRates.contains(stored.toDouble())) {
+      return stored.toDouble();
+    }
+    if (_runsAt(device, session)) return session;
+    return _ownRate(device);
+  }
+
+  /// Whether applying [desired] live needs a **new engine session** (issue
+  /// #448): its device reports [desired]'s rate and the running session is at
+  /// another, or no rate was chosen and the device cannot run at the session's.
+  /// The session rate is locked from init until close, so either one can only
+  /// be had by [restartTo]; everything else is a plain [switchTo]. `false` when
+  /// [desired]'s device is not listed — [switchTo] explains that one.
+  bool needsSessionRestart(AudioSettings desired) {
+    final session = _gateway.sessionSampleRate;
+    if (session <= 0) return false;
+    final device = desired.outputDevice == null
+        ? _gateway.defaultAudioDevice()
+        : _resolve(desired.outputHost, desired.outputDevice);
+    if (device == null) return false;
+    return _rateFor(device, desired.sampleRate, session) != session;
+  }
+
+  /// Applies [desired] by **restarting the engine session** at the rate it
+  /// needs (issue #448) — `close()`, then a fresh offline session at that rate,
+  /// then [desired]'s device opened in it: the [_startSession] step, run live.
+  ///
+  /// `close()` frees every native object built on the session, so the caller
+  /// (`PhiEngine`) releases its own first and re-materialises them once this
+  /// returns — whatever it returns, because a session is up either way.
+  ///
+  /// Mirrors [switchTo]'s contract: `true` when [desired] is open; on failure
+  /// the previous device is reopened — at the rate the session ran at before —
+  /// with a [AudioNoticeKind.switchReverted] notice, then the platform default,
+  /// then nothing (a [AudioNoticeKind.noAudioDevice] notice and a recovery
+  /// run). Returns `false` so the caller does not persist [desired]. When the
+  /// restart happened only because the device cannot run the session rate (no
+  /// rate was chosen), a [AudioNoticeKind.sessionRateUnsupported] notice says
+  /// so — the performer asked for a device, not for a new rate.
+  bool restartTo(AudioSettings desired) {
+    final previous = _current;
+    final previousRate = _gateway.sessionSampleRate;
+    final name = desired.outputDevice;
+    // Resolved against the list the running session read; the restart
+    // re-enumerates, and the device is resolved again against that below.
+    final listed = name == null
+        ? _gateway.defaultAudioDevice()
+        : _resolve(desired.outputHost, name);
+    final rateUnsupported =
+        listed != null &&
+        !_supports(listed, desired.sampleRate) &&
+        !_runsAt(listed, previousRate);
+    _recovery.cancel();
+    _gateway.close();
+    _intended = desired;
+    _current = null;
+    _gateway.requestedSampleRate = listed == null
+        ? desired.sampleRate ?? 0
+        : _rateFor(listed, desired.sampleRate, previousRate).toInt();
+    _initSession();
+    _gateway.setAutoReconnect(on: false);
+
+    final descriptor = name == null ? null : _resolve(desired.outputHost, name);
+    if ((name == null || descriptor != null) &&
+        _openInSession(descriptor, desired)) {
+      if (rateUnsupported) {
+        _notify(
+          AudioNoticeKind.sessionRateUnsupported,
+          'Audio device ${_nameOf(desired)} cannot run at '
+          '${previousRate.toStringAsFixed(0)} Hz — the audio engine restarted '
+          'at ${_gateway.sessionSampleRate.toStringAsFixed(0)} Hz.',
+        );
+      }
+      return true;
+    }
+
+    final label = '"${name ?? 'default'}"';
+    if (previous != null && _reopenInSession(previous, previousRate)) {
+      _notify(
+        AudioNoticeKind.switchReverted,
+        'Audio device $label could not be opened — reverting to '
+        '${_nameOf(previous)}.',
+      );
+      return false;
+    }
+    if (_openInSession(null, const AudioSettings(), quiet: true)) {
+      _notify(
+        AudioNoticeKind.switchReverted,
+        'Audio device $label could not be opened — using the default device.',
+      );
+      return false;
+    }
+    _current = null;
+    _notify(
+      AudioNoticeKind.noAudioDevice,
+      'No audio output device could be opened.',
+    );
+    _recovery.arm();
+    return false;
+  }
+
+  /// Reopens [settings]' device in a fresh session, fitting the session back
+  /// to [rate] (the one it ran at before) when [settings] chose none — the
+  /// revert of a failed [restartTo]. Quiet: the revert notice says it all.
+  bool _reopenInSession(AudioSettings settings, double rate) {
+    final name = settings.outputDevice;
+    final descriptor = name == null
+        ? null
+        : _resolve(settings.outputHost, name);
+    if (name != null && descriptor == null) return false;
+    return _openInSession(
+      descriptor,
+      settings,
+      quiet: true,
+      sessionRate: settings.sampleRate ?? rate.toInt(),
+    );
+  }
+
+  /// Whether [device] reports [rate] — `false` for no rate at all.
+  static bool _supports(AudioDeviceDescriptor device, int? rate) =>
+      rate != null && device.sampleRates.contains(rate.toDouble());
+
+  /// Whether [device] can run at [rate]. A device that reports no rates is
+  /// taken at its word, as is a session with no rate yet.
+  static bool _runsAt(AudioDeviceDescriptor device, double rate) =>
+      rate <= 0 ||
+      device.sampleRates.isEmpty ||
+      device.sampleRates.contains(rate);
+
+  /// The rate a session for [device] runs at when the performer chose none:
+  /// the engine's 48 kHz default when the device takes it, else 44.1 kHz, else
+  /// the first rate it reports.
+  static double _ownRate(AudioDeviceDescriptor device) {
+    final rates = device.sampleRates;
+    if (rates.isEmpty || rates.contains(48000.0)) return 48000;
+    if (rates.contains(44100.0)) return 44100;
+    return rates.first;
+  }
+
+  /// Applies a live device change from the settings window (design §5, §9.3):
+  /// close the open device and open [desired] in the running session. (The
+  /// stored preference is no longer applied this way at launch — [boot] opens
+  /// it directly, issue #449.) On any
   /// failure the previous working device is kept (target missing) or restored
   /// (open failed), a notice is raised, and `false` is returned so the caller
   /// knows **not** to persist [desired] — the stored choice updates only on
@@ -184,7 +392,7 @@ class AudioDeviceCoordinator {
       );
       // Nothing is open and the performer's pick isn't there either: keep
       // trying, with a fresh budget, now that we know which device they want.
-      if (current == null) _armRecovery();
+      if (current == null) _recovery.arm();
       return false;
     }
 
@@ -215,7 +423,7 @@ class AudioDeviceCoordinator {
         AudioNoticeKind.noAudioDevice,
         'No audio output device could be opened.',
       );
-      _armRecovery();
+      _recovery.arm();
       return false;
     }
 
@@ -238,7 +446,7 @@ class AudioDeviceCoordinator {
         AudioNoticeKind.noAudioDevice,
         'No audio output device could be opened.',
       );
-      _armRecovery();
+      _recovery.arm();
     }
     return false;
   }
@@ -262,55 +470,79 @@ class AudioDeviceCoordinator {
   /// warning), and a [AudioNoticeKind.noAudioDevice] here would toast a second
   /// time at *error* level for a state Phi is actively fixing — which is the
   /// distinction this whole change exists to draw. The error notice belongs to
-  /// the moments it is true: [_onRecoveryExhausted], and the case below.
+  /// the moment it is true: [_onRecoveryExhausted].
   ///
-  /// That case is a device dropping on an engine that enumerated nothing — a
-  /// default device opened by `init()` without going through the list, on a box
-  /// where enumeration itself failed. Nothing can be armed for it (issue #412),
-  /// so without a notice the health monitor would read the silence as
-  /// "reconnecting" and sit there forever, waiting on retries that were never
-  /// scheduled. Saying it is lost is what settles the chip on NO AUDIO.
+  /// Under libYSE 2.4 a drop on an engine that had enumerated nothing raised
+  /// "restart Phi" here instead, because no run could ever find a device
+  /// (issue #412). Every attempt now re-enumerates (issue #445), so that case
+  /// arms like any other.
   void observeLiveState() {
     if (_current == null) return;
     if (_gateway.activeAudioState() != AudioDeviceState.none) return;
     _current = null;
-    if (!_armRecovery()) {
-      _notify(
-        AudioNoticeKind.noAudioDevice,
-        'The audio output device is gone, and the engine enumerated no others '
-        '— restart Phi to pick one up.',
-      );
-    }
-  }
-
-  /// Arms a bounded recovery run, unless it would be theatre — and reports
-  /// which happened.
-  ///
-  /// Recovery re-opens **cached** descriptors, and that is the only thing it
-  /// can do: libyse enumerates once, inside `init()`, over a PortAudio device
-  /// table captured at the first `Pa_Initialize()`, and nothing refreshes either
-  /// in-process — not `closeCurrentDevice()`, not `System::close()` + `init()`,
-  /// and there is no exported rescan (issue #412, dart-yse #51). That cuts both
-  /// ways, and the good half is the one recovery depends on: an interface that
-  /// is unplugged **keeps its entry**, so the device the performer asked for
-  /// stays resolvable and each attempt is a real `openDevice` on it that starts
-  /// working again the moment the hardware is back.
-  ///
-  /// The bad half is this guard. A device the engine never enumerated cannot be
-  /// opened, ever, for the life of the process — so when the list is empty there
-  /// is no descriptor to reach for and no attempt that could succeed. Arming
-  /// anyway would show RECONNECTING for two minutes and then give up, which
-  /// tells a performer to wait for something that is not coming.
-  ///
-  /// Returns `true` when a run was armed.
-  bool _armRecovery() {
-    if (_gateway.audioDevices().isEmpty) return false;
     _recovery.arm();
-    return true;
   }
 
-  /// One recovery attempt (issue #410): reach for the device the performer
-  /// actually wants, then settle for the platform default. Quiet by design — a
+  /// Re-reads the machine's audio devices **while one is playing** (issue
+  /// #450) — the Settings › Audio "Rescan devices" action. Returns `true` when
+  /// the device that was open is open again afterwards.
+  ///
+  /// PortAudio cannot rescan with a stream open: `refreshDevices()` then
+  /// re-reads the existing enumeration, so an interface plugged in mid-session
+  /// never appears and an unplugged one keeps its entry (§4). So this closes
+  /// the stream — only the stream: the session, its rate and everything built
+  /// on it stay, which is why this is *not* [restartTo] — refreshes, and
+  /// reopens [current]: a deliberate, announced dropout. The rescan changes no
+  /// choice: the stored preference is never touched and what the performer
+  /// asked for stays what recovery reaches for (design §5, §9.3).
+  ///
+  /// If [current]'s device is gone from the fresh list, the platform default
+  /// is opened instead with a [AudioNoticeKind.switchReverted] notice; if that
+  /// fails too, [current] becomes `null`, a [AudioNoticeKind.noAudioDevice]
+  /// notice is raised and a recovery run armed — [switchTo]'s total loss.
+  ///
+  /// With nothing open the list is already re-read by every refresh, so a
+  /// rescan is one recovery attempt run now: it opens the wanted device (or
+  /// the default) if it has arrived, and stands any run down when it does.
+  bool rescanDevices() {
+    final previous = _current;
+    if (previous == null) {
+      if (!_attemptRecovery()) return false;
+      _recovery.cancel();
+      return true;
+    }
+    _gateway.closeAudioDevice();
+    _gateway.refreshDevices();
+    if (_reopen(previous)) return true;
+
+    if (previous.outputDevice != null && _reopen(const AudioSettings())) {
+      _notify(
+        AudioNoticeKind.switchReverted,
+        'Audio device ${_nameOf(previous)} is no longer available — using the '
+        'default device.',
+      );
+      return false;
+    }
+    _current = null;
+    _notify(
+      AudioNoticeKind.noAudioDevice,
+      'No audio output device could be opened after the rescan.',
+    );
+    _recovery.arm();
+    return false;
+  }
+
+  /// One recovery attempt (issue #410): re-enumerate, reach for the device the
+  /// performer actually wants, then settle for the platform default.
+  ///
+  /// The re-enumeration comes first and is what makes recovery real (issue
+  /// #445). Nothing is open during a run, so `refreshDevices()` restarts the
+  /// audio backend and reads the machine as it is now: an interface that was
+  /// replugged — possibly under a new index — or one that was never there at
+  /// boot becomes resolvable, and one that is gone drops out of the list
+  /// instead of failing an open on a stale entry. Under libYSE 2.4 the list was
+  /// a cache frozen at the first `init()` (issue #412), so a run could only
+  /// ever re-open what the engine had seen at startup. Quiet by design — a
   /// run makes up to eight of these, and eight "unsupported sample rate" toasts
   /// while the audio is already gone would bury the one message that matters.
   /// The one exception is the settle itself: landing on the default while a
@@ -321,6 +553,7 @@ class AudioDeviceCoordinator {
   /// the gateway has confirmed a stream came up (dart-yse #52), so a run cannot
   /// end on a device that merely failed to complain.
   bool _attemptRecovery() {
+    _gateway.refreshDevices();
     final intended = _intended;
     if (intended != null && _reopen(intended)) return true;
     // The default is worth a separate try — the performer's interface may still
@@ -398,11 +631,19 @@ class AudioDeviceCoordinator {
         bufferSize: buffer,
         layout: settings.layout,
       );
+      _requestSessionRate(rate);
       return true;
     } on AudioDeviceException {
       return false;
     }
   }
+
+  /// Carries the accepted [rate] (`null` = the device's own) to the engine as
+  /// the request for the next session (issue #443). A rate that differs from
+  /// the running session's never reaches here as a plain open: the engine
+  /// restarts the session for it first ([needsSessionRestart], issue #448).
+  void _requestSessionRate(double? rate) =>
+      _gateway.requestedSampleRate = rate?.toInt() ?? 0;
 
   /// Resolves [settings]' device and opens it quietly — the revert of a failed
   /// switch (design §9.3) and each attempt of a recovery run (issue #410). Both

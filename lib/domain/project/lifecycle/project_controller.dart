@@ -6,7 +6,6 @@ import 'package:path/path.dart' as p;
 import '../../session/session_state.dart';
 import '../../shell_layout/shell_layout.dart';
 import '../app_settings/app_settings_controller.dart';
-import '../app_settings/audio_settings.dart';
 import '../app_settings/midi_settings.dart';
 import '../entity_address.dart';
 import '../project_command.dart';
@@ -168,11 +167,6 @@ class ProjectController extends ChangeNotifier {
   /// value (design §3, default 60 s).
   Duration get autosaveInterval =>
       _autosaveIntervalOverride ?? _settings.value.autosaveInterval;
-
-  /// The stored audio settings (chosen output device + overrides + layout) the
-  /// engine boots from once [loadSettings] has read `settings.json` — the shell
-  /// applies these to the engine at launch (design §5).
-  AudioSettings get audioSettings => _settings.value.audio;
 
   /// The stored MIDI settings (chosen output port + enabled input ports) the
   /// engine applies once [loadSettings] has read `settings.json` — the shell

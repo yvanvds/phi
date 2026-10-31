@@ -23,6 +23,9 @@ class FakeAppSettingsStore implements AppSettingsStore {
   Future<AppSettings> load() async => _settings;
 
   @override
+  AppSettings loadSync() => _settings;
+
+  @override
   Future<void> save(AppSettings settings) async {
     _settings = settings;
     saveCount++;

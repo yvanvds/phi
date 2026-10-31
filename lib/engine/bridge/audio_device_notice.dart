@@ -46,9 +46,8 @@ enum AudioNoticeKind {
 
   /// A device switch failed (target missing or refused) — the previous working
   /// device was kept / restored and the stored choice left unchanged. Covers the
-  /// launch-time apply of the stored preference too, since that runs through the
-  /// same switch (issue #405): a device that isn't plugged in leaves the app on
-  /// the platform default `init()` opened, with the preference intact.
+  /// boot too (issue #449): a stored device that isn't plugged in, or refuses,
+  /// leaves the app on the platform default, with the preference intact.
   switchReverted,
 
   /// No audio device could be opened at all, not even the platform default — the
@@ -63,4 +62,11 @@ enum AudioNoticeKind {
   /// built-in speakers with nobody told. The stored preference is untouched —
   /// re-picking the device in Settings › Audio once it returns is the way back.
   recoveredOnDefault,
+
+  /// The device picked in the settings window cannot run at the running
+  /// session's sample rate — locked from engine init until close (yse 0.2.0,
+  /// issue #443) — and no rate was chosen for it, so the audio engine was
+  /// restarted at a rate the device offers (issue #448). Said because the
+  /// performer asked for a device, not for a new rate.
+  sessionRateUnsupported,
 }

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/domain/project/app_settings/audio_settings.dart';
 import 'package:phi/engine/bridge/audio_device_state.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/engine/state/engine_telemetry.dart';
@@ -31,7 +32,7 @@ void main() {
 
       expect(engine.isStarted, isTrue);
       expect(gateway.initialised, isTrue);
-      expect(gateway.calls, containsAllInOrder(<String>['init']));
+      expect(gateway.calls, containsAllInOrder(<String>['initOffline']));
       expect(
         gateway.calls.any((c) => c.startsWith('startUpdateTimer')),
         isTrue,
@@ -42,7 +43,7 @@ void main() {
       engine.start();
       engine.start();
 
-      final inits = gateway.calls.where((c) => c == 'init').length;
+      final inits = gateway.calls.where((c) => c == 'initOffline').length;
       expect(inits, 1);
     });
 
@@ -65,7 +66,7 @@ void main() {
     // `none` while stopped and would pass either way.
     test('a second start() in one process brings the device back up', () {
       engine.start();
-      expect(gateway.activeAudioState().sampleRate, 44100);
+      expect(gateway.activeAudioState().sampleRate, 48000);
 
       engine.stop();
       expect(gateway.activeAudioState(), AudioDeviceState.none);
@@ -73,7 +74,22 @@ void main() {
 
       engine.start();
       expect(engine.isStarted, isTrue);
-      expect(engine.activeAudioState().sampleRate, 44100);
+      expect(engine.activeAudioState().sampleRate, 48000);
+    });
+
+    // The session rate is locked at init (yse 0.2.0), so a stored rate only
+    // reaches the device when it is requested before start (issues #443, #449).
+    test('a boot rate requested before start() is the session rate', () {
+      expect(engine.sessionSampleRate, 0);
+      engine.requestBootAudio(const AudioSettings(sampleRate: 96000));
+      engine.start();
+
+      expect(engine.sessionSampleRate, 96000);
+      expect(engine.activeAudioState().sampleRate, 96000);
+
+      // A later request only affects a later start.
+      engine.requestBootAudio(const AudioSettings());
+      expect(engine.sessionSampleRate, 96000); // the running session keeps it
     });
 
     test('setTestSignal forwards to gateway and updates listenable', () {

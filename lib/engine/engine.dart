@@ -232,9 +232,19 @@ class PhiEngine {
   /// notices flow into [_lastAudioNotice].
   late final AudioDeviceCoordinator _audio = AudioDeviceCoordinator(
     _gateway,
-    onNotice: (notice) => _lastAudioNotice.value = notice,
+    onNotice: (notice) {
+      if (_collectBootNotices) _bootAudioNotices.add(notice);
+      _lastAudioNotice.value = notice;
+    },
     recoverySchedule: _audioRecoverySchedule,
   );
+
+  /// The audio settings the next [start] boots onto — see [requestBootAudio].
+  AudioSettings _bootAudio = const AudioSettings();
+
+  /// Whether a notice the coordinator raises belongs to [start]'s boot.
+  bool _collectBootNotices = false;
+  final List<AudioDeviceNotice> _bootAudioNotices = [];
 
   final ValueNotifier<AudioDeviceNotice?> _lastAudioNotice =
       ValueNotifier<AudioDeviceNotice?>(null);
@@ -319,9 +329,10 @@ class PhiEngine {
     return p;
   }
 
-  /// The last patch source-placement degradation, or `null`. A placement naming a
-  /// bus no longer in the mix leaves the patch unplaced and raises one of these
-  /// (design §4, §8); the shell surfaces it like an [lastAudioNotice].
+  /// The last patch degradation, or `null`. A placement naming a bus no longer
+  /// in the mix leaves the patch unplaced and raises one of these (design §4,
+  /// §8), as does a patch whose address is too long to name its native patcher
+  /// (issue #452); the shell surfaces it like an [lastAudioNotice].
   ValueListenable<PatchPlacementNotice?> get lastPatchNotice =>
       _lastPatchNotice;
 
@@ -948,18 +959,21 @@ class PhiEngine {
 
   /// Initialise the engine, start the update loop, begin emitting telemetry.
   ///
-  /// Brings audio up on the platform default (design §4, §5), with Phi — not the
-  /// engine — supervising recovery if it ever goes away (issue #410). It takes
-  /// **no settings**: the stored device is applied
-  /// afterwards through [switchAudioDevice], once the settings store has loaded
-  /// — that is what the shell does (`Workstation._startProject`) and the only
-  /// sequence the engine supports, because it enumerates its hardware solely
-  /// while opening a device (issue #403). A settings-carrying `start` therefore
-  /// could not open the stored device any sooner; it only duplicated this path,
-  /// unused, which is where #403's defect hid (issue #405).
+  /// Brings audio up straight on the device [requestBootAudio] named — the
+  /// stored one — or the platform default when none was requested (design §4,
+  /// §5, issue #449), with Phi — not the engine — supervising recovery if it
+  /// ever goes away (issue #410). A missing or refusing stored device falls
+  /// back to the default with a [lastAudioNotice]; the notices raised here are
+  /// kept in [bootAudioNotices] for a shell that mounts afterwards.
   void start() {
     if (_started) return;
-    _audio.boot();
+    _bootAudioNotices.clear();
+    _collectBootNotices = true;
+    try {
+      _audio.boot(_bootAudio);
+    } finally {
+      _collectBootNotices = false;
+    }
     // Patcher subsystem is optional — tests that don't inject a
     // PatcherGateway get an engine without a patcher (engine.patcher throws).
     // When wired, the native patchers are created per `patch.` entity by the
@@ -1099,15 +1113,7 @@ class PhiEngine {
     // the fx epic) — it degrades to a graceful no-op. Every degradation is a
     // notice, never a crash. Silent in production until the tap C API lands
     // (the default [NoOpBusTap] yields no frames).
-    _controlPlane = ControlPlaneDispatcher(
-      busTap: _busTap,
-      clips: SessionClipControlPort(midi: _midi, documentAt: _clipDocumentAt),
-      voices: AuditionVoiceControlPort(_midi),
-      variables: RuntimeVariableControlPort(rv),
-      states: StateMachineControlPort(_stateTriggers!),
-      tempo: DomainTempoControlPort(_applyDomainTempo),
-      fx: const _UnwiredFxControlPort(),
-    );
+    _controlPlane = _buildControlPlane();
     // The rack materialiser (issue #208) reconciles synths per internal voice
     // and insert chains per bus, then hands the live voice table + synth map to
     // the MIDI controller so sessions flatten + connect by routed voice. It runs
@@ -1208,6 +1214,20 @@ class PhiEngine {
     _stateCurrentMirror.reset();
     _stateCurrentMirror.push(sm.activeStateAddress);
   }
+
+  /// The live-coding control plane over the engine's bus tap (issue #334),
+  /// wired to the running controllers. Built on [start], and again after an
+  /// audio-session restart (issue #448), whose `close()` releases every bus
+  /// subscription the previous one held.
+  ControlPlaneDispatcher _buildControlPlane() => ControlPlaneDispatcher(
+    busTap: _busTap,
+    clips: SessionClipControlPort(midi: _midi, documentAt: _clipDocumentAt),
+    voices: AuditionVoiceControlPort(_midi),
+    variables: RuntimeVariableControlPort(_runtimeVariables!),
+    states: StateMachineControlPort(_stateTriggers!),
+    tempo: DomainTempoControlPort(_applyDomainTempo),
+    fx: const _UnwiredFxControlPort(),
+  );
 
   /// Build (or, after a project swap, rebind) the [PatchLibraryController] and
   /// open the first `patch.` entity (issue #224). Seeds a default empty patch
@@ -1645,12 +1665,14 @@ class PhiEngine {
   /// [start] (no device surface yet); the shell never touches the gateway, so
   /// this façade method is the only way above the bridge to enumerate devices.
   ///
-  /// A **cache, not a live list** (issue #412): the engine fills it once, while
-  /// starting, and no in-process call refreshes it. So the pickers go on
-  /// offering an interface that has been unplugged — choosing it fails the open,
-  /// which is the intended way to find out — and an interface plugged in after
-  /// startup does not appear here until Phi is restarted. Re-reading this after
-  /// a device change is therefore pointless; it cannot return anything new.
+  /// A **snapshot, not a live list** (issues #412, #445): it is the engine's
+  /// last enumeration, which cannot be rescanned while a device is playing. So
+  /// the pickers go on offering an interface that has been unplugged — choosing
+  /// it fails the open, which is the intended way to find out — and an interface
+  /// plugged in while audio runs does not appear until [rescanAudioDevices]
+  /// (issue #450). The list also changes after a total loss: each recovery
+  /// attempt re-enumerates with nothing open, so hardware that came back (or
+  /// arrived) is listed once a run has looked.
   List<AudioDeviceDescriptor> audioDevices() =>
       _started ? _gateway.audioDevices() : const [];
 
@@ -1683,10 +1705,111 @@ class PhiEngine {
   /// success — or a no-op when [desired] is already open — so the caller persists
   /// the stored choice only when it does. Returns `false` (a no-op) before
   /// [start].
+  ///
+  /// A change the running session cannot take — a different sample rate, or a
+  /// device that cannot run at the session's — restarts the audio session in
+  /// place ([_restartAudioSession], issue #448) rather than waiting for the
+  /// next launch.
   bool switchAudioDevice(AudioSettings desired) {
     if (!_started) return false;
-    return _audio.switchTo(desired);
+    final ok = _audio.needsSessionRestart(desired)
+        ? _restartAudioSession(desired)
+        : _audio.switchTo(desired);
+    // A restart comes back on what the performer picked, as the next launch
+    // does once the caller has persisted it.
+    if (ok) _bootAudio = desired;
+    return ok;
   }
+
+  /// Rescans the machine's audio devices while one is playing (issue #450) —
+  /// Settings › Audio's "Rescan devices". The open device is closed (the
+  /// session and everything built on it stay), the list re-read, and the same
+  /// device reopened: a brief, deliberate dropout. Afterwards [audioDevices]
+  /// lists an interface plugged in since and drops one that was pulled. Returns
+  /// `true` when the device that was open is open again; otherwise the default
+  /// (or nothing) is open and a [lastAudioNotice] says why. Changes no stored
+  /// choice. Returns `false` (a no-op) before [start].
+  bool rescanAudioDevices() => _started && _audio.rescanDevices();
+
+  /// Restarts the **native** audio session under the running engine (issue
+  /// #448): `close()` and a fresh session at the rate [desired] needs, with
+  /// every Phi controller kept alive.
+  ///
+  /// The session rate is locked from init until close (yse 0.2.0, issue #443),
+  /// so a new rate needs a new session — and `close()` frees every native
+  /// object built on it. A [stop] → [start] would get there too, but it
+  /// rebuilds the engine-side controllers, and the shell holds those from its
+  /// own `initState` (`midi.chain` / `midi.editor` and their undo scope, the
+  /// clip library, the voice audition, every surface). So instead the restart
+  /// goes *below* the controllers: each lets go of only its native handles —
+  /// transports and clocks, the click voice, the racks, the patchers, the
+  /// channels — the coordinator restarts the session, and the same objects
+  /// re-materialise from the registry the way a project open does. Patch
+  /// dumps are flushed into their payloads first, so nothing edited is lost.
+  ///
+  /// Performance carries across: the clips that were playing start again
+  /// (from the top, on fresh transports), a running click resumes, running
+  /// patch sources are remounted, armed timed transitions keep their count,
+  /// and the master level, test signal and Python name table are re-pushed.
+  bool _restartAudioSession(AudioSettings desired) {
+    flushPatchPayloads();
+    unawaited(_controlPlane?.dispose());
+    _controlPlane = null;
+    final reconciler = _patchReconciler;
+    final runningPatches = reconciler == null
+        ? const <EntityAddress>[]
+        : [
+            for (final address in reconciler.openPatches)
+              if (reconciler.isRunning(address)) address,
+          ];
+    _stateTriggers?.releaseClocks();
+    final released = _midi?.releaseTransports();
+    _metronome?.releaseTransport();
+    _clickSynth?.dispose();
+    _clickSynth = null;
+    _patchLibrary?.releaseEditors();
+    _teardownChannels();
+    _patcherGateway?.disposeAll();
+
+    final ok = _audio.restartTo(desired);
+
+    _gateway.startUpdateTimer(engineUpdateInterval);
+    _stallTracker.reset();
+    if (_testSignal.value) _gateway.audioTest = true;
+    _pushMasterEffective();
+    _syncChannelsFromRegistry();
+    _patchLibrary?.reopen();
+    for (final address in runningPatches) {
+      _patchLibrary?.start(address);
+    }
+    if (released != null) _midi?.resumeTransports(released);
+    _metronome?.resumeTransport();
+    _stateTriggers?.restoreClocks();
+    _controlPlane = _buildControlPlane();
+    _mirrorBinder.resync();
+    _stateCurrentMirror.reset();
+    _stateCurrentMirror.push(_stateMachine?.activeStateAddress);
+    return ok;
+  }
+
+  /// Names the audio settings the **next** [start] boots onto — the stored
+  /// `settings.json` audio section, read by the composition root before the
+  /// engine starts (issue #449). Its device is the one opened, and its rate
+  /// the session runs at: the engine locks the rate from start to stop (issue
+  /// #443), so it can only be asked for here. Called on a running engine it only
+  /// affects a later start.
+  void requestBootAudio(AudioSettings stored) => _bootAudio = stored;
+
+  /// The audio notices the last [start] raised while booting — a stored device
+  /// that was missing or refused, an unsupported stored rate or buffer — in
+  /// order. [lastAudioNotice] retains only the latest, and boot runs before the
+  /// shell is listening, so the shell surfaces these once when it mounts.
+  List<AudioDeviceNotice> get bootAudioNotices =>
+      List.unmodifiable(_bootAudioNotices);
+
+  /// The rate, in Hz, the running engine session is locked at — what every
+  /// device opened in it runs at (issue #443). `0` before [start].
+  double get sessionSampleRate => _started ? _gateway.sessionSampleRate : 0;
 
   // ─── MIDI ports (design §5, §6) ──────────────────────────────────────────
   //

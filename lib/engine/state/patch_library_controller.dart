@@ -178,6 +178,23 @@ class PatchLibraryController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Drop every cached editor — each is bound to a native instance an engine
+  /// session restart is about to free (issue #448). The open address is kept,
+  /// so [reopen] binds a fresh editor to the same patch once the reconciler
+  /// has re-materialised it.
+  void releaseEditors() => _disposeEditors();
+
+  /// Re-open the patch that was open before [releaseEditors] on its freshly
+  /// materialised instance (issue #448) — the first patch when that one is
+  /// gone — and notify, so the canvas rebinds to the new editor.
+  void reopen() {
+    final address = _openAddress;
+    _openAddress = null;
+    if (address != null) open(address);
+    if (_openAddress == null) openFirst();
+    notifyListeners();
+  }
+
   /// Open the first patch entity in the tree, if any — the engine's start-up /
   /// project-swap hook so the surface always shows a patch when one exists.
   void openFirst() {

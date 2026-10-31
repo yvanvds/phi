@@ -77,6 +77,23 @@ void main() {
       expect(await store.load(), settings);
     });
 
+    // The pre-start read of the stored sample rate (issue #443): the engine
+    // locks its rate at init, before the async settings load can run.
+    test('loadSync reads what save wrote, with the same fallbacks', () async {
+      final store = RealAppSettingsStore(directory: temp);
+      expect(store.loadSync(), const AppSettings()); // no file yet
+
+      const settings = AppSettings(
+        audio: AudioSettings(outputDevice: 'Fireface UCX', sampleRate: 44100),
+      );
+      await store.save(settings);
+      expect(store.loadSync(), settings);
+
+      await File(p.join(temp.path, RealAppSettingsStore.fileName))
+          .writeAsString('{ not json');
+      expect(store.loadSync(), const AppSettings());
+    });
+
     test(
       'an old settings.json without the new keys loads to defaults',
       () async {
