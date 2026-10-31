@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/design/tokens/phi_colors.dart';
+import 'package:phi/design/tokens/phi_note_swatch.dart';
 import 'package:phi/design/widgets/patcher/patch_note_box.dart';
+import 'package:phi/design/widgets/patcher/patch_note_metrics.dart';
 import 'package:phi/design/widgets/patcher/patch_object_box.dart';
 import 'package:phi/design/widgets/patcher/patch_object_box_metrics.dart';
 import 'package:phi/design/widgets/patcher/patch_port_dot.dart';
+import 'package:phi/domain/patcher/patch_gui_property.dart';
 import 'package:phi/domain/patcher/patch_node.dart';
 import 'package:phi/engine/bridge/patch_object_descriptor.dart';
 import 'package:phi/engine/state/node_type_registry.dart';
@@ -159,5 +163,279 @@ void main() {
     await tester.pump();
     expect(find.text('first words'), findsOneWidget);
     expect(node.size, initial);
+  });
+
+  group('multi-line, resizable notes (issue #488)', () {
+    const paragraph =
+        'A sine runs into the dac. Drag the slider to sweep its frequency '
+        'and listen to how the pitch follows; then try a saw instead.';
+
+    PatchNode note([String args = paragraph]) =>
+        controller.addObject(desc: textDesc, position: Offset.zero, args: args);
+
+    void resizeTo(PatchNode node, double width) {
+      controller
+        ..beginNoteResize(node.id)
+        ..previewNoteWidth(width)
+        ..endNoteResize();
+    }
+
+    testWidgets('a paragraph wraps at the default width and grows down', (
+      tester,
+    ) async {
+      final node = note();
+      expect(node.size.width, PatchNoteMetrics.defaultWidth);
+      expect(node.size, PatchNoteMetrics.sizeFor(display: paragraph));
+      expect(
+        node.size.height,
+        greaterThan(
+          PatchObjectBoxMetrics.sizeFor(
+            text: 'x',
+            inputs: 0,
+            outputs: 0,
+          ).height,
+        ),
+      );
+      await pumpNode(tester, node);
+      expect(tester.getSize(find.byType(PatchNoteBox)), node.size);
+      expect(find.text(paragraph), findsOneWidget);
+    });
+
+    testWidgets('line breaks are kept, on screen and in the args', (
+      tester,
+    ) async {
+      final node = note('# Title\nfirst line');
+      expect(controller.argsOf(node.id), '# Title\nfirst line');
+      await pumpNode(tester, node);
+      // The heading marker is dropped; the break is not.
+      expect(find.text('Title\nfirst line'), findsOneWidget);
+    });
+
+    test(
+      'a resize sets the width, re-wraps, persists and undoes in one step',
+      () {
+        final node = note();
+        final initial = node.size;
+
+        controller.beginNoteResize(node.id);
+        controller.previewNoteWidth(300);
+        controller.previewNoteWidth(400.4);
+        controller.endNoteResize();
+
+        expect(node.size.width, 400);
+        expect(node.size.height, lessThan(initial.height));
+        expect(controller.noteWidthOf(node.id), 400);
+        // Written to the engine's GUI properties, which is what the dump saves.
+        final native =
+            gateway.instances[controller.instanceId]!.nodes.values.single;
+        expect(native.gui[PatchGuiProperty.width], '400');
+
+        controller.undo();
+        expect(node.size, initial);
+        expect(controller.noteWidthOf(node.id), isNull);
+        expect(native.gui.containsKey(PatchGuiProperty.width), isFalse);
+
+        controller.redo();
+        expect(node.size.width, 400);
+        expect(native.gui[PatchGuiProperty.width], '400');
+      },
+    );
+
+    test('a resize that ends where it started journals nothing', () {
+      final node = note();
+      resizeTo(node, 300);
+      controller.beginNoteResize(node.id);
+      controller.previewNoteWidth(420);
+      controller.previewNoteWidth(300);
+      controller.endNoteResize();
+      expect(controller.noteWidthOf(node.id), 300);
+
+      // One undo is the first resize itself — the round trip added no step.
+      controller.undo();
+      expect(controller.noteWidthOf(node.id), isNull);
+      expect(controller.undoScope.canUndo, isFalse);
+    });
+
+    test('a cancelled resize puts the width back', () {
+      final node = note();
+      resizeTo(node, 300);
+      controller.beginNoteResize(node.id);
+      controller.previewNoteWidth(500);
+      controller.abortNoteResize();
+      expect(node.size.width, 300);
+      expect(controller.noteWidthOf(node.id), 300);
+    });
+
+    test('the width rides along a delete-undo, a duplicate and a paste', () {
+      final node = note();
+      resizeTo(node, 320);
+
+      controller.selectNode(node.id);
+      controller.deleteSelection();
+      controller.undo();
+      expect(controller.noteWidthOf(node.id), 320);
+      expect(controller.graph.nodeById(node.id)!.size.width, 320);
+
+      controller.selectNode(node.id);
+      controller.duplicateSelection();
+      final copy = controller.graph.selectedNodes.single;
+      expect(copy, isNot(node.id));
+      expect(controller.noteWidthOf(copy), 320);
+
+      controller.selectNode(node.id);
+      controller.copySelection();
+      controller.pasteClipboard();
+      final pasted = controller.graph.selectedNodes.single;
+      expect(controller.noteWidthOf(pasted), 320);
+      // Each copy wrote it onto its own native object, so it saves too.
+      for (final n in gateway.instances[controller.instanceId]!.nodes.values) {
+        expect(n.gui[PatchGuiProperty.width], '320');
+      }
+    });
+
+    test('width and breaks survive save → reload', () {
+      final node = note('# Title\n$paragraph');
+      resizeTo(node, 360);
+      final saved = node.size;
+
+      final dump = gateway.dumpJson(controller.instanceId);
+      final other = gateway.createInstance();
+      gateway.parseJson(other, dump);
+      final reloaded = PatcherController.bound(gateway, instanceId: other)
+        ..rebuildFromInstance();
+      addTearDown(reloaded.dispose);
+
+      final back = reloaded.graph.nodes.single;
+      expect(reloaded.argsOf(back.id), '# Title\n$paragraph');
+      expect(reloaded.noteWidthOf(back.id), 360);
+      expect(back.size, saved);
+    });
+
+    test('an edit to the text re-wraps at the width it was given', () {
+      final node = note('short');
+      resizeTo(node, 200);
+      expect(node.size.width, 200);
+
+      controller.applyParams(node.id, paragraph);
+      expect(node.size.width, 200, reason: 'a resized note keeps its width');
+      expect(
+        node.size,
+        PatchNoteMetrics.sizeFor(display: paragraph, width: 200),
+      );
+    });
+
+    test('only a note can be resized', () {
+      final sine = controller.addObject(
+        desc: FakePatcherGateway.defaultCatalogue.firstWhere(
+          (d) => d.type == Obj.dSine,
+        ),
+        position: Offset.zero,
+      );
+      final before = sine.size;
+      controller
+        ..beginNoteResize(sine.id)
+        ..previewNoteWidth(500)
+        ..endNoteResize();
+      expect(sine.size, before);
+      expect(controller.guiPropertyOf(sine.id, PatchGuiProperty.width), '');
+    });
+  });
+
+  group('note colour (issue #511)', () {
+    PatchNode note([String args = '# Title\nbody']) =>
+        controller.addObject(desc: textDesc, position: Offset.zero, args: args);
+
+    Color? fieldOf(WidgetTester tester) =>
+        (tester
+                    .widget<DecoratedBox>(
+                      find.descendant(
+                        of: find.byType(PatchNoteBox),
+                        matching: find.byType(DecoratedBox),
+                      ),
+                    )
+                    .decoration
+                as BoxDecoration)
+            .color;
+
+    testWidgets('a colour repaints the note, persists, and undoes in one '
+        'step', (tester) async {
+      final node = note();
+      await pumpNode(tester, node);
+      final size = node.size;
+      final brightness = Theme.of(tester.element(find.byType(PatchNoteBox)))
+          .brightness;
+      expect(fieldOf(tester), PhiColors.noteBg);
+
+      controller.setNoteColor(node.id, PhiNoteSwatch.green.name);
+      await tester.pump();
+      expect(controller.noteColorOf(node.id), 'note-green');
+      expect(fieldOf(tester), PhiNoteSwatch.green.bg(brightness));
+      expect(node.size, size, reason: 'a colour does not move the box');
+      final native =
+          gateway.instances[controller.instanceId]!.nodes.values.single;
+      // The token name, not a hex, is what the dump saves.
+      expect(native.gui[PatchGuiProperty.background], 'note-green');
+
+      controller.undo();
+      await tester.pump();
+      expect(controller.noteColorOf(node.id), '');
+      expect(fieldOf(tester), PhiColors.noteBg);
+      expect(native.gui.containsKey(PatchGuiProperty.background), isFalse);
+      expect(controller.undoScope.canUndo, isFalse, reason: 'one step');
+
+      controller.redo();
+      await tester.pump();
+      expect(fieldOf(tester), PhiNoteSwatch.green.bg(brightness));
+    });
+
+    test('clearing goes back to plain; the same colour journals nothing', () {
+      final node = note();
+      controller.setNoteColor(node.id, 'note-rose');
+      controller.setNoteColor(node.id, 'note-rose');
+      controller.setNoteColor(node.id, '');
+      expect(controller.noteColorOf(node.id), '');
+      controller.undo();
+      expect(controller.noteColorOf(node.id), 'note-rose');
+      controller.undo();
+      expect(controller.noteColorOf(node.id), '');
+      expect(controller.undoScope.canUndo, isFalse);
+    });
+
+    test('colour and width ride along a duplicate and a save → reload', () {
+      final node = note();
+      controller
+        ..beginNoteResize(node.id)
+        ..previewNoteWidth(300)
+        ..endNoteResize()
+        ..setNoteColor(node.id, 'note-violet');
+
+      controller.selectNode(node.id);
+      controller.duplicateSelection();
+      final copy = controller.graph.selectedNodes.single;
+      expect(controller.noteColorOf(copy), 'note-violet');
+
+      final dump = gateway.dumpJson(controller.instanceId);
+      final other = gateway.createInstance();
+      gateway.parseJson(other, dump);
+      final reloaded = PatcherController.bound(gateway, instanceId: other)
+        ..rebuildFromInstance();
+      addTearDown(reloaded.dispose);
+      for (final n in reloaded.graph.nodes) {
+        expect(reloaded.noteColorOf(n.id), 'note-violet');
+        expect(reloaded.noteWidthOf(n.id), 300);
+      }
+    });
+
+    test('only a note can be coloured', () {
+      final sine = controller.addObject(
+        desc: FakePatcherGateway.defaultCatalogue.firstWhere(
+          (d) => d.type == Obj.dSine,
+        ),
+        position: Offset.zero,
+      );
+      controller.setNoteColor(sine.id, 'note-amber');
+      expect(controller.noteColorOf(sine.id), '');
+      expect(controller.undoScope.canUndo, isFalse);
+    });
   });
 }

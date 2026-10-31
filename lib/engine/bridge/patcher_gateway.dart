@@ -100,6 +100,16 @@ abstract interface class PatcherGateway {
   /// Returns null if either coordinate is missing or malformed.
   Offset? getNodePosition(int instanceId, int handleId);
 
+  /// Write one decoration GUI property ([key] → [value]) on the native object
+  /// — editor state saved with the patch by `dumpJson` and restored by
+  /// `parseJson`, opaque to the engine (a note's wrap width, issue #488; the
+  /// keys are `PatchGuiProperty`'s). An empty [value] reads back as unset.
+  void setGuiProperty(int instanceId, int handleId, String key, String value);
+
+  /// Read back a GUI property written by [setGuiProperty] — the empty string
+  /// when it was never set or the handle is unknown.
+  String guiProperty(int instanceId, int handleId, String key);
+
   // ─── data flow (live GUI bodies) ─────────────────────────────────────
 
   /// Drop a float into [inlet] of [handleId]. Used by control-node bodies

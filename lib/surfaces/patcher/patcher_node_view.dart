@@ -1,10 +1,12 @@
 import 'package:flutter/widgets.dart';
 
 import '../../design/tokens/phi_colors.dart';
+import '../../design/tokens/phi_note_swatch.dart';
 import '../../design/widgets/patcher/patch_canvas_constants.dart';
 import '../../design/widgets/patcher/patch_gui_object.dart';
 import '../../design/widgets/patcher/patch_note_box.dart';
 import '../../design/widgets/patcher/patch_object_box.dart';
+import '../../domain/patcher/patch_gui_property.dart';
 import '../../domain/patcher/patch_node.dart';
 import '../../domain/patcher/patch_node_id.dart';
 import '../../domain/patcher/patch_port.dart';
@@ -112,6 +114,14 @@ class PatcherNodeView extends StatelessWidget {
               PatchNoteBox(
                 text: controller.argsOf(node.id),
                 textKey: objectLineKey(node.id),
+                // The stored token name (issue #511); an unknown or absent one
+                // keeps the plain paper look.
+                swatch: PhiNoteSwatch.byName(
+                  controller.guiPropertyOf(
+                    node.id,
+                    PatchGuiProperty.background,
+                  ),
+                ),
               )
             else if (body == null)
               PatchObjectBox(

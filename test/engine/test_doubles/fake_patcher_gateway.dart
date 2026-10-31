@@ -229,6 +229,18 @@ class FakePatcherGateway implements PatcherGateway {
       _inst(instanceId).nodes[handleId]?.position;
 
   @override
+  void setGuiProperty(int instanceId, int handleId, String key, String value) {
+    calls.add('setGuiProperty:$handleId:$key:$value');
+    final node = _inst(instanceId).nodes[handleId];
+    if (node == null) return;
+    value.isEmpty ? node.gui.remove(key) : node.gui[key] = value;
+  }
+
+  @override
+  String guiProperty(int instanceId, int handleId, String key) =>
+      _inst(instanceId).nodes[handleId]?.gui[key] ?? '';
+
+  @override
   void sendFloat(int instanceId, int handleId, int inlet, double value) {
     calls.add('sendFloat:$handleId:$inlet:${value.toStringAsFixed(3)}');
     final node = _inst(instanceId).nodes[handleId];
@@ -324,7 +336,7 @@ class FakePatcherGateway implements PatcherGateway {
   }
 
   /// Serialise the instance to a **structured, re-parseable** dump — objects
-  /// (id · type · args · optional x/y) and cables — so a flush → reload
+  /// (id · type · args · optional x/y and gui) and cables — so a flush → reload
   /// round-trip through [parseJson] faithfully reconstructs the graph, the way
   /// the real gateway's libyse dump does. (The old summary form carried only
   /// counts, which could not be rebuilt from.)
@@ -340,6 +352,7 @@ class FakePatcherGateway implements PatcherGateway {
             'args': entry.value.args,
             if (entry.value.position != null) 'x': entry.value.position!.dx,
             if (entry.value.position != null) 'y': entry.value.position!.dy,
+            if (entry.value.gui.isNotEmpty) 'gui': entry.value.gui,
           },
       ],
       'cables': [
@@ -380,6 +393,12 @@ class FakePatcherGateway implements PatcherGateway {
       final y = raw['y'];
       if (x is num && y is num) {
         node.position = Offset(x.toDouble(), y.toDouble());
+      }
+      final gui = raw['gui'];
+      if (gui is Map) {
+        node.gui.addAll({
+          for (final e in gui.entries) '${e.key}': '${e.value}',
+        });
       }
       inst.nodes[id] = node;
       if (type == Obj.gReceive && args.isNotEmpty) inst.receivers.add(args);
@@ -559,6 +578,10 @@ class FakeNode {
   String guiValue = '';
 
   Offset? position;
+
+  /// Decoration GUI properties beyond the position — yse's `setGuiProperty`
+  /// store, dumped under `gui` the way libYSE's own dump nests them.
+  final Map<String, String> gui = {};
   final Map<int, double> lastValueByInlet = {};
   final List<int> bangedInlets = [];
 }

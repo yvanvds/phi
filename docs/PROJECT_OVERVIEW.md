@@ -952,7 +952,13 @@ main + app          (orchestration)
   implement `ProjectCommand` and its stack *is* an `UndoScope` (exposed as
   `ClipEditor.undoScope`), making the MIDI surface the first registered scope;
   the piano roll no longer handles Ctrl+Z itself, letting the combo bubble to
-  the shell. Gesture coalescing stays a convention (a drag mutates transient
+  the shell. Issue #512 registers the patcher's stack too: `PatcherSurface`
+  registers the open patch editor's `undoScope` under
+  `PatcherController.undoScopeId` (re-registered on a patch switch / project
+  swap / session restart, withdrawn in run mode or with no patch open), so
+  Ctrl+Z reaches the patch after a click in the palette or reference panel;
+  `UndoScopes.unregister` keeps focus on the id so a re-register resumes it.
+  Gesture coalescing stays a convention (a drag mutates transient
   state and commits one command on release). `entitiesTouched` is the seam
   save/autosave dirty-tracking (#121) and the recovery journal (#122) will
   consume. Issue #120 adds references and refactoring (design §4): each entity
@@ -2361,6 +2367,13 @@ main + app          (orchestration)
   it opens holding the keyboard, Escape / click-away, Ctrl+Z), and an end-to-end
   `patcher_inline_create` integration test that makes an object by keyboard
   alone, corrects a typo in place, and undoes the result.
+- **`N` inserts an object** (issue #468) — a plain `N` on the focused canvas in
+  edit mode opens the same inline object box as a double-click on empty canvas,
+  placed under the mouse (`_hoverLocal`, now cleared when the pointer leaves the
+  viewport) or at the viewport centre. Matched logically like `Ctrl+Z/C/V`,
+  declined with Alt/Meta, in run mode, without a catalogue, and on key repeat.
+  Covered by `patcher_canvas_test.dart` ("N inserts an object") and the
+  `patcher_insert_object_key` integration test.
 - **Patcher canvas interaction polish** (issue #359, patcher epic #217, design
   `docs/design/patcher.md` §6–7): the three gaps that made the canvas feel
   unlearnable next to Max, all riding the existing raw-pointer pipeline rather
@@ -2561,6 +2574,12 @@ main + app          (orchestration)
   Two new one-fact helpers keep it from being restated five times: pure-Dart
   `PatchTypeName` (`lib/domain/patcher/`, `bare` / `isDsp`) and
   `PatchTypeStyle` (`lib/design/widgets/patcher/`, `color(isDsp)`).
+  The surfaces name engine type ids (node-body registrations, the seed patch)
+  through `PatchObjectTypes` (`lib/domain/patcher/`, issue #483), a pure-Dart
+  mirror of the `Obj.*` constants they need, so `package:yse` stays inside
+  `lib/engine/bridge/`; a drift guard checks each id against `Obj.all`, and
+  `test/engine/bridge/yse_import_boundary_test.dart` fails any `package:yse`
+  import elsewhere under `lib/`.
   `PatcherController.objectLine` now bares the type it is handed, so the box is
   *measured* from the line it actually prints; `PatchObjectBox` takes an `isDsp`
   and colours its line with it. The palette and the inline create box's

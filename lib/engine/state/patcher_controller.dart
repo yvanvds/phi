@@ -4,9 +4,11 @@ import 'package:flutter/widgets.dart';
 
 import '../../design/widgets/patcher/patch_canvas_constants.dart';
 import '../../design/widgets/patcher/patch_note_box.dart';
+import '../../design/widgets/patcher/patch_note_metrics.dart';
 import '../../design/widgets/patcher/patch_object_box_metrics.dart';
 import '../../domain/patcher/patch_cable.dart';
 import '../../domain/patcher/patch_graph.dart';
+import '../../domain/patcher/patch_gui_property.dart';
 import '../../domain/patcher/patch_node.dart';
 import '../../domain/patcher/patch_node_id.dart';
 import '../../domain/patcher/patch_port.dart';
@@ -32,6 +34,7 @@ import 'patcher_commands/move_patch_nodes_command.dart';
 import 'patcher_commands/paste_patch_clipboard_command.dart';
 import 'patcher_commands/reroute_cable_command.dart';
 import 'patcher_commands/retype_patch_object_command.dart';
+import 'patcher_commands/set_patch_gui_property_command.dart';
 import 'patcher_commands/set_patch_params_command.dart';
 
 /// Engine-side mediator between user gestures and the native patcher.
@@ -104,10 +107,18 @@ class PatcherController {
   /// Pan/zoom state for the [InteractiveViewer] in the canvas.
   final TransformationController transform = TransformationController();
 
+  /// The [UndoScope.id] every patch editor's [undoScope] carries — the
+  /// patcher surface's key in the shell's `UndoScopes` router (#512). Shared by
+  /// all editors on purpose: the surface registers whichever one is open under
+  /// it, replacing the previous patch's.
+  static const String undoScopeId = 'patcher';
+
   /// This surface's undo/redo stack — the patcher scope in the undo-follows-
-  /// focus model. Canvas gestures `run` a command here; the canvas routes
-  /// Ctrl+Z/Y to [undo]/[redo].
-  final UndoScope undoScope = UndoScope(id: 'patcher', label: 'Patcher');
+  /// focus model. Canvas gestures `run` a command here; the focused canvas
+  /// routes Ctrl+Z/Y to [undo]/[redo] itself, and the shell's `edit.undo` /
+  /// `edit.redo` reach it from anywhere else in the pane once the surface has
+  /// registered it (#512).
+  final UndoScope undoScope = UndoScope(id: undoScopeId, label: 'Patcher');
 
   /// Logical node id → current native handle. Rebuilt on restore so a logical
   /// id outlives the native object it names.
@@ -122,6 +133,18 @@ class PatcherController {
   /// absent from the map counts as the empty display a fresh object has, so a
   /// value that arrived before the first poll still registers as a change.
   final Map<PatchNodeId, String> _guiValueByNode = {};
+
+  /// Logical node id → its **decoration** GUI properties ([PatchGuiProperty]:
+  /// a note's width today), mirrored here so a spec can carry them through
+  /// delete/undo, duplicate, paste and retype without asking the engine. A
+  /// node with no decoration has no entry.
+  final Map<PatchNodeId, Map<String, String>> _guiByNode = {};
+
+  /// The note a right-edge resize is in flight on, and the width property it
+  /// had when the press landed (`''` for a never-resized note) — so the
+  /// release journals one step from there and a cancel can put it back.
+  PatchNodeId? _resizing;
+  String _resizeOrigin = '';
 
   /// Falls below zero to mint collision-free logical ids when a native handle
   /// value is already in use (only possible if the native side reuses handles).
@@ -368,7 +391,10 @@ class PatcherController {
     required int inputs,
     required int outputs,
     Size? declared,
+    Map<String, String> gui = const {},
   }) {
+    // A note wraps (issue #488): its box is its text laid out at its width.
+    if (PatchTypeName.isNote(type)) return _noteSize(args, gui);
     final tuned = declared ?? NodeTypeRegistry.instance.find(type)?.defaultSize;
     if (tuned != null) {
       final floor = PatchCanvasConstants.minWidthForPorts(
@@ -384,6 +410,14 @@ class PatcherController {
       outputs: outputs,
     );
   }
+
+  /// The box a note with [args] and decoration [gui] needs — wrapped at its
+  /// stored width, or shrink-wrapped up to the default reading width.
+  static Size _noteSize(String args, Map<String, String> gui) =>
+      PatchNoteMetrics.sizeFor(
+        display: PatchNoteBox.displayText(args),
+        width: double.tryParse(gui[PatchGuiProperty.width] ?? ''),
+      );
 
   // ─── graph reconstruction (from a reloaded / re-materialised instance) ──
 
@@ -409,12 +443,22 @@ class PatcherController {
     _nativeByNode.clear();
     _argsByNode.clear();
     _guiValueByNode.clear();
+    _guiByNode.clear();
 
     final snapshot = _gateway.enumerate(instanceId);
     for (final obj in snapshot.objects) {
       final id = PatchNodeId(obj.handleId);
       _nativeByNode[id] = obj.handleId;
       _argsByNode[id] = obj.args;
+      // The decoration rides in the dump's GUI properties beside x/y; every
+      // key the domain names is read back, so a reload keeps it (issue #488).
+      final gui = <String, String>{
+        for (final key in PatchGuiProperty.decoration)
+          if (_gateway.guiProperty(instanceId, obj.handleId, key)
+              case final value when value.isNotEmpty)
+            key: value,
+      };
+      if (gui.isNotEmpty) _guiByNode[id] = gui;
       final ports = obj.ports;
       graph.addNode(
         PatchNode(
@@ -427,6 +471,7 @@ class PatcherController {
             args: obj.args,
             inputs: ports.inputs,
             outputs: ports.outputs,
+            gui: gui,
           ),
           inputs: _portsFrom(ports, PatchPortSide.input, 1),
           outputs: _portsFrom(ports, PatchPortSide.output, 1),
@@ -571,6 +616,96 @@ class PatcherController {
   /// what the params dialog seeds its fields from and what
   /// [SetPatchParamsCommand] captures for undo.
   String argsOf(PatchNodeId id) => _argsByNode[id] ?? '';
+
+  /// The decoration GUI property [key] of [id] ([PatchGuiProperty]) — `''`
+  /// when it was never set.
+  String guiPropertyOf(PatchNodeId id, String key) =>
+      _guiByNode[id]?[key] ?? '';
+
+  /// The width a note was resized to, or null for one that never was (it then
+  /// shrink-wraps up to [PatchNoteMetrics.defaultWidth]).
+  double? noteWidthOf(PatchNodeId id) =>
+      double.tryParse(guiPropertyOf(id, PatchGuiProperty.width));
+
+  /// The swatch token name a note was coloured with (`note-amber`, ...), or
+  /// `''` for the plain paper look (issue #511).
+  String noteColorOf(PatchNodeId id) =>
+      guiPropertyOf(id, PatchGuiProperty.background);
+
+  /// Colour the note at [id] with the swatch token [name] (`''` clears it back
+  /// to the plain look) as one journaled, undoable step. A no-op for anything
+  /// that is not a note, and for a colour it already has.
+  void setNoteColor(PatchNodeId id, String name) {
+    final node = graph.nodeById(id);
+    if (node == null || !PatchTypeName.isNote(node.type)) return;
+    if (noteColorOf(id) == name) return;
+    undoScope.run(
+      SetPatchGuiPropertyCommand(
+        this,
+        id,
+        key: PatchGuiProperty.background,
+        value: name,
+        label: name.isEmpty ? 'clear note colour' : 'colour note',
+      ),
+    );
+  }
+
+  // ─── note resize (issue #488) ────────────────────────────────────────
+
+  /// Start a right-edge resize of the note at [id], remembering the width it
+  /// had so the release journals one step and a cancel can restore it. A
+  /// no-op for anything that is not a note.
+  void beginNoteResize(PatchNodeId id) {
+    final node = graph.nodeById(id);
+    if (node == null || !PatchTypeName.isNote(node.type)) return;
+    _resizing = id;
+    _resizeOrigin = guiPropertyOf(id, PatchGuiProperty.width);
+  }
+
+  /// Show the in-flight resize at [width] — live, unjournaled, held to
+  /// [PatchNoteMetrics]' range.
+  void previewNoteWidth(double width) {
+    final id = _resizing;
+    if (id == null) return;
+    setGuiPropertyPrimitive(
+      id,
+      PatchGuiProperty.width,
+      _formatWidth(PatchNoteMetrics.clampWidth(width)),
+    );
+  }
+
+  /// Finish the resize: one journaled [SetPatchGuiPropertyCommand] from the
+  /// width the press found, so a single `Ctrl+Z` puts the note back. A release
+  /// that ended where it started records nothing.
+  void endNoteResize() {
+    final id = _resizing;
+    _resizing = null;
+    if (id == null) return;
+    final now = guiPropertyOf(id, PatchGuiProperty.width);
+    if (now == _resizeOrigin) return;
+    undoScope.run(
+      SetPatchGuiPropertyCommand(
+        this,
+        id,
+        key: PatchGuiProperty.width,
+        value: now,
+        previous: _resizeOrigin,
+        label: 'resize note',
+      ),
+    );
+  }
+
+  /// Drop an in-flight resize and put the width back — a cancelled gesture is
+  /// not an edit.
+  void abortNoteResize() {
+    final id = _resizing;
+    _resizing = null;
+    if (id == null) return;
+    setGuiPropertyPrimitive(id, PatchGuiProperty.width, _resizeOrigin);
+  }
+
+  /// Whole pixels, written without a trailing `.0` — what lands in the dump.
+  static String _formatWidth(double width) => width.round().toString();
 
   // ─── live display refresh (issue #357) ───────────────────────────────
 
@@ -1024,6 +1159,41 @@ class PatcherController {
     if (native != null) _gateway.setNodePosition(instanceId, native, position);
   }
 
+  /// Set (or, with an empty [value], clear) the decoration GUI property [key]
+  /// of [id] on the native object and the mirror, and re-seat the box — a
+  /// note's width is its wrap, so its height follows. The primitive
+  /// [SetPatchGuiPropertyCommand] and the live resize preview write through.
+  void setGuiPropertyPrimitive(PatchNodeId id, String key, String value) {
+    final node = graph.nodeById(id);
+    if (node == null) return;
+    final gui = _guiByNode.putIfAbsent(id, () => {});
+    value.isEmpty ? gui.remove(key) : gui[key] = value;
+    if (gui.isEmpty) _guiByNode.remove(id);
+    final native = _nativeByNode[id];
+    if (native != null) _gateway.setGuiProperty(instanceId, native, key, value);
+    final size = _sizeSeating(node, node.inputs.length, node.outputs.length);
+    if (size != node.size) {
+      node.reshapePorts(inputs: node.inputs, outputs: node.outputs, size: size);
+    } else {
+      // A decoration that does not move the box (a note's colour, #511) must
+      // still repaint it — and the graph re-broadcasts, so the panel follows.
+      node.markParamsChanged();
+    }
+  }
+
+  /// Write every decoration property in [gui] onto [native] — what a node
+  /// recreated from a spec (or replaced by a retype) carries across.
+  void _writeGui(PatchNodeId id, int native, Map<String, String> gui) {
+    if (gui.isEmpty) {
+      _guiByNode.remove(id);
+      return;
+    }
+    _guiByNode[id] = Map.of(gui);
+    for (final MapEntry(:key, :value) in gui.entries) {
+      _gateway.setGuiProperty(instanceId, native, key, value);
+    }
+  }
+
   /// Reconfigure the object at [id] with a new creation-argument string,
   /// persisting it to the native object via `setParams`. Primitive called by
   /// [SetPatchParamsCommand]; author through [applyParams] so the change is
@@ -1114,6 +1284,9 @@ class PatcherController {
   /// than the current box seats — the axis ports spread along since #377 — so a
   /// hand-authored body never jumps around as ports come and go.
   Size _sizeSeating(PatchNode node, int inputs, int outputs) {
+    if (PatchTypeName.isNote(node.type)) {
+      return _noteSize(argsOf(node.id), _guiByNode[node.id] ?? const {});
+    }
     if (isObjectBox(node.type)) {
       return PatchObjectBoxMetrics.sizeFor(
         text: displayLine(node.type, argsOf(node.id)),
@@ -1172,6 +1345,7 @@ class PatcherController {
       size: n.size,
       inputs: n.inputs,
       outputs: n.outputs,
+      gui: Map.unmodifiable(_guiByNode[id] ?? const <String, String>{}),
     );
   }
 
@@ -1198,6 +1372,7 @@ class PatcherController {
     _nativeByNode.remove(id);
     _argsByNode.remove(id);
     _guiValueByNode.remove(id);
+    _guiByNode.remove(id);
   }
 
   /// Recreate a previously-deleted node under its **same** logical [id] from
@@ -1212,6 +1387,7 @@ class PatcherController {
     _nativeByNode[id] = native;
     _argsByNode[id] = spec.args;
     _gateway.setNodePosition(instanceId, native, spec.position);
+    _writeGui(id, native, spec.gui);
     graph.addNode(_nodeFromSpec(id, spec));
   }
 
@@ -1253,6 +1429,10 @@ class PatcherController {
     // the poll last read belonged to the object that just went.
     _guiValueByNode.remove(id);
     _gateway.setNodePosition(instanceId, native, node.position);
+    // Decoration is the canvas's, not the object's: it is carried to the
+    // replacement like the position, so a retype's undo finds it intact.
+    final gui = _guiByNode[id] ?? const <String, String>{};
+    _writeGui(id, native, gui);
     final snapshot = _gateway.inspect(instanceId, native);
     graph.addNode(
       PatchNode(
@@ -1265,6 +1445,7 @@ class PatcherController {
           args: args,
           inputs: snapshot.inputs,
           outputs: snapshot.outputs,
+          gui: gui,
         ),
         inputs: _portsFrom(snapshot, PatchPortSide.input, node.voice),
         outputs: _portsFrom(snapshot, PatchPortSide.output, node.voice),
@@ -1298,6 +1479,7 @@ class PatcherController {
     _nativeByNode[id] = native;
     _argsByNode[id] = spec.args;
     _gateway.setNodePosition(instanceId, native, spec.position);
+    _writeGui(id, native, spec.gui);
     graph.addNode(_nodeFromSpec(id, spec));
     return id;
   }

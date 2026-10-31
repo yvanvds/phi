@@ -520,6 +520,98 @@ void main() {
     });
   });
 
+  group('a note spans lines (issue #488)', () {
+    Future<void> shiftEnter(WidgetTester tester) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+    }
+
+    testWidgets('Shift+Enter breaks the line and Enter still commits', (
+      tester,
+    ) async {
+      await pumpBox(tester);
+      await type(tester, 'text # Title');
+
+      await shiftEnter(tester);
+      // A break, not a commit — the box is still open on the same text.
+      expect(created, isNull);
+      expect(fieldText(tester), 'text # Title\n');
+
+      await type(tester, '${fieldText(tester)}first line');
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(created?.type, '.text');
+      expect(createdArgs, '# Title\nfirst line');
+    });
+
+    testWidgets('the break lands at the caret, replacing a selection', (
+      tester,
+    ) async {
+      await pumpBox(tester);
+      await type(tester, 'text one two');
+      final field = tester.widget<TextField>(
+        find.byKey(PatchInlineObjectBox.fieldKey),
+      );
+      // Select the space between `one` and `two`.
+      field.controller!.selection = const TextSelection(
+        baseOffset: 8,
+        extentOffset: 9,
+      );
+      await tester.pump();
+
+      await shiftEnter(tester);
+      expect(fieldText(tester), 'text one\ntwo');
+    });
+
+    testWidgets('the field grows to show a note\'s lines', (tester) async {
+      await pumpBox(tester);
+      await type(tester, 'text a');
+      final single = tester.getSize(find.byKey(PatchInlineObjectBox.fieldKey));
+      await shiftEnter(tester);
+      await type(tester, '${fieldText(tester)}b');
+
+      expect(
+        tester
+            .widget<TextField>(find.byKey(PatchInlineObjectBox.fieldKey))
+            .maxLines,
+        isNull,
+      );
+      expect(
+        tester.getSize(find.byKey(PatchInlineObjectBox.fieldKey)).height,
+        greaterThan(single.height),
+      );
+    });
+
+    testWidgets('editing a note keeps the breaks it opened with', (
+      tester,
+    ) async {
+      await pumpBox(
+        tester,
+        editing: catalogue.firstWhere((d) => d.type == '.text'),
+        initialText: 'text one\ntwo',
+      );
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(created?.type, '.text');
+      expect(createdArgs, 'one\ntwo');
+    });
+
+    testWidgets('for any other object Shift+Enter is just Enter', (
+      tester,
+    ) async {
+      await pumpBox(tester);
+      await type(tester, '~sine 220');
+
+      await shiftEnter(tester);
+
+      expect(created?.type, '~sine');
+      expect(createdArgs, '220');
+      expect(fieldText(tester), isNot(contains('\n')));
+    });
+  });
+
   group('the reference panel follows the name as it settles (issue #437)', () {
     testWidgets('a name reports the moment it is unambiguous, not before', (
       tester,

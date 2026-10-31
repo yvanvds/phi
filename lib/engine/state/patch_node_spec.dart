@@ -6,7 +6,7 @@ import '../../domain/patcher/patch_port.dart';
 /// be undone and a selection can be duplicated.
 ///
 /// It bundles the native creation inputs ([type] + [args]) with the canvas-side
-/// presentation ([voice], [position], [size]) and the reified port topology
+/// presentation ([voice], [position], [size], decoration [gui]) and the reified port topology
 /// ([inputs] / [outputs]), so the controller can rebuild an identical
 /// [PatchNode] without re-inspecting the gateway. Immutable — [offsetBy] returns
 /// a copy shifted by a grid step for the duplicate gesture.
@@ -19,6 +19,7 @@ class PatchNodeSpec {
     required this.size,
     required this.inputs,
     required this.outputs,
+    this.gui = const {},
   });
 
   /// One of `package:yse`'s `Obj.*` constants.
@@ -39,6 +40,11 @@ class PatchNodeSpec {
   final List<PatchPort> inputs;
   final List<PatchPort> outputs;
 
+  /// The decoration GUI properties beyond the position (`PatchGuiProperty`:
+  /// a note's width, issue #488) — written back onto the recreated object so
+  /// an undo, a duplicate or a paste keeps them.
+  final Map<String, String> gui;
+
   /// A copy shifted by [delta] — the offset a duplicate lands at.
   PatchNodeSpec offsetBy(Offset delta) => PatchNodeSpec(
     type: type,
@@ -48,5 +54,6 @@ class PatchNodeSpec {
     size: size,
     inputs: inputs,
     outputs: outputs,
+    gui: gui,
   );
 }

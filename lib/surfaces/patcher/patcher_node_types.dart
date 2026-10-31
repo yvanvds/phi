@@ -1,8 +1,8 @@
 import 'package:flutter/widgets.dart';
-import 'package:yse/yse.dart';
 
 import '../../design/widgets/patcher/patch_canvas_constants.dart';
 import '../../design/widgets/patcher/patch_object_box_metrics.dart';
+import '../../domain/patcher/patch_object_types.dart';
 import '../../domain/patcher/patch_port_kind.dart';
 import '../../engine/state/node_type_registry.dart';
 import 'nodes/button_node_body.dart';
@@ -32,7 +32,7 @@ void registerBuiltInPatcherNodes() {
 
   registry.register(
     const NodeDescriptor(
-      type: Obj.dSine,
+      type: PatchObjectTypes.dSine,
       defaultArgs: '440',
       inputs: [PortSpec(kind: PatchPortKind.control, label: 'freq')],
       outputs: [PortSpec(kind: PatchPortKind.audio)],
@@ -41,7 +41,7 @@ void registerBuiltInPatcherNodes() {
 
   registry.register(
     NodeDescriptor(
-      type: Obj.gSlider,
+      type: PatchObjectTypes.gSlider,
       // A bare fader and nothing else (issue #381): as wide as the track plus
       // its thumb overhang, floored by the port geometry, and a Max-ish throw
       // tall. No header, no readout, so no rows to seat.
@@ -60,7 +60,7 @@ void registerBuiltInPatcherNodes() {
 
   registry.register(
     const NodeDescriptor(
-      type: Obj.dDac,
+      type: PatchObjectTypes.dDac,
       defaultArgs: '',
       inputs: [
         PortSpec(kind: PatchPortKind.audio, label: 'L'),
@@ -78,7 +78,7 @@ void registerBuiltInPatcherNodes() {
 
   registry.register(
     NodeDescriptor(
-      type: Obj.gToggle,
+      type: PatchObjectTypes.gToggle,
       // The switch itself — a square with a cross in it (issue #381).
       defaultSize: const Size(square, square),
       defaultArgs: '',
@@ -92,7 +92,7 @@ void registerBuiltInPatcherNodes() {
 
   registry.register(
     NodeDescriptor(
-      type: Obj.gButton,
+      type: PatchObjectTypes.gButton,
       // The bang square itself — no frame, no `bang` caption (issue #381).
       defaultSize: const Size(square, square),
       defaultArgs: '',
@@ -105,7 +105,7 @@ void registerBuiltInPatcherNodes() {
 
   registry.register(
     NodeDescriptor(
-      type: Obj.gFloat,
+      type: PatchObjectTypes.gFloat,
       // A bare readout, one line tall like an object box (issue #381).
       defaultSize: Size(_numberBoxWidth, lineHeight),
       defaultArgs: '',
@@ -119,7 +119,7 @@ void registerBuiltInPatcherNodes() {
 
   registry.register(
     NodeDescriptor(
-      type: Obj.gInt,
+      type: PatchObjectTypes.gInt,
       defaultSize: Size(_numberBoxWidth, lineHeight),
       defaultArgs: '',
       inputs: const [PortSpec(kind: PatchPortKind.control)],
@@ -132,7 +132,7 @@ void registerBuiltInPatcherNodes() {
 
   registry.register(
     NodeDescriptor(
-      type: Obj.gMessage,
+      type: PatchObjectTypes.gMessage,
       // The message box itself, one line tall — its notched right edge is what
       // tells it from a number box now (issue #381).
       defaultSize: Size(_messageBoxWidth, lineHeight),

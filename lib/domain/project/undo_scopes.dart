@@ -34,16 +34,22 @@ class UndoScopes extends ChangeNotifier {
   bool get canRedo => focused?.canRedo ?? false;
 
   /// Registers [scope] under its [UndoScope.id]. A second register with the
-  /// same id replaces the entry.
+  /// same id replaces the entry — how a surface whose stack is per document
+  /// (the patcher's, one per open patch, #512) swaps in the current one.
   void register(UndoScope scope) {
     _scopes[scope.id] = scope;
     notifyListeners();
   }
 
-  /// Drops the scope registered under [id], clearing focus if it held it.
+  /// Drops the scope registered under [id].
+  ///
+  /// Focus is **kept** on [id] — it names a surface, not a stack instance, just
+  /// as [focus] on a not-yet-registered id does. So a surface that withdraws its
+  /// stack for a while (the patcher in run mode, or with no patch open, #512)
+  /// and registers a fresh one later is focused again without the shell having
+  /// to re-point anything; meanwhile [focused] is `null` and undo is a no-op.
   void unregister(String id) {
     if (_scopes.remove(id) == null) return;
-    if (_focusedId == id) _focusedId = null;
     notifyListeners();
   }
 

@@ -99,4 +99,30 @@ void main() {
       reason: 'more than the eight 0.1.0 categories reach the palette',
     );
   });
+
+  // Issue #482: libYSE 3.1.0 documents `~dac` itself, so the hand-authored
+  // fallback (#434) is gone. If the engine ever drops the entry again, the
+  // palette and inline completion lose the one object every audible patch
+  // needs — this is where that shows up.
+  test('objectTypes lists ~dac with the engine\'s own metadata', () {
+    final dacs = gateway.objectTypes().where((d) => d.type == Obj.dDac);
+    expect(dacs, hasLength(1), reason: 'exactly one ~dac entry');
+    final dac = dacs.single;
+    final engineDac = PatcherRegistry.types().singleWhere(
+      (t) => t.name == Obj.dDac,
+    );
+
+    expect(dac.description, engineDac.description);
+    expect(dac.description, isNotEmpty, reason: 'documented by the engine');
+    expect(
+      dac.description,
+      isNot('audio output'),
+      reason: 'not the old fallback text',
+    );
+    expect(dac.category, PatchObjectCategory.io);
+    expect(dac.isDsp, isTrue);
+    expect(dac.inlets, hasLength(2));
+    expect(dac.inlets.every((i) => i.isDspInput), isTrue);
+    expect(dac.outlets, isEmpty);
+  });
 }
