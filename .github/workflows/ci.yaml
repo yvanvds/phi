@@ -80,6 +80,18 @@ jobs:
         working-directory: phi
         run: flutter analyze
 
+      # The yse build hook bundles the Linux engine (libyse.so) for
+      # `flutter test`, but unlike the Windows release it links the audio
+      # runtime dynamically: its DT_NEEDED are libsndfile.so.1,
+      # libportaudio.so.2 and librtmidi.so.6, which the runner image lacks.
+      # Without them the real-engine bridge tests cannot load libyse (#442).
+      # Package names are Ubuntu 24.04's (ubuntu-latest); re-check them if the
+      # image moves to a release where the sonames change.
+      - name: Install libYSE runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libsndfile1 libportaudio2 librtmidi6
+
       - name: Test (with coverage)
         working-directory: phi
         run: flutter test --coverage

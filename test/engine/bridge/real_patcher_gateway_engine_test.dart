@@ -12,14 +12,20 @@ import 'package:yse/yse.dart';
 /// and `PCategory` grew eleven categories the descriptor must carry through.
 void main() {
   late RealPatcherGateway gateway;
+  var engineUp = false;
 
   setUpAll(() {
     System.instance
       ..requestedSampleRate = 48000
       ..initOffline();
+    engineUp = true;
   });
 
-  tearDownAll(() => System.instance.close());
+  // Only close what setUpAll actually opened: if the engine failed to load,
+  // that failure is the one to report, not a second one from teardown.
+  tearDownAll(() {
+    if (engineUp) System.instance.close();
+  });
 
   setUp(() => gateway = RealPatcherGateway());
 
