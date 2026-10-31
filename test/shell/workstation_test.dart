@@ -3,9 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/app.dart';
 import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/engine.dart';
+import 'package:phi/engine/state/node_type_registry.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
 import 'package:phi/surfaces/scene/scene_surface.dart';
+import 'package:yse/yse.dart';
 
 import '../engine/test_doubles/fake_scene_renderer.dart';
 import '../engine/test_doubles/fake_yse_gateway.dart';
@@ -129,4 +131,29 @@ void main() {
     session.dispose();
     await engine.dispose();
   });
+
+  testWidgets(
+    'registers the built-in patcher node types at boot, before the Patcher '
+    'mounts (issue #461)',
+    (tester) async {
+      // A fresh process: nothing has registered them yet.
+      NodeTypeRegistry.instance.clear();
+      final engine = PhiEngine(FakeYseGateway());
+      final session = SessionState();
+
+      await widen(tester);
+      await tester.pumpWidget(PhiApp(engine: engine, session: session));
+      await tester.pumpAndSettle();
+
+      // The shell boots on Mix — the Patcher surface never mounted — yet a
+      // patch rebuilt now must already find the slider's tuned size.
+      expect(
+        NodeTypeRegistry.instance.find(Obj.gSlider)?.defaultSize,
+        isNotNull,
+      );
+
+      session.dispose();
+      await engine.dispose();
+    },
+  );
 }

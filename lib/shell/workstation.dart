@@ -81,6 +81,7 @@ class Workstation extends StatefulWidget {
     this.noticeCenter,
     this.sessionLog,
     this.crashReport,
+    this.onExit,
     super.key,
   });
 
@@ -97,6 +98,14 @@ class Workstation extends StatefulWidget {
   /// the log then lives in memory only. Ignored when [noticeCenter] is injected
   /// (that center already owns its recorder).
   final SessionLog? sessionLog;
+
+  /// The orderly-shutdown hook run once an OS close request is granted (issue
+  /// #462): after the close guard allows the exit (clean project, or saved /
+  /// discarded) and before the response goes back to the embedder, which then
+  /// ends the process without tearing the widget tree down — so no `dispose`
+  /// runs. The app passes its engine stop + clean-shutdown marker here. Not
+  /// called when the guard vetoes the close. `null` in tests that don't care.
+  final Future<void> Function()? onExit;
 
   /// The result of booting the session log (issue #272, design §6): a non-null
   /// [CrashReport] means the previous session left no clean-shutdown marker — it
@@ -638,20 +647,29 @@ class _WorkstationState extends State<Workstation> {
 
   /// Vetoes an OS close while the project is dirty, offering to save/discard/
   /// keep working (design §9). Delegates the decision to a widget-free
-  /// [CloseGuard] so the mapping is unit-testable.
+  /// [CloseGuard] so the mapping is unit-testable. A granted exit then runs
+  /// [Workstation.onExit] before answering the embedder.
   Future<AppExitResponse> _onExitRequested() async {
     final controller = widget.projectController;
     final actions = _actions;
-    if (controller == null || actions == null) return AppExitResponse.exit;
-    final guard = CloseGuard(
-      isDirty: () => controller.isDirty.value,
-      confirm: () async {
-        if (!mounted) return CloseDecision.discard;
-        return CloseConfirmDialog.show(context);
-      },
-      save: () => actions.save(context),
-    );
-    return guard.onExitRequested();
+    final AppExitResponse response;
+    if (controller == null || actions == null) {
+      response = AppExitResponse.exit;
+    } else {
+      final guard = CloseGuard(
+        isDirty: () => controller.isDirty.value,
+        confirm: () async {
+          if (!mounted) return CloseDecision.discard;
+          return CloseConfirmDialog.show(context);
+        },
+        save: () => actions.save(context),
+      );
+      response = await guard.onExitRequested();
+    }
+    // A granted exit ends the process right after this returns, with no widget
+    // teardown (issue #462) — shut down in order now, while we still can.
+    if (response == AppExitResponse.exit) await widget.onExit?.call();
+    return response;
   }
 
   /// Opens the settings dialog (design `settings-and-devices.md` §6) over the

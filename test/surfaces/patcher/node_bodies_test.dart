@@ -73,6 +73,39 @@ void main() {
     expect(gateway.calls, contains('sendFloat:${handle()}:0:0.400'));
   });
 
+  testWidgets('slider body in a box shorter than the thumb renders a '
+      'degraded fader and still drives the object', (tester) async {
+    // Issue #460: a slider reloaded before its node type was registered is
+    // measured as a one-line object box (~22 px), shorter than the 24 px
+    // thumb. The body must not throw on every build.
+    final node = addNode(Obj.gSlider);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 120,
+              height: 18,
+              child: SliderNodeBody(node: node, controller: controller),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(find.byType(PhiFader)).height, 18);
+
+    await tester.tapAt(tester.getRect(find.byType(PhiFader)).center);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(
+      gateway.calls.where((c) => c.startsWith('sendFloat:${handle()}:0:')),
+      isNotEmpty,
+    );
+  });
+
   testWidgets('toggle body sends int 1 on, int 0 off', (tester) async {
     // An *int*, not a float: the engine's `gToggle` registers no float handler
     // on inlet 0 and the inlet dispatch never coerces, so the float this body
