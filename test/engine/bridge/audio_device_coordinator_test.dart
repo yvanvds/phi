@@ -201,11 +201,49 @@ void main() {
       expect(notices, isEmpty);
     });
 
-    test('a rate picked on a running session is requested for the next one, '
-        'and says so (#443)', () {
-      // yse 0.2.0 locks the session rate from init to close: the device opens
-      // at the session's 48 kHz whatever the switch asks for. Before #443 the
-      // rate went into `DeviceSetup.sampleRate` and was silently dropped.
+    test('a rate picked on a running session needs a new session; a buffer '
+        'or the running rate does not (#448)', () {
+      coordinator.boot();
+      const device = AudioSettings(
+        outputHost: 'WASAPI',
+        outputDevice: 'Fake Interface',
+      );
+
+      expect(
+        coordinator.needsSessionRestart(
+          const AudioSettings(
+            outputHost: 'WASAPI',
+            outputDevice: 'Fake Interface',
+            sampleRate: 96000,
+          ),
+        ),
+        isTrue,
+      );
+      expect(coordinator.needsSessionRestart(device), isFalse);
+      expect(
+        coordinator.needsSessionRestart(
+          const AudioSettings(
+            outputHost: 'WASAPI',
+            outputDevice: 'Fake Interface',
+            sampleRate: 48000,
+            bufferSize: 128,
+          ),
+        ),
+        isFalse,
+      );
+      // A device that is not listed is [switchTo]'s to explain.
+      expect(
+        coordinator.needsSessionRestart(
+          const AudioSettings(outputDevice: 'Ghost', sampleRate: 96000),
+        ),
+        isFalse,
+      );
+    });
+
+    test('restartTo applies a picked rate live: the session and the device '
+        'run at it, no notice (#448)', () {
+      // yse 0.2.0 locks the session rate from init to close, so before #448 a
+      // picked rate waited for the next launch behind a notice.
       const picked = AudioSettings(
         outputHost: 'WASAPI',
         outputDevice: 'Fake Interface',
@@ -213,18 +251,102 @@ void main() {
         bufferSize: 128,
       );
       coordinator.boot();
-      final ok = coordinator.switchTo(picked);
+      gateway.calls.clear();
+
+      final ok = coordinator.restartTo(picked);
 
       expect(ok, isTrue);
-      expect(gateway.activeAudioState().sampleRate, 48000);
+      expect(
+        gateway.calls.where(
+          (c) =>
+              c == 'close' ||
+              c == 'initOffline' ||
+              c == 'refreshDevices' ||
+              c.startsWith('openAudioDevice'),
+        ),
+        [
+          'close',
+          'initOffline',
+          'refreshDevices',
+          'openAudioDevice:Fake Interface:96000:128:auto',
+        ],
+      );
+      expect(gateway.sessionSampleRate, 96000);
+      expect(gateway.activeAudioState().sampleRate, 96000);
       expect(gateway.activeAudioState().bufferSize, 128);
-      expect(gateway.requestedSampleRate, 96000);
-      // The choice is what [current] reports — it is what gets persisted, so
-      // the next launch requests it.
-      expect(coordinator.current?.sampleRate, 96000);
-      expect(notices.single.kind, AudioNoticeKind.sampleRateOnRestart);
-      expect(notices.single.message, contains('96000 Hz'));
+      expect(coordinator.current, picked);
+      expect(gateway.autoReconnectOn, isFalse);
+      expect(notices, isEmpty);
+    });
+
+    test('a device that cannot run the session rate restarts it at one it '
+        'offers, with its own notice (#448)', () {
+      gateway.devices = [
+        ...gateway.devices,
+        const AudioDeviceDescriptor(
+          name: 'Old Card',
+          hostName: 'MME',
+          sampleRates: [22050.0, 44100.0],
+          bufferSizes: [512],
+          defaultBufferSize: 512,
+        ),
+      ];
+      coordinator.boot();
+      expect(gateway.sessionSampleRate, 48000);
+      const oldCard = AudioSettings(
+        outputHost: 'MME',
+        outputDevice: 'Old Card',
+      );
+
+      // Before #448 the open was refused at 48 kHz and the switch reverted with
+      // a generic "could not be opened".
+      expect(coordinator.needsSessionRestart(oldCard), isTrue);
+      final ok = coordinator.restartTo(oldCard);
+
+      expect(ok, isTrue);
+      expect(gateway.sessionSampleRate, 44100);
+      expect(coordinator.current?.outputDevice, 'Old Card');
+      expect(notices.single.kind, AudioNoticeKind.sessionRateUnsupported);
+      expect(notices.single.message, contains('"Old Card"'));
       expect(notices.single.message, contains('48000 Hz'));
+      expect(notices.single.message, contains('44100 Hz'));
+    });
+
+    test('a restart whose device refuses reverts to the previous device at '
+        'the previous rate (#448)', () {
+      gateway.devices = [
+        ...gateway.devices,
+        const AudioDeviceDescriptor(
+          name: 'Flaky',
+          hostName: 'ASIO',
+          sampleRates: [96000.0],
+          bufferSizes: [256],
+          defaultBufferSize: 256,
+        ),
+      ];
+      gateway.unopenableDeviceNames.add('Flaky');
+      const previous = AudioSettings(
+        outputHost: 'WASAPI',
+        outputDevice: 'Fake Interface',
+      );
+      applyStored(previous);
+
+      final ok = coordinator.restartTo(
+        const AudioSettings(
+          outputHost: 'ASIO',
+          outputDevice: 'Flaky',
+          sampleRate: 96000,
+        ),
+      );
+
+      expect(ok, isFalse);
+      expect(coordinator.current, previous);
+      expect(gateway.sessionSampleRate, 48000);
+      expect(gateway.activeAudioState().sampleRate, 48000);
+      expect(notices.single.kind, AudioNoticeKind.switchReverted);
+      expect(notices.single.message, contains('"Flaky"'));
+      expect(notices.single.message, contains('reverting to "Fake Interface"'));
+      expect(coordinator.recovery.retrying, isFalse);
     });
 
     test('picking the running rate, or the device default, raises nothing and '

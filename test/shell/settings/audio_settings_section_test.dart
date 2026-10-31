@@ -182,10 +182,8 @@ void main() {
     expect(find.text('96000 Hz'), findsNothing);
   });
 
-  testWidgets('picking a rate persists it and says it applies at the next '
-      'launch, while the read-back keeps the session rate (#443)', (
-    tester,
-  ) async {
+  testWidgets('picking a rate applies it live and persists it — the read-back '
+      'shows the new session rate (#443, #448)', (tester) async {
     await pumpSection(tester);
 
     await tester.tap(find.byType(PhiSelect<int>).first);
@@ -193,13 +191,14 @@ void main() {
     await tester.tap(find.text('44100 Hz').last);
     await tester.pumpAndSettle();
 
-    // Stored, and requested for the next session …
+    // Stored …
     expect(settings.value.audio.sampleRate, 44100);
-    expect(gateway.requestedSampleRate, 44100);
-    // … but the running session is locked at 48 kHz, and the section says so
-    // instead of showing a rate the engine is not running at.
-    expect(find.textContaining('48000 Hz   ·'), findsOneWidget);
-    expect(find.textContaining('next time Phi starts'), findsOneWidget);
+    // … and running: the session restarted at the picked rate, so the
+    // read-back and the engine agree with the picker. No notice is needed.
+    expect(engine.sessionSampleRate, 44100);
+    expect(find.textContaining('44100 Hz   ·'), findsOneWidget);
+    expect(find.textContaining('next time Phi starts'), findsNothing);
+    expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
   });
 
   testWidgets('changing the speaker layout applies and persists', (

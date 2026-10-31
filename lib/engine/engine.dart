@@ -1112,15 +1112,7 @@ class PhiEngine {
     // the fx epic) — it degrades to a graceful no-op. Every degradation is a
     // notice, never a crash. Silent in production until the tap C API lands
     // (the default [NoOpBusTap] yields no frames).
-    _controlPlane = ControlPlaneDispatcher(
-      busTap: _busTap,
-      clips: SessionClipControlPort(midi: _midi, documentAt: _clipDocumentAt),
-      voices: AuditionVoiceControlPort(_midi),
-      variables: RuntimeVariableControlPort(rv),
-      states: StateMachineControlPort(_stateTriggers!),
-      tempo: DomainTempoControlPort(_applyDomainTempo),
-      fx: const _UnwiredFxControlPort(),
-    );
+    _controlPlane = _buildControlPlane();
     // The rack materialiser (issue #208) reconciles synths per internal voice
     // and insert chains per bus, then hands the live voice table + synth map to
     // the MIDI controller so sessions flatten + connect by routed voice. It runs
@@ -1221,6 +1213,20 @@ class PhiEngine {
     _stateCurrentMirror.reset();
     _stateCurrentMirror.push(sm.activeStateAddress);
   }
+
+  /// The live-coding control plane over the engine's bus tap (issue #334),
+  /// wired to the running controllers. Built on [start], and again after an
+  /// audio-session restart (issue #448), whose `close()` releases every bus
+  /// subscription the previous one held.
+  ControlPlaneDispatcher _buildControlPlane() => ControlPlaneDispatcher(
+    busTap: _busTap,
+    clips: SessionClipControlPort(midi: _midi, documentAt: _clipDocumentAt),
+    voices: AuditionVoiceControlPort(_midi),
+    variables: RuntimeVariableControlPort(_runtimeVariables!),
+    states: StateMachineControlPort(_stateTriggers!),
+    tempo: DomainTempoControlPort(_applyDomainTempo),
+    fx: const _UnwiredFxControlPort(),
+  );
 
   /// Build (or, after a project swap, rebind) the [PatchLibraryController] and
   /// open the first `patch.` entity (issue #224). Seeds a default empty patch
@@ -1697,12 +1703,80 @@ class PhiEngine {
   /// success — or a no-op when [desired] is already open — so the caller persists
   /// the stored choice only when it does. Returns `false` (a no-op) before
   /// [start].
+  ///
+  /// A change the running session cannot take — a different sample rate, or a
+  /// device that cannot run at the session's — restarts the audio session in
+  /// place ([_restartAudioSession], issue #448) rather than waiting for the
+  /// next launch.
   bool switchAudioDevice(AudioSettings desired) {
     if (!_started) return false;
-    final ok = _audio.switchTo(desired);
+    final ok = _audio.needsSessionRestart(desired)
+        ? _restartAudioSession(desired)
+        : _audio.switchTo(desired);
     // A restart comes back on what the performer picked, as the next launch
     // does once the caller has persisted it.
     if (ok) _bootAudio = desired;
+    return ok;
+  }
+
+  /// Restarts the **native** audio session under the running engine (issue
+  /// #448): `close()` and a fresh session at the rate [desired] needs, with
+  /// every Phi controller kept alive.
+  ///
+  /// The session rate is locked from init until close (yse 0.2.0, issue #443),
+  /// so a new rate needs a new session — and `close()` frees every native
+  /// object built on it. A [stop] → [start] would get there too, but it
+  /// rebuilds the engine-side controllers, and the shell holds those from its
+  /// own `initState` (`midi.chain` / `midi.editor` and their undo scope, the
+  /// clip library, the voice audition, every surface). So instead the restart
+  /// goes *below* the controllers: each lets go of only its native handles —
+  /// transports and clocks, the click voice, the racks, the patchers, the
+  /// channels — the coordinator restarts the session, and the same objects
+  /// re-materialise from the registry the way a project open does. Patch
+  /// dumps are flushed into their payloads first, so nothing edited is lost.
+  ///
+  /// Performance carries across: the clips that were playing start again
+  /// (from the top, on fresh transports), a running click resumes, running
+  /// patch sources are remounted, armed timed transitions keep their count,
+  /// and the master level, test signal and Python name table are re-pushed.
+  bool _restartAudioSession(AudioSettings desired) {
+    flushPatchPayloads();
+    unawaited(_controlPlane?.dispose());
+    _controlPlane = null;
+    final reconciler = _patchReconciler;
+    final runningPatches = reconciler == null
+        ? const <EntityAddress>[]
+        : [
+            for (final address in reconciler.openPatches)
+              if (reconciler.isRunning(address)) address,
+          ];
+    _stateTriggers?.releaseClocks();
+    final released = _midi?.releaseTransports();
+    _metronome?.releaseTransport();
+    _clickSynth?.dispose();
+    _clickSynth = null;
+    _patchLibrary?.releaseEditors();
+    _teardownChannels();
+    _patcherGateway?.disposeAll();
+
+    final ok = _audio.restartTo(desired);
+
+    _gateway.startUpdateTimer(engineUpdateInterval);
+    _stallTracker.reset();
+    if (_testSignal.value) _gateway.audioTest = true;
+    _pushMasterEffective();
+    _syncChannelsFromRegistry();
+    _patchLibrary?.reopen();
+    for (final address in runningPatches) {
+      _patchLibrary?.start(address);
+    }
+    if (released != null) _midi?.resumeTransports(released);
+    _metronome?.resumeTransport();
+    _stateTriggers?.restoreClocks();
+    _controlPlane = _buildControlPlane();
+    _mirrorBinder.resync();
+    _stateCurrentMirror.reset();
+    _stateCurrentMirror.push(_stateMachine?.activeStateAddress);
     return ok;
   }
 

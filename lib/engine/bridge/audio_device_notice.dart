@@ -63,9 +63,10 @@ enum AudioNoticeKind {
   /// re-picking the device in Settings › Audio once it returns is the way back.
   recoveredOnDefault,
 
-  /// The chosen sample rate differs from the running session's, which is locked
-  /// from engine init until close (yse 0.2.0, issue #443). The device opened at
-  /// the session rate; the choice is stored and takes effect the next time Phi
-  /// starts.
-  sampleRateOnRestart,
+  /// The device picked in the settings window cannot run at the running
+  /// session's sample rate — locked from engine init until close (yse 0.2.0,
+  /// issue #443) — and no rate was chosen for it, so the audio engine was
+  /// restarted at a rate the device offers (issue #448). Said because the
+  /// performer asked for a device, not for a new rate.
+  sessionRateUnsupported,
 }

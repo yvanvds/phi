@@ -113,8 +113,9 @@ Confirmed against the bridge; no engine work is required for v1:
   read-back is gone — issue #445.) Since
   yse 0.2.0 (issue #443) Phi sets `System.requestedSampleRate` from
   `settings.json` *before* the engine starts, so the stored rate is the
-  session rate; a rate picked while Phi runs is stored and requested for the
-  next launch, with a notice, and the read-back shows `sessionSampleRate`.
+  session rate. A rate picked while Phi runs restarts the session in place
+  at it (§5 "Live change", issue #448); the read-back shows
+  `sessionSampleRate`.
 - **Live state:** `activeSampleRate`, `activeBufferSize`, output latency
   in samples — the diagnostics section reads these, not the stored
   settings (they can legitimately differ).
@@ -191,8 +192,8 @@ retained (`PhiEngine.bootAudioNotices`) and toasted when the shell mounts.
 The shell no longer re-applies the stored device after settings load.
 
 The "start a session and open this device in it" step is a reusable piece
-of the coordinator (`_startSession`), so a live restart for a rate change
-(#448) can be `close()` + the same step.
+of the coordinator (`_startSession`); the live restart for a rate change
+(`restartTo`, #448, below) is `close()` + the same steps.
 
 > **History.** Before #449 boot was two steps: `init()` opened the platform
 > default, then the shell applied the stored device as a live switch once
@@ -224,6 +225,46 @@ immediately (`closeCurrentDevice` + `openDevice`) through that same
 selecting a device in a dropdown *is* the deliberate act, no separate Apply
 button. Failure reverts to the previous working device, raises a notice,
 and updates the stored choice only on success.
+
+**Live rate change — restarting the session in place** (issue #448). The
+session rate is locked from init to close (§4), so two picks cannot be a
+plain swap: a different sample rate, and a device that cannot run the
+session's rate (yse 0.2.0 refuses the open). `AudioDeviceCoordinator.
+needsSessionRestart` spots both; `PhiEngine.switchAudioDevice` then runs
+`_restartAudioSession` instead of `switchTo`:
+
+1. Release every native object built on the session, **keeping every Phi
+   controller**: flush patch dumps into their payloads; the trigger
+   scheduler's clocks (armed counts remembered), every clip transport and
+   the count-in clock (`EngineMidiController.releaseTransports`, which also
+   closes the MIDI-out port), the metronome transport, the click voice, the
+   patch editors, then the racks, patchers and channels
+   (`_teardownChannels`).
+2. `AudioDeviceCoordinator.restartTo(desired)`: `close()` →
+   `requestedSampleRate` → `initOffline()` → `refreshDevices()` → open the
+   device. A refusal reopens the previous device at the previous rate
+   (`switchReverted`), else the default, else nothing (`noAudioDevice` +
+   recovery) — `switchTo`'s contract.
+3. Re-materialise from the registry the way a project open does — channels,
+   sends, racks, patchers, the open patch's editor — and bring the
+   performance back: master level and test signal re-pushed, running patch
+   sources remounted, playing clips restarted (from the top), a running
+   click resumed, armed timed transitions continuing their count, the
+   control plane and the Python name table rebuilt.
+
+**Why below the controllers, not `stop()` → `start()`.** A full engine
+restart rebuilds the engine-side controllers, and the shell holds them from
+its own `initState` — `midi.chain` / `midi.editor` and their undo scope, the
+clip library, the voice audition, the record arm, every surface. Rebinding
+all of those is a change across the whole shell; keeping the controllers and
+swapping only the native handles under them is a change inside the engine,
+along the teardown / re-sync seams a project open already exercises. The
+one shell-side touch is the patcher canvas, now keyed on its editor so a
+fresh editor for the same open patch rebuilds it.
+
+A device picked with no rate that cannot run the session's raises its own
+notice (`sessionRateUnsupported`: "… cannot run at 48000 Hz — the audio
+engine restarted at 44100 Hz"); a performer-picked rate needs none.
 
 **Device loss and recovery** (issue #410). Any moment Phi ends up with *no*
 device open — an interface unplugged mid-set, a switch whose target refused

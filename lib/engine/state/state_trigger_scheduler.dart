@@ -156,6 +156,39 @@ class StateTriggerScheduler {
     _rebuildWatchersIfNeeded();
   }
 
+  /// Release every reserved clock ahead of an engine session restart (issue
+  /// #448): the session's `close()` frees every native clock, so each is
+  /// disposed here first. The armed schedules stay, each remembering how many
+  /// beats it had counted, so [restoreClocks] carries the count on rather
+  /// than starting it over.
+  void releaseClocks() {
+    for (final schedule in _schedules) {
+      final clock = schedule.clock;
+      if (clock == null) continue;
+      schedule
+        ..releasedElapsed = clock.beatPosition - schedule.origin
+        ..clock = null;
+    }
+    for (final clock in _clocks.values) {
+      clock.dispose();
+    }
+    _clocks.clear();
+    _syncTimer();
+  }
+
+  /// Re-mint the clocks [releaseClocks] dropped, once the new session is up
+  /// (issue #448), and resume each schedule's count where it stopped.
+  void restoreClocks() {
+    for (final schedule in _schedules) {
+      final elapsed = schedule.releasedElapsed;
+      if (elapsed == null) continue;
+      schedule.releasedElapsed = null;
+      _activate(schedule);
+      if (schedule.clock != null) schedule.origin -= elapsed;
+    }
+    _syncTimer();
+  }
+
   // ─── code trigger — the `phi` control-plane seam ──────────────────────────
 
   /// Fire the live state's outbound transition toward the state named
@@ -488,6 +521,11 @@ class _TimedSchedule {
   MidiTransport? clock;
   double origin = 0;
   double appliedTempo = 0;
+
+  /// Beats this schedule had counted when [StateTriggerScheduler.releaseClocks]
+  /// dropped its clock for an engine session restart (issue #448), or `null`
+  /// when it holds no released count.
+  double? releasedElapsed;
 }
 
 /// One armed variable watcher: fire toward [target] when the variable named

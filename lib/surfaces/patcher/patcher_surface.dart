@@ -297,6 +297,11 @@ class _PatcherViewportState extends State<_PatcherViewport> {
                         // with none, there is nothing to poll and no poller
                         // (issue #357).
                         : PatchGuiPoller(
+                            // Keyed on the editor itself: an engine session
+                            // restart (issue #448) re-binds the *same* open
+                            // patch to a fresh editor, which must rebuild the
+                            // poller and canvas just as a patch switch does.
+                            key: ObjectKey(editor),
                             controller: editor,
                             active: widget.active,
                             child: PatcherCanvas(

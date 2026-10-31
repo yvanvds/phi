@@ -59,8 +59,8 @@ class AudioDeviceCoordinator {
   /// switch reverts to (design §9.3). Its stored rate / buffer are normalised to
   /// what the device actually accepted (an unsupported override reads back as
   /// `null`, i.e. the device default). The rate is the performer's accepted
-  /// *choice*: it can differ from the engine's locked session rate until Phi
-  /// restarts (issue #443), and it is what gets persisted.
+  /// *choice* and is what gets persisted; picking a different one restarts the
+  /// engine session at it ([restartTo], issue #448).
   ///
   /// **`null` means no device is open at all** (issue #408) — the total loss a
   /// [AudioNoticeKind.noAudioDevice] notice announces, or a [boot] on a machine
@@ -101,8 +101,8 @@ class AudioDeviceCoordinator {
 
   /// Starts an engine session and opens [target] in it, falling back to the
   /// platform default — the "open the stored device from an offline session"
-  /// step. [boot] is its first caller; a live restart for a rate change (issue
-  /// #448) is the second: `close()` the running session, then this.
+  /// step. [boot] is its caller; [restartTo] runs the same steps live for a
+  /// rate change (issue #448), with a revert to the previous device on failure.
   bool _startSession(AudioSettings target) {
     // What the performer wants, even if it fails to open: recovery reaches for
     // it first, and after a total loss this is the only record of it.
@@ -160,40 +160,168 @@ class AudioDeviceCoordinator {
   /// session [_startSession] just started, first making sure the session runs
   /// at a rate the device accepts. Returns `false` when there is no such device
   /// or it refuses.
+  ///
+  /// [sessionRate] is the rate to fit the session to when it differs from
+  /// [settings]' own — a revert asks for the rate the session ran at before.
   bool _openInSession(
     AudioDeviceDescriptor? descriptor,
     AudioSettings settings, {
     bool quiet = false,
+    int? sessionRate,
   }) {
     final device = descriptor ?? _gateway.defaultAudioDevice();
     if (device == null) return false;
-    _fitSessionRate(device, settings.sampleRate);
+    _fitSessionRate(device, sessionRate ?? settings.sampleRate);
     return _open(descriptor, settings, quiet: quiet);
   }
 
-  /// Restarts the not-yet-used session when [device] cannot run at its rate,
-  /// or when [stored] is a rate the device accepts and the session is not at
-  /// it. The session rate is locked from `initOffline()` to `close()`, and a
-  /// device that cannot run at it refuses to open (yse 0.2.0, issue #443) — so
-  /// a 44.1 kHz-only interface with no stored rate would otherwise never open
-  /// on a 48 kHz session. Nothing is open and nothing has been built on the
-  /// session yet, so the restart costs only a re-enumeration.
+  /// Restarts the not-yet-used session when it is not at the rate
+  /// [_rateFor] picks for [device] — [stored] when the device accepts it, else
+  /// the session's own when the device can run at it, else one the device
+  /// offers. The session rate is locked from `initOffline()` to `close()`, and
+  /// a device that cannot run at it refuses to open (yse 0.2.0, issue #443) —
+  /// so a 44.1 kHz-only interface with no stored rate would otherwise never
+  /// open on a 48 kHz session. Nothing is open and nothing has been built on
+  /// the session yet, so the restart costs only a re-enumeration.
   void _fitSessionRate(AudioDeviceDescriptor device, int? stored) {
     final session = _gateway.sessionSampleRate;
-    final double wanted;
-    if (stored != null && device.sampleRates.contains(stored.toDouble())) {
-      wanted = stored.toDouble();
-    } else if (_runsAt(device, session)) {
-      return;
-    } else {
-      wanted = _ownRate(device);
-    }
+    final wanted = _rateFor(device, stored, session);
     if (wanted == session) return;
     _gateway.close();
     _gateway.requestedSampleRate = wanted.toInt();
     _initSession();
     _gateway.setAutoReconnect(on: false);
   }
+
+  /// The session rate [device] should open on: [stored] when the device
+  /// reports it, else [session] when the device can run at it, else the
+  /// device's own rate ([_ownRate]).
+  static double _rateFor(
+    AudioDeviceDescriptor device,
+    int? stored,
+    double session,
+  ) {
+    if (stored != null && device.sampleRates.contains(stored.toDouble())) {
+      return stored.toDouble();
+    }
+    if (_runsAt(device, session)) return session;
+    return _ownRate(device);
+  }
+
+  /// Whether applying [desired] live needs a **new engine session** (issue
+  /// #448): its device reports [desired]'s rate and the running session is at
+  /// another, or no rate was chosen and the device cannot run at the session's.
+  /// The session rate is locked from init until close, so either one can only
+  /// be had by [restartTo]; everything else is a plain [switchTo]. `false` when
+  /// [desired]'s device is not listed — [switchTo] explains that one.
+  bool needsSessionRestart(AudioSettings desired) {
+    final session = _gateway.sessionSampleRate;
+    if (session <= 0) return false;
+    final device = desired.outputDevice == null
+        ? _gateway.defaultAudioDevice()
+        : _resolve(desired.outputHost, desired.outputDevice);
+    if (device == null) return false;
+    return _rateFor(device, desired.sampleRate, session) != session;
+  }
+
+  /// Applies [desired] by **restarting the engine session** at the rate it
+  /// needs (issue #448) — `close()`, then a fresh offline session at that rate,
+  /// then [desired]'s device opened in it: the [_startSession] step, run live.
+  ///
+  /// `close()` frees every native object built on the session, so the caller
+  /// (`PhiEngine`) releases its own first and re-materialises them once this
+  /// returns — whatever it returns, because a session is up either way.
+  ///
+  /// Mirrors [switchTo]'s contract: `true` when [desired] is open; on failure
+  /// the previous device is reopened — at the rate the session ran at before —
+  /// with a [AudioNoticeKind.switchReverted] notice, then the platform default,
+  /// then nothing (a [AudioNoticeKind.noAudioDevice] notice and a recovery
+  /// run). Returns `false` so the caller does not persist [desired]. When the
+  /// restart happened only because the device cannot run the session rate (no
+  /// rate was chosen), a [AudioNoticeKind.sessionRateUnsupported] notice says
+  /// so — the performer asked for a device, not for a new rate.
+  bool restartTo(AudioSettings desired) {
+    final previous = _current;
+    final previousRate = _gateway.sessionSampleRate;
+    final name = desired.outputDevice;
+    // Resolved against the list the running session read; the restart
+    // re-enumerates, and the device is resolved again against that below.
+    final listed = name == null
+        ? _gateway.defaultAudioDevice()
+        : _resolve(desired.outputHost, name);
+    final rateUnsupported =
+        listed != null &&
+        !_supports(listed, desired.sampleRate) &&
+        !_runsAt(listed, previousRate);
+    _recovery.cancel();
+    _gateway.close();
+    _intended = desired;
+    _current = null;
+    _gateway.requestedSampleRate = listed == null
+        ? desired.sampleRate ?? 0
+        : _rateFor(listed, desired.sampleRate, previousRate).toInt();
+    _initSession();
+    _gateway.setAutoReconnect(on: false);
+
+    final descriptor = name == null ? null : _resolve(desired.outputHost, name);
+    if ((name == null || descriptor != null) &&
+        _openInSession(descriptor, desired)) {
+      if (rateUnsupported) {
+        _notify(
+          AudioNoticeKind.sessionRateUnsupported,
+          'Audio device ${_nameOf(desired)} cannot run at '
+          '${previousRate.toStringAsFixed(0)} Hz — the audio engine restarted '
+          'at ${_gateway.sessionSampleRate.toStringAsFixed(0)} Hz.',
+        );
+      }
+      return true;
+    }
+
+    final label = '"${name ?? 'default'}"';
+    if (previous != null && _reopenInSession(previous, previousRate)) {
+      _notify(
+        AudioNoticeKind.switchReverted,
+        'Audio device $label could not be opened — reverting to '
+        '${_nameOf(previous)}.',
+      );
+      return false;
+    }
+    if (_openInSession(null, const AudioSettings(), quiet: true)) {
+      _notify(
+        AudioNoticeKind.switchReverted,
+        'Audio device $label could not be opened — using the default device.',
+      );
+      return false;
+    }
+    _current = null;
+    _notify(
+      AudioNoticeKind.noAudioDevice,
+      'No audio output device could be opened.',
+    );
+    _recovery.arm();
+    return false;
+  }
+
+  /// Reopens [settings]' device in a fresh session, fitting the session back
+  /// to [rate] (the one it ran at before) when [settings] chose none — the
+  /// revert of a failed [restartTo]. Quiet: the revert notice says it all.
+  bool _reopenInSession(AudioSettings settings, double rate) {
+    final name = settings.outputDevice;
+    final descriptor = name == null
+        ? null
+        : _resolve(settings.outputHost, name);
+    if (name != null && descriptor == null) return false;
+    return _openInSession(
+      descriptor,
+      settings,
+      quiet: true,
+      sessionRate: settings.sampleRate ?? rate.toInt(),
+    );
+  }
+
+  /// Whether [device] reports [rate] — `false` for no rate at all.
+  static bool _supports(AudioDeviceDescriptor device, int? rate) =>
+      rate != null && device.sampleRates.contains(rate.toDouble());
 
   /// Whether [device] can run at [rate]. A device that reports no rates is
   /// taken at its word, as is a session with no rate yet.
@@ -454,7 +582,7 @@ class AudioDeviceCoordinator {
         bufferSize: buffer,
         layout: settings.layout,
       );
-      _requestSessionRate(rate, quiet: quiet);
+      _requestSessionRate(rate);
       return true;
     } on AudioDeviceException {
       return false;
@@ -462,23 +590,11 @@ class AudioDeviceCoordinator {
   }
 
   /// Carries the accepted [rate] (`null` = the device's own) to the engine as
-  /// the request for the next session (issue #443). The device just opened at
-  /// the running session's rate — it is locked from init until close — so a
-  /// rate that differs from it cannot apply now, only at the next launch, when
-  /// [boot] requests the stored rate before the session starts. Says so,
-  /// unless [quiet]: otherwise the picker would show a rate the engine is not
-  /// running at, with nothing to explain it.
-  void _requestSessionRate(double? rate, {required bool quiet}) {
-    _gateway.requestedSampleRate = rate?.toInt() ?? 0;
-    final session = _gateway.sessionSampleRate;
-    if (quiet || rate == null || session <= 0 || rate == session) return;
-    _notify(
-      AudioNoticeKind.sampleRateOnRestart,
-      'Sample rate ${rate.toInt()} Hz takes effect the next time Phi starts — '
-      'the audio engine keeps its rate while it runs (now '
-      '${session.toStringAsFixed(0)} Hz).',
-    );
-  }
+  /// the request for the next session (issue #443). A rate that differs from
+  /// the running session's never reaches here as a plain open: the engine
+  /// restarts the session for it first ([needsSessionRestart], issue #448).
+  void _requestSessionRate(double? rate) =>
+      _gateway.requestedSampleRate = rate?.toInt() ?? 0;
 
   /// Resolves [settings]' device and opens it quietly — the revert of a failed
   /// switch (design §9.3) and each attempt of a recovery run (issue #410). Both
