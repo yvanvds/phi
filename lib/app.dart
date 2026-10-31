@@ -27,6 +27,7 @@ import 'shell/layout/shell_layout_controller.dart';
 import 'shell/project/file_selector_project_directory_picker.dart';
 import 'shell/workstation.dart';
 import 'surfaces/midi/midi_file_io.dart';
+import 'surfaces/patcher/patcher_node_types.dart';
 
 class PhiApp extends StatefulWidget {
   const PhiApp({
@@ -145,6 +146,13 @@ class _PhiAppState extends State<PhiApp> {
   @override
   void initState() {
     super.initState();
+    // Register the built-in patcher node types before anything can lay out a
+    // patch (issue #461). A project reopened at launch has its editor rebuilt
+    // from the live instance long before the Patcher surface mounts, and the
+    // controller sizes every node from this registry — an empty one measures
+    // GUI nodes as one-line object boxes. Idempotent, so the surface's own
+    // call stays harmless.
+    registerBuiltInPatcherNodes();
     final injectedEngine = widget.engine;
     if (injectedEngine != null) {
       _engine = injectedEngine;

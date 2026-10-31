@@ -36,7 +36,9 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 /// instance while the node-type registry is still empty — it is populated by
 /// `PatcherSurface.initState` — so the slider is measured as a one-line object
 /// box, shorter than the fader's 24 px thumb. Before the fix the fader's thumb
-/// `clamp` got an inverted range and threw on every build.
+/// `clamp` got an inverted range and threw on every build. Issue #461 then
+/// moved registration into `PhiApp` start-up, so the slider is reopened at its
+/// tuned size.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -112,6 +114,13 @@ void main() {
       matching: find.byType(PhiFader),
     );
     expect(fader, findsOneWidget);
+
+    // Issue #461: the slider keeps its tuned GUI size through the launch-time
+    // rebuild, rather than being measured as a one-line object box.
+    final tuned = NodeTypeRegistry.instance.find(Obj.gSlider)!.defaultSize!;
+    final node = engine.patcher.graph.nodes.single;
+    expect(node.size.height, tuned.height);
+    expect(tester.getSize(fader).height, greaterThan(node.size.height / 2));
 
     // A few more frames: the fault was per build, not a one-off.
     for (var i = 0; i < 3; i++) {
