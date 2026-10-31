@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
+import 'package:phi/design/tokens/phi_colors.dart';
+import 'package:phi/design/tokens/phi_note_swatch.dart';
 import 'package:phi/design/widgets/patcher/patch_note_box.dart';
 import 'package:phi/design/widgets/patcher/patch_note_metrics.dart';
 import 'package:phi/domain/patcher/patch_gui_property.dart';
@@ -17,6 +19,7 @@ import 'package:phi/shell/left_rail/surface_id.dart';
 import 'package:phi/surfaces/patcher/create/patch_inline_object_box.dart';
 import 'package:phi/surfaces/patcher/library/patch_entity_strip.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
+import 'package:phi/surfaces/patcher/reference/patch_reference_panel.dart';
 import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
@@ -34,6 +37,11 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 /// and Ctrl+Z / Ctrl+Y walk that one step; and the note survives a dump →
 /// parse round trip — the duplicated patch opens with the same text, breaks
 /// and width.
+///
+/// Issue #511 rides the same session: the selected note is coloured from the
+/// reference panel's swatch row, repaints in the swatch's dark-theme field
+/// (the app's theme) with the heading in its ink, undoes and redoes as one
+/// step, and the reloaded copy comes back with the same colour.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -62,7 +70,9 @@ void main() {
       'listen to how the pitch follows; then swap the sine for a saw.';
 
   testWidgets('patcher: a note wraps, takes line breaks, resizes from its '
-      'edge with one undo step, and survives a reload', (tester) async {
+      'edge with one undo step, takes a colour, and survives a reload', (
+    tester,
+  ) async {
     final gateway = FakePatcherGateway()
       ..objectTypesCatalogue = [
         ...FakePatcherGateway.defaultCatalogue,
@@ -163,6 +173,52 @@ void main() {
     expect(note.size.width, narrow.width + 120);
     final resized = note.size;
 
+    // ── 3b) colour it from the reference panel (issue #511) ─────────────────
+    BoxDecoration paperOf(Finder box) =>
+        tester
+                .widget<DecoratedBox>(
+                  find
+                      .descendant(of: box, matching: find.byType(DecoratedBox))
+                      .first,
+                )
+                .decoration
+            as BoxDecoration;
+    Color? inkOf(String shown) =>
+        tester.widget<Text>(find.text(shown)).textSpan!.style!.color;
+    const shown = 'Tutorial\n$paragraph';
+    const swatch = PhiNoteSwatch.cyan;
+
+    expect(paperOf(noteBox).color, PhiColors.noteBg, reason: 'no bg = plain');
+    await tester.tapAt(
+      canvasRect.topLeft + note.position + note.size.center(Offset.zero),
+    );
+    await tester.pumpAndSettle();
+    final chip = find.byKey(PatchReferencePanel.noteColorKey(swatch.name));
+    expect(chip, findsOneWidget, reason: 'a selected note shows the swatches');
+    await tester.tap(chip);
+    await tester.pumpAndSettle();
+
+    expect(patcher.noteColorOf(note.id), swatch.name);
+    expect(paperOf(noteBox).color, swatch.bgDark);
+    expect(paperOf(noteBox).border!.top.color, swatch.lineDark);
+    expect(inkOf(shown), swatch.fgDark);
+    final heading =
+        (tester.widget<Text>(find.text(shown)).textSpan! as TextSpan)
+                .children!
+                .first
+            as TextSpan;
+    expect(heading.style!.color, swatch.fgDark);
+    expect(note.size, resized, reason: 'a colour does not move the box');
+
+    // No click back on the canvas: the pick hands the keyboard back, so the
+    // very next Ctrl+Z undoes it.
+    await chord(LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.keyZ);
+    expect(patcher.noteColorOf(note.id), '');
+    expect(paperOf(noteBox).color, PhiColors.noteBg);
+    expect(note.size, resized, reason: 'the undo took the colour, not width');
+    await chord(LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.keyY);
+    expect(paperOf(noteBox).color, swatch.bgDark);
+
     // ── 4) save → reload: the duplicated patch is parsed from the dump ───────
     final first = library.openAddress!;
     await tester.tap(find.byKey(PatchEntityStrip.expandToggleKey));
@@ -182,6 +238,11 @@ void main() {
     );
     expect(copy.size, resized);
     expect(tester.getSize(find.byType(PatchNoteBox)), resized);
+    expect(
+      copyEditor.guiPropertyOf(copy.id, PatchGuiProperty.background),
+      swatch.name,
+    );
+    expect(paperOf(find.byType(PatchNoteBox)).color, swatch.bgDark);
 
     session.dispose();
     await engine.dispose();

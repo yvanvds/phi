@@ -113,10 +113,17 @@ class PatcherCanvas extends StatefulWidget {
     this.onNodeTap,
     this.onNodeContextMenu,
     this.onTypeResolved,
+    this.focusNode,
     super.key,
   });
 
   final PatcherController controller;
+
+  /// The keyboard focus the canvas listens on, when its host wants to hand
+  /// the keyboard back after a click elsewhere — the reference panel's note
+  /// colour (issue #511), so the `Ctrl+Z` that follows reaches this canvas's
+  /// undo. Owned (and disposed) by the host; null makes the canvas own one.
+  final FocusNode? focusNode;
 
   /// Whether the canvas is being edited or played (issue #378, design §6).
   ///
@@ -206,7 +213,8 @@ class PatcherCanvas extends StatefulWidget {
 }
 
 class _PatcherCanvasState extends State<PatcherCanvas> {
-  final FocusNode _focus = FocusNode(debugLabel: 'patcher-canvas');
+  late final FocusNode _ownFocus = FocusNode(debugLabel: 'patcher-canvas');
+  FocusNode get _focus => widget.focusNode ?? _ownFocus;
 
   Offset _cursor = Offset.zero;
 
@@ -352,9 +360,8 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   @override
   void dispose() {
     _rejectTimer?.cancel();
-    _focus
-      ..removeListener(_onFocusChanged)
-      ..dispose();
+    _focus.removeListener(_onFocusChanged);
+    if (widget.focusNode == null) _ownFocus.dispose();
     super.dispose();
   }
 

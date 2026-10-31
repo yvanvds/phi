@@ -1,6 +1,9 @@
+import 'package:flutter/material.dart' show Theme;
 import 'package:flutter/widgets.dart';
 
 import '../../../design/tokens/phi_colors.dart';
+import '../../../design/tokens/phi_note_swatch.dart';
+import '../../../design/tokens/phi_radii.dart';
 import '../../../design/tokens/phi_spacing.dart';
 import '../../../design/tokens/phi_type.dart';
 import '../../../design/widgets/patcher/patch_type_style.dart';
@@ -19,8 +22,19 @@ import '../../../engine/bridge/patch_object_descriptor.dart';
 /// [args] carries that node's current creation arguments and each documented
 /// parameter is shown with the value it actually holds, so selecting a node
 /// answers "what is this set to" without opening a dialog (issue #356).
+///
+/// A selected **note** also gets a colour row (issue #511): the plain look and
+/// every [PhiNoteSwatch], the current one ringed. A tap reports the chosen
+/// token name through [onNoteColor] (`''` for plain), which the surface
+/// journals — so the panel itself never edits anything.
 class PatchReferencePanel extends StatelessWidget {
-  const PatchReferencePanel({required this.descriptor, this.args, super.key});
+  const PatchReferencePanel({
+    required this.descriptor,
+    this.args,
+    this.noteColor,
+    this.onNoteColor,
+    super.key,
+  });
 
   /// The object type to document, or null for the empty state.
   final PatchObjectDescriptor? descriptor;
@@ -29,6 +43,14 @@ class PatchReferencePanel extends StatelessWidget {
   /// aligned with [PatchObjectDescriptor.params]. Null when the reference
   /// documents a *type* (a palette tap), which has no values of its own.
   final String? args;
+
+  /// The selected note's swatch token name (`''` for plain). Only read while
+  /// [onNoteColor] is set.
+  final String? noteColor;
+
+  /// Called with the swatch token name a tap picked (`''` for plain). Null
+  /// hides the colour row — a palette tap, or a node that is not a note.
+  final ValueChanged<String>? onNoteColor;
 
   /// Fixed pane width — the right column of the patcher layout.
   static const double width = 260;
@@ -39,6 +61,11 @@ class PatchReferencePanel extends StatelessWidget {
   /// Key on one parameter's current-value readout.
   static Key valueKey(String param) => Key('PatchReferencePanel.value.$param');
 
+  /// Key on one note-colour chip — [name] is the swatch token name, `''` the
+  /// plain look.
+  static Key noteColorKey(String name) =>
+      Key('PatchReferencePanel.noteColor.${name.isEmpty ? 'none' : name}');
+
   @override
   Widget build(BuildContext context) {
     final d = descriptor;
@@ -48,7 +75,14 @@ class PatchReferencePanel extends StatelessWidget {
         color: PhiColors.bg1,
         border: Border(left: BorderSide(color: PhiColors.line1)),
       ),
-      child: d == null ? const _Empty() : _Reference(descriptor: d, args: args),
+      child: d == null
+          ? const _Empty()
+          : _Reference(
+              descriptor: d,
+              args: args,
+              noteColor: noteColor ?? '',
+              onNoteColor: PatchTypeName.isNote(d.type) ? onNoteColor : null,
+            ),
     );
   }
 }
@@ -70,10 +104,17 @@ class _Empty extends StatelessWidget {
 }
 
 class _Reference extends StatelessWidget {
-  const _Reference({required this.descriptor, this.args});
+  const _Reference({
+    required this.descriptor,
+    required this.noteColor,
+    this.args,
+    this.onNoteColor,
+  });
 
   final PatchObjectDescriptor descriptor;
   final String? args;
+  final String noteColor;
+  final ValueChanged<String>? onNoteColor;
 
   @override
   Widget build(BuildContext context) {
@@ -180,6 +221,11 @@ class _Reference extends StatelessWidget {
                 ),
             ],
           ),
+        if (onNoteColor case final pick?)
+          _Section(
+            title: 'colour',
+            children: [_NoteColorRow(current: noteColor, onPick: pick)],
+          ),
       ],
     );
   }
@@ -190,6 +236,72 @@ class _Reference extends StatelessWidget {
     for (final a in PatchInletAccept.values)
       if (accepts.contains(a)) a.name,
   ].join(', ');
+}
+
+/// The note colour picker (issue #511): a plain chip, then one chip per
+/// [PhiNoteSwatch] painted in its field and frame for the current theme. The
+/// current colour is ringed in the foreground.
+class _NoteColorRow extends StatelessWidget {
+  const _NoteColorRow({required this.current, required this.onPick});
+
+  final String current;
+  final ValueChanged<String> onPick;
+
+  static const double _chip = 20;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    Widget chip(String name, String label, Color field, Color frame) {
+      final selected = name == current;
+      return Semantics(
+        button: true,
+        selected: selected,
+        label: 'note colour $label',
+        child: GestureDetector(
+          key: PatchReferencePanel.noteColorKey(name),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => onPick(name),
+          child: Container(
+            width: _chip + 6,
+            height: _chip + 6,
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              borderRadius: PhiRadii.all2,
+              border: Border.all(
+                color: selected ? PhiColors.fg0 : const Color(0x00000000),
+              ),
+            ),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: field,
+                borderRadius: PhiRadii.all1,
+                border: Border.all(color: frame),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        PhiSpacing.s3,
+        PhiSpacing.s2,
+        PhiSpacing.s3,
+        PhiSpacing.s1,
+      ),
+      child: Wrap(
+        spacing: PhiSpacing.s1,
+        runSpacing: PhiSpacing.s1,
+        children: [
+          chip('', 'plain', PhiColors.noteBg, PhiColors.noteLine),
+          for (final s in PhiNoteSwatch.all)
+            chip(s.name, s.label, s.bg(brightness), s.line(brightness)),
+        ],
+      ),
+    );
+  }
 }
 
 /// A small `dsp` / `control` chip echoing the palette's DSP distinction.

@@ -32,10 +32,11 @@ void main(List<String> args) {
   }
   final css = cssFile.readAsStringSync();
   final root = _parseRoot(css);
+  final light = _parseBlock(css, ':root[data-theme="light"]');
   final classes = _parseClasses(css);
 
   final updates = <String, String>{
-    'lib/design/tokens/phi_colors.dart': _emitColors(root),
+    'lib/design/tokens/phi_colors.dart': _emitColors(root, light),
     'lib/design/tokens/phi_spacing.dart': _emitSpacing(root),
     'lib/design/tokens/phi_motion.dart': _emitMotion(root),
     'lib/design/tokens/phi_radii.dart': _emitRadii(root),
@@ -86,7 +87,20 @@ void main(List<String> args) {
 Map<String, String> _parseRoot(String css) {
   final rootMatch = RegExp(r':root\s*\{([\s\S]*?)\n\}').firstMatch(css);
   if (rootMatch == null) throw StateError('no :root in CSS');
-  final body = _stripComments(rootMatch.group(1)!);
+  return _parseVars(rootMatch.group(1)!);
+}
+
+/// The variables of the block opened by [selector] — a theme override such
+/// as the light note swatches (issue #511).
+Map<String, String> _parseBlock(String css, String selector) {
+  final m = RegExp(RegExp.escape(selector) + r'\s*\{([\s\S]*?)\n\}')
+      .firstMatch(css);
+  if (m == null) throw StateError('no `$selector` block in CSS');
+  return _parseVars(m.group(1)!);
+}
+
+Map<String, String> _parseVars(String block) {
+  final body = _stripComments(block);
   final vars = <String, String>{};
   final varRe = RegExp(r'--([\w-]+)\s*:\s*([^;]+);');
   for (final m in varRe.allMatches(body)) {
@@ -174,7 +188,12 @@ String _replaceRegion(String current, String body, String path) {
 
 // ─── colors ─────────────────────────────────────────────────────────────────
 
-String _emitColors(Map<String, String> root) {
+/// The note swatches (issue #511), in palette order. Each is a
+/// `--note-<name>-bg/-fg/-line` triple in `:root` (dark) and again in the
+/// `:root[data-theme="light"]` block.
+const _noteSwatches = ['amber', 'cyan', 'green', 'violet', 'rose', 'slate'];
+
+String _emitColors(Map<String, String> root, Map<String, String> light) {
   final b = _Buf()..header(_generatedHeader);
   b.section('Substrate');
   b.line('static const Color voidField = ${_cssHex(root["void"]!)};');
@@ -208,6 +227,24 @@ String _emitColors(Map<String, String> root) {
   b.line('static const Color noteBg = ${_cssHex(root["note-bg"]!)};');
   b.line('static const Color noteFg = ${_cssHex(root["note-fg"]!)};');
   b.line('static const Color noteLine = ${_cssRgba(root["note-line"]!)};');
+  b.section('Note swatches (dark, then light)');
+  for (final (vars, suffix) in [(root, ''), (light, 'Light')]) {
+    for (final name in _noteSwatches) {
+      final dart = 'note${_cap(name)}';
+      final css = 'note-$name';
+      b
+        ..line(
+          'static const Color ${dart}Bg$suffix = ${_cssHex(vars["$css-bg"]!)};',
+        )
+        ..line(
+          'static const Color ${dart}Fg$suffix = ${_cssHex(vars["$css-fg"]!)};',
+        )
+        ..line(
+          'static const Color ${dart}Line$suffix = '
+          '${_cssRgba(vars["$css-line"]!)};',
+        );
+    }
+  }
   b.section('Grid');
   b.line('static const Color grid = ${_cssRgba(root["grid-color"]!)};');
   b.line('static const Color gridStrong = ${_cssRgba(root["grid-strong"]!)};');

@@ -91,6 +91,30 @@
   --note-fg:   #e8dfc0;                    /* note ink */
   --note-line: rgba(255, 224, 102, 0.18);  /* soft frame, off voice-6 */
 
+  /* Note swatches (issue #511): the colours a note can be given to */
+  /* set a title, an explanation or a "try this" apart. Each is a  */
+  /* field / ink / frame triple, tinted off a voice, and each has  */
+  /* a light-theme variant below. A note stores the swatch NAME    */
+  /* (`note-amber`, ...), never a hex, so a theme change follows.  */
+  --note-amber-bg:    #2b2114;
+  --note-amber-fg:    #f6dfbd;
+  --note-amber-line:  rgba(255, 180, 84, 0.30);
+  --note-cyan-bg:     #13232b;
+  --note-cyan-fg:     #cdeefb;
+  --note-cyan-line:   rgba(111, 213, 255, 0.28);
+  --note-green-bg:    #1a2614;
+  --note-green-fg:    #dcf5c6;
+  --note-green-line:  rgba(168, 252, 92, 0.26);
+  --note-violet-bg:   #1f1a2c;
+  --note-violet-fg:   #e2d6fb;
+  --note-violet-line: rgba(181, 141, 255, 0.30);
+  --note-rose-bg:     #2a1624;
+  --note-rose-fg:     #f7d0ea;
+  --note-rose-line:   rgba(255, 61, 203, 0.30);
+  --note-slate-bg:    #1b2026;
+  --note-slate-fg:    #dde2e7;
+  --note-slate-line:  rgba(255, 255, 255, 0.14);
+
   /* ---------- Spacing scale --------------------------------- */
   --s-0:  2px;
   --s-1:  4px;
@@ -135,6 +159,29 @@
   --dur-2: 160ms;
   --dur-3: 280ms;
   --dur-4: 480ms;
+}
+
+/* Light-theme variants of the note swatches (issue #511): a pale */
+/* field with dark ink, so a coloured note reads in either theme. */
+:root[data-theme="light"] {
+  --note-amber-bg:    #fbe9d0;
+  --note-amber-fg:    #3d2a10;
+  --note-amber-line:  rgba(184, 112, 20, 0.35);
+  --note-cyan-bg:     #d8f1fb;
+  --note-cyan-fg:     #0f3442;
+  --note-cyan-line:   rgba(20, 130, 180, 0.35);
+  --note-green-bg:    #e3f7d0;
+  --note-green-fg:    #24400e;
+  --note-green-line:  rgba(80, 150, 30, 0.35);
+  --note-violet-bg:   #ebe2fb;
+  --note-violet-fg:   #2e1d52;
+  --note-violet-line: rgba(110, 70, 200, 0.35);
+  --note-rose-bg:     #fbdcf1;
+  --note-rose-fg:     #4d1239;
+  --note-rose-line:   rgba(200, 30, 150, 0.35);
+  --note-slate-bg:    #e4e8ec;
+  --note-slate-fg:    #20262c;
+  --note-slate-line:  rgba(0, 0, 0, 0.16);
 }
 
 /* =============================================================

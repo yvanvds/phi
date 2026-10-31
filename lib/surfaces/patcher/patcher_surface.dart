@@ -86,6 +86,12 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   /// (issue #356). Null for a palette tap, which documents a type.
   PatchNodeId? _selectedNodeId;
 
+  /// The canvas's keyboard focus, held here so a pick in the reference panel
+  /// can hand the keyboard straight back to the canvas (issue #511): the pane
+  /// takes focus on any press inside it, and the `Ctrl+Z` after a colour pick
+  /// must still reach the patch's undo.
+  final FocusNode _canvasFocus = FocusNode(debugLabel: 'patcher-canvas');
+
   /// Whether the canvas quantises a node drop to the grid (issue #368). A view
   /// preference of the surface, not of the patch: it belongs to how this user
   /// is arranging things right now, so it lives here beside the reference-panel
@@ -107,6 +113,12 @@ class _PatcherViewportState extends State<_PatcherViewport> {
     registerBuiltInPatcherNodes();
     _seedDefaultGraphIfEmpty(widget.engine.patcher);
     _objectTypes = widget.engine.patcher.objectTypes();
+  }
+
+  @override
+  void dispose() {
+    _canvasFocus.dispose();
+    super.dispose();
   }
 
   /// Switch the canvas between editing and playing (issue #378) — from the
@@ -321,6 +333,7 @@ class _PatcherViewportState extends State<_PatcherViewport> {
                               // are documented while they are being typed
                               // (issue #437).
                               onTypeResolved: _select,
+                              focusNode: _canvasFocus,
                             ),
                           ),
                   ),
@@ -360,6 +373,15 @@ class _PatcherViewportState extends State<_PatcherViewport> {
         return PatchReferencePanel(
           descriptor: _selected,
           args: documented ? editor.argsOf(id) : null,
+          // A selected note's colour (issue #511), journaled by the editor so
+          // Ctrl+Z puts it back; the graph wakes this builder on every change.
+          noteColor: documented ? editor.noteColorOf(id) : null,
+          onNoteColor: documented
+              ? (name) {
+                  editor.setNoteColor(id, name);
+                  _canvasFocus.requestFocus();
+                }
+              : null,
         );
       },
     );

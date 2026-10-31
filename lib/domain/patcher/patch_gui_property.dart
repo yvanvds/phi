@@ -17,6 +17,11 @@ abstract final class PatchGuiProperty {
   /// default reading width.
   static const String width = 'w';
 
+  /// A note's background colour (issue #511): the **name** of a design-token
+  /// swatch (`note-amber`, ...), never a hex, so a theme change carries over.
+  /// Absent on a note that keeps the plain paper look.
+  static const String background = 'bg';
+
   /// Every decoration key a reload reads back from the engine.
-  static const List<String> decoration = [width];
+  static const List<String> decoration = [width, background];
 }

@@ -1,6 +1,8 @@
+import 'package:flutter/material.dart' show Theme;
 import 'package:flutter/widgets.dart';
 
 import '../../tokens/phi_colors.dart';
+import '../../tokens/phi_note_swatch.dart';
 import '../../tokens/phi_radii.dart';
 import 'patch_canvas_constants.dart';
 import 'patch_note_metrics.dart';
@@ -26,11 +28,22 @@ import 'patch_note_metrics.dart';
 /// measurement predicted is the wrap that renders. An empty note shows a dim
 /// [placeholder] instead of collapsing to an unclickable sliver.
 ///
+/// A note can be given a **colour** (issue #511): a [swatch] replaces the
+/// paper field, ink and frame with one of the [PhiNoteSwatch] token triples,
+/// resolved against the ambient theme's brightness so the ink always pairs
+/// with its field — headings included, since they take the same ink. With no
+/// swatch the note looks exactly as it always did.
+///
 /// Visual-only and unaware of `PatchNode`/`PatcherController`; the canvas's
 /// raw pointer pipeline owns every press over it — select, drag, and the
 /// double-click that opens the inline box to edit the text.
 class PatchNoteBox extends StatelessWidget {
-  const PatchNoteBox({required this.text, this.textKey, super.key});
+  const PatchNoteBox({
+    required this.text,
+    this.textKey,
+    this.swatch,
+    super.key,
+  });
 
   /// The note's content — the object's raw creation-argument string. Blank
   /// renders (and measures) as [placeholder].
@@ -39,6 +52,9 @@ class PatchNoteBox extends StatelessWidget {
   /// Key placed on the rendered text, so a test can name the text of one
   /// specific note on a canvas full of nodes.
   final Key? textKey;
+
+  /// The note's colour, or null for the plain paper look.
+  final PhiNoteSwatch? swatch;
 
   /// What an empty note reads — dim, so it invites the double-click that
   /// fills it in.
@@ -56,11 +72,19 @@ class PatchNoteBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final empty = text.trim().isEmpty;
+    final s = swatch;
+    final brightness = Theme.of(context).brightness;
+    final field = s?.bg(brightness) ?? PhiColors.noteBg;
+    final ink = s?.fg(brightness) ?? PhiColors.noteFg;
+    final frame = s?.line(brightness) ?? PhiColors.noteLine;
+    // The empty-note hint is dim either way: the plain paper's faint fg3, or
+    // the swatch's own ink at half strength (fg3 would vanish on a light field).
+    final hint = s == null ? PhiColors.fg3 : ink.withValues(alpha: 0.5);
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: PhiColors.noteBg,
+        color: field,
         border: Border.all(
-          color: PhiColors.noteLine,
+          color: frame,
           width: PatchCanvasConstants.nodeBorderWidth,
         ),
         borderRadius: PhiRadii.all3,
@@ -81,7 +105,7 @@ class PatchNoteBox extends StatelessWidget {
             child: Text.rich(
               PatchNoteMetrics.span(
                 displayText(text),
-                color: empty ? PhiColors.fg3 : PhiColors.noteFg,
+                color: empty ? hint : ink,
               ),
               key: textKey,
               softWrap: true,

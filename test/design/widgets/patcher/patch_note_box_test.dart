@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/tokens/phi_colors.dart';
+import 'package:phi/design/tokens/phi_note_swatch.dart';
 import 'package:phi/design/widgets/patcher/patch_note_box.dart';
 import 'package:phi/design/widgets/patcher/patch_note_metrics.dart';
 import 'package:phi/design/widgets/patcher/patch_object_box_metrics.dart';
@@ -21,15 +22,18 @@ void main() {
     WidgetTester tester,
     String text, {
     Size size = const Size(160, 24),
+    PhiNoteSwatch? swatch,
+    Brightness? brightness,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
+        theme: brightness == null ? null : ThemeData(brightness: brightness),
         home: Scaffold(
           body: Center(
             child: SizedBox(
               width: size.width,
               height: size.height,
-              child: PatchNoteBox(text: text),
+              child: PatchNoteBox(text: text, swatch: swatch),
             ),
           ),
         ),
@@ -177,6 +181,102 @@ void main() {
         PatchNoteMetrics.sizeFor(display: 'a', width: 1e6).width,
         PatchNoteMetrics.maxWidth,
       );
+    });
+  });
+
+  group('colour (issue #511)', () {
+    const heading = '# Try this\nturn the knob';
+    final headingSize = PatchNoteMetrics.sizeFor(display: heading);
+
+    for (final brightness in Brightness.values) {
+      testWidgets('a swatch paints its ${brightness.name} field, frame and '
+          'ink — heading included', (tester) async {
+        const s = PhiNoteSwatch.cyan;
+        await pump(
+          tester,
+          heading,
+          size: headingSize,
+          swatch: s,
+          brightness: brightness,
+        );
+        final deco = decorationOf(tester);
+        expect(deco.color, s.bg(brightness));
+        expect(deco.border!.top.color, s.line(brightness));
+        final root =
+            tester.widget<Text>(find.text('Try this\nturn the knob')).textSpan!
+                as TextSpan;
+        expect(root.style!.color, s.fg(brightness));
+        final head = root.children!.first as TextSpan;
+        expect(head.style!.color, s.fg(brightness));
+      });
+
+      testWidgets(
+        'no swatch is the plain paper look under ${brightness.name}',
+        (tester) async {
+          await pump(tester, 'a note', brightness: brightness);
+          final deco = decorationOf(tester);
+          expect(deco.color, PhiColors.noteBg);
+          expect(deco.border!.top.color, PhiColors.noteLine);
+          expect(inkOf(tester, 'a note'), PhiColors.noteFg);
+        },
+      );
+    }
+
+    test('the dark and light variants are distinct fields', () {
+      for (final s in PhiNoteSwatch.all) {
+        expect(s.bgDark, isNot(s.bgLight), reason: s.name);
+        expect(s.bg(Brightness.dark), s.bgDark);
+        expect(s.bg(Brightness.light), s.bgLight);
+      }
+    });
+
+    testWidgets('an empty coloured note dims its own ink for the hint', (
+      tester,
+    ) async {
+      const s = PhiNoteSwatch.amber;
+      await pump(tester, '', swatch: s, brightness: Brightness.light);
+      expect(
+        inkOf(tester, PatchNoteBox.placeholder),
+        s.fgLight.withValues(alpha: 0.5),
+      );
+    });
+
+    test('every swatch keeps its ink readable on its field (WCAG AAA, 7:1) '
+        'in both themes', () {
+      double contrast(Color a, Color b) {
+        final la = a.computeLuminance();
+        final lb = b.computeLuminance();
+        final hi = la > lb ? la : lb;
+        final lo = la > lb ? lb : la;
+        return (hi + 0.05) / (lo + 0.05);
+      }
+
+      for (final s in PhiNoteSwatch.all) {
+        for (final b in Brightness.values) {
+          expect(
+            contrast(s.fg(b), s.bg(b)),
+            greaterThanOrEqualTo(7),
+            reason: '${s.name} (${b.name})',
+          );
+        }
+        // Dark ink on a pale field in light; pale ink on a dim field in dark.
+        expect(s.bgDark.computeLuminance(), lessThan(0.05), reason: s.name);
+        expect(s.bgLight.computeLuminance(), greaterThan(0.6), reason: s.name);
+      }
+    });
+
+    test('a note stores the token name; an unknown one is no swatch', () {
+      for (final s in PhiNoteSwatch.all) {
+        expect(s.name, startsWith('note-'));
+        expect(PhiNoteSwatch.byName(s.name), same(s));
+      }
+      expect(
+        {for (final s in PhiNoteSwatch.all) s.name}.length,
+        PhiNoteSwatch.all.length,
+      );
+      expect(PhiNoteSwatch.byName(''), isNull);
+      expect(PhiNoteSwatch.byName('#ff0000'), isNull);
+      expect(PhiNoteSwatch.byName('note-plaid'), isNull);
     });
   });
 }

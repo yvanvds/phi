@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/design/tokens/phi_colors.dart';
+import 'package:phi/design/tokens/phi_note_swatch.dart';
 import 'package:phi/engine/bridge/patch_object_descriptor.dart';
 import 'package:phi/surfaces/patcher/reference/patch_reference_panel.dart';
 
@@ -237,6 +239,91 @@ void main() {
       // note that reads `warm` as holding one word of its four.
       expect(find.byKey(PatchReferencePanel.valueKey('text')), findsOneWidget);
       expect(find.text('= warm pad from here'), findsOneWidget);
+    });
+  });
+
+  group('note colour (issue #511)', () {
+    const note = PatchObjectDescriptor(
+      type: '.text',
+      description: 'text label',
+      category: PatchObjectCategory.gui,
+      isDsp: false,
+      inlets: [],
+      outlets: [],
+      params: [
+        PatchParamDescriptor(
+          name: 'text',
+          doc: 'label text',
+          defaultValue: '',
+          range: 'any string',
+        ),
+      ],
+    );
+
+    Future<List<String>> pumpPicker(
+      WidgetTester tester,
+      PatchObjectDescriptor desc, {
+      String current = '',
+    }) async {
+      final picked = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PatchReferencePanel(
+              descriptor: desc,
+              args: 'a note',
+              noteColor: current,
+              onNoteColor: picked.add,
+            ),
+          ),
+        ),
+      );
+      return picked;
+    }
+
+    testWidgets('a selected note offers plain plus every swatch, and a tap '
+        'reports the token name', (tester) async {
+      final picked = await pumpPicker(tester, note);
+      expect(find.text('COLOUR'), findsOneWidget);
+      expect(find.byKey(PatchReferencePanel.noteColorKey('')), findsOneWidget);
+      for (final s in PhiNoteSwatch.all) {
+        expect(find.byKey(PatchReferencePanel.noteColorKey(s.name)), findsOne);
+      }
+
+      await tester.tap(
+        find.byKey(PatchReferencePanel.noteColorKey('note-cyan')),
+      );
+      await tester.tap(find.byKey(PatchReferencePanel.noteColorKey('')));
+      expect(picked, ['note-cyan', '']);
+    });
+
+    testWidgets('the current colour is the ringed chip', (tester) async {
+      await pumpPicker(tester, note, current: 'note-amber');
+      Color ringOf(String name) {
+        final box = tester
+            .widgetList<Container>(
+              find.descendant(
+                of: find.byKey(PatchReferencePanel.noteColorKey(name)),
+                matching: find.byType(Container),
+              ),
+            )
+            .first;
+        return (box.decoration! as BoxDecoration).border!.top.color;
+      }
+
+      bool ringed(String name) => ringOf(name) == PhiColors.fg0;
+      expect(ringed('note-amber'), isTrue);
+      expect(ringed(''), isFalse);
+    });
+
+    testWidgets('anything but a note, and a palette tap, has no colour row', (
+      tester,
+    ) async {
+      await pumpPicker(tester, sine);
+      expect(find.text('COLOUR'), findsNothing);
+
+      await pumpPanel(tester, note);
+      expect(find.text('COLOUR'), findsNothing);
     });
   });
 }

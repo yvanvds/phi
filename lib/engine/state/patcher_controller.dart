@@ -619,6 +619,29 @@ class PatcherController {
   double? noteWidthOf(PatchNodeId id) =>
       double.tryParse(guiPropertyOf(id, PatchGuiProperty.width));
 
+  /// The swatch token name a note was coloured with (`note-amber`, ...), or
+  /// `''` for the plain paper look (issue #511).
+  String noteColorOf(PatchNodeId id) =>
+      guiPropertyOf(id, PatchGuiProperty.background);
+
+  /// Colour the note at [id] with the swatch token [name] (`''` clears it back
+  /// to the plain look) as one journaled, undoable step. A no-op for anything
+  /// that is not a note, and for a colour it already has.
+  void setNoteColor(PatchNodeId id, String name) {
+    final node = graph.nodeById(id);
+    if (node == null || !PatchTypeName.isNote(node.type)) return;
+    if (noteColorOf(id) == name) return;
+    undoScope.run(
+      SetPatchGuiPropertyCommand(
+        this,
+        id,
+        key: PatchGuiProperty.background,
+        value: name,
+        label: name.isEmpty ? 'clear note colour' : 'colour note',
+      ),
+    );
+  }
+
   // ─── note resize (issue #488) ────────────────────────────────────────
 
   /// Start a right-edge resize of the note at [id], remembering the width it
@@ -1143,6 +1166,10 @@ class PatcherController {
     final size = _sizeSeating(node, node.inputs.length, node.outputs.length);
     if (size != node.size) {
       node.reshapePorts(inputs: node.inputs, outputs: node.outputs, size: size);
+    } else {
+      // A decoration that does not move the box (a note's colour, #511) must
+      // still repaint it — and the graph re-broadcasts, so the panel follows.
+      node.markParamsChanged();
     }
   }
 

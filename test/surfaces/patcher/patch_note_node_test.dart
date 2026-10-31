@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/design/tokens/phi_colors.dart';
+import 'package:phi/design/tokens/phi_note_swatch.dart';
 import 'package:phi/design/widgets/patcher/patch_note_box.dart';
 import 'package:phi/design/widgets/patcher/patch_note_metrics.dart';
 import 'package:phi/design/widgets/patcher/patch_object_box.dart';
@@ -336,6 +338,104 @@ void main() {
         ..endNoteResize();
       expect(sine.size, before);
       expect(controller.guiPropertyOf(sine.id, PatchGuiProperty.width), '');
+    });
+  });
+
+  group('note colour (issue #511)', () {
+    PatchNode note([String args = '# Title\nbody']) =>
+        controller.addObject(desc: textDesc, position: Offset.zero, args: args);
+
+    Color? fieldOf(WidgetTester tester) =>
+        (tester
+                    .widget<DecoratedBox>(
+                      find.descendant(
+                        of: find.byType(PatchNoteBox),
+                        matching: find.byType(DecoratedBox),
+                      ),
+                    )
+                    .decoration
+                as BoxDecoration)
+            .color;
+
+    testWidgets('a colour repaints the note, persists, and undoes in one '
+        'step', (tester) async {
+      final node = note();
+      await pumpNode(tester, node);
+      final size = node.size;
+      final brightness = Theme.of(tester.element(find.byType(PatchNoteBox)))
+          .brightness;
+      expect(fieldOf(tester), PhiColors.noteBg);
+
+      controller.setNoteColor(node.id, PhiNoteSwatch.green.name);
+      await tester.pump();
+      expect(controller.noteColorOf(node.id), 'note-green');
+      expect(fieldOf(tester), PhiNoteSwatch.green.bg(brightness));
+      expect(node.size, size, reason: 'a colour does not move the box');
+      final native =
+          gateway.instances[controller.instanceId]!.nodes.values.single;
+      // The token name, not a hex, is what the dump saves.
+      expect(native.gui[PatchGuiProperty.background], 'note-green');
+
+      controller.undo();
+      await tester.pump();
+      expect(controller.noteColorOf(node.id), '');
+      expect(fieldOf(tester), PhiColors.noteBg);
+      expect(native.gui.containsKey(PatchGuiProperty.background), isFalse);
+      expect(controller.undoScope.canUndo, isFalse, reason: 'one step');
+
+      controller.redo();
+      await tester.pump();
+      expect(fieldOf(tester), PhiNoteSwatch.green.bg(brightness));
+    });
+
+    test('clearing goes back to plain; the same colour journals nothing', () {
+      final node = note();
+      controller.setNoteColor(node.id, 'note-rose');
+      controller.setNoteColor(node.id, 'note-rose');
+      controller.setNoteColor(node.id, '');
+      expect(controller.noteColorOf(node.id), '');
+      controller.undo();
+      expect(controller.noteColorOf(node.id), 'note-rose');
+      controller.undo();
+      expect(controller.noteColorOf(node.id), '');
+      expect(controller.undoScope.canUndo, isFalse);
+    });
+
+    test('colour and width ride along a duplicate and a save → reload', () {
+      final node = note();
+      controller
+        ..beginNoteResize(node.id)
+        ..previewNoteWidth(300)
+        ..endNoteResize()
+        ..setNoteColor(node.id, 'note-violet');
+
+      controller.selectNode(node.id);
+      controller.duplicateSelection();
+      final copy = controller.graph.selectedNodes.single;
+      expect(controller.noteColorOf(copy), 'note-violet');
+
+      final dump = gateway.dumpJson(controller.instanceId);
+      final other = gateway.createInstance();
+      gateway.parseJson(other, dump);
+      final reloaded = PatcherController.bound(gateway, instanceId: other)
+        ..rebuildFromInstance();
+      addTearDown(reloaded.dispose);
+      for (final n in reloaded.graph.nodes) {
+        expect(reloaded.noteColorOf(n.id), 'note-violet');
+        expect(reloaded.noteWidthOf(n.id), 300);
+      }
+    });
+
+    test('only a note can be coloured', () {
+      final sine = controller.addObject(
+        desc: FakePatcherGateway.defaultCatalogue.firstWhere(
+          (d) => d.type == Obj.dSine,
+        ),
+        position: Offset.zero,
+      );
+      controller.setNoteColor(sine.id, 'note-amber');
+      expect(controller.noteColorOf(sine.id), '');
+      expect(controller.undoScope.canUndo, isFalse);
     });
   });
 }
