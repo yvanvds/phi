@@ -41,12 +41,12 @@ maintainer-applied.
 
 ## Running locally
 
-Requires Windows and Flutter ≥ 3.47.1 (a Linux x64 runner exists under
-`linux/`, but its build is blocked on `flutter_angle` — see #455). `yse`
-(^0.2.0) comes from pub.dev; its native-assets build hook downloads and bundles `libyse.dll` next to the
-executable, so no engine setup is needed. `YSE_DLL_PATH` (a directory) still
-takes precedence, for testing against a local engine build. See
-[README.md](README.md).
+Requires Windows or Linux (x64) and Flutter ≥ 3.47.1. There is no 3D Scene
+renderer on any platform for now (#455). `yse` (^0.2.0) comes from pub.dev; its
+native-assets build hook downloads and bundles the engine (`libyse.dll` next to
+the executable, `libyse.so` in `bundle/lib/`), so no engine setup is needed.
+`YSE_DLL_PATH` (a directory) still takes precedence, for testing against a
+local engine build. See [README.md](README.md).
 
 ```powershell
 flutter pub get

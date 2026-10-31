@@ -8,9 +8,8 @@
 
 Phi is a flexible workstation for live electronic music performance — see
 [phi-vision.md](phi-vision.md) for the full vision. Personal years-long
-project, Windows desktop; a Linux x64 runner is scaffolded (`linux/`, issue
-#454) but `flutter build linux` is blocked on `flutter_angle`'s Linux plugin
-(issue #455).
+project, Windows and Linux (x64) desktop (`windows/`, `linux/` runners; Linux
+since issue #454). No 3D Scene renderer on any platform for now (#455).
 
 ## Stack at a glance
 
@@ -18,7 +17,7 @@ project, Windows desktop; a Linux x64 runner is scaffolded (`linux/`, issue
 |--------------|-------------------------------------------------------|
 | Audio engine | C++ (`yse-soundengine`)                               |
 | FFI bridge   | `dart-yse` — Dart wrapper, package name `yse`         |
-| UI shell     | Flutter ≥ 3.47.1, Windows desktop (Linux x64 in progress, #454) |
+| UI shell     | Flutter ≥ 3.47.1, Windows + Linux x64 desktop          |
 | Design       | Dart tokens derived from `design system/colors_and_type.css` |
 | 3D viewport  | none for now — `PlaceholderSceneRenderer` (macbear_3d removed in #456; return tracked in #455) |
 | Scripting    | Python with DSL (Phase ≥ 2 — not yet)                 |
@@ -2722,8 +2721,9 @@ main + app          (orchestration)
 - **Design previews:** `design system/preview/*.html` and
   `design system/ui_kits/phi-workstation/*.jsx` — open these when sketching
   new surfaces in Flutter.
-- **CI:** `.github/workflows/ci.yaml` (analyze + test + coverage; the Windows
-  build is gated to `main`), `.github/workflows/integration.yaml` (the
+- **CI:** `.github/workflows/ci.yaml` (analyze + test + coverage; a Linux
+  release build on every PR/push that asserts `libyse.so` in `bundle/lib/`; the
+  Windows build is gated to `main`), `.github/workflows/integration.yaml` (the
   `integration_test/` suite on windows-latest — nightly on `develop`, on every
   release PR into `main`, and on manual dispatch).
 - **Integration test driver:** `tool/run_integration_tests.ps1` — runs each
