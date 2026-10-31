@@ -57,12 +57,16 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
     return id;
   }
 
+  @override
+  int get maxInstanceNameLength => Patcher.maxNameLength;
+
   /// The name handed to `Patcher(name: ...)` for bus name [name], or `null`
   /// for an anonymous (auto-named) patcher.
   ///
   /// The engine refuses names over [Patcher.maxNameLength] by throwing, but a
   /// valid project address can be longer (issue #452). Such a patch falls
-  /// back to anonymous rather than failing to open at all.
+  /// back to anonymous rather than failing to open at all; the reconciler
+  /// checks [maxInstanceNameLength] and surfaces it as a notice.
   static String? nativeNameFor(String name) {
     if (name.isEmpty || name.length > Patcher.maxNameLength) return null;
     return name;

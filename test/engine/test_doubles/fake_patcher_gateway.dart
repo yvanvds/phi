@@ -64,6 +64,10 @@ class FakePatcherGateway implements PatcherGateway {
 
   FakeInstance _inst(int instanceId) => instances[instanceId]!;
 
+  /// Mirrors the engine's patcher-name cap; a test may lower it.
+  @override
+  int maxInstanceNameLength = Patcher.maxNameLength;
+
   @override
   int createInstance({int mainOutputs = 2, String name = ''}) {
     final id = _nextInstanceId++;
@@ -71,7 +75,11 @@ class FakePatcherGateway implements PatcherGateway {
     instances[id] = FakeInstance(mainOutputs: mainOutputs, busName: name);
     // A named instance registers on the engine-direct patcher bus (issue #318);
     // last registration wins, so a rename (new instance, new name) re-registers.
-    if (name.isNotEmpty) _patcherBus[name] = id;
+    // An over-long name opens anonymous, exactly as the real gateway does
+    // (issue #452).
+    if (name.isNotEmpty && name.length <= maxInstanceNameLength) {
+      _patcherBus[name] = id;
+    }
     return id;
   }
 

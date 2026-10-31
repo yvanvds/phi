@@ -410,4 +410,73 @@ void main() {
       },
     );
   });
+
+  group('over-long bus name (issue #452)', () {
+    // Two valid segments (each well inside NameValidator.maxLength) whose
+    // dotted path overruns the engine's patcher-name cap.
+    final long = EntityAddress(
+      kind: RegistryKinds.patch,
+      segments: ['a' * 30, 'b' * (Patcher.maxNameLength - 30)],
+    );
+
+    test('surfaces a notice instead of going silently unreachable', () {
+      final registry = registryWith({long: PatchPayload.empty});
+      addTearDown(registry.dispose);
+
+      build().sync(registry);
+
+      final name = long.segments.join('.');
+      expect(name.length, Patcher.maxNameLength + 1);
+      // The patch still opens (it sounds), but nothing reaches it by name…
+      expect(gateway.instances, hasLength(1));
+      expect(gateway.deliverToPatcherBus('patcher.$name.0', 1), isFalse);
+      // …and the user is told so, naming the patch and the limit.
+      expect(notices, hasLength(1));
+      final notice = notices.single;
+      expect(notice.patch, long);
+      expect(notice.bus, isNull);
+      expect(notice.message, contains(long.format()));
+      expect(notice.message, contains('${Patcher.maxNameLength}'));
+    });
+
+    test('warns once per open, not on every re-sync', () {
+      final registry = registryWith({long: PatchPayload.empty});
+      addTearDown(registry.dispose);
+      final reconciler = build();
+
+      reconciler
+        ..sync(registry)
+        ..sync(registry);
+
+      expect(notices, hasLength(1));
+    });
+
+    test('warns again when a restart re-opens the patch', () {
+      final registry = registryWith({long: PatchPayload.empty});
+      addTearDown(registry.dispose);
+      final reconciler = build()..sync(registry);
+
+      // An audio-session restart tears every patcher down and rebuilds it.
+      reconciler
+        ..teardown()
+        ..sync(registry);
+
+      expect(notices, hasLength(2));
+    });
+
+    test('a name exactly at the limit stays addressable and quiet', () {
+      final atLimit = EntityAddress(
+        kind: RegistryKinds.patch,
+        segments: ['c' * Patcher.maxNameLength],
+      );
+      final registry = registryWith({atLimit: PatchPayload.empty});
+      addTearDown(registry.dispose);
+
+      build().sync(registry);
+
+      final name = atLimit.segments.single;
+      expect(gateway.deliverToPatcherBus('patcher.$name.0', 1), isTrue);
+      expect(notices, isEmpty);
+    });
+  });
 }

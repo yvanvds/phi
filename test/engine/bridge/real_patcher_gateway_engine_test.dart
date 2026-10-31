@@ -78,6 +78,8 @@ void main() {
     test('an over-long name opens anonymous instead of throwing', () async {
       final long = 'x' * (Patcher.maxNameLength + 1);
       expect(RealPatcherGateway.nativeNameFor(long), isNull);
+      // The cap callers check against to surface the fallback (issue #452).
+      expect(gateway.maxInstanceNameLength, Patcher.maxNameLength);
       expect(await sendThroughSlot(long, 'patcher.$long.cutoff'), isEmpty);
     });
 

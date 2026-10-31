@@ -1759,7 +1759,11 @@ main + app          (orchestration)
   clips). A running source is kept mounted on its current bus across re-syncs; a
   placement naming a bus absent from the live mix **degrades gracefully** — the
   source is left unplaced and a `PatchPlacementNotice` surfaces through
-  `PhiEngine.lastPatchNotice` (the `AudioDeviceNotice` shape). **Dump-to-payload on
+  `PhiEngine.lastPatchNotice` (the `AudioDeviceNotice` shape). A patch whose
+  dotted path exceeds `PatcherGateway.maxInstanceNameLength` (the engine's 55-char
+  patcher-name cap) opens anonymous and raises the same notice with a `null` bus,
+  so it is never silently unreachable on `patcher.<name>.<slot>` (issue #452).
+  **Dump-to-payload on
   save:** the reconciler's `flushToPayloads` re-dumps each open patcher into its
   entity payload (via `UpdateEntityPayloadCommand`, only when the dump changed),
   wired to a new `ProjectController.onBeforeSave` hook the shell sets to

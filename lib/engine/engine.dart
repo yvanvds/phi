@@ -329,9 +329,10 @@ class PhiEngine {
     return p;
   }
 
-  /// The last patch source-placement degradation, or `null`. A placement naming a
-  /// bus no longer in the mix leaves the patch unplaced and raises one of these
-  /// (design §4, §8); the shell surfaces it like an [lastAudioNotice].
+  /// The last patch degradation, or `null`. A placement naming a bus no longer
+  /// in the mix leaves the patch unplaced and raises one of these (design §4,
+  /// §8), as does a patch whose address is too long to name its native patcher
+  /// (issue #452); the shell surfaces it like an [lastAudioNotice].
   ValueListenable<PatchPlacementNotice?> get lastPatchNotice =>
       _lastPatchNotice;
 
