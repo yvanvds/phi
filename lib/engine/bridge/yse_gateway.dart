@@ -93,6 +93,13 @@ abstract interface class YseGateway {
   /// it opens it (issue #449).
   AudioDeviceDescriptor? defaultAudioDevice();
 
+  /// Close the open audio device, if any, **keeping the session** — every
+  /// channel, sound and clock built on it survives (`closeCurrentDevice()`).
+  /// With no stream open, [refreshDevices] restarts the audio backend and reads
+  /// the machine afresh, so this is the first half of a rescan while a device
+  /// is playing (issue #450); [openAudioDevice] is the second.
+  void closeAudioDevice();
+
   /// Open an audio device, or live-swap to it if one is already open
   /// (`closeCurrentDevice` + `openDevice`, design §5 — a brief dropout is
   /// accepted). Passing a null [descriptor] opens the platform-default device.

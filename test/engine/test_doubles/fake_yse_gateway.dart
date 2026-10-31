@@ -399,6 +399,14 @@ class FakeYseGateway implements YseGateway {
     return visible.isEmpty ? null : visible.first;
   }
 
+  /// `System.closeCurrentDevice()`: the stream goes, the session stays — so a
+  /// [refreshDevices] afterwards reads the hardware afresh (issue #450).
+  @override
+  void closeAudioDevice() {
+    calls.add('closeAudioDevice');
+    _closeDeviceState();
+  }
+
   @override
   void openAudioDevice(
     AudioDeviceDescriptor? descriptor, {

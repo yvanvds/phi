@@ -1668,9 +1668,10 @@ class PhiEngine {
   /// last enumeration, which cannot be rescanned while a device is playing. So
   /// the pickers go on offering an interface that has been unplugged — choosing
   /// it fails the open, which is the intended way to find out — and an interface
-  /// plugged in while audio runs does not appear. The list does change after a
-  /// total loss: each recovery attempt re-enumerates with nothing open, so
-  /// hardware that came back (or arrived) is listed once a run has looked.
+  /// plugged in while audio runs does not appear until [rescanAudioDevices]
+  /// (issue #450). The list also changes after a total loss: each recovery
+  /// attempt re-enumerates with nothing open, so hardware that came back (or
+  /// arrived) is listed once a run has looked.
   List<AudioDeviceDescriptor> audioDevices() =>
       _started ? _gateway.audioDevices() : const [];
 
@@ -1718,6 +1719,16 @@ class PhiEngine {
     if (ok) _bootAudio = desired;
     return ok;
   }
+
+  /// Rescans the machine's audio devices while one is playing (issue #450) —
+  /// Settings › Audio's "Rescan devices". The open device is closed (the
+  /// session and everything built on it stay), the list re-read, and the same
+  /// device reopened: a brief, deliberate dropout. Afterwards [audioDevices]
+  /// lists an interface plugged in since and drops one that was pulled. Returns
+  /// `true` when the device that was open is open again; otherwise the default
+  /// (or nothing) is open and a [lastAudioNotice] says why. Changes no stored
+  /// choice. Returns `false` (a no-op) before [start].
+  bool rescanAudioDevices() => _started && _audio.rescanDevices();
 
   /// Restarts the **native** audio session under the running engine (issue
   /// #448): `close()` and a fresh session at the rate [desired] needs, with

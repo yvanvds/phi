@@ -483,6 +483,55 @@ class AudioDeviceCoordinator {
     _recovery.arm();
   }
 
+  /// Re-reads the machine's audio devices **while one is playing** (issue
+  /// #450) — the Settings › Audio "Rescan devices" action. Returns `true` when
+  /// the device that was open is open again afterwards.
+  ///
+  /// PortAudio cannot rescan with a stream open: `refreshDevices()` then
+  /// re-reads the existing enumeration, so an interface plugged in mid-session
+  /// never appears and an unplugged one keeps its entry (§4). So this closes
+  /// the stream — only the stream: the session, its rate and everything built
+  /// on it stay, which is why this is *not* [restartTo] — refreshes, and
+  /// reopens [current]: a deliberate, announced dropout. The rescan changes no
+  /// choice: the stored preference is never touched and what the performer
+  /// asked for stays what recovery reaches for (design §5, §9.3).
+  ///
+  /// If [current]'s device is gone from the fresh list, the platform default
+  /// is opened instead with a [AudioNoticeKind.switchReverted] notice; if that
+  /// fails too, [current] becomes `null`, a [AudioNoticeKind.noAudioDevice]
+  /// notice is raised and a recovery run armed — [switchTo]'s total loss.
+  ///
+  /// With nothing open the list is already re-read by every refresh, so a
+  /// rescan is one recovery attempt run now: it opens the wanted device (or
+  /// the default) if it has arrived, and stands any run down when it does.
+  bool rescanDevices() {
+    final previous = _current;
+    if (previous == null) {
+      if (!_attemptRecovery()) return false;
+      _recovery.cancel();
+      return true;
+    }
+    _gateway.closeAudioDevice();
+    _gateway.refreshDevices();
+    if (_reopen(previous)) return true;
+
+    if (previous.outputDevice != null && _reopen(const AudioSettings())) {
+      _notify(
+        AudioNoticeKind.switchReverted,
+        'Audio device ${_nameOf(previous)} is no longer available — using the '
+        'default device.',
+      );
+      return false;
+    }
+    _current = null;
+    _notify(
+      AudioNoticeKind.noAudioDevice,
+      'No audio output device could be opened after the rescan.',
+    );
+    _recovery.arm();
+    return false;
+  }
+
   /// One recovery attempt (issue #410): re-enumerate, reach for the device the
   /// performer actually wants, then settle for the platform default.
   ///

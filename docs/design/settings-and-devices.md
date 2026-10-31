@@ -144,7 +144,16 @@ Confirmed against the bridge; no engine work is required for v1:
   rescan PortAudio while a stream is open, so:
   - while audio runs, a device unplugged **keeps its entry** — the
     dropdown goes on offering it, and the only way Phi finds out it is gone
-    is that opening it fails — and a device plugged in **does not appear**;
+    is that opening it fails — and a device plugged in **does not appear**
+    until the performer presses **Rescan devices** in Settings › Audio
+    (issue #450): `closeCurrentDevice()` — only the stream; the session, its
+    rate and everything built on it stay, so this is not the #448 session
+    restart — then `refreshDevices()` with nothing open, then the same device
+    reopened. A brief, deliberate dropout, announced next to the button. It
+    changes no choice: if the open device is gone it lands on the default
+    with a notice (the stored preference intact), every device gone is the
+    total loss below, and with nothing open it is one recovery attempt run
+    now;
   - once nothing is open (a total loss), `refreshDevices()` restarts the
     backend and reads the machine as it is now. Every recovery attempt
     starts with one, so an interface that came back — under a new index or
@@ -333,7 +342,8 @@ File/app menu and the command palette later.
 - AUDIO: output device dropdown (grouped by host), sample-rate and
   buffer-size dropdowns (populated from the *selected* device's reported
   lists, "device default" as first entry), speaker-layout dropdown,
-  live read-back line (active rate / buffer / latency in ms).
+  live read-back line (active rate / buffer / latency in ms), and a
+  **Rescan devices** button under the device dropdown (§4, issue #450).
 - MIDI: output-port dropdown, input-port checklist with per-port activity
   dot.
 - PROJECTS: autosave cadence (number field, seconds; 0 disables) and

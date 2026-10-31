@@ -113,6 +113,9 @@ class RealYseGateway implements YseGateway {
     return device == null ? null : _describe(device);
   }
 
+  @override
+  void closeAudioDevice() => _system.closeCurrentDevice();
+
   /// The FFI-free descriptor for an engine [Device] (design §4).
   AudioDeviceDescriptor _describe(Device device) => AudioDeviceDescriptor(
     name: device.name,

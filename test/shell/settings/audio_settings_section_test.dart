@@ -165,6 +165,48 @@ void main() {
     expect(engine.activeAudioState().sampleRate, 48000);
   });
 
+  testWidgets('Rescan devices lists hardware plugged in and drops hardware '
+      'pulled while Alpha plays, and changes no choice (#450)', (tester) async {
+    const gamma = AudioDeviceDescriptor(
+      name: 'Gamma',
+      hostName: 'ASIO',
+      sampleRates: [48000.0],
+      bufferSizes: [128],
+      defaultBufferSize: 128,
+      outputLatency: 128,
+    );
+    gateway.devices = const [_alpha, gamma]; // Gamma in, Beta out
+    await pumpSection(tester);
+    final before = store.saveCount;
+
+    // Without a rescan the list is the stale one (issue #445).
+    await tester.tap(find.byType(PhiSelect<String>));
+    await tester.pumpAndSettle();
+    expect(find.text('Gamma'), findsNothing);
+    expect(find.text('Beta'), findsOneWidget);
+    await tester.tap(find.text('Alpha').last);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('audio stops briefly'), findsOneWidget);
+    await tester.tap(find.byKey(AudioSettingsSection.rescanKey));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(PhiSelect<String>));
+    await tester.pumpAndSettle();
+    expect(find.text('Gamma'), findsOneWidget);
+    expect(find.text('Beta'), findsNothing);
+    await tester.tap(find.text('Alpha').last);
+    await tester.pumpAndSettle();
+
+    // Alpha is open again, in the same session, and nothing was persisted.
+    expect(gateway.calls, contains('closeAudioDevice'));
+    expect(engine.activeAudioSettings?.outputDevice, 'Alpha');
+    expect(engine.activeAudioState().sampleRate, 48000);
+    expect(settings.value.audio, onAlpha);
+    expect(store.saveCount, before);
+    expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
+  });
+
   testWidgets('the rate picker is populated from the selected device', (
     tester,
   ) async {

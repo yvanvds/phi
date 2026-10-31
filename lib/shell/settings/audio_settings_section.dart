@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../design/tokens/phi_colors.dart';
 import '../../design/tokens/phi_spacing.dart';
 import '../../design/tokens/phi_type.dart';
+import '../../design/widgets/button/primary_button.dart';
 import '../../design/widgets/select/phi_select.dart';
 import '../../design/widgets/select/phi_select_group.dart';
 import '../../design/widgets/select/phi_select_option.dart';
@@ -35,6 +36,9 @@ class AudioSettingsSection extends StatefulWidget {
     required this.settings,
     super.key,
   });
+
+  /// The "Rescan devices" action (issue #450).
+  static const Key rescanKey = Key('AudioSettingsSection.rescan');
 
   /// The engine façade — the only path above the bridge to the device list, the
   /// live-switch, the active read-back, and fallback notices.
@@ -124,6 +128,16 @@ class _AudioSettingsSectionState extends State<AudioSettingsSection> {
     }
   }
 
+  /// Re-reads the machine's devices while one is playing (issue #450): the
+  /// engine closes the stream, refreshes and reopens the same device — the
+  /// announced dropout the hint beside the button warns of. No choice changes,
+  /// so [_selected] and the stored preference stay as they are; a device that
+  /// vanished shows as "(unavailable)" and the notice line says what opened.
+  void _rescan() {
+    widget.engine.rescanAudioDevices();
+    setState(() {});
+  }
+
   void _onDeviceChanged(String key) {
     final descriptor = key == _defaultDeviceKey ? null : _deviceForKey(key);
     // A new device reports its own rate / buffer lists, so drop the previous
@@ -176,6 +190,8 @@ class _AudioSettingsSectionState extends State<AudioSettingsSection> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _field('OUTPUT DEVICE', _deviceSelect()),
+          const SizedBox(height: PhiSpacing.s2),
+          _rescanRow(),
           const SizedBox(height: PhiSpacing.s4),
           _field('SAMPLE RATE', _rateSelect(descriptor)),
           const SizedBox(height: PhiSpacing.s4),
@@ -232,6 +248,28 @@ class _AudioSettingsSectionState extends State<AudioSettingsSection> {
           ? '${_selected.outputDevice} (unavailable)'
           : 'System default',
       onChanged: _onDeviceChanged,
+    );
+  }
+
+  /// The rescan button and the dropout it costs, said up front (issue #450):
+  /// PortAudio only sees hardware plugged in (or pulled) since the last
+  /// enumeration once no stream is open, so the rescan briefly stops audio.
+  Widget _rescanRow() {
+    return Row(
+      children: [
+        PrimaryButton(
+          key: AudioSettingsSection.rescanKey,
+          label: 'Rescan devices',
+          onPressed: _rescan,
+        ),
+        const SizedBox(width: PhiSpacing.s3),
+        Expanded(
+          child: Text(
+            'Finds hardware plugged in or removed since — audio stops briefly.',
+            style: PhiType.small().copyWith(color: PhiColors.fg3),
+          ),
+        ),
+      ],
     );
   }
 
