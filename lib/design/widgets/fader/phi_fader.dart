@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../tokens/phi_colors.dart';
@@ -59,6 +61,9 @@ class PhiFader extends StatelessWidget {
   static const double _thumbOverhang = 5;
 
   double _toValue(double localY) {
+    // A zero-height track has no travel to map a position onto (issue #460):
+    // dividing by it would emit NaN, so a gesture there leaves the value be.
+    if (height <= 0) return value.clamp(0.0, 1.0);
     final clamped = localY.clamp(0.0, height);
     return 1.0 - (clamped / height);
   }
@@ -68,6 +73,11 @@ class PhiFader extends StatelessWidget {
     final clamped = value.clamp(0.0, 1.0);
     final fillFraction = clamped;
     final thumbCentreFromTop = (1.0 - clamped) * height;
+    // A track shorter than the thumb (a patcher slider squeezed into a one-line
+    // box, issue #460) has no travel: pin the thumb to the top rather than
+    // passing `clamp` an inverted range, which throws on every build. The
+    // track's own bounds clip the overhang.
+    final maxThumbTop = math.max(0.0, height - _thumbHeight);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -134,7 +144,7 @@ class PhiFader extends StatelessWidget {
                   right: 0,
                   top: (thumbCentreFromTop - _thumbHeight / 2).clamp(
                     0.0,
-                    height - _thumbHeight,
+                    maxThumbTop,
                   ),
                   height: _thumbHeight,
                   child: DecoratedBox(
