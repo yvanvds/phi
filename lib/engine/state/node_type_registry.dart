@@ -95,14 +95,12 @@ class NodeDescriptor {
   /// surface's gated refresh, so an idle patch of plain objects costs nothing
   /// (issue #357).
   ///
-  /// Deliberately narrower than "the body is a live control": `.m` (which
-  /// renders its creation args) is operable but has no display value to
-  /// re-read, so polling by "is it interactive" would burn reads on bodies that
-  /// can never change from underneath. `.b` does qualify: it flashes for a
-  /// press that arrives over a cable, which only its `guiValue` reports (issue
-  /// #519). An **object box**
-  /// never qualifies either — it prints the arguments the object was made
-  /// with, which only a journaled `setParams` changes (issue #379).
+  /// Every live control qualifies, because each can change from underneath:
+  /// `.b` flashes for a press that arrives over a cable, which only its
+  /// `guiValue` reports (issue #519), and `.m` shows the message it holds,
+  /// which a list on its inlet replaces (issue #520). An **object box** never
+  /// qualifies — it prints the arguments the object was made with, which only
+  /// a journaled `setParams` changes (issue #379).
   ///
   /// There is no companion "the body owns its presses" flag any more: since
   /// issue #378 that is the canvas's **mode**, not the type's — in edit mode

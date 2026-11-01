@@ -107,11 +107,11 @@ void main() {
   });
 
   test('a body that displays no guiValue is never read', () {
-    // `.m` renders its creation args — it has no display value that can
+    // A body registered without `readsGuiValue` has no display value that can
     // change from underneath, so polling it would be waste.
-    NodeTypeRegistry.instance.register(desc(Obj.gMessage));
+    NodeTypeRegistry.instance.register(desc(Obj.gSlider));
     final node = controller.addNode(
-      desc: desc(Obj.gMessage),
+      desc: desc(Obj.gSlider),
       position: Offset.zero,
     );
     var notified = 0;
@@ -148,6 +148,26 @@ void main() {
     gateway.sendBang(controller.instanceId, node.id.value, 0);
     expect(controller.refreshGuiValues(), 1);
     expect(values.last, 'on');
+  });
+
+  test('a .m reports a message replaced from its inlet, and keeps its '
+      'creation args (issue #520)', () {
+    final node = addPollable(Obj.gMessage);
+    controller.setNodeParams(node.id, '0');
+    expect(controller.refreshGuiValues(), 1, reason: 'first read: 0');
+    expect(controller.guiValueOf(node.id), '0');
+
+    // A list down a cable — `.pack 1 2 3` — with nothing told to Dart.
+    gateway.sendList(controller.instanceId, node.id.value, 0, '1 2 3');
+    expect(controller.refreshGuiValues(), 1);
+    expect(controller.guiValueOf(node.id), '1 2 3', reason: 'every word');
+    expect(controller.refreshGuiValues(), 0, reason: 'nothing new');
+
+    // A click sends the replaced message without changing it, and the
+    // arguments the patch saves stay the creation text.
+    controller.setControlBang(node.id, inlet: 0);
+    expect(controller.guiValueOf(node.id), '1 2 3');
+    expect(controller.argsOf(node.id), '0');
   });
 
   test('an unregistered type is never read', () {

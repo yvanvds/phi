@@ -100,6 +100,14 @@ its value, and holding `Shift` makes the steps finer. While you type into a numb
 `Esc` puts back the previous value. Controls follow values that arrive over
 cables, too.
 
+A **message box** shows the message it holds now, which is what a click sends.
+A list or a word message arriving on its inlet replaces that message without
+sending it, and the box shows the new message. The replacement is not saved:
+the patch keeps the text you typed, so the box shows that text again when the
+patch is reopened or when you edit its text. In this version of Phi a message
+box typed with several words keeps only the first word, and shows only that
+word. A newer engine lifts that limit.
+
 **Right-click** an object for its context menu: *duplicate* and *delete*.
 
 ## Cables

@@ -1894,7 +1894,7 @@ main + app          (orchestration)
   `.b` button (a bang → `sendBang`), `.i`/`.f` number (an editable readout that pushes
   `sendFloat` then re-reads `guiValue`, so it shows the authoritative engine value —
   a cable into its inlet would set the same), and `.m` message (its args, fired as a
-  bang on tap). Non-GUI nodes got a **double-click params dialog** — one field per
+  bang on tap; since #520 the message the engine holds). Non-GUI nodes got a **double-click params dialog** — one field per
   documented `PatchParamDescriptor` (name · doc · default · range), seeded from the
   node's current args, joined back into a positional arg string and applied through
   `setParams` as a single `SetPatchParamsCommand` on the surface `undoScope` (so the
@@ -2334,7 +2334,12 @@ main + app          (orchestration)
   gesture, `.m` is operable but displays nothing that can change from
   underneath. (`.b` joined the set in #519: its destructive `on`/`off` read is
   how a cabled bang, e.g. a `.metro` tick, flashes it; on the real engine that
-  awaits yvanvds/dart-yse#106, whose double read turns a press into `of`.) (The companion `interactiveBody` flag it was contrasted with is
+  awaits yvanvds/dart-yse#106, whose double read turns a press into `of`. `.m`
+  joined in #520: `MessageNodeBody` shows the message the engine holds, which a
+  list or word message on its inlet replaces, through a `GuiValueLink`, falling
+  back to its args only when that read is empty. The replacement is runtime
+  state: the dump keeps the creation text, so a reload or a `setParams` puts
+  it back.) (The companion `interactiveBody` flag it was contrasted with is
   gone since #378 — press ownership is the canvas's mode now.) A new
   `PatchGuiPoller` (`lib/surfaces/patcher/`) wraps the canvas and runs the ask at
   30 Hz behind three gates: the surface is the **visible tab** (the shell now

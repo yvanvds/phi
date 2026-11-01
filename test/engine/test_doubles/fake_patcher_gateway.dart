@@ -292,6 +292,9 @@ class FakePatcherGateway implements PatcherGateway {
     // it lands nowhere — the real engine drops it silently. The fake dropping
     // it too is what lets a test catch a body pushing through the wrong verb.
     if (node.type == Obj.gToggle) return;
+    // `gMessage` registers bang and list handlers only, so a number leaves the
+    // stored message alone (issue #520).
+    if (node.type == Obj.gMessage) return;
     node.lastValueByInlet[inlet] = value;
     if (inlet == 0 && node.receiveSwitchNumber(value)) return;
     if (inlet == 0 && node.receiveButtonPress()) return;
@@ -335,6 +338,7 @@ class FakePatcherGateway implements PatcherGateway {
       return;
     }
     if (inlet != 0) return;
+    if (node.type == Obj.gMessage) return;
     if (node.receiveSwitchNumber(value.toDouble())) return;
     if (node.receiveButtonPress()) return;
     // The engine's `gToggle` displays its state as `on`/`off`, not as a
@@ -821,6 +825,11 @@ class FakePatcherGateway implements PatcherGateway {
     if (node.isFunction) node.reshapeFunction();
     // A `.preset` is replaced, its slots empty (`gPreset::ShapeStore`).
     if (node.isPreset) node.reshapePreset();
+    // A `.m` re-parses its message from the new arguments (`PARM_CLEAR` then
+    // `PARM_PARSE`), dropping one a list had put there.
+    if (node.type == Obj.gMessage) {
+      node.guiCells = FakeNode._initialCells(Obj.gMessage, args);
+    }
   }
 
   /// A whole value renders without a trailing `.0` (`3` not `3.0`), matching
@@ -1423,6 +1432,12 @@ class FakeNode {
     }
     if (type == Obj.gList) {
       guiCells = [list];
+      return;
+    }
+    // A `.m` stores the list or word message silently (`gMessage::SetValue`),
+    // every word of it (issue #520).
+    if (type == Obj.gMessage) {
+      guiCells = [list.trim()];
       return;
     }
     if (!guiSettable) return;
@@ -2294,6 +2309,10 @@ class FakeNode {
       // An idle `.b` reads `off`; a press reads `on` once (`gButton`).
       case Obj.gButton:
         return ['off'];
+      // A `.m` holds its creation words, single-spaced (`gMessage`'s
+      // `PARM_PARSE`, all of them as libYSE after 3.1.0 keeps them, #521).
+      case Obj.gMessage:
+        return [args.trim().split(RegExp(r'\s+')).join(' ')];
     }
     return [''];
   }

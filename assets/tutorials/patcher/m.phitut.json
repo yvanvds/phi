@@ -153,7 +153,7 @@
           "y": "500.0",
           "w": "300"
         },
-        "parms": "4. A list or a word message arriving on the inlet replaces the stored message without sending it. Click the button: pack sends the list 1 2 3 into the message box, and nothing happens below. Now click the message box, which held 0: it sends 1 2 3, and the list box shows it.\nIn this version of Phi a message box typed with several words keeps only the first one, so this list is built with pack. A newer engine lifts that limit.",
+        "parms": "4. A list or a word message arriving on the inlet replaces the stored message without sending it. Click the button: pack sends the list 1 2 3 into the message box that showed 0. It now shows 1 2 3, and nothing happens below. Click it: it sends 1 2 3, and the list box shows it.\nIn this version of Phi a message box typed with several words keeps only the first one, so this list is built with pack. A newer engine lifts that limit.",
         "type": ".text"
       },
       "object 2": {

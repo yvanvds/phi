@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
@@ -240,8 +241,20 @@ void main() {
     final before = cells(listBox);
     await tap(find.byType(PatchBangSquare));
     expect(cells(listBox), before, reason: 'replacing sends nothing');
-    await tap(message('0'));
+    // The box itself now shows the list it holds, read through the live GUI
+    // poll (issue #520) — whole, not cut short by the box's width.
+    for (var i = 0; i < 30 && message('1 2 3').evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(message('1 2 3'), findsOneWidget, reason: 'the box shows 1 2 3');
+    expect(message('0'), findsNothing, reason: 'not its creation text');
+    expect(
+      tester.renderObject<RenderParagraph>(message('1 2 3')).didExceedMaxLines,
+      isFalse,
+    );
+    await tap(message('1 2 3'));
     expect(cells(listBox), '1 2 3', reason: 'it now sends the whole list');
+    expect(message('1 2 3'), findsOneWidget, reason: 'a click keeps it');
     await close();
 
     // ── .text: notes all the way down ───────────────────────────────────────

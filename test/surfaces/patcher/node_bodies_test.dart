@@ -399,6 +399,33 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
   });
 
+  testWidgets('a message replaced over a cable shows in the message box, '
+      'every word of it (issue #520)', (tester) async {
+    registerBuiltInPatcherNodes();
+    final node = addNode(Obj.gMessage, args: '0');
+    await pumpBody(tester, MessageNodeBody(node: node, controller: controller));
+    await poll(tester);
+    expect(find.text('0'), findsOneWidget);
+
+    // `.pack 1 2 3` into the inlet: the engine stores it, Dart hears nothing.
+    gateway.sendList(controller.instanceId, handle(), 0, '1 2 3');
+    await poll(tester);
+    expect(find.text('1 2 3'), findsOneWidget);
+    expect(find.text('0'), findsNothing);
+    expect(controller.argsOf(node.id), '0', reason: 'the saved text');
+
+    // A click sends what the box shows and keeps showing it.
+    await tester.tap(find.byType(MessageNodeBody));
+    await poll(tester);
+    expect(gateway.calls, contains('sendBang:${handle()}:0'));
+    expect(find.text('1 2 3'), findsOneWidget);
+
+    // New params put the creation text back.
+    controller.setNodeParams(node.id, '440');
+    await poll(tester);
+    expect(find.text('440'), findsOneWidget);
+  });
+
   testWidgets('a cable-driven value re-renders an idle number box', (
     tester,
   ) async {
