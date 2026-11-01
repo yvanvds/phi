@@ -201,4 +201,57 @@ void main() {
       expect(controller.guiValueCellsOf(bank.id), ['0.5']);
     });
   });
+
+  // Issue #514: the poll's read is the only one in a frame, so the body it
+  // wakes sees the value that woke it, even when that read was destructive.
+  group('whole-read cache', () {
+    test('a woken momentary .led sees the press its poll consumed', () {
+      final led = add(Obj.gLed, args: 'momentary');
+      controller.refreshGuiValues();
+      final seen = <String>[];
+      led.addListener(() => seen.add(controller.guiValueOf(led.id)));
+      final idle = gateway.wholeReads;
+
+      // A press over a cable: the engine holds it until the next read.
+      gateway.sendInt(controller.instanceId, led.id.value, 0, 1);
+
+      expect(controller.refreshGuiValues(), 1);
+      expect(seen, ['1'], reason: 'the body sees the press');
+      expect(gateway.wholeReads, idle + 1, reason: 'one read per frame');
+      expect(controller.refreshGuiValues(), 1, reason: 'cleared next frame');
+      expect(seen, ['1', '0']);
+    });
+
+    test('guiValueOf answers from the poll until a write outdates it', () {
+      final slider = add(Obj.gSlider);
+      native(slider).guiValue = '0.5';
+      controller.refreshGuiValues();
+      final reads = gateway.wholeReads;
+
+      expect(controller.guiValueOf(slider.id), '0.5');
+      expect(gateway.wholeReads, reads, reason: 'from the poll');
+
+      controller.setControlValue(slider.id, inlet: 0, value: 0.25);
+      expect(controller.guiValueOf(slider.id), '0.25', reason: 're-read');
+      expect(controller.guiValueOf(slider.id), '0.25');
+      expect(gateway.wholeReads, reads + 1, reason: 'then remembered');
+      expect(controller.refreshGuiValues(), 0, reason: 'already shown');
+    });
+
+    test('a node never polled is read once, then answered from memory', () {
+      final dial = add(Obj.gDial);
+      native(dial).guiValue = '0.3';
+      expect(controller.guiValueOf(dial.id), '0.3');
+      expect(controller.guiValueOf(dial.id), '0.3');
+      expect(gateway.wholeReads, 1);
+    });
+
+    test('new params outdate the remembered value', () {
+      final text = add(Obj.gTextedit, args: 'hello');
+      expect(controller.guiValueOf(text.id), 'hello');
+      native(text).guiValue = 'bye';
+      controller.setNodeParams(text.id, 'bye');
+      expect(controller.guiValueOf(text.id), 'bye');
+    });
+  });
 }

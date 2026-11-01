@@ -36,7 +36,10 @@ class GuiValueLink {
   int _revision;
 
   /// The engine's current display value for the bound node — what a body seeds
-  /// from and what it snaps back to when an edit is abandoned.
+  /// from and what it snaps back to when an edit is abandoned. It is the read
+  /// that woke the body, not a fresh one (issue #514), so a destructive read (a
+  /// momentary press) reaches the body intact; a body re-reads after its own
+  /// write simply by asking again.
   String get value => _controller.guiValueOf(_node.id);
 
   /// Follow the body's widget onto a different [node].

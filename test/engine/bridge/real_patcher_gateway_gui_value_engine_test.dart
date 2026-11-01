@@ -22,5 +22,10 @@ void main() {
     if (engineUp) System.instance.close();
   });
 
-  guiValueProtocolContract(RealPatcherGateway.new);
+  guiValueProtocolContract(
+    RealPatcherGateway.new,
+    // The wrapper reads the native value twice (a length query, then the
+    // fill), so the press is consumed before Dart sees it.
+    pressReadSkip: 'yvanvds/dart-yse#106: the wrapper consumes the press',
+  );
 }

@@ -251,6 +251,7 @@ class FakePatcherGateway implements PatcherGateway {
     // it too is what lets a test catch a body pushing through the wrong verb.
     if (node.type == Obj.gToggle) return;
     node.lastValueByInlet[inlet] = value;
+    if (inlet == 0 && node.receiveSwitchNumber(value)) return;
     // A `.dial` stores its position clamped to 0–1, as `gDial::Store` does.
     if (node.type == Obj.gDial && inlet == 0) {
       node.guiValue = _formatGui(value.clamp(0.0, 1.0));
@@ -269,6 +270,7 @@ class FakePatcherGateway implements PatcherGateway {
     if (node == null) return;
     node.lastValueByInlet[inlet] = value.toDouble();
     if (inlet != 0) return;
+    if (node.receiveSwitchNumber(value.toDouble())) return;
     // The engine's `gToggle` displays its state as `on`/`off`, not as a
     // number (issue #439) — the fake reports the same strings so a body that
     // only parses digits fails here the way it fails against libyse.
@@ -283,18 +285,26 @@ class FakePatcherGateway implements PatcherGateway {
     final node = _inst(instanceId).nodes[handleId];
     if (node == null) return;
     node.bangedInlets.add(inlet);
-    // A latching `.led` / `.textbutton` flips on a bang (`gLabelSwitchBase`).
-    // Momentary presses are not modelled.
-    if (inlet == 0 &&
-        (node.type == Obj.gLed || node.type == Obj.gTextbutton) &&
-        !node.args.trim().startsWith('momentary')) {
-      node.guiValue = node.guiValue == '1' ? '0' : '1';
+    // A latching `.led` / `.textbutton` flips on a bang; a momentary one
+    // takes it as a press (`gLabelSwitchBase`).
+    if (inlet == 0 && node.isLabelSwitch) {
+      node.guiValue = node.isMomentary || node.guiValue != '1' ? '1' : '0';
     }
   }
 
+  /// A momentary `.led` / `.textbutton`'s read is **destructive**, as libYSE's
+  /// is (`gLabelSwitchBase`'s `GUI_VALUE`): it reports a pending press as `1`
+  /// and clears it in the same call, so a second read in the same frame says
+  /// `0` (issue #514). Reading [FakeNode.guiValue] directly in a test is a
+  /// look, not a consume.
   @override
-  String guiValue(int instanceId, int handleId) =>
-      _inst(instanceId).nodes[handleId]?.guiValue ?? '';
+  String guiValue(int instanceId, int handleId) {
+    final node = _inst(instanceId).nodes[handleId];
+    if (node == null) return '';
+    final value = node.guiValue;
+    node.consumePress();
+    return value;
+  }
 
   @override
   void sendList(int instanceId, int handleId, int inlet, String list) {
@@ -315,9 +325,12 @@ class FakePatcherGateway implements PatcherGateway {
 
   @override
   String guiValueAt(int instanceId, int handleId, int index) {
-    final cells = _inst(instanceId).nodes[handleId]?.guiCells;
+    final node = _inst(instanceId).nodes[handleId];
+    final cells = node?.guiCells;
     if (cells == null || index < 0 || index >= cells.length) return '';
-    return cells[index];
+    final value = cells[index];
+    node!.consumePress();
+    return value;
   }
 
   @override
@@ -659,6 +672,29 @@ class FakeNode {
   /// simulate a cable-driven change, which makes it a one-cell state.
   String get guiValue => guiCells.join(' ');
   set guiValue(String value) => guiCells = [value];
+
+  /// Whether this is a `.led` / `.textbutton` (`gLabelSwitchBase`).
+  bool get isLabelSwitch => type == Obj.gLed || type == Obj.gTextbutton;
+
+  /// Whether this label switch was made `momentary` — its leading creation
+  /// argument — so it registers presses rather than holding a state.
+  bool get isMomentary =>
+      isLabelSwitch && args.trim().split(RegExp(r'\s+')).first == 'momentary';
+
+  /// Model a number landing on a label switch's inlet 0: a momentary one takes
+  /// any number as a press, a latching one stores it as on (non-zero) / off.
+  /// Returns whether the node was a label switch (and so handled it).
+  bool receiveSwitchNumber(double value) {
+    if (!isLabelSwitch) return false;
+    guiValue = isMomentary || value != 0 ? '1' : '0';
+    return true;
+  }
+
+  /// Clear a momentary label switch's pending press — what the engine does on
+  /// every read of its GUI state. A no-op for anything else.
+  void consumePress() {
+    if (isMomentary) guiCells = ['0'];
+  }
 
   /// Every list (and selector message) sent to the object, in order, keyed by
   /// inlet.

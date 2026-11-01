@@ -130,10 +130,16 @@ class PatcherController {
   /// so a delete's undo (and a duplicate) recreate the object identically.
   final Map<PatchNodeId, String> _argsByNode = {};
 
-  /// Logical node id → the `guiValue` [refreshGuiValues] last read for it, so
-  /// the poll wakes a node only when the engine reports something *new*. A node
-  /// absent from the map counts as the empty display a fresh object has, so a
-  /// value that arrived before the first poll still registers as a change.
+  /// Logical node id → the `guiValue` last read for a [GuiValueRead.whole]
+  /// node, so the poll wakes a node only when the engine reports something
+  /// *new*. A node absent from the map counts as the empty display a fresh
+  /// object has, so a value that arrived before the first poll still registers
+  /// as a change.
+  ///
+  /// It is also what [guiValueOf] answers from (issue #514): the body a poll
+  /// wakes must see the value that woke it, not read the engine a second time
+  /// in the same frame — a momentary `.led` / `.textbutton` reports a press
+  /// once and clears it, so that second read would always say idle.
   final Map<PatchNodeId, String> _guiValueByNode = {};
 
   /// Logical node id → the cells [refreshGuiValues] last read for a
@@ -146,10 +152,11 @@ class PatcherController {
   /// ([setGuiCellWindow]); a node without one is read in full.
   final Map<PatchNodeId, (int, int)> _guiCellWindowByNode = {};
 
-  /// Nodes whose cached cells a write through this controller has outdated —
-  /// the next cell accessor re-reads them rather than answering the pre-write
-  /// state (the next poll then settles them without a second wake-up).
-  final Set<PatchNodeId> _guiCellsStale = {};
+  /// Nodes whose cached GUI state (whole value or cells) a write through this
+  /// controller has outdated — the next accessor re-reads them rather than
+  /// answering the pre-write state (the next poll then settles them without a
+  /// second wake-up).
+  final Set<PatchNodeId> _guiValueStale = {};
 
   /// Logical node id → its **decoration** GUI properties ([PatchGuiProperty]:
   /// a note's width today), mirrored here so a spec can carry them through
@@ -462,7 +469,7 @@ class PatcherController {
     _guiValueByNode.clear();
     _guiCellsByNode.clear();
     _guiCellWindowByNode.clear();
-    _guiCellsStale.clear();
+    _guiValueStale.clear();
     _guiByNode.clear();
 
     final snapshot = _gateway.enumerate(instanceId);
@@ -602,7 +609,7 @@ class PatcherController {
     final native = _nativeByNode[id];
     if (native == null) return;
     _gateway.sendFloat(instanceId, native, inlet, value);
-    _guiCellsStale.add(id);
+    _guiValueStale.add(id);
   }
 
   /// Drop an **integer** control value into a node's inlet — used by the
@@ -613,7 +620,7 @@ class PatcherController {
     final native = _nativeByNode[id];
     if (native == null) return;
     _gateway.sendInt(instanceId, native, inlet, value);
-    _guiCellsStale.add(id);
+    _guiValueStale.add(id);
   }
 
   /// Bang a node's inlet — used by trigger-style control bodies (`.b`,
@@ -623,7 +630,7 @@ class PatcherController {
     final native = _nativeByNode[id];
     if (native == null) return;
     _gateway.sendBang(instanceId, native, inlet);
-    _guiCellsStale.add(id);
+    _guiValueStale.add(id);
   }
 
   /// Send a list (`0.2 0.8`) into a node's inlet — the multi-value controls'
@@ -636,7 +643,7 @@ class PatcherController {
     final native = _nativeByNode[id];
     if (native == null) return;
     _gateway.sendList(instanceId, native, inlet, list);
-    _guiCellsStale.add(id);
+    _guiValueStale.add(id);
   }
 
   /// Send a selector message (`inc`, `store 3`, `clear`) into a node's inlet
@@ -649,23 +656,30 @@ class PatcherController {
     final native = _nativeByNode[id];
     if (native == null) return;
     _gateway.sendMessage(instanceId, native, inlet, message);
-    _guiCellsStale.add(id);
+    _guiValueStale.add(id);
   }
 
   /// The live GUI display value of a node (`guiValue`) — what a control body
   /// (`.slider`, `.f`, `.i`, `.t`) shows. Empty for a node with no native
   /// handle or no display value.
   ///
-  /// For a [GuiValueRead.cells] node this is its cells joined by spaces (the
-  /// spelling `guiValue` itself uses), answered from the per-cell read rather
-  /// than a second, whole-state read — the engine's one-read-form rule.
+  /// Answered from the last read — [refreshGuiValues]'s, normally — and read
+  /// now (and remembered) only when there is none yet or a write through this
+  /// controller has outdated it, so a woken body never reads the engine a
+  /// second time in the same frame (issue #514): some reads are destructive.
+  /// For a [GuiValueRead.cells] node it is the cells joined by spaces (the
+  /// spelling `guiValue` itself uses), from the per-cell read rather than a
+  /// whole-state one — the engine's one-read-form rule.
   String guiValueOf(PatchNodeId id) {
     final native = _nativeByNode[id];
     if (native == null) return '';
     if (_guiValueReadOf(id) == GuiValueRead.cells) {
       return guiValueCellsOf(id).join(' ');
     }
-    return _gateway.guiValue(instanceId, native);
+    final cached = _guiValueByNode[id];
+    if (cached != null && !_guiValueStale.contains(id)) return cached;
+    _guiValueStale.remove(id);
+    return _guiValueByNode[id] = _gateway.guiValue(instanceId, native);
   }
 
   // ─── GUI value protocol, per cell (issue #469) ──────────────────────
@@ -676,10 +690,10 @@ class PatcherController {
   /// hold the last value read for them (`''` if never read).
   List<String> guiValueCellsOf(PatchNodeId id) {
     final cached = _guiCellsByNode[id];
-    if (cached != null && !_guiCellsStale.contains(id)) return cached;
+    if (cached != null && !_guiValueStale.contains(id)) return cached;
     final native = _nativeByNode[id];
     if (native == null) return const [];
-    _guiCellsStale.remove(id);
+    _guiValueStale.remove(id);
     return _guiCellsByNode[id] = List.unmodifiable(
       _readCells(id, native, cached ?? const []),
     );
@@ -723,7 +737,7 @@ class PatcherController {
     final native = _nativeByNode[id];
     if (native == null) return false;
     final sent = _gateway.restoreGuiValue(instanceId, native, state);
-    if (sent) _guiCellsStale.add(id);
+    if (sent) _guiValueStale.add(id);
     return sent;
   }
 
@@ -734,7 +748,7 @@ class PatcherController {
     final native = _nativeByNode[id];
     if (native == null) return false;
     final sent = _gateway.setGuiValueAt(instanceId, native, index, value);
-    if (sent) _guiCellsStale.add(id);
+    if (sent) _guiValueStale.add(id);
     return sent;
   }
 
@@ -874,9 +888,13 @@ class PatcherController {
   /// nothing at all while it is not.
   ///
   /// Two economies keep an idle patch free: only [_readsGuiValue] nodes are
-  /// read, and only a value different from the last one seen raises
+  /// read, and only a value different from the last one seen — or the first
+  /// read after a write through this controller — raises
   /// [PatchNode.markGuiValueChanged]. A patch nobody is driving therefore
   /// repaints nothing, however long the poll runs.
+  ///
+  /// This read is the frame's only one for a [GuiValueRead.whole] node: the
+  /// body it wakes answers from it through [guiValueOf] (issue #514).
   ///
   /// If the gateway ever grows a cheaper change signal (a per-object dirty flag
   /// from `dart-yse`), it swaps in behind this one method — the surface, the
@@ -889,10 +907,16 @@ class PatcherController {
         if (_refreshCells(node)) woken++;
         continue;
       }
-      final value = guiValueOf(node.id);
+      final native = _nativeByNode[node.id];
+      if (native == null) continue;
+      final value = _gateway.guiValue(instanceId, native);
       final previous = _guiValueByNode[node.id] ?? '';
       _guiValueByNode[node.id] = value;
-      if (previous == value) continue;
+      // A write nobody has read back since leaves the body showing its own
+      // optimistic guess, which the engine may have overruled — so the read
+      // after it wakes the node even when it matches the last one.
+      final written = _guiValueStale.remove(node.id);
+      if (previous == value && !written) continue;
       node.markGuiValueChanged();
       woken++;
     }
@@ -911,7 +935,7 @@ class PatcherController {
       _readCells(node.id, native, previous),
     );
     _guiCellsByNode[node.id] = cells;
-    _guiCellsStale.remove(node.id);
+    _guiValueStale.remove(node.id);
     if (listEquals(previous, cells)) return false;
     node.markGuiValueChanged();
     return true;
@@ -1384,6 +1408,9 @@ class PatcherController {
     if (native == null) return const [];
     _gateway.setParams(instanceId, native, args);
     _argsByNode[id] = args;
+    // New arguments can mean a new state (a `.textedit`'s text, a label
+    // switch's mode), so the remembered read no longer stands.
+    _guiValueStale.add(id);
     final dropped = _resyncShape(id, native);
     graph.nodeById(id)?.markParamsChanged();
     return dropped;
@@ -1545,7 +1572,7 @@ class PatcherController {
     _guiValueByNode.remove(id);
     _guiCellsByNode.remove(id);
     _guiCellWindowByNode.remove(id);
-    _guiCellsStale.remove(id);
+    _guiValueStale.remove(id);
     _guiByNode.remove(id);
   }
 

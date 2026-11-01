@@ -10,7 +10,15 @@ import 'package:yse/yse.dart';
 ///
 /// Values are compared as numbers: the engine spells a float `0.25` or `0.`,
 /// the fake `0.25` or `0`, and no caller depends on the spelling.
-void guiValueProtocolContract(PatcherGateway Function() makeGateway) {
+///
+/// [pressReadSkip], when set, skips the check that a momentary control's
+/// pending press reads as `1` — for a gateway that cannot report one yet (the
+/// real one, until yvanvds/dart-yse#106 reads the native value only once). The
+/// check that the read then clears the press runs regardless.
+void guiValueProtocolContract(
+  PatcherGateway Function() makeGateway, {
+  String? pressReadSkip,
+}) {
   late PatcherGateway gateway;
   late int inst;
 
@@ -158,6 +166,31 @@ void guiValueProtocolContract(PatcherGateway Function() makeGateway) {
       expect(gateway.guiValue(inst, lamp), '1');
       gateway.sendInt(inst, lamp, 0, 0);
       expect(gateway.guiValue(inst, lamp), '0');
+    });
+  }
+
+  for (final type in [Obj.gLed, Obj.gTextbutton]) {
+    // The engine's momentary read is destructive (issue #514): a press is
+    // reported once, then cleared, so a host must read it once per frame.
+    test('a momentary $type reports a press once, then idle', () {
+      final lamp = gateway.createObject(inst, type, args: 'momentary go');
+      expect(gateway.guiValue(inst, lamp), '0');
+      gateway.sendInt(inst, lamp, 0, 1);
+      expect(gateway.guiValue(inst, lamp), '1', reason: 'the press');
+      expect(gateway.guiValue(inst, lamp), '0', reason: 'consumed');
+      gateway.sendBang(inst, lamp, 0);
+      expect(gateway.guiValueAt(inst, lamp, 0), '1', reason: 'a bang too');
+      expect(gateway.guiValueAt(inst, lamp, 0), '0', reason: 'consumed');
+    }, skip: pressReadSkip);
+
+    test('a read of a momentary $type clears its press', () {
+      final lamp = gateway.createObject(inst, type, args: 'momentary go');
+      gateway.sendInt(inst, lamp, 0, 0);
+      gateway.guiValue(inst, lamp);
+      expect(gateway.guiValue(inst, lamp), '0');
+      gateway.sendBang(inst, lamp, 0);
+      gateway.guiValueAt(inst, lamp, 0);
+      expect(gateway.guiValueAt(inst, lamp, 0), '0');
     });
   }
 

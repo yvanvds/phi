@@ -242,4 +242,69 @@ void main() {
     session.dispose();
     await engine.dispose();
   });
+
+  testWidgets('a momentary .textbutton flashes when a press arrives over a '
+      'cable in run mode (issue #514)', (tester) async {
+    final patcherGateway = FakePatcherGateway();
+    final engine = PhiEngine(
+      FakeYseGateway(),
+      patcherGateway: patcherGateway,
+      telemetryInterval: const Duration(milliseconds: 20),
+    );
+    final session = SessionState();
+
+    await tester.pumpWidget(PhiApp(engine: engine, session: session));
+    await tester.pumpAndSettle();
+    await tester.tap(railFor(SurfaceId.patcher));
+    await tester.pumpAndSettle();
+
+    final patcher = engine.patcher;
+    final d = NodeTypeRegistry.instance.find(Obj.gTextbutton)!;
+    final button = patcher.addNode(
+      desc: NodeDescriptor(
+        type: d.type,
+        defaultSize: d.defaultSize,
+        defaultArgs: 'momentary go',
+        inputs: d.inputs,
+        outputs: d.outputs,
+        buildBody: d.buildBody,
+        readsGuiValue: d.readsGuiValue,
+        guiValueRead: d.guiValueRead,
+      ),
+      position: const Offset(60, 60),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<PatcherCanvas>(find.byType(PatcherCanvas)).mode,
+      PatchCanvasMode.run,
+    );
+
+    bool pressed() =>
+        tester.widget<PatchTextButton>(find.byType(PatchTextButton)).pressed;
+    expect(find.text('go'), findsOneWidget);
+    expect(pressed(), isFalse);
+
+    // A press lands on the native object the way a cable delivers one — the
+    // canvas is told nothing, and the engine reports it to exactly one read.
+    patcherGateway.sendInt(patcher.instanceId, button.id.value, 0, 1);
+
+    // The live poller picks it up; watch frame by frame, since the flash is
+    // brief by design.
+    var flashed = false;
+    for (var i = 0; i < 50 && !flashed; i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+      flashed = pressed();
+    }
+    expect(flashed, isTrue, reason: 'the inbound press lit the button');
+
+    // ...and only for a moment: the press was consumed, so it goes dark.
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    expect(pressed(), isFalse);
+
+    session.dispose();
+    await engine.dispose();
+  });
 }
