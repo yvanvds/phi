@@ -6,12 +6,14 @@ import 'package:phi/app.dart';
 import 'package:phi/design/widgets/fader/phi_fader.dart';
 import 'package:phi/design/widgets/patcher/patch_dial_knob.dart';
 import 'package:phi/design/widgets/patcher/patch_incdec_stepper.dart';
+import 'package:phi/design/widgets/patcher/patch_keyboard.dart';
 import 'package:phi/design/widgets/patcher/patch_led_lamp.dart';
 import 'package:phi/design/widgets/patcher/patch_list_box.dart';
 import 'package:phi/design/widgets/patcher/patch_menu_box.dart';
 import 'package:phi/design/widgets/patcher/patch_radio_group.dart';
 import 'package:phi/design/widgets/patcher/patch_range_bar.dart';
 import 'package:phi/design/widgets/patcher/patch_slider_bank.dart';
+import 'package:phi/design/widgets/patcher/patch_staff.dart';
 import 'package:phi/design/widgets/patcher/patch_tab_strip.dart';
 import 'package:phi/design/widgets/patcher/patch_text_button.dart';
 import 'package:phi/design/widgets/patcher/patch_text_edit_box.dart';
@@ -20,6 +22,7 @@ import 'package:phi/domain/patcher/patch_node.dart';
 import 'package:phi/domain/patcher/patch_port.dart';
 import 'package:phi/domain/patcher/patch_port_id.dart';
 import 'package:phi/domain/patcher/patch_port_kind.dart';
+import 'package:phi/domain/patcher/staff_note.dart';
 import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/bridge/patcher_node_snapshot.dart';
 import 'package:phi/engine/engine.dart';
@@ -673,6 +676,177 @@ void main() {
     expect(bars(), hasLength(6));
     expect(bars().first, closeTo(0.1, 1e-9));
     expect(listShows(), '10 20 30 40 50 60');
+    expect(tester.takeException(), isNull);
+
+    session.dispose();
+    await engine.dispose();
+  });
+
+  testWidgets('a .kslider key pressed in run mode sends pitch and velocity '
+      'into two .i, and a .nslider drags its note (issue #473)', (
+    tester,
+  ) async {
+    final patcherGateway = FakePatcherGateway()
+      // The engine's `.i`: one inlet, one outlet — so it can be wired.
+      ..topologyOverrides[Obj.gInt] = const PatcherNodeSnapshot(
+        inputs: 1,
+        outputs: 1,
+        inputKinds: [PatchPortKind.control],
+        outputKinds: [PatchPortKind.control],
+      );
+    final engine = PhiEngine(
+      FakeYseGateway(),
+      patcherGateway: patcherGateway,
+      telemetryInterval: const Duration(milliseconds: 20),
+    );
+    final session = SessionState();
+
+    await tester.pumpWidget(PhiApp(engine: engine, session: session));
+    await tester.pumpAndSettle();
+    await tester.tap(railFor(SurfaceId.patcher));
+    await tester.pumpAndSettle();
+
+    // An empty canvas: the demo seed would sit over the controls under test.
+    final patcher = engine.patcher;
+    for (final id in patcher.graph.nodes.map((n) => n.id).toList()) {
+      patcher.removeNode(id);
+    }
+    await tester.pumpAndSettle();
+
+    PatchNode gui(String type, Offset position, {String args = ''}) {
+      final d = NodeTypeRegistry.instance.find(type)!;
+      return patcher.addNode(
+        desc: NodeDescriptor(
+          type: d.type,
+          defaultSize: d.defaultSize,
+          sizeForArgs: d.sizeForArgs,
+          defaultArgs: args,
+          inputs: d.inputs,
+          outputs: d.outputs,
+          buildBody: d.buildBody,
+          readsGuiValue: d.readsGuiValue,
+          guiValueRead: d.guiValueRead,
+        ),
+        position: position,
+      );
+    }
+
+    void wire(PatchNode from, int outlet, PatchNode to) => patcher.connect(
+      PatchPortId(nodeId: from.id, side: PatchPortSide.output, index: outlet),
+      PatchPortId(nodeId: to.id, side: PatchPortSide.input, index: 0),
+    );
+
+    final keys = gui(Obj.gKslider, const Offset(30, 30));
+    final pitch = gui(Obj.gInt, const Offset(30, 160));
+    final velocity = gui(Obj.gInt, const Offset(160, 160));
+    final staff = gui(Obj.gNslider, const Offset(360, 30), args: '36 96');
+    final staffPitch = gui(Obj.gInt, const Offset(360, 220));
+    wire(keys, 0, pitch);
+    wire(keys, 1, velocity);
+    wire(staff, 0, staffPitch);
+    await tester.pumpAndSettle();
+
+    // ─── both render as their controls ────────────────────────────────────
+    expect(find.byType(PatchKeyboard), findsOneWidget);
+    expect(find.byType(PatchStaff), findsOneWidget);
+    expect(tester.takeException(), isNull, reason: 'nothing overflows');
+
+    // The controller keys each node by its native handle.
+    int handleOf(PatchNode node) => node.id.value;
+    String shows(PatchNode number) => tester
+        .widget<TextField>(
+          find.descendant(
+            of: find.byWidgetPredicate(
+              (w) => w is NumberNodeBody && identical(w.node, number),
+            ),
+            matching: find.byType(TextField),
+          ),
+        )
+        .controller!
+        .text;
+    PatchKeyboard keyboard() =>
+        tester.widget<PatchKeyboard>(find.byType(PatchKeyboard));
+    StaffNote staffNote() =>
+        tester.widget<PatchStaff>(find.byType(PatchStaff)).note;
+
+    /// The centre of [pitch]'s key, at fraction [y] down the keyboard.
+    Offset keyAt(int pitch, double y) {
+      final box = tester.getRect(find.byType(PatchKeyboard));
+      final b = keyboard().layout.boundsOf(pitch);
+      return box.topLeft +
+          Offset(box.width * (b.left + b.right) / 2, box.height * y);
+    }
+
+    // ─── edit mode: pressing a key plays nothing ──────────────────────────
+    patcherGateway.calls.clear();
+    await tester.tapAt(keyAt(62, 0.5));
+    await tester.pumpAndSettle();
+    expect(
+      patcherGateway.calls.where((c) => c.startsWith('sendList')),
+      isEmpty,
+    );
+
+    // ─── run mode ─────────────────────────────────────────────────────────
+    await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<PatcherCanvas>(find.byType(PatcherCanvas)).mode,
+      PatchCanvasMode.run,
+    );
+
+    // Hold D4 low on the key: a loud note-on reaches both `.i`.
+    final press = await tester.startGesture(keyAt(62, 0.85));
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pump();
+    final held = keyboard().held;
+    expect(held.keys, [62]);
+    expect(held[62], greaterThan(100), reason: 'lower down is louder');
+    expect(patcherGateway.nodes[handleOf(pitch)]!.guiValue, '62');
+    expect(patcherGateway.nodes[handleOf(velocity)]!.guiValue, '${held[62]}');
+    expect(shows(pitch), '62');
+    expect(shows(velocity), '${held[62]}');
+
+    // Lift: velocity 0, the release, follows the note down the cable.
+    await press.up();
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    expect(keyboard().held, isEmpty);
+    expect(shows(velocity), '0');
+    expect(shows(pitch), '62');
+
+    // ─── a note sent in down a cable lights its key ───────────────────────
+    patcherGateway.sendList(patcher.instanceId, handleOf(keys), 0, '67 50');
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    expect(keyboard().held, {67: 50});
+    expect(shows(pitch), '67');
+
+    // ─── the staff: drag the note up, into a connected `.i` ───────────────
+    patcherGateway.sendInt(patcher.instanceId, handleOf(staff), 0, 60);
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    expect(staffNote(), StaffNote.of(60, 0));
+    expect(shows(staffPitch), '60');
+
+    final box = tester.getRect(find.byType(PatchStaff));
+    final drag = await tester.startGesture(box.center);
+    for (var i = 0; i < 5; i++) {
+      await drag.moveBy(const Offset(0, -6));
+      await tester.pump();
+    }
+    await drag.up();
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    final raised = int.parse(shows(staffPitch));
+    expect(raised, greaterThan(60));
+    expect(patcherGateway.nodes[handleOf(staff)]!.guiCells.first, '$raised');
+    expect(staffNote().step, greaterThan(StaffNote.middleC));
+
+    // A note sent in shows with its spelling.
+    patcherGateway.sendList(patcher.instanceId, handleOf(staff), 0, '70 -1');
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    expect(staffNote(), StaffNote.of(70, -1), reason: 'B flat');
     expect(tester.takeException(), isNull);
 
     session.dispose();

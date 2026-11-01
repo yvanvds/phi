@@ -2809,6 +2809,27 @@ main + app          (orchestration)
   tests, `multi_value_slider_bodies_test.dart`, and a `patcher_node_gui`
   integration case (a `.multislider` drawn in run mode sends its bank down
   outlet 0 into a `.l`; inert in edit mode; a cable-driven resize re-lays it).
+- **Keyboard and staff bodies** (issue #473) — `.kslider`
+  (`KsliderNodeBody` over `PatchKeyboard`, a horizontal piano keyboard) and
+  `.nslider` (`NsliderNodeBody` over `PatchStaff`, a grand staff with one note
+  head, its accidental, ledger lines and an ottava mark past the window). Both
+  are polled **per cell**: the keyboard's 128 velocity cells only across the
+  keys it shows (`setGuiCellWindow`), the staff's pitch and accidental. The
+  keyboard's visible range and an optional fixed press velocity are decoration
+  (`PatchGuiProperty.keyLow` / `keyHigh` / `keyVelocity`), not engine state. A
+  press sends `set <pitch> <velocity>` (louder lower down the key), a slide
+  releases and replays (`KeyboardGesture`), a lift sends velocity 0; held keys
+  light from the cells, so cable-driven notes show. Dragging the staff sends
+  the pitch as an int inside `minimum maximum` (`StaffDrag`, `NsliderArgs`).
+  Geometry is pure Dart: `KeyboardLayout`, `StaffNote`, and
+  `domain/midi/midi_pitch.dart` (`MidiPitch`: black keys, diatonic staff step).
+  `FakePatcherGateway` models both objects (stored velocity, `set`, `clear`,
+  the 128-number restore, spelling, bounds, velocity-before-pitch and
+  accidental-before-pitch sends), pinned to the engine by the shared contract.
+  Covered by domain unit tests, `keyboard_staff_bodies_test.dart`, and a
+  `patcher_node_gui` integration case (a key pressed in run mode sends pitch
+  and velocity into two `.i`; inert in edit mode; a staff drag reaches a `.i`;
+  cable-driven notes show on both).
 - Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
   switched off for now, issue #447)
 

@@ -387,6 +387,103 @@ void guiValueProtocolContract(
     expect(numbers(cellsOf(bank)), [7, 8, 9]);
   });
 
+  // ─── the keyboard and the staff (issue #473) ─────────────────────────
+
+  test('a .kslider plays a bare pitch at its stored velocity', () {
+    final keys = gateway.createObject(inst, Obj.gKslider, args: '90');
+    final pitch = listen(keys, 0, Obj.gInt);
+    final velocity = listen(keys, 1, Obj.gInt);
+
+    gateway.sendInt(inst, keys, 0, 60);
+    expect(gateway.guiValueAt(inst, keys, 60), '90');
+    expect(gateway.guiValue(inst, pitch), '60');
+    expect(gateway.guiValue(inst, velocity), '90');
+
+    // Inlet 1 stores a velocity for later pitches and sends nothing.
+    gateway.sendInt(inst, keys, 1, 30);
+    expect(gateway.guiValue(inst, pitch), '60');
+    gateway.sendFloat(inst, keys, 0, 64.7);
+    expect(gateway.guiValueAt(inst, keys, 64), '30', reason: 'truncated');
+    expect(gateway.guiValue(inst, pitch), '64');
+    expect(gateway.guiValue(inst, velocity), '30');
+
+    // Velocity 0 releases.
+    gateway.sendList(inst, keys, 0, '60 0');
+    expect(gateway.guiValueAt(inst, keys, 60), '0');
+    expect(gateway.guiValue(inst, velocity), '0');
+  });
+
+  test('a .kslider cell write plays that key and sends it', () {
+    final keys = gateway.createObject(inst, Obj.gKslider);
+    final pitch = listen(keys, 0, Obj.gInt);
+    final velocity = listen(keys, 1, Obj.gInt);
+
+    expect(gateway.setGuiValueAt(inst, keys, 72, '200'), isTrue);
+    expect(gateway.guiValueAt(inst, keys, 72), '127', reason: 'clamped');
+    expect(gateway.guiValue(inst, pitch), '72');
+    expect(gateway.guiValue(inst, velocity), '127');
+
+    // A `set` leaves the stored velocity alone: a bare pitch still plays 100.
+    gateway.sendInt(inst, keys, 0, 48);
+    expect(gateway.guiValueAt(inst, keys, 48), '100');
+
+    expect(gateway.setGuiValueAt(inst, keys, 72, '0'), isTrue);
+    expect(gateway.guiValueAt(inst, keys, 72), '0');
+    expect(gateway.guiValue(inst, pitch), '72');
+    expect(gateway.guiValue(inst, velocity), '0');
+  });
+
+  test('a .kslider holds several keys, and clear releases them all', () {
+    final keys = gateway.createObject(inst, Obj.gKslider);
+    final velocity = listen(keys, 1, Obj.gInt);
+    gateway.sendList(inst, keys, 0, '60 80');
+    gateway.sendList(inst, keys, 0, '64 90');
+    gateway.sendInt(inst, keys, 0, 200);
+    expect(gateway.guiValueCount(inst, keys), 128);
+    final held = {
+      for (final (i, c) in cellsOf(keys).indexed)
+        if (c != '0') i: c,
+    };
+    expect(held, {60: '80', 64: '90'}, reason: 'off the keyboard: dropped');
+
+    gateway.sendMessage(inst, keys, 0, 'clear');
+    expect(cellsOf(keys).every((c) => c == '0'), isTrue);
+    expect(gateway.guiValue(inst, velocity), '0');
+  });
+
+  test('a .nslider stores a pitch and spells it', () {
+    final staff = gateway.createObject(inst, Obj.gNslider, args: '36 96 -1');
+    final pitch = listen(staff, 0, Obj.gInt);
+    final accidental = listen(staff, 1, Obj.gInt);
+    expect(gateway.guiValueCount(inst, staff), 2);
+    expect(gateway.guiValueIsSettable(inst, staff), isTrue);
+    expect(numbers(cellsOf(staff)), [36, 0], reason: 'the bottom of its range');
+
+    gateway.sendInt(inst, staff, 0, 61);
+    expect(numbers(cellsOf(staff)), [61, -1], reason: 'spelled flat');
+    expect(gateway.guiValue(inst, pitch), '61');
+    expect(gateway.guiValue(inst, accidental), '-1');
+
+    gateway.sendList(inst, staff, 0, '61 1');
+    expect(numbers(cellsOf(staff)), [61, 1]);
+    expect(gateway.guiValue(inst, accidental), '1');
+
+    gateway.sendInt(inst, staff, 0, 63);
+    expect(numbers(cellsOf(staff)), [63, -1], reason: 'the key is unchanged');
+
+    gateway.sendInt(inst, staff, 0, 10);
+    expect(numbers(cellsOf(staff)), [36, 0], reason: 'clamped');
+    expect(gateway.guiValue(inst, pitch), '36');
+
+    expect(gateway.setGuiValueAt(inst, staff, 0, '66'), isTrue);
+    expect(numbers(cellsOf(staff)), [66, -1]);
+    expect(gateway.setGuiValueAt(inst, staff, 1, '1'), isTrue);
+    expect(numbers(cellsOf(staff)), [66, 1]);
+    expect(gateway.guiValue(inst, pitch), '66', reason: 'a set sends too');
+    // A live re-range is deferred to the audio thread in the engine (the
+    // scalar plan), so it is not pinned here.
+  });
+
   test('an unknown handle answers the empty protocol', () {
     expect(gateway.guiValueCount(inst, 999), 0);
     expect(gateway.guiValueAt(inst, 999, 0), '');

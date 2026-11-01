@@ -258,6 +258,11 @@ class FakePatcherGateway implements PatcherGateway {
       _multiValueSliderNumber(instanceId, handleId, inlet, value);
       return;
     }
+    if (node.isKeyboard || node.isStaff) {
+      node.lastValueByInlet[inlet] = value;
+      _musicalNumber(instanceId, handleId, inlet, value);
+      return;
+    }
     // Model the engine's uncoerced inlet dispatch (issue #439): `gToggle`
     // registers int and bang handlers but **no float one**, so a float sent at
     // it lands nowhere — the real engine drops it silently. The fake dropping
@@ -290,6 +295,10 @@ class FakePatcherGateway implements PatcherGateway {
       _multiValueSliderNumber(instanceId, handleId, inlet, value.toDouble());
       return;
     }
+    if (node.isKeyboard || node.isStaff) {
+      _musicalNumber(instanceId, handleId, inlet, value.toDouble());
+      return;
+    }
     if (inlet != 0) return;
     if (node.receiveSwitchNumber(value.toDouble())) return;
     // The engine's `gToggle` displays its state as `on`/`off`, not as a
@@ -313,6 +322,9 @@ class FakePatcherGateway implements PatcherGateway {
     if (inlet == 0 && node.isMultiValueSlider) {
       _emitMultiValueSlider(instanceId, handleId);
     }
+    // A `.kslider` re-sends what it holds; a `.nslider` re-sends its note.
+    if (inlet == 0 && node.isKeyboard) node.bangKeyboard();
+    _emitMusical(instanceId, handleId, inlet: inlet);
     // A latching `.led` / `.textbutton` flips on a bang; a momentary one
     // takes it as a press (`gLabelSwitchBase`).
     if (inlet == 0 && node.isLabelSwitch) {
@@ -345,6 +357,7 @@ class FakePatcherGateway implements PatcherGateway {
     if (inlet == 0 && (node?.isMultiValueSlider ?? false)) {
       _emitMultiValueSlider(instanceId, handleId);
     }
+    _emitMusical(instanceId, handleId, inlet: inlet);
   }
 
   @override
@@ -359,6 +372,7 @@ class FakePatcherGateway implements PatcherGateway {
     if (inlet == 0 && (node?.isMultiValueSlider ?? false)) {
       _emitMultiValueSlider(instanceId, handleId);
     }
+    _emitMusical(instanceId, handleId, inlet: inlet);
   }
 
   /// A number landing on an item list (`gItemListBase::FloatIn`): on inlet 0
@@ -400,6 +414,48 @@ class FakePatcherGateway implements PatcherGateway {
   ) {
     _inst(instanceId).nodes[handleId]!.receiveSliderNumber(inlet, value);
     if (inlet == 0) _emitMultiValueSlider(instanceId, handleId);
+  }
+
+  /// A number landing on a `.kslider` or `.nslider`, then whatever it sends.
+  void _musicalNumber(int instanceId, int handleId, int inlet, double value) {
+    final node = _inst(instanceId).nodes[handleId]!;
+    if (node.isKeyboard) {
+      node.receiveKeyboardNumber(inlet, value);
+    } else {
+      node.receiveStaffNumber(inlet, value);
+    }
+    _emitMusical(instanceId, handleId, inlet: inlet);
+  }
+
+  /// Model what a `.kslider` or `.nslider` sends after a message on [inlet],
+  /// each value delivered down every cable from its outlet as an int:
+  ///
+  /// - `.kslider`: every note it played, in order, velocity on outlet 1 before
+  ///   pitch on outlet 0 (`gKSlider::Emit`). Inlet 1 plays nothing.
+  /// - `.nslider`: after **every** message on its one (hot) inlet, the
+  ///   accidental on outlet 1, then the pitch on outlet 0 (`CALC`).
+  void _emitMusical(int instanceId, int handleId, {int inlet = 0}) {
+    final inst = _inst(instanceId);
+    final node = inst.nodes[handleId];
+    if (node == null || !(node.isKeyboard || node.isStaff)) return;
+    void deliver(int outlet, int value) {
+      for (final c in [...inst.cables]) {
+        if (c.fromHandleId == handleId && c.outlet == outlet) {
+          sendInt(instanceId, c.toHandleId, c.inlet, value);
+        }
+      }
+    }
+
+    if (node.isKeyboard) {
+      for (final (pitch, velocity) in node.takeNotes()) {
+        deliver(1, velocity);
+        deliver(0, pitch);
+      }
+      return;
+    }
+    if (inlet != 0) return;
+    deliver(1, int.parse(node.guiCells[1]));
+    deliver(0, int.parse(node.guiCells[0]));
   }
 
   /// Model a multi-value slider's send (`CALC`), right to left as the engine
@@ -493,6 +549,9 @@ class FakePatcherGateway implements PatcherGateway {
     // apply on the way out at once, and a `.multislider`'s `size` becomes its
     // live count, values kept.
     if (node.isMultiValueSlider) node.reconfigureSlider();
+    // So do the keyboard and the staff: a new `velocity`, or new bounds the
+    // held pitch is pulled into at once.
+    if (node.isKeyboard || node.isStaff) node.reconfigureMusical();
   }
 
   /// A whole value renders without a trailing `.0` (`3` not `3.0`), matching
@@ -680,6 +739,22 @@ class FakePatcherGateway implements PatcherGateway {
           inputKinds: [PatchPortKind.control],
           outputKinds: [PatchPortKind.control, PatchPortKind.control],
         );
+      // Pitch and velocity in; pitch and velocity out (issue #473).
+      case Obj.gKslider:
+        return const PatcherNodeSnapshot(
+          inputs: 2,
+          outputs: 2,
+          inputKinds: [PatchPortKind.control, PatchPortKind.control],
+          outputKinds: [PatchPortKind.control, PatchPortKind.control],
+        );
+      // One hot inlet; pitch and accidental out (issue #473).
+      case Obj.gNslider:
+        return const PatcherNodeSnapshot(
+          inputs: 1,
+          outputs: 2,
+          inputKinds: [PatchPortKind.control],
+          outputKinds: [PatchPortKind.control, PatchPortKind.control],
+        );
       // One hot inlet; index, item name and whole selection out (issue #471).
       case Obj.gUmenu:
       case Obj.gRadiogroup:
@@ -815,6 +890,7 @@ class FakeNode {
       _bankSize = MultisliderArgs.parse(args).size;
       _publishSlider();
     }
+    if (isKeyboard || isStaff) reconfigureMusical();
   }
   final String type;
 
@@ -981,7 +1057,15 @@ class FakeNode {
   /// settable) stores the list as its one cell.
   void receiveList(int inlet, String list) {
     listsByInlet.putIfAbsent(inlet, () => []).add(list);
+    if (isKeyboard) {
+      _receiveKeyboardList(inlet, list);
+      return;
+    }
     if (inlet != 0) return;
+    if (isStaff) {
+      _receiveStaffList(list);
+      return;
+    }
     if (type == Obj.gIncdec && _stepIncdec(list.trim())) return;
     if (isItemList) {
       _receiveItemList(list);
@@ -1195,6 +1279,194 @@ class FakeNode {
       }
     }
     _publishSlider();
+  }
+
+  // ─── the keyboard and the staff (issue #473) ────────────────────────
+
+  /// Whether this is a `.kslider`: 128 cells, the velocity held on each key.
+  bool get isKeyboard => type == Obj.gKslider;
+
+  /// Whether this is a `.nslider`: two cells, a pitch and its accidental.
+  bool get isStaff => type == Obj.gNslider;
+
+  /// `.kslider`'s stored velocity — the `velocity` param, or what inlet 1 or a
+  /// `<pitch> <velocity>` pair last set.
+  int _keyVelocity = 100;
+
+  /// Notes the keyboard has played and not yet sent, `(pitch, velocity)` in
+  /// order — drained by the gateway, which sends each down its cables.
+  final List<(int, int)> _pendingNotes = [];
+
+  /// The notes played since the last call, in order.
+  List<(int, int)> takeNotes() {
+    final notes = [..._pendingNotes];
+    _pendingNotes.clear();
+    return notes;
+  }
+
+  /// `.nslider`'s stored pitch (bounded when stored) and chosen accidental (0
+  /// for "the default spelling").
+  int _staffPitch = 0;
+  int _staffAccidental = 0;
+
+  /// The keyboard's or staff's params changed (`setParams`), or it was made.
+  void reconfigureMusical() {
+    final parts = args.trim().isEmpty
+        ? const <String>[]
+        : args.trim().split(RegExp(r'\s+'));
+    int read(int i, int fallback) => i < parts.length
+        ? num.tryParse(parts[i])?.truncate() ?? fallback
+        : fallback;
+    if (isKeyboard) {
+      _keyVelocity = _boundVelocity(read(0, 100));
+      return;
+    }
+    _publishStaff();
+  }
+
+  static int _boundVelocity(int v) => v.clamp(0, 127);
+
+  /// `gKSlider::Play`: a pitch on the keyboard takes [velocity] (bounded) and
+  /// is sent; one off it is dropped.
+  void _play(int pitch, int velocity) {
+    if (pitch < 0 || pitch >= 128) return;
+    final bounded = _boundVelocity(velocity);
+    guiCells = [...guiCells]..[pitch] = '$bounded';
+    _pendingNotes.add((pitch, bounded));
+  }
+
+  /// A number on the keyboard's [inlet]: inlet 0 plays that pitch at the
+  /// stored velocity, inlet 1 stores the velocity and sends nothing.
+  void receiveKeyboardNumber(int inlet, double value) {
+    final n = value.truncate();
+    if (inlet == 0) {
+      _play(n, _keyVelocity);
+    } else {
+      _keyVelocity = _boundVelocity(n);
+    }
+  }
+
+  /// A bang on the keyboard re-sends every held key, ascending.
+  void bangKeyboard() {
+    for (var p = 0; p < 128; p++) {
+      final v = int.parse(guiCells[p]);
+      if (v != 0) _pendingNotes.add((p, v));
+    }
+  }
+
+  /// `gKSlider::ListIn`.
+  void _receiveKeyboardList(int inlet, String list) {
+    final tokens = list.trim().split(RegExp(r'\s+'));
+    if (tokens.first.isEmpty) return;
+    final numbers = [for (final t in tokens) ?num.tryParse(t)];
+    if (inlet != 0) {
+      if (numbers.isNotEmpty) {
+        _keyVelocity = _boundVelocity(numbers[0].truncate());
+      }
+      return;
+    }
+    if (tokens.first == 'set') {
+      if (numbers.length < 2 || !(numbers[0] >= 0)) return;
+      _play(numbers[0].truncate(), numbers[1].truncate());
+      return;
+    }
+    if (tokens.first == 'clear') {
+      for (var p = 0; p < 128; p++) {
+        if (guiCells[p] == '0') continue;
+        guiCells = [...guiCells]..[p] = '0';
+        _pendingNotes.add((p, 0));
+      }
+      return;
+    }
+    if (numbers.length == 128) {
+      // The whole keyboard: only the keys that moved are sent.
+      for (var p = 0; p < 128; p++) {
+        final wanted = _boundVelocity(numbers[p].truncate());
+        if ('$wanted' == guiCells[p]) continue;
+        guiCells = [...guiCells]..[p] = '$wanted';
+        _pendingNotes.add((p, wanted));
+      }
+      return;
+    }
+    if (numbers.length == 1) {
+      _play(numbers[0].truncate(), _keyVelocity);
+    } else if (numbers.length == 2) {
+      _keyVelocity = _boundVelocity(numbers[1].truncate());
+      _play(numbers[0].truncate(), _keyVelocity);
+    }
+  }
+
+  /// `gNSlider`'s bounds: `minimum maximum`, sorted and kept inside MIDI.
+  int _boundPitch(int value) {
+    final parts = args.trim().isEmpty
+        ? const <String>[]
+        : args.trim().split(RegExp(r'\s+'));
+    int read(int i, int fallback) => i < parts.length
+        ? num.tryParse(parts[i])?.truncate() ?? fallback
+        : fallback;
+    final a = read(0, 0).clamp(0, 127);
+    final b = read(1, 127).clamp(0, 127);
+    return value.clamp(a < b ? a : b, a < b ? b : a);
+  }
+
+  int get _staffSpelling {
+    final parts = args.trim().isEmpty
+        ? const <String>[]
+        : args.trim().split(RegExp(r'\s+'));
+    return parts.length > 2 ? num.tryParse(parts[2])?.truncate() ?? 1 : 1;
+  }
+
+  /// Re-render the staff's two cells (`gNSlider::Pitch` / `Accidental`).
+  void _publishStaff() {
+    final pitch = _boundPitch(_staffPitch);
+    const black = {1, 3, 6, 8, 10};
+    final accidental = !black.contains(pitch % 12)
+        ? 0
+        : _staffAccidental > 0
+        ? 1
+        : _staffAccidental < 0
+        ? -1
+        : (_staffSpelling < 0 ? -1 : 1);
+    guiCells = ['$pitch', '$accidental'];
+  }
+
+  /// A number on the staff: the pitch, spelled the default way.
+  void receiveStaffNumber(int inlet, double value) {
+    if (inlet != 0) return;
+    _staffPitch = _boundPitch(value.truncate());
+    _staffAccidental = 0;
+    _publishStaff();
+  }
+
+  /// `gNSlider::ListIn`: `set 0 <pitch>`, `set 1 <accidental>`, or
+  /// `<pitch> [<accidental>]`.
+  void _receiveStaffList(String list) {
+    final tokens = list.trim().split(RegExp(r'\s+'));
+    if (tokens.first == 'set') {
+      final numbers = [for (final t in tokens.skip(1)) num.tryParse(t)];
+      if (numbers.length < 2 || numbers[0] == null || numbers[1] == null) {
+        return;
+      }
+      final index = numbers[0]!;
+      if (!(index >= 0) || index >= 2) return;
+      if (index.truncate() == 0) {
+        _staffPitch = _boundPitch(numbers[1]!.truncate());
+      } else {
+        _staffAccidental = numbers[1]!.truncate();
+      }
+      _publishStaff();
+      return;
+    }
+    final numbers = <num>[];
+    for (final t in tokens.take(2)) {
+      final n = num.tryParse(t);
+      if (n == null) break;
+      numbers.add(n);
+    }
+    if (numbers.isEmpty) return;
+    _staffAccidental = numbers.length >= 2 ? numbers[1].truncate() : 0;
+    _staffPitch = _boundPitch(numbers[0].truncate());
+    _publishStaff();
   }
 
   /// Objects whose GUI value the engine does not accept back.

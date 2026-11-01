@@ -76,6 +76,14 @@ abstract final class PatchObjectTypes {
   /// `Obj.gMultislider` — a bank of sliders, one cell each (issue #472).
   static const String gMultislider = '.multislider';
 
+  /// `Obj.gKslider` — a piano keyboard, the velocity held on each of its 128
+  /// keys (issue #473).
+  static const String gKslider = '.kslider';
+
+  /// `Obj.gNslider` — a note on a staff, its pitch and accidental
+  /// (issue #473).
+  static const String gNslider = '.nslider';
+
   /// Every id above, for the drift guard.
   static const List<String> all = [
     dSine,
@@ -98,5 +106,7 @@ abstract final class PatchObjectTypes {
     gRslider,
     gXyslider,
     gMultislider,
+    gKslider,
+    gNslider,
   ];
 }

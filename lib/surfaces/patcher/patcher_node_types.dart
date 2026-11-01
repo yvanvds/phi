@@ -14,10 +14,12 @@ import 'nodes/button_node_body.dart';
 import 'nodes/dial_node_body.dart';
 import 'nodes/incdec_node_body.dart';
 import 'nodes/item_list_node_body.dart';
+import 'nodes/kslider_node_body.dart';
 import 'nodes/label_switch_node_body.dart';
 import 'nodes/list_node_body.dart';
 import 'nodes/message_node_body.dart';
 import 'nodes/multislider_node_body.dart';
+import 'nodes/nslider_node_body.dart';
 import 'nodes/number_node_body.dart';
 import 'nodes/range_slider_node_body.dart';
 import 'nodes/slider_node_body.dart';
@@ -403,7 +405,66 @@ void registerBuiltInPatcherNodes() {
       guiValueRead: GuiValueRead.cells,
     ),
   );
+
+  // ─── libYSE 3.0 keyboard and staff (issue #473) ────────────────────────
+  // The two musical controls. A `.kslider`'s GUI value is 128 cells, one
+  // velocity per key, and a `.nslider`'s two, pitch and accidental; both are
+  // polled per cell, the keyboard only across the keys it shows.
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gKslider,
+      // Three octaves of white keys at a playable width, C3 to C6.
+      defaultSize: const Size(_keyboardWidth, _keyboardHeight),
+      defaultArgs: '',
+      inputs: const [
+        PortSpec(kind: PatchPortKind.control),
+        PortSpec(kind: PatchPortKind.control, label: 'velocity'),
+      ],
+      outputs: const [
+        PortSpec(kind: PatchPortKind.control, label: 'pitch'),
+        PortSpec(kind: PatchPortKind.control, label: 'velocity'),
+      ],
+      buildBody: (ctx, node, controller) =>
+          KsliderNodeBody(node: node, controller: controller),
+      readsGuiValue: true,
+      guiValueRead: GuiValueRead.cells,
+    ),
+  );
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gNslider,
+      // A grand staff: tall enough for both staves and their ledger lines.
+      defaultSize: Size(
+        math.max(_staffWidth, PatchCanvasConstants.minWidthForPorts(2)),
+        _staffHeight,
+      ),
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [
+        PortSpec(kind: PatchPortKind.control, label: 'pitch'),
+        PortSpec(kind: PatchPortKind.control, label: 'accidental'),
+      ],
+      buildBody: (ctx, node, controller) =>
+          NsliderNodeBody(node: node, controller: controller),
+      readsGuiValue: true,
+      guiValueRead: GuiValueRead.cells,
+    ),
+  );
 }
+
+/// A `.kslider` at creation: 22 white keys (C3–C6) at 12 px (issue #473).
+const double _keyboardWidth = 264;
+
+/// Height of a `.kslider` — long enough to play by depth.
+const double _keyboardHeight = 60;
+
+/// Width of a `.nslider` staff (issue #473).
+const double _staffWidth = 72;
+
+/// Height of a `.nslider`: 30 half-spaces at 4.5 px.
+const double _staffHeight = 135;
 
 /// Side of a `.xyslider` pad (issue #472).
 const double _xyPadSize = 120;

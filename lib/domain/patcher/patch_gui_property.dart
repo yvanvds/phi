@@ -22,6 +22,24 @@ abstract final class PatchGuiProperty {
   /// Absent on a note that keeps the plain paper look.
   static const String background = 'bg';
 
+  /// The lowest pitch a `.kslider` keyboard shows (issue #473). Absent on a
+  /// keyboard showing its default range. The object itself always holds all
+  /// 128 keys; this is only how much of it is drawn.
+  static const String keyLow = 'lo';
+
+  /// The highest pitch a `.kslider` keyboard shows (issue #473).
+  static const String keyHigh = 'hi';
+
+  /// A fixed velocity (1–127) every `.kslider` press plays at (issue #473).
+  /// Absent, a press plays louder the lower down the key it lands.
+  static const String keyVelocity = 'kv';
+
   /// Every decoration key a reload reads back from the engine.
-  static const List<String> decoration = [width, background];
+  static const List<String> decoration = [
+    width,
+    background,
+    keyLow,
+    keyHigh,
+    keyVelocity,
+  ];
 }
