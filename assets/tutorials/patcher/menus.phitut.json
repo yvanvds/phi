@@ -1,0 +1,596 @@
+{
+  "title": "umenu, radiogroup and tab — choosing from named items",
+  "covers": [
+    ".umenu",
+    ".radiogroup",
+    ".tab"
+  ],
+  "summary": "Select named items by number and by name in a menu, radio buttons and tabs, read their three outlets, and mix waveforms with multi check boxes.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# umenu, radiogroup and tab — choosing from named items\nThese three are one object drawn three ways: umenu as a pop-up menu, radiogroup as radio buttons or check boxes, tab as a row of tabs. Their arguments are the item names, and they answer the same messages.\nMax's umenu gets its items from messages such as append and clear, and its radiogroup only counts its buttons. Here the items are the arguments and stay fixed while the patch runs, and all three select by number or by name in the same way.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "140.0"
+        },
+        "parms": "2",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "2": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 3
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "400.0"
+        },
+        "parms": "1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "220.0",
+          "y": "380.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "220.0",
+          "y": "430.0"
+        },
+        "parms": "1 0 1",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "460.0"
+        },
+        "parms": "multi sine saw noise",
+        "type": ".radiogroup",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "Count": 0
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "570.0"
+        },
+        "parms": "0 0 0",
+        "type": ".unpack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 20
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 1,
+              "Object": 21
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 1,
+              "Object": 22
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "200.0",
+          "y": "570.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "300.0",
+          "y": "570.0"
+        },
+        "parms": "",
+        "type": ".l",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "60.0",
+          "y": "630.0"
+        },
+        "parms": "220",
+        "type": "~sine",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "170.0",
+          "y": "630.0"
+        },
+        "parms": "220",
+        "type": "~saw",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 21
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "280.0",
+          "y": "630.0"
+        },
+        "parms": "",
+        "type": "~noise",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "140.0"
+        },
+        "parms": "saw",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "2": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 3
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "60.0",
+          "y": "690.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 23
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "170.0",
+          "y": "690.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 23
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "280.0",
+          "y": "690.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 24
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "60.0",
+          "y": "750.0"
+        },
+        "parms": "",
+        "type": "~+",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 24
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "60.0",
+          "y": "810.0"
+        },
+        "parms": "",
+        "type": "~+",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 25
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "60.0",
+          "y": "870.0"
+        },
+        "parms": "0.1",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 26
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 26
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "60.0",
+          "y": "930.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 27": {
+        "ID": 27,
+        "gui": {
+          "x": "580.0",
+          "y": "130.0",
+          "w": "300"
+        },
+        "parms": "1. Click 2, then saw. All three controls select the third item: items count from 0, and a number or an item name selects the same way. A bang sends the selection again.",
+        "type": ".text"
+      },
+      "object 28": {
+        "ID": 28,
+        "gui": {
+          "x": "580.0",
+          "y": "230.0",
+          "w": "300"
+        },
+        "parms": "2. Every message sends from three outlets, right to left: the whole state, the item's name, then its number. The boxes under the menu show them. For a single choice the state is just the number again.",
+        "type": ".text"
+      },
+      "object 29": {
+        "ID": 29,
+        "gui": {
+          "x": "580.0",
+          "y": "330.0",
+          "w": "300"
+        },
+        "parms": "3. Pick saw or noise from the menu with the mouse: the boxes follow. The radiogroup and the tab are separate objects, so clicking them changes only themselves. A number outside the list, or a name that is not an item, is ignored.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "2": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 3
+          }
+        }
+      },
+      "object 30": {
+        "ID": 30,
+        "gui": {
+          "x": "580.0",
+          "y": "460.0",
+          "w": "300"
+        },
+        "parms": "4. With multi first, radiogroup multi draws check boxes, and several items can be on at once. Here they choose which waveforms play on the master bus. Tick sine, saw and noise and listen.",
+        "type": ".text"
+      },
+      "object 31": {
+        "ID": 31,
+        "gui": {
+          "x": "580.0",
+          "y": "570.0",
+          "w": "300"
+        },
+        "parms": "5. In multi mode the state is one 0 or 1 per item, and unpack spreads it over three gains. A number toggles that item: click 1 to switch saw on and off. A list sets every box: the button sends pack's list 1 0 1.",
+        "type": ".text"
+      },
+      "object 32": {
+        "ID": 32,
+        "gui": {
+          "x": "580.0",
+          "y": "690.0",
+          "w": "300"
+        },
+        "parms": "6. The number outlet sends the item that just changed, or after a list the lowest item that is on. Each gain is 0 or 1, and ~* 0.1 keeps the mix quiet.",
+        "type": ".text"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "200.0"
+        },
+        "parms": "sine saw noise",
+        "type": ".umenu",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "220.0",
+          "y": "200.0"
+        },
+        "parms": "sine saw noise",
+        "type": ".radiogroup",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          },
+          "output 1": {
+            "Count": 0
+          },
+          "output 2": {
+            "Count": 0
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "360.0",
+          "y": "200.0"
+        },
+        "parms": "sine saw noise",
+        "type": ".tab",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          },
+          "output 1": {
+            "Count": 0
+          },
+          "output 2": {
+            "Count": 0
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "310.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "150.0",
+          "y": "310.0"
+        },
+        "parms": "",
+        "type": ".l",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "270.0",
+          "y": "310.0"
+        },
+        "parms": "",
+        "type": ".l",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      }
+    }
+  }
+}

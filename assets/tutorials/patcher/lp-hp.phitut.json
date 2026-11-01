@@ -1,0 +1,307 @@
+{
+  "title": "~lp and ~hp — lowpass and highpass",
+  "covers": [
+    "~lp",
+    "~hp"
+  ],
+  "summary": "Sweep the cutoff of a lowpass and a highpass on noise from a slider, and compare what each keeps.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# ~lp and ~hp — lowpass and highpass\nA ~lp lets the frequencies below its cutoff through and turns down those above; a ~hp does the opposite. Both are single-pole filters with a gentle slope, 6 dB per octave. The argument is the cutoff in Hz, and a float on the right inlet changes it.\nMax builds these with onepole~ or biquad~, which take the cutoff as a signal or a number. Here the cutoff is a number, and only a float: an int is ignored.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "320.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "200.0",
+          "y": "320.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": "~+",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "480.0"
+        },
+        "parms": "0.3",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 14
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "540.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "560.0",
+          "y": "150.0",
+          "w": "300"
+        },
+        "parms": "1. Turn on the left toggle: noise through ~lp, on the master bus. Drag the slider to sweep the cutoff from 0 to 5000 Hz, shown in the f box. Low, a dull rumble. High, nearly the whole hiss.",
+        "type": ".text"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "560.0",
+          "y": "280.0",
+          "w": "300"
+        },
+        "parms": "2. Turn it off and turn on the right toggle: the same noise through ~hp at the same cutoff. It keeps what ~lp throws away: at a low cutoff ~lp leaves a rumble and ~hp nearly the whole hiss. Turn on both to hear the two halves together.",
+        "type": ".text"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "560.0",
+          "y": "430.0",
+          "w": "300"
+        },
+        "parms": "3. White noise carries most of its energy high up, so raising ~hp's cutoff thins it gently, while ~lp changes it a lot. The slope is gentle too, so a sweep sounds smooth rather than sharp. For a narrow band, see the ~bp tutorial.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "200.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "340.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".slider",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "400.0",
+          "y": "140.0"
+        },
+        "parms": "0.2",
+        "type": ".loadmess",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "200.0"
+        },
+        "parms": "",
+        "type": "~noise",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "260.0"
+        },
+        "parms": "1000",
+        "type": "~lp",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "200.0",
+          "y": "260.0"
+        },
+        "parms": "1000",
+        "type": "~hp",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "340.0",
+          "y": "300.0"
+        },
+        "parms": "0 1 0 5000",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "340.0",
+          "y": "360.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 6
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 7
+            },
+            "Count": 2
+          }
+        }
+      }
+    }
+  }
+}

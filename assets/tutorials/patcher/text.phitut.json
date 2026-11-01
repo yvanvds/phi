@@ -1,0 +1,139 @@
+{
+  "title": "text — notes",
+  "covers": [
+    ".text"
+  ],
+  "summary": "What notes are for, that they have no ports, and how to write, format and edit one.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "620"
+        },
+        "parms": "# text — notes\nA note is a comment on the canvas, like this one. It explains a patch to whoever opens it next, and is saved with the patch. Max calls this a comment.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "40.0",
+          "y": "130.0",
+          "w": "320"
+        },
+        "parms": "1. A note has no inlets or outlets. It takes part in nothing: the patch runs the same with or without it.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "40.0",
+          "y": "210.0",
+          "w": "320"
+        },
+        "parms": "2. To write one, type text followed by your words into the object box (press N, or double-click empty canvas). Shift+Enter starts a new line, and Enter creates the note.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "40.0",
+          "y": "320.0",
+          "w": "320"
+        },
+        "parms": "3. A line that starts with # and a space is a heading, like the one at the top.\nLong text wraps. In edit mode, drag a note's right edge to make it wider or narrower.",
+        "type": ".text"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "40.0",
+          "y": "430.0",
+          "w": "320"
+        },
+        "parms": "4. Double-click a note in edit mode to change its text. A tutorial is read-only: copy it to your project to try.",
+        "type": ".text"
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "420.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "420.0",
+          "y": "200.0"
+        },
+        "parms": "500",
+        "type": ".metro",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "420.0",
+          "y": "260.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "420.0",
+          "y": "320.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "520.0",
+          "y": "130.0",
+          "w": "200"
+        },
+        "parms": "Notes as documentation: this toggle starts a metro, and the counter under it counts its ticks, two a second.",
+        "type": ".text"
+      }
+    }
+  }
+}

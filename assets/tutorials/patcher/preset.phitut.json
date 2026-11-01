@@ -1,0 +1,480 @@
+{
+  "title": "preset — snapshots of a patch",
+  "covers": [
+    ".preset"
+  ],
+  "summary": "Recall three stored control states by number and by click, store your own, and see that empty slots send nothing and slots are saved with the patch.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# preset — snapshots of a patch\nA preset keeps the values of a patch's controls in numbered slots and puts them back on recall. Its argument is how many slots it has. store <n> captures every control in the patch into slot n, a number recalls a slot, and the slots are saved with the patch.\nMax's preset counts slots from 1, and can be limited to the objects wired to its left outlet. Here slots count from 0, and every control in the patch is captured.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "250.0",
+          "y": "430.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 11
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "250.0",
+          "y": "490.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "560.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "170.0",
+          "y": "560.0"
+        },
+        "parms": "1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "280.0",
+          "y": "560.0"
+        },
+        "parms": "2",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "390.0",
+          "y": "560.0"
+        },
+        "parms": "5",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "500.0",
+          "y": "560.0"
+        },
+        "parms": "3",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "500.0",
+          "y": "620.0"
+        },
+        "parms": "store",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "60.0",
+          "y": "680.0"
+        },
+        "parms": "8",
+        "type": ".preset",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "Count": 1
+          }
+        },
+        "state": {
+          "active": -1,
+          "slots": [
+            {
+              "objects": [
+                {
+                  "object": 1,
+                  "type": ".t",
+                  "value": "on"
+                },
+                {
+                  "object": 2,
+                  "type": ".i",
+                  "value": "45"
+                },
+                {
+                  "object": 3,
+                  "type": ".slider",
+                  "value": "0.200000"
+                }
+              ],
+              "slot": 0
+            },
+            {
+              "objects": [
+                {
+                  "object": 1,
+                  "type": ".t",
+                  "value": "on"
+                },
+                {
+                  "object": 2,
+                  "type": ".i",
+                  "value": "57"
+                },
+                {
+                  "object": 3,
+                  "type": ".slider",
+                  "value": "0.600000"
+                }
+              ],
+              "slot": 1
+            },
+            {
+              "objects": [
+                {
+                  "object": 1,
+                  "type": ".t",
+                  "value": "on"
+                },
+                {
+                  "object": 2,
+                  "type": ".i",
+                  "value": "52"
+                },
+                {
+                  "object": 3,
+                  "type": ".slider",
+                  "value": "0.900000"
+                }
+              ],
+              "slot": 2
+            }
+          ]
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "60.0",
+          "y": "740.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "250.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "190.0",
+          "y": "740.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "640.0",
+          "y": "130.0",
+          "w": "300"
+        },
+        "parms": "1. A saw on the master bus: the toggle turns it on, the number box sets its note, and the slider its lowpass cutoff. Try them.",
+        "type": ".text"
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "640.0",
+          "y": "230.0",
+          "w": "300"
+        },
+        "parms": "2. Three slots were stored before this tutorial was saved, and they came back with it: the filled squares. Click 0, 1 and 2, or click the squares. Toggle, note and slider jump to what each slot holds, and send on as if moved by hand.",
+        "type": ".text"
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "640.0",
+          "y": "560.0",
+          "w": "300"
+        },
+        "parms": "3. After a recall the left outlet sends the slot number, once every value is back in place. Click 5: an empty slot sends nothing and changes nothing.",
+        "type": ".text"
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "640.0",
+          "y": "680.0",
+          "w": "300"
+        },
+        "parms": "4. Store your own: set the controls, then click 3, which prepend turns into store 3, or Shift+click a square. The right outlet sends the slot just stored. Alt+click empties a slot. Save the patch and its slots are saved with it.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "440.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".slider",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "200.0"
+        },
+        "parms": "0 1 0 0.15",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "250.0",
+          "y": "200.0"
+        },
+        "parms": "",
+        "type": ".mtof",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "340.0",
+          "y": "200.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "250.0",
+          "y": "260.0"
+        },
+        "parms": "",
+        "type": "~saw",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "440.0",
+          "y": "310.0"
+        },
+        "parms": "0 1 200 4000",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "250.0",
+          "y": "370.0"
+        },
+        "parms": "1000",
+        "type": "~lp",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

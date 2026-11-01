@@ -12,8 +12,8 @@ import 'package:yse/yse.dart';
 /// Values are compared as numbers: the engine spells a float `0.25` or `0.`,
 /// the fake `0.25` or `0`, and no caller depends on the spelling.
 ///
-/// [pressReadSkip], when set, skips the check that a momentary control's
-/// pending press reads as `1` — for a gateway that cannot report one yet (the
+/// [pressReadSkip], when set, skips the checks that a momentary control's
+/// pending press reads as `1` (a `.b`'s as `on`) — for a gateway that cannot report one yet (the
 /// real one, until yvanvds/dart-yse#106 reads the native value only once). The
 /// check that the read then clears the press runs regardless.
 void guiValueProtocolContract(
@@ -124,6 +124,45 @@ void guiValueProtocolContract(
     expect(gateway.guiValueIsSettable(inst, list), isFalse);
   });
 
+  // A `.m` holds a message a list or a word message replaces silently
+  // (issue #520); the patch saves only its creation text.
+  test('a .m reports the message it holds, replaced whole from its inlet', () {
+    final box = gateway.createObject(inst, Obj.gMessage, args: '0');
+    expect(gateway.guiValue(inst, box), '0');
+    gateway.sendList(inst, box, 0, '1 2 3');
+    expect(gateway.guiValue(inst, box), '1 2 3', reason: 'every word');
+    expect(gateway.guiValue(inst, box), '1 2 3', reason: 'not consumed');
+    expect(cellsOf(box), ['1 2 3'], reason: 'one cell, the whole message');
+    gateway.sendInt(inst, box, 0, 5);
+    gateway.sendFloat(inst, box, 0, 2.5);
+    expect(gateway.guiValue(inst, box), '1 2 3', reason: 'no number handler');
+    gateway.sendMessage(inst, box, 0, 'stop now');
+    expect(gateway.guiValue(inst, box), 'stop now', reason: 'a word message');
+    gateway.sendBang(inst, box, 0);
+    expect(gateway.guiValue(inst, box), 'stop now', reason: 'a click keeps it');
+    expect(gateway.guiValueIsSettable(inst, box), isFalse);
+  });
+
+  test('a .m reloads with its creation text, not a replaced message', () {
+    final box = gateway.createObject(inst, Obj.gMessage, args: '0');
+    gateway.sendList(inst, box, 0, '1 2 3');
+    final copy = gateway.createInstance();
+    gateway.parseJson(copy, gateway.dumpJson(inst));
+    final reloaded = gateway
+        .enumerate(copy)
+        .objects
+        .firstWhere((o) => o.type == Obj.gMessage)
+        .handleId;
+    expect(gateway.guiValue(copy, reloaded), '0');
+  });
+
+  test('new params replace a .m\'s replaced message', () {
+    final box = gateway.createObject(inst, Obj.gMessage, args: '0');
+    gateway.sendList(inst, box, 0, '1 2 3');
+    gateway.setParams(inst, box, '440');
+    expect(gateway.guiValue(inst, box), '440');
+  });
+
   // ─── the single-value control bodies (issue #470) ──────────────────
 
   test('.incdec steps by its step argument inside a clamped range', () {
@@ -194,6 +233,31 @@ void guiValueProtocolContract(
       expect(gateway.guiValueAt(inst, lamp, 0), '0');
     });
   }
+
+  // A `.b` lights until the host next reads it (issue #519): its read is
+  // destructive, spelt `on` / `off`.
+  test('a .b reports a press once as on, then off', () {
+    final bang = gateway.createObject(inst, Obj.gButton);
+    expect(gateway.guiValue(inst, bang), 'off');
+    gateway.sendBang(inst, bang, 0);
+    expect(gateway.guiValue(inst, bang), 'on', reason: 'the press');
+    expect(gateway.guiValue(inst, bang), 'off', reason: 'consumed');
+    gateway.sendInt(inst, bang, 0, 3);
+    expect(gateway.guiValue(inst, bang), 'on', reason: 'a number too');
+    gateway.sendFloat(inst, bang, 0, 0.5);
+    expect(gateway.guiValueAt(inst, bang, 0), 'on', reason: 'per cell too');
+    expect(gateway.guiValueAt(inst, bang, 0), 'off', reason: 'consumed');
+  }, skip: pressReadSkip);
+
+  test('a read of a .b clears its press', () {
+    final bang = gateway.createObject(inst, Obj.gButton);
+    gateway.sendBang(inst, bang, 0);
+    gateway.guiValue(inst, bang);
+    expect(gateway.guiValue(inst, bang), 'off');
+    gateway.sendBang(inst, bang, 0);
+    gateway.guiValueAt(inst, bang, 0);
+    expect(gateway.guiValueAt(inst, bang, 0), 'off');
+  });
 
   test('a .textedit starts with its text and takes a whole new one back', () {
     final text = gateway.createObject(inst, Obj.gTextedit, args: 'hello world');

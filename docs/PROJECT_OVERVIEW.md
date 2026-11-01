@@ -1894,7 +1894,7 @@ main + app          (orchestration)
   `.b` button (a bang → `sendBang`), `.i`/`.f` number (an editable readout that pushes
   `sendFloat` then re-reads `guiValue`, so it shows the authoritative engine value —
   a cable into its inlet would set the same), and `.m` message (its args, fired as a
-  bang on tap). Non-GUI nodes got a **double-click params dialog** — one field per
+  bang on tap; since #520 the message the engine holds). Non-GUI nodes got a **double-click params dialog** — one field per
   documented `PatchParamDescriptor` (name · doc · default · range), seeded from the
   node's current args, joined back into a positional arg string and applied through
   `setParams` as a single `SetPatchParamsCommand` on the surface `undoScope` (so the
@@ -2331,8 +2331,15 @@ main + app          (orchestration)
   `NodeDescriptor.readsGuiValue` marks the pollable set (`.slider` · `.t` ·
   `.i`/`.f` · `~sine`); it is deliberately narrower than "the body is a live
   control", whose set only overlaps — `~sine` displays a value but takes no
-  gesture, `.b` and `.m` are operable but display nothing that can change from
-  underneath. (The companion `interactiveBody` flag it was contrasted with is
+  gesture, `.m` is operable but displays nothing that can change from
+  underneath. (`.b` joined the set in #519: its destructive `on`/`off` read is
+  how a cabled bang, e.g. a `.metro` tick, flashes it; on the real engine that
+  awaits yvanvds/dart-yse#106, whose double read turns a press into `of`. `.m`
+  joined in #520: `MessageNodeBody` shows the message the engine holds, which a
+  list or word message on its inlet replaces, through a `GuiValueLink`, falling
+  back to its args only when that read is empty. The replacement is runtime
+  state: the dump keeps the creation text, so a reload or a `setParams` puts
+  it back.) (The companion `interactiveBody` flag it was contrasted with is
   gone since #378 — press ownership is the canvas's mode now.) A new
   `PatchGuiPoller` (`lib/surfaces/patcher/`) wraps the canvas and runs the ask at
   30 Hz behind three gates: the surface is the **visible tab** (the shell now
@@ -2979,14 +2986,33 @@ main + app          (orchestration)
   bar — the surface forces run mode, refuses `Ctrl+E`, and offers no drop
   target. Shell commands **Open Patcher Tutorial…** (summons the patcher on
   the Tutorials tab) and the dev-facing **Export Patch as Tutorial…** (writes
-  the open patch in the file format via `PatchTutorialExport`). One real
-  tutorial ships (`metro`). Covered by domain unit tests, a
-  `patch_library_tutorial_test`, a real-engine
+  the open patch in the file format via `PatchTutorialExport`). Shipped
+  tutorials: `metro` (#489) and the GUI basics (#490: `b`, `t`, `slider`,
+  `number-boxes` for `.i` + `.f`, `m`, `text`) and the single-value controls
+  (#491: `dial`, `incdec`, `led`, `textbutton`, `textedit`, `l`) and the
+  selection and slider controls (#492: `menus` for `.umenu` + `.radiogroup` +
+  `.tab`, `rslider`, `xyslider`, `multislider`) and the structured controls
+  (#493: `matrixctrl`, `function`, `nodes`, `preset`, `kslider`, `nslider`;
+  `function` and `preset` ship their points and slots as saved object state
+  in the dump) and the audio basics (#494: `sine`, `saw`, `noise`, `sig-line`,
+  `adc-dac` for `~adc` + `~dac`, `signal-math` for `~+ ~- ~* ~/ ~clip`,
+  `lp-hp`, `bp-vcf`). Covered by domain unit tests, a `patch_library_tutorial_test`, a real-engine
   `patcher_tutorial_assets_engine_test` (every index entry has a file, every
   type exists in the engine, every payload parses, a report of uncovered
   types), surface/reference-panel widget tests, and an end-to-end
   `patcher_tutorial` integration test on the real patcher engine and asset
-  bundle.
+  bundle. Content issues add per-tutorial cases to the asset test that
+  replay what each tutorial's notes promise on the real engine (objects found
+  by type + canvas position), plus an end-to-end run per batch
+  (`patcher_gui_basics_tutorials`, `patcher_single_value_controls_tutorials`,
+  `patcher_selection_slider_controls_tutorials`,
+  `patcher_structured_controls_tutorials`,
+  `patcher_audio_basics_tutorials`: each opens its tutorials
+  from the Tutorials tab, plays their controls with real taps, and checks
+  that no note or object overlaps another). The audio cases mount the
+  tutorial on master and read the offline session's master meter
+  (`renderOffline` + `Channel.master.peakLinearPost`) to check what is
+  heard.
 - Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
   switched off for now, issue #447)
 

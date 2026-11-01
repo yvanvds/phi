@@ -292,8 +292,12 @@ class FakePatcherGateway implements PatcherGateway {
     // it lands nowhere — the real engine drops it silently. The fake dropping
     // it too is what lets a test catch a body pushing through the wrong verb.
     if (node.type == Obj.gToggle) return;
+    // `gMessage` registers bang and list handlers only, so a number leaves the
+    // stored message alone (issue #520).
+    if (node.type == Obj.gMessage) return;
     node.lastValueByInlet[inlet] = value;
     if (inlet == 0 && node.receiveSwitchNumber(value)) return;
+    if (inlet == 0 && node.receiveButtonPress()) return;
     // A `.dial` stores its position clamped to 0–1, as `gDial::Store` does.
     if (node.type == Obj.gDial && inlet == 0) {
       node.guiValue = _formatGui(value.clamp(0.0, 1.0));
@@ -334,7 +338,9 @@ class FakePatcherGateway implements PatcherGateway {
       return;
     }
     if (inlet != 0) return;
+    if (node.type == Obj.gMessage) return;
     if (node.receiveSwitchNumber(value.toDouble())) return;
+    if (node.receiveButtonPress()) return;
     // The engine's `gToggle` displays its state as `on`/`off`, not as a
     // number (issue #439) — the fake reports the same strings so a body that
     // only parses digits fails here the way it fails against libyse.
@@ -379,12 +385,15 @@ class FakePatcherGateway implements PatcherGateway {
     if (inlet == 0 && node.isLabelSwitch) {
       node.guiValue = node.isMomentary || node.guiValue != '1' ? '1' : '0';
     }
+    // A `.b` lights until the host next reads it (`gButton`).
+    if (inlet == 0) node.receiveButtonPress();
   }
 
   /// A momentary `.led` / `.textbutton`'s read is **destructive**, as libYSE's
   /// is (`gLabelSwitchBase`'s `GUI_VALUE`): it reports a pending press as `1`
   /// and clears it in the same call, so a second read in the same frame says
-  /// `0` (issue #514). Reading [FakeNode.guiValue] directly in a test is a
+  /// `0` (issue #514). A `.b`'s is too, spelt `on` / `off` (`gButton`,
+  /// issue #519). Reading [FakeNode.guiValue] directly in a test is a
   /// look, not a consume.
   @override
   String guiValue(int instanceId, int handleId) {
@@ -816,6 +825,11 @@ class FakePatcherGateway implements PatcherGateway {
     if (node.isFunction) node.reshapeFunction();
     // A `.preset` is replaced, its slots empty (`gPreset::ShapeStore`).
     if (node.isPreset) node.reshapePreset();
+    // A `.m` re-parses its message from the new arguments (`PARM_CLEAR` then
+    // `PARM_PARSE`), dropping one a list had put there.
+    if (node.type == Obj.gMessage) {
+      node.guiCells = FakeNode._initialCells(Obj.gMessage, args);
+    }
   }
 
   /// A whole value renders without a trailing `.0` (`3` not `3.0`), matching
@@ -1350,6 +1364,16 @@ class FakeNode {
   /// every read of its GUI state. A no-op for anything else.
   void consumePress() {
     if (isMomentary) guiCells = ['0'];
+    if (type == Obj.gButton) guiCells = ['off'];
+  }
+
+  /// Model a bang or number landing on a `.b`'s inlet: like `gButton`, it
+  /// lights (`on`) until the next read clears it. Returns whether the node was
+  /// a `.b` (and so handled it).
+  bool receiveButtonPress() {
+    if (type != Obj.gButton) return false;
+    guiValue = 'on';
+    return true;
   }
 
   /// Every list (and selector message) sent to the object, in order, keyed by
@@ -1408,6 +1432,12 @@ class FakeNode {
     }
     if (type == Obj.gList) {
       guiCells = [list];
+      return;
+    }
+    // A `.m` stores the list or word message silently (`gMessage::SetValue`),
+    // every word of it (issue #520).
+    if (type == Obj.gMessage) {
+      guiCells = [list.trim()];
       return;
     }
     if (!guiSettable) return;
@@ -2276,6 +2306,13 @@ class FakeNode {
       // A fresh `.function` holds no points, so it has no cells.
       case Obj.gFunction:
         return const [];
+      // An idle `.b` reads `off`; a press reads `on` once (`gButton`).
+      case Obj.gButton:
+        return ['off'];
+      // A `.m` holds its creation words, single-spaced (`gMessage`'s
+      // `PARM_PARSE`, all of them as libYSE after 3.1.0 keeps them, #521).
+      case Obj.gMessage:
+        return [args.trim().split(RegExp(r'\s+')).join(' ')];
     }
     return [''];
   }

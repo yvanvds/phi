@@ -1,0 +1,165 @@
+{
+  "title": "b — the button",
+  "covers": [
+    ".b"
+  ],
+  "summary": "Press a button by clicking it, by sending it a number and from a metro, and count the bangs it sends.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "560"
+        },
+        "parms": "# b — the button\nA button turns anything that reaches it into a bang. Click it, send it a number, or let a metro press it.\nIn Max, b is short for bangbang and t for trigger. Here .b is the button and .t the toggle; those two objects are .bangbang and .trigger.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "130.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "360.0",
+          "y": "360.0",
+          "w": "300"
+        },
+        "parms": "4. The counter counts every press, wherever it came from. A button is the usual way to feed bangs to objects such as counter. For now the button lights only when you click it, not when a bang reaches it over a cable; that needs an update to the engine wrapper (issue #519).",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "130.0"
+        },
+        "parms": "42",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "60.0",
+          "y": "190.0"
+        },
+        "parms": "250",
+        "type": ".metro",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "260.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "330.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "400.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "360.0",
+          "y": "120.0",
+          "w": "300"
+        },
+        "parms": "1. Click the button. It flashes and sends one bang, and the counter below it adds one.",
+        "type": ".text"
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "360.0",
+          "y": "190.0",
+          "w": "300"
+        },
+        "parms": "2. Click the message 42. Any number works like a bang: the button sends a bang, not the 42.",
+        "type": ".text"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "360.0",
+          "y": "270.0",
+          "w": "300"
+        },
+        "parms": "3. Click the toggle to start the metro. Every tick presses the button, so the counter climbs four times a second. Click the toggle again to stop it.",
+        "type": ".text"
+      }
+    }
+  }
+}

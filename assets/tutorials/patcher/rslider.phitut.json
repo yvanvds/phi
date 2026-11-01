@@ -1,0 +1,319 @@
+{
+  "title": "rslider — a range with two ends",
+  "covers": [
+    ".rslider"
+  ],
+  "summary": "Set the two ends of a range by hand and by message, see them come out sorted, and keep random values inside the range with random and scale.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# rslider — a range with two ends\nAn rslider holds two ends inside a minimum and a maximum, its two arguments: a key split, a velocity layer, a range for random notes. However the ends were set, it sends the lower one from its left outlet, the higher one from the middle, and both as a list, lower first, from the right.\nMax's rslider sets its range with the size and min attributes and has two outlets. Here minimum and maximum are arguments, and the third outlet sends both ends as one list.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "140.0"
+        },
+        "parms": "48",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "240.0",
+          "y": "380.0"
+        },
+        "parms": "",
+        "type": ".l",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "470.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "530.0"
+        },
+        "parms": "1000",
+        "type": ".random",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "590.0"
+        },
+        "parms": "0 999 36 96",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "650.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "530.0",
+          "y": "130.0",
+          "w": "300"
+        },
+        "parms": "1. Drag an end of the bar to move it, or drag the middle to slide the whole range. The boxes below show the low end, the high end and the list of both. The ends stay inside 36 to 96.",
+        "type": ".text"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "530.0",
+          "y": "240.0",
+          "w": "300"
+        },
+        "parms": "2. A number on the right inlet sets one end without sending: click 48, and nothing changes below. A number on the left inlet sets the other end and sends: click 84. Now the boxes show 48 and 84.",
+        "type": ".text"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "530.0",
+          "y": "350.0",
+          "w": "300"
+        },
+        "parms": "3. Ends set in either order come out sorted. Click the button above pack 90 40: a list sets both ends, and the rslider sends 40 low and 90 high. set 0 moves the low end and set 1 the high end: click 60, which prepend turns into set 0 60.",
+        "type": ".text"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "530.0",
+          "y": "460.0",
+          "w": "300"
+        },
+        "parms": "4. A random range. Each click of the button picks a number from 0 to 999, and scale 0 999 maps it between the two ends: the low and high outlets set scale's output range. Narrow the bar and click again: every value lands inside it.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "140.0"
+        },
+        "parms": "84",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "280.0",
+          "y": "200.0"
+        },
+        "parms": "90 40",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "390.0",
+          "y": "140.0"
+        },
+        "parms": "60",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "390.0",
+          "y": "200.0"
+        },
+        "parms": "set 0",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "200.0"
+        },
+        "parms": "36 96",
+        "type": ".rslider",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "1": {
+              "Inlet": 3,
+              "Object": 13
+            },
+            "Count": 2
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "1": {
+              "Inlet": 4,
+              "Object": 13
+            },
+            "Count": 2
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "380.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "150.0",
+          "y": "380.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      }
+    }
+  }
+}

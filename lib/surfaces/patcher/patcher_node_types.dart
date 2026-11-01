@@ -125,6 +125,9 @@ void registerBuiltInPatcherNodes() {
       outputs: const [PortSpec(kind: PatchPortKind.control)],
       buildBody: (ctx, node, controller) =>
           ButtonNodeBody(node: node, controller: controller),
+      // Polled so a press arriving over a cable (a `.metro` tick) flashes it
+      // (issue #519): the engine reports a pending press as `on`, once.
+      readsGuiValue: true,
     ),
   );
 
@@ -166,6 +169,9 @@ void registerBuiltInPatcherNodes() {
       outputs: const [PortSpec(kind: PatchPortKind.control)],
       buildBody: (ctx, node, controller) =>
           MessageNodeBody(node: node, controller: controller),
+      // Polled so a message replaced from the inlet shows in the box
+      // (issue #520): the engine reports the message it holds now.
+      readsGuiValue: true,
     ),
   );
 
@@ -176,8 +182,8 @@ void registerBuiltInPatcherNodes() {
   // the controller and follows the engine with a `GuiValueLink`, and one
   // block here. `defaultArgs` is the object's empty default — each of these
   // registers its parameters, so an empty string parses safely — and a body
-  // that shows engine state sets `readsGuiValue` (all six do: `.l`'s stored
-  // list is live state, unlike a `.m`'s arguments). One value each, so the
+  // that shows engine state sets `readsGuiValue` (all six do, as `.l` and
+  // `.m` do: a stored list or message is live state). One value each, so the
   // whole-state read (`GuiValueRead.whole`, the default) is the right one.
 
   registry.register(

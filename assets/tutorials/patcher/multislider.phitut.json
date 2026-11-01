@@ -1,0 +1,405 @@
+{
+  "title": "multislider — a bank of sliders",
+  "covers": [
+    ".multislider"
+  ],
+  "summary": "Play a bank of sliders as an eight-step sequence with counter and fetch, resize it with a list and set every cell with a number.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# multislider — a bank of sliders\nA multislider holds a row of values, such as the steps of a sequencer. Its arguments are the number of cells, then the minimum and maximum. Draw across it to set the cells. Every change sends the whole bank as a list.\nMax's multislider sets its size and range with attributes. Here they are arguments, and a list of another length resizes the bank.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "280.0",
+          "y": "440.0"
+        },
+        "parms": "8",
+        "type": ".%",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "400.0",
+          "y": "440.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "280.0",
+          "y": "500.0"
+        },
+        "parms": "fetch",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "410.0"
+        },
+        "parms": "48",
+        "type": ".+",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "170.0",
+          "y": "470.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "60.0",
+          "y": "470.0"
+        },
+        "parms": "",
+        "type": ".mtof",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "60.0",
+          "y": "530.0"
+        },
+        "parms": "",
+        "type": "~saw",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "60.0",
+          "y": "590.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 18
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "60.0",
+          "y": "650.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "280.0",
+          "y": "560.0"
+        },
+        "parms": "0 1 0 0.15",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "200.0",
+          "y": "140.0"
+        },
+        "parms": "12",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "530.0",
+          "y": "130.0",
+          "w": "300"
+        },
+        "parms": "1. loadmess fills the bank with an eight-step pattern when the patch opens: semitones from 0 to 24 above C3. Draw across the bars to change it.",
+        "type": ".text"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "530.0",
+          "y": "220.0",
+          "w": "300"
+        },
+        "parms": "2. Turn on the toggle to start the sequence on the master bus. metro counts steps with counter and % 8, and prepend fetch asks the bank for one cell at a time: fetch 0, fetch 1, and so on. Cells count from 0.",
+        "type": ".text"
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "530.0",
+          "y": "340.0",
+          "w": "300"
+        },
+        "parms": "3. The cell's value leaves the right outlet, and + 48 and mtof turn it into the saw's pitch. Every message also sends the whole bank as a list from the left outlet.",
+        "type": ".text"
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "530.0",
+          "y": "440.0",
+          "w": "300"
+        },
+        "parms": "4. A number sets every cell: click 12 for one repeated note. A list sets the cells and resizes the bank: the button above pack 0 4 7 12 sends four cells. fetch ignores a cell that is not there, so the last note holds through the other four steps. The button above loadmess brings back the pattern.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "330.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "200.0"
+        },
+        "parms": "0 3 7 10 12 10 7 3",
+        "type": ".loadmess",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "330.0",
+          "y": "200.0"
+        },
+        "parms": "0 4 7 12",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "260.0"
+        },
+        "parms": "8 0 24",
+        "type": ".multislider",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "280.0",
+          "y": "260.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "280.0",
+          "y": "320.0"
+        },
+        "parms": "250",
+        "type": ".metro",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "280.0",
+          "y": "380.0"
+        },
+        "parms": "-1",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

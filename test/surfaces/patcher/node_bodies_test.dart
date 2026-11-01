@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/widgets/fader/phi_fader.dart';
+import 'package:phi/design/widgets/patcher/patch_bang_square.dart';
 import 'package:phi/design/widgets/patcher/patch_toggle_square.dart';
 import 'package:phi/domain/patcher/patch_node.dart';
 import 'package:phi/engine/state/node_type_registry.dart';
@@ -367,6 +368,62 @@ void main() {
     driveFromEngine('0');
     await poll(tester);
     expect(on(), isFalse);
+  });
+
+  testWidgets('a bang over a cable flashes the button, once per press '
+      '(issue #519)', (tester) async {
+    registerBuiltInPatcherNodes();
+    final node = addNode(Obj.gButton);
+    await pumpBody(tester, ButtonNodeBody(node: node, controller: controller));
+
+    bool lit() =>
+        tester.widget<PatchBangSquare>(find.byType(PatchBangSquare)).flash;
+    await poll(tester);
+    expect(lit(), isFalse, reason: 'an idle button reads off');
+
+    // A `.metro` tick: the bang lands on the native object, Dart hears nothing.
+    gateway.sendBang(controller.instanceId, handle(), 0);
+    await poll(tester);
+    expect(lit(), isTrue);
+
+    // The flash is brief, and the read consumed the press: the next poll
+    // reports off and does not light it again.
+    await poll(tester);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(lit(), isFalse);
+
+    // The next tick flashes it again.
+    gateway.sendBang(controller.instanceId, handle(), 0);
+    await poll(tester);
+    expect(lit(), isTrue);
+    await tester.pump(const Duration(milliseconds: 200));
+  });
+
+  testWidgets('a message replaced over a cable shows in the message box, '
+      'every word of it (issue #520)', (tester) async {
+    registerBuiltInPatcherNodes();
+    final node = addNode(Obj.gMessage, args: '0');
+    await pumpBody(tester, MessageNodeBody(node: node, controller: controller));
+    await poll(tester);
+    expect(find.text('0'), findsOneWidget);
+
+    // `.pack 1 2 3` into the inlet: the engine stores it, Dart hears nothing.
+    gateway.sendList(controller.instanceId, handle(), 0, '1 2 3');
+    await poll(tester);
+    expect(find.text('1 2 3'), findsOneWidget);
+    expect(find.text('0'), findsNothing);
+    expect(controller.argsOf(node.id), '0', reason: 'the saved text');
+
+    // A click sends what the box shows and keeps showing it.
+    await tester.tap(find.byType(MessageNodeBody));
+    await poll(tester);
+    expect(gateway.calls, contains('sendBang:${handle()}:0'));
+    expect(find.text('1 2 3'), findsOneWidget);
+
+    // New params put the creation text back.
+    controller.setNodeParams(node.id, '440');
+    await poll(tester);
+    expect(find.text('440'), findsOneWidget);
   });
 
   testWidgets('a cable-driven value re-renders an idle number box', (

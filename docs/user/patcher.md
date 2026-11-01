@@ -100,6 +100,14 @@ its value, and holding `Shift` makes the steps finer. While you type into a numb
 `Esc` puts back the previous value. Controls follow values that arrive over
 cables, too.
 
+A **message box** shows the message it holds now, which is what a click sends.
+A list or a word message arriving on its inlet replaces that message without
+sending it, and the box shows the new message. The replacement is not saved:
+the patch keeps the text you typed, so the box shows that text again when the
+patch is reopened or when you edit its text. In this version of Phi a message
+box typed with several words keeps only the first word, and shows only that
+word. A newer engine lifts that limit.
+
 **Right-click** an object for its context menu: *duplicate* and *delete*.
 
 ## Cables
@@ -164,8 +172,32 @@ an `OPEN TUTORIAL` button.
 Tutorials are example patches that come with Phi, each demonstrating an
 object. Find them in the palette's TUTORIALS tab (grouped by category,
 searchable), through the reference panel's `OPEN TUTORIAL` button, or with
-the command palette's `Open Patcher Tutorial…`. Only a few tutorials exist
-so far.
+the command palette's `Open Patcher Tutorial…`. So far there are tutorials
+for:
+
+- **GUI basics:** the button (`b`), the toggle (`t`), the slider (`slider`),
+  the number boxes (`i` and `f`, which share one tutorial), the message box
+  (`m`) and notes (`text`).
+- **Single-value controls:** the dial (`dial`), the stepper (`incdec`), the
+  lamp (`led`), the labelled button (`textbutton`), the text field
+  (`textedit`) and the list box (`l`).
+- **Selection and slider controls:** the menu, radio buttons and tabs
+  (`umenu`, `radiogroup` and `tab`, which share one tutorial), the range
+  slider (`rslider`), the XY pad (`xyslider`) and the slider bank
+  (`multislider`).
+- **Structured controls:** the grid (`matrixctrl`), the breakpoint editor
+  (`function`), the interpolation field (`nodes`), the preset bank
+  (`preset`), the keyboard (`kslider`) and the staff (`nslider`).
+- **Audio basics:** the oscillators (`~sine`, `~saw`, `~noise`), signal
+  ramps (`~line`), the audio input and output (`~adc` and `~dac`, which share
+  one tutorial), signal arithmetic (`~+`, `~-`, `~*`, `~/` and `~clip`, which
+  share one tutorial), the lowpass and highpass (`~lp` and `~hp`) and the
+  bandpass and resonant filter (`~bp` and `~vcf`).
+- **Time:** `metro`.
+
+Each tutorial is a small working patch, with numbered notes that walk you
+through it. Where Phi's object differs from the Max object of the same name,
+the tutorial says so.
 
 A tutorial opens read-only, in run mode. A banner reads
 `TUTORIAL — READ-ONLY · <title>` instead of the placement bar, and `Ctrl+E`

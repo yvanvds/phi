@@ -1,0 +1,374 @@
+{
+  "title": "~adc and ~dac — a patch's audio in and out",
+  "covers": [
+    "~adc",
+    "~dac"
+  ],
+  "summary": "Sum two ~dacs, see that a signal reaching no ~dac stays silent, and build an ~adc to ~dac passthrough with gain for an insert.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# ~adc and ~dac — a patch's audio in and out\nA ~dac is the patch's audio output: its left inlet is the left channel, its right inlet the right, passed on to whatever hosts the patch. A ~adc is the input: when the patch runs as an insert effect, its outlets carry the left and right channel of the audio it processes. A patch is silent until a signal reaches a ~dac.\nMax's adc~ and dac~ talk to the sound card, and take channel numbers as arguments. Here they talk to the bus the patch is placed on, two channels each, with no arguments.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "300.0",
+          "y": "320.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "300.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": "~noise",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "300.0",
+          "y": "480.0"
+        },
+        "parms": "0.1",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": "~adc",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "180.0",
+          "y": "420.0"
+        },
+        "parms": "1",
+        "type": ".loadmess",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "180.0",
+          "y": "470.0"
+        },
+        "parms": "",
+        "type": ".slider",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 16
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 17
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "60.0",
+          "y": "480.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "60.0",
+          "y": "540.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "60.0",
+          "y": "620.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "560.0",
+          "y": "150.0",
+          "w": "300"
+        },
+        "parms": "1. Turn on either toggle: a sine on the master bus through its own ~dac. Turn on both: the patch plays the sum of its two ~dacs. A patch can have as many as it needs.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "110.0",
+          "y": "140.0"
+        },
+        "parms": "0 1 0 0.1",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "560.0",
+          "y": "280.0",
+          "w": "300"
+        },
+        "parms": "2. The noise below the right ~dac is running, but nothing connects it to a ~dac, so you never hear it.",
+        "type": ".text"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "560.0",
+          "y": "370.0",
+          "w": "300"
+        },
+        "parms": "3. ~adc into ~dac is a passthrough with a gain: the slider sets both ~*, the left channel and the right. In a tutorial the patch plays as a source on master, and ~adc is silent.",
+        "type": ".text"
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "560.0",
+          "y": "500.0",
+          "w": "300"
+        },
+        "parms": "4. To hear it, use COPY TO PROJECT. On the Mix surface, pick the copy in a bus's INSERTS: ~adc now carries that bus's audio, ~dac hands it back, and the slider is its volume. Or place a patch as a source: pick a bus in the placement bar and press START, and its ~dac plays on that bus.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "300.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "350.0",
+          "y": "140.0"
+        },
+        "parms": "0 1 0 0.1",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "200.0"
+        },
+        "parms": "330",
+        "type": "~sine",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "300.0",
+          "y": "200.0"
+        },
+        "parms": "495",
+        "type": "~sine",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "260.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 9
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "300.0",
+          "y": "260.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 10
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "320.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      }
+    }
+  }
+}

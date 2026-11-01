@@ -99,10 +99,10 @@ void main() {
 
   testWidgets('a patch with nothing that displays an engine value is not '
       'polled', (tester) async {
-    // `.b` bangs and `.m` renders its creation args — neither can change from
+    // Object boxes print their creation args — they cannot change from
     // underneath, so there is nothing here to ask about.
-    addNode(Obj.gButton);
-    addNode(Obj.gMessage);
+    addNode(Obj.dSine);
+    addNode(Obj.dAdd);
     await pumpPoller(tester, active: true);
 
     await tester.pump(window);

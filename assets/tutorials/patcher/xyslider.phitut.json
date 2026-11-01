@@ -1,0 +1,336 @@
+{
+  "title": "xyslider — one gesture, two parameters",
+  "covers": [
+    ".xyslider"
+  ],
+  "summary": "Drive a saw oscillator's frequency and a lowpass cutoff with one pad, set each axis by message, and use the silent right inlet.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# xyslider — one gesture, two parameters\nAn xyslider is a pad holding an x and a y, each inside its own range. Its arguments are xminimum, xmaximum, yminimum and ymaximum. Drag across it and both values move at once.\nMax draws a two-dimensional control with pictslider, which counts 0 to 127 on both axes. Here each axis has its own range in the arguments, and the pad sends the pair as one list too.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "140.0"
+        },
+        "parms": "300",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "440.0"
+        },
+        "parms": "100",
+        "type": "~saw",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "500.0"
+        },
+        "parms": "200",
+        "type": "~lp",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "560.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 13
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "620.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "220.0",
+          "y": "440.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "220.0",
+          "y": "500.0"
+        },
+        "parms": "0 1 0 0.2",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "530.0",
+          "y": "130.0",
+          "w": "300"
+        },
+        "parms": "1. Turn on the toggle to hear the pad on the master bus, then drag across it. Left to right is x, a saw oscillator's frequency from 100 to 1000 Hz. Bottom to top is y, a lowpass filter's cutoff from 200 to 5000 Hz.",
+        "type": ".text"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "530.0",
+          "y": "250.0",
+          "w": "300"
+        },
+        "parms": "2. A number on the left inlet sets x and sends: click 300. Each axis is clamped to its own range, so a number past the end stops there.",
+        "type": ".text"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "530.0",
+          "y": "330.0",
+          "w": "300"
+        },
+        "parms": "3. The right inlet sets y without sending: click 2000, and nothing changes below. Click the button to send. From the left inlet, set 0 sets x and set 1 sets y, and sends: click 4000, which prepend turns into set 1 4000.",
+        "type": ".text"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "530.0",
+          "y": "450.0",
+          "w": "300"
+        },
+        "parms": "4. The outlets fire right to left: the pair x y into the list box, then y, then x. The first value of the pair is always x. That pair is the cursor message nodes takes.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "140.0"
+        },
+        "parms": "2000",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "330.0",
+          "y": "140.0"
+        },
+        "parms": "4000",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "330.0",
+          "y": "200.0"
+        },
+        "parms": "set 1",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "200.0"
+        },
+        "parms": "100 1000 200 5000",
+        "type": ".xyslider",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "360.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "150.0",
+          "y": "360.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "240.0",
+          "y": "360.0"
+        },
+        "parms": "",
+        "type": ".l",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      }
+    }
+  }
+}
