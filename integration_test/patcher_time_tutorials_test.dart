@@ -250,6 +250,32 @@ void main() {
       await tester.pump();
     }
 
+    // Wall-clock readings (metro, timer, clocker) depend on how much real
+    // time the test itself takes: a tap and its settling cost a few ms on a
+    // fast runner and hundreds on a slow one (#532). So the checks below
+    // bound each reading by real time measured on this stopwatch, never by
+    // a fixed window: at least the time between the end of one action and
+    // the start of the next, at most the time from the start of the first to
+    // the end of the second.
+    final clock = Stopwatch()..start();
+    double now() => clock.elapsedMicroseconds / 1000;
+    // Taps [f] and returns when, on [clock], the tap started and ended: the
+    // press and release reach the patch inside that span. Settling the frame
+    // afterwards is left out of it.
+    Future<({double start, double end})> timedTap(Finder f) async {
+      expect(f, findsOneWidget);
+      final start = now();
+      await tester.tap(f);
+      final end = now();
+      await tester.pumpAndSettle();
+      return (start: start, end: end);
+    }
+
+    // Scheduling jitter of a wall-clock object, in ms.
+    const slack = 50.0;
+    // How far the engine's clock and this stopwatch may disagree, in ms.
+    const margin = 5.0;
+
     // Opens every other type a tutorial covers, and closes it again.
     Future<void> openRest(
       List<String> types, {
@@ -294,10 +320,19 @@ void main() {
     );
     final ticks = at('.i', 60, 400);
     expect(value(at('.i', 360, 230)), '500', reason: 'loadmess on load');
-    await tap(toggleAt(60, 160));
-    expect(whole(ticks), 1, reason: 'a tick the moment it starts');
+    // A tick the moment it starts, then one every 500 ms of real time since.
+    Matcher ticksSince(({double start, double end}) on, int period) {
+      final t = now();
+      return inInclusiveRange(
+        1 + math.max(0, ((t - on.end - slack) / period).floor()),
+        1 + ((t - on.start + slack) / period).floor(),
+      );
+    }
+
+    final started = await timedTap(toggleAt(60, 160));
+    expect(whole(ticks), ticksSince(started, 500), reason: 'a tick at once');
     await wait(1100);
-    expect(whole(ticks), inInclusiveRange(2, 4), reason: 'every 500 ms');
+    expect(whole(ticks), ticksSince(started, 500), reason: 'every 500 ms');
     await tap(message('125'));
     var before = whole(ticks);
     await wait(600);
@@ -310,8 +345,12 @@ void main() {
     // real time a tap and its settling take: metro keeps wall-clock time.
     await tap(message('1000'));
     expect(value(at('.i', 360, 230)), '1000');
-    await tap(message('bang'));
-    expect(whole(ticks), stopped + 1, reason: 'bang starts it, at once');
+    final banged = await timedTap(message('bang'));
+    expect(
+      whole(ticks) - stopped,
+      ticksSince(banged, 1000),
+      reason: 'bang starts it, at once',
+    );
     await tap(message('stop'));
     before = whole(ticks);
     await wait(300);
@@ -514,25 +553,49 @@ void main() {
       notes: 5,
       heading: timerHeading,
     );
+    // The real time between two taps, as bounds for what timer measured.
+    Matcher spanning(
+      ({double start, double end}) from,
+      ({double start, double end}) to,
+    ) => inInclusiveRange(
+      to.start - from.end - margin,
+      to.end - from.start + margin,
+    );
+
+    final taps = <({double start, double end})>[];
     for (var i = 0; i < 3; i++) {
-      await tap(buttonAt(60, 160));
+      taps.add(await timedTap(buttonAt(60, 160)));
       if (i < 2) await wait(500);
     }
     final between = read(at('.f', 60, 340));
-    expect(between, inInclusiveRange(480, 800), reason: 'between two taps');
+    expect(between, greaterThanOrEqualTo(500), reason: 'the wait at least');
+    expect(between, spanning(taps[1], taps[2]), reason: 'between two taps');
     expect(read(at('.f', 60, 450)), closeTo(60000 / between, 1e-3));
-    await tap(buttonAt(360, 160));
+    final start = await timedTap(buttonAt(360, 160));
     await wait(300);
-    await tap(buttonAt(460, 160));
+    final lap1 = await timedTap(buttonAt(460, 160));
     final lap = read(at('.f', 360, 280));
-    expect(lap, inInclusiveRange(280, 600), reason: 'the stopwatch');
+    expect(lap, greaterThanOrEqualTo(300), reason: 'the stopwatch');
+    expect(lap, spanning(start, lap1), reason: 'the stopwatch');
     await wait(200);
-    await tap(buttonAt(460, 160));
-    expect(read(at('.f', 360, 280)), greaterThan(lap + 150), reason: 'kept');
-    await tap(toggleAt(60, 580));
+    final lap2 = await timedTap(buttonAt(460, 160));
+    final second = read(at('.f', 360, 280));
+    expect(second, spanning(start, lap2), reason: 'lap keeps the start');
+    expect(second - lap, spanning(lap1, lap2), reason: 'kept');
+    final on = await timedTap(toggleAt(60, 580));
     await wait(500);
+    // clocker reports the time since its start once every 100 ms.
+    final readAt = now();
     final elapsed = whole(at('.i', 60, 700));
-    expect(elapsed, inInclusiveRange(300, 900), reason: 'the time so far');
+    expect(
+      elapsed,
+      inInclusiveRange(
+        readAt - on.end - 100 - slack,
+        now() - on.start + margin,
+      ),
+      reason: 'the time so far',
+    );
+    expect(elapsed, greaterThanOrEqualTo(500 - 100), reason: 'the wait');
     await tap(toggleAt(60, 580));
     await close();
     await openRest(
