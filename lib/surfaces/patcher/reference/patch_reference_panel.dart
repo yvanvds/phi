@@ -12,6 +12,7 @@ import '../../../domain/patcher/patch_args.dart';
 import '../../../domain/patcher/patch_object_types.dart';
 import '../../../domain/patcher/patch_type_name.dart';
 import '../../../engine/bridge/patch_object_descriptor.dart';
+import '../tutorial/patch_word_button.dart';
 import 'patch_keyboard_settings.dart';
 
 /// The patcher's **reference panel** (design `docs/design/patcher.md` §5): the
@@ -34,6 +35,10 @@ import 'patch_keyboard_settings.dart';
 /// A selected **`.kslider`** gets keyboard rows the same way (issue #515):
 /// its [keyboardRange] and [keyboardVelocity], edited through
 /// [onKeyboardRange] / [onKeyboardVelocity] ([PatchKeyboardSettings]).
+///
+/// When the documented type has a bundled tutorial, the surface passes
+/// [onOpenTutorial] and an **Open tutorial** button sits under the heading
+/// (issue #489) — for a palette tap and a canvas selection alike.
 class PatchReferencePanel extends StatelessWidget {
   const PatchReferencePanel({
     required this.descriptor,
@@ -44,6 +49,7 @@ class PatchReferencePanel extends StatelessWidget {
     this.keyboardVelocity,
     this.onKeyboardRange,
     this.onKeyboardVelocity,
+    this.onOpenTutorial,
     super.key,
   });
 
@@ -76,6 +82,13 @@ class PatchReferencePanel extends StatelessWidget {
   /// Called with the fixed velocity a keyboard step picked (null for depth).
   final ValueChanged<int?>? onKeyboardVelocity;
 
+  /// Opens the documented type's tutorial. Null hides the button — the type
+  /// has no tutorial (or nothing is documented).
+  final VoidCallback? onOpenTutorial;
+
+  /// Key on the "Open tutorial" button.
+  static const Key openTutorialKey = Key('PatchReferencePanel.openTutorial');
+
   /// Fixed pane width — the right column of the patcher layout.
   static const double width = 260;
 
@@ -104,6 +117,7 @@ class PatchReferencePanel extends StatelessWidget {
           : _Reference(
               descriptor: d,
               args: args,
+              onOpenTutorial: onOpenTutorial,
               noteColor: noteColor ?? '',
               onNoteColor: PatchTypeName.isNote(d.type) ? onNoteColor : null,
               keyboard: switch ((
@@ -149,10 +163,12 @@ class _Reference extends StatelessWidget {
     this.args,
     this.onNoteColor,
     this.keyboard,
+    this.onOpenTutorial,
   });
 
   final PatchObjectDescriptor descriptor;
   final String? args;
+  final VoidCallback? onOpenTutorial;
   final String noteColor;
   final ValueChanged<String>? onNoteColor;
   final Widget? keyboard;
@@ -195,6 +211,25 @@ class _Reference extends StatelessWidget {
             ],
           ),
         ),
+        if (onOpenTutorial != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              PhiSpacing.s3,
+              PhiSpacing.s1,
+              PhiSpacing.s3,
+              PhiSpacing.s1,
+            ),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: PatchWordButton(
+                key: PatchReferencePanel.openTutorialKey,
+                label: 'open tutorial',
+                color: PhiColors.voice1,
+                tooltip: 'a playable demo patch of this object',
+                onTap: onOpenTutorial!,
+              ),
+            ),
+          ),
         if (d.description.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(

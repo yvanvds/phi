@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../../design/tokens/phi_colors.dart';
@@ -22,6 +23,7 @@ class ProjectMenu extends StatelessWidget {
     required this.controller,
     required this.picker,
     this.onOpenSettings,
+    this.onOpenKeyboardShortcuts,
     super.key,
   });
 
@@ -31,6 +33,10 @@ class ProjectMenu extends StatelessWidget {
   /// Opens the settings dialog (design `settings-and-devices.md` §6). When set, a
   /// "Settings…" item joins the menu; `null` (the bare Phase-1 path) omits it.
   final VoidCallback? onOpenSettings;
+
+  /// Opens the keyboard shortcuts overlay (issue #487). When set, a "Keyboard
+  /// Shortcuts" item joins the menu, showing its Ctrl+/ chord.
+  final VoidCallback? onOpenKeyboardShortcuts;
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +68,16 @@ class ProjectMenu extends StatelessWidget {
           MenuItemButton(
             onPressed: onOpenSettings,
             child: const Text('Settings…'),
+          ),
+        if (onOpenKeyboardShortcuts != null)
+          MenuItemButton(
+            onPressed: onOpenKeyboardShortcuts,
+            // Display only — the binding itself lives in the command registry.
+            shortcut: const SingleActivator(
+              LogicalKeyboardKey.slash,
+              control: true,
+            ),
+            child: const Text('Keyboard Shortcuts'),
           ),
       ],
       builder: (context, menu, _) => _MenuTrigger(

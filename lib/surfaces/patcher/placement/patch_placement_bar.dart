@@ -188,8 +188,8 @@ class _ModeButton extends StatelessWidget {
     final fg = run ? PhiColors.live : PhiColors.fg1;
     return Tooltip(
       message: run
-          ? 'run mode · bodies live, nodes locked · ctrl+e to edit'
-          : 'edit mode · bodies inert, everything drags · ctrl+e to run',
+          ? 'run mode · bodies live, nodes locked · Ctrl+E to edit'
+          : 'edit mode · bodies inert, everything drags · Ctrl+E to run',
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         child: GestureDetector(

@@ -3653,4 +3653,60 @@ void main() {
       expect(activeCursor(), isNot(SystemMouseCursors.resizeLeftRight));
     });
   });
+
+  // ─── the empty-canvas hint (issue #487) ──────────────────────────────────
+
+  group('empty-canvas hint', () {
+    Finder hint() => find.byKey(PatcherCanvas.emptyHintKey);
+    void create(PatchObjectDescriptor d, Offset at, {String? args}) {}
+
+    testWidgets('names double-click and N over an empty patch in edit mode, '
+        'and goes once an object lands', (tester) async {
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: create,
+      );
+      expect(hint(), findsOneWidget);
+      expect(
+        find.text(PatcherCanvas.emptyHintText.toUpperCase()),
+        findsOneWidget,
+      );
+
+      controller.addNode(desc: desc(Obj.dSine), position: const Offset(40, 40));
+      await tester.pump();
+      expect(hint(), findsNothing);
+    });
+
+    testWidgets('is absent in run mode and when nothing can be created', (
+      tester,
+    ) async {
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: create,
+        initialMode: PatchCanvasMode.run,
+      );
+      expect(hint(), findsNothing);
+
+      // A read-only host (a tutorial) passes no create callback.
+      await pumpCanvas(tester, objectTypes: catalogue());
+      expect(hint(), findsNothing);
+    });
+
+    testWidgets('hides while the object box is open', (tester) async {
+      await pumpCanvas(
+        tester,
+        objectTypes: catalogue(),
+        onCreateObject: create,
+      );
+      final centre = tester.getCenter(find.byType(PatcherCanvas));
+      await tester.tapAt(centre);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.pump();
+      expect(find.byKey(PatcherCanvas.inlineCreateKey), findsOneWidget);
+      expect(hint(), findsNothing);
+    });
+  });
 }

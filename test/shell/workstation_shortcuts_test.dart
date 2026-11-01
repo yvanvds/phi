@@ -5,6 +5,7 @@ import 'package:phi/app.dart';
 import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/shell/commands/command_palette.dart';
+import 'package:phi/shell/shortcuts/keyboard_shortcuts_overlay.dart';
 import 'package:phi/surfaces/midi/midi_viewport.dart';
 import 'package:phi/surfaces/mix/mix_surface.dart';
 
@@ -100,6 +101,65 @@ void main() {
     // The registry-owned chord surfaces as the palette's discoverability story.
     expect(find.text('Go to MIDI'), findsOneWidget);
     expect(find.text('Ctrl+5'), findsOneWidget);
+
+    session.dispose();
+    await engine.dispose();
+  });
+
+  testWidgets('Ctrl+/ opens the keyboard shortcuts overlay, focused surface '
+      'first (issue #487)', (tester) async {
+    final session = SessionState();
+    final engine = await pumpApp(tester, session);
+
+    // Focus MIDI so its table should lead.
+    await pressCtrl(tester, LogicalKeyboardKey.digit5);
+    expect(find.byType(MidiViewport), findsOneWidget);
+
+    await pressCtrl(tester, LogicalKeyboardKey.slash);
+    expect(find.byType(KeyboardShortcutsOverlay), findsOneWidget);
+    final overlay = find.byType(KeyboardShortcutsOverlay);
+    final titles = tester
+        .widget<KeyboardShortcutsOverlay>(overlay)
+        .sections
+        .map((s) => s.title)
+        .toList();
+    expect(titles.take(2), ['MIDI', 'Global']);
+    // The leading table is the one on screen as the overlay opens.
+    expect(
+      find.descendant(of: overlay, matching: find.text('MIDI')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: overlay, matching: find.text('Ctrl+=')),
+      findsOneWidget,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byType(KeyboardShortcutsOverlay), findsNothing);
+
+    // The numpad `/` is the layout-stable alias (AZERTY needs Shift for `/`).
+    await pressCtrl(tester, LogicalKeyboardKey.numpadDivide);
+    expect(find.byType(KeyboardShortcutsOverlay), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    session.dispose();
+    await engine.dispose();
+  });
+
+  testWidgets('rail and panic tooltips carry their chords (issue #487)', (
+    tester,
+  ) async {
+    final session = SessionState();
+    final engine = await pumpApp(tester, session);
+
+    expect(find.byTooltip('Patcher (Ctrl+2)'), findsOneWidget);
+    expect(find.byTooltip('Mix (Ctrl+7)'), findsOneWidget);
+    expect(
+      find.byTooltip('panic — stop everything, all notes off (F12)'),
+      findsOneWidget,
+    );
 
     session.dispose();
     await engine.dispose();

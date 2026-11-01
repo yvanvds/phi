@@ -129,6 +129,21 @@ main + app          (orchestration)
   Enter/tap invoke · recents float · shortcut render), and an end-to-end
   `command_palette` integration test (Ctrl+Shift+P → filter → Enter summons MIDI;
   play then reopen shows the now-enabled Stop; F1 opens).
+  Issue #487 adds the **keyboard shortcuts overlay** (`lib/shell/shortcuts/`):
+  `KeyboardShortcutsOverlay` (Ctrl+/, alias Ctrl+numpad-/, the
+  `view.keyboardShortcuts` command and the File menu's "Keyboard Shortcuts"
+  item) lists `ShortcutHintSection`s — the focused surface's table first, then
+  Global (read live off the registry, aliases included), the other surfaces and
+  "Lists & dialogs" — with a filter reusing `CommandSearch.score`
+  (`ShortcutFilter`). `ShortcutHint` / `ShortcutHintSection` are pure data in
+  `lib/domain/shortcuts/`; each surface declares its local table next to its key
+  handler (`surfaces/patcher/patcher_shortcut_hints.dart`,
+  `surfaces/midi/piano_roll_shortcut_hints.dart`,
+  `surfaces/code/code_shortcut_hints.dart`), and `ShortcutCatalog` is the one
+  place that gathers them all — the source the user docs' shortcut page (#486)
+  is checked against. Rail tooltips read `Patcher (Ctrl+2)` off the registry;
+  panic shows `F12`; an empty patch in edit mode shows "double-click or N to
+  add an object".
 - Settings dialog (`lib/shell/settings/`, design `settings-and-devices.md`
   §6, issues #154 + #151): a modal overlay (no rail button, no OS window) opened
   from the File menu's `Settings…` item, with a left section list (AUDIO · MIDI ·
@@ -2938,6 +2953,40 @@ main + app          (orchestration)
   unit tests, `patcher_controller_keyboard_test.dart`, reference-panel widget
   tests, and a `patcher_node_gui` integration case (select, shift and widen,
   the box follows, undo / redo, a fixed velocity played in run mode).
+- **Patcher tutorials — infrastructure** (issue #489; content is #490–#510) —
+  bundled tutorial patches under **`assets/tutorials/patcher/`** (the app's
+  first `flutter: assets:` entry): `index.json` maps a canonical type id
+  (`.metro`, `~sine`, `.!=`) to a slug, and `<slug>.phitut.json` holds
+  `{title, covers, summary, payload}` with `payload` an ordinary
+  `PatchPayload` (engine dump + placement). Pure-Dart `PatchTutorial`,
+  `TutorialCatalog` (`hasTutorial` / `tutorialFor`) and the `TutorialSlug`
+  file-name rule (bare name, operators spelled out, `sig-` for a `~` type
+  clashing with a control type) live in `lib/domain/patcher/tutorial/`;
+  `PatchLibrary.fromTutorial` mints the `patch.tutorials.<slug>` copy. The
+  engine reads assets through a `PatchTutorialSource` seam
+  (`lib/engine/state/tutorial/`: `BundlePatchTutorialSource` in production,
+  `MemoryPatchTutorialSource` in tests, injected as
+  `PhiEngine(patchTutorialSource:)`); `PatchLibraryController` loads the index
+  on start and opens a tutorial as a `PatchTutorialSession` — a **transient
+  native patcher that is not a registry entity** (never journaled or saved),
+  mounted on master only when it holds a `~dac`, whose editor `openEditor`
+  answers while it is open; opening a project patch, a rebind, a session
+  restart and dispose close it. UI (`lib/surfaces/patcher/tutorial/`): the
+  reference panel's **Open tutorial** button (only when the type has one), a
+  **Tutorials** tab in the patcher palette (`PatchTutorialBrowser`, grouped by
+  category, searchable), and the read-only `PatchTutorialBar` banner
+  ("Tutorial — read-only", copy to project, close) in place of the placement
+  bar — the surface forces run mode, refuses `Ctrl+E`, and offers no drop
+  target. Shell commands **Open Patcher Tutorial…** (summons the patcher on
+  the Tutorials tab) and the dev-facing **Export Patch as Tutorial…** (writes
+  the open patch in the file format via `PatchTutorialExport`). One real
+  tutorial ships (`metro`). Covered by domain unit tests, a
+  `patch_library_tutorial_test`, a real-engine
+  `patcher_tutorial_assets_engine_test` (every index entry has a file, every
+  type exists in the engine, every payload parses, a report of uncovered
+  types), surface/reference-panel widget tests, and an end-to-end
+  `patcher_tutorial` integration test on the real patcher engine and asset
+  bundle.
 - Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
   switched off for now, issue #447)
 
@@ -2961,6 +3010,17 @@ main + app          (orchestration)
   in the repo (issue #230, design `docs/design/live-coding.md` §3), with its
   `unittest` suite + fake `yse` bus under `python/tests/`. Not Dart, not under
   `lib/`; run inside `flutter test` via `test/engine/python/phi_library_test.dart`.
+- **Bundled patcher tutorials:** `assets/tutorials/patcher/` — `index.json`
+  (type → slug) plus one `<slug>.phitut.json` per tutorial (issue #489). Add a
+  tutorial by exporting a patch ("Export Patch as Tutorial…"), dropping the
+  file here and adding its types to the index;
+  `test/engine/patcher_tutorial_assets_engine_test.dart` checks it parses.
+- **User documentation:** `docs/user/` (issue #486) — Markdown for
+  performers: `README.md` (index + notation), `getting-started.md`,
+  `workstation.md`, `surfaces.md`, `patcher.md`, `keyboard-shortcuts.md`. The
+  shortcut page's tables are the `ShortcutCatalog` rendered as Markdown;
+  `test/shell/shortcuts/keyboard_shortcuts_doc_drift_test.dart` fails (and
+  prints the replacement table) when the code and the page disagree.
 - **Design previews:** `design system/preview/*.html` and
   `design system/ui_kits/phi-workstation/*.jsx` — open these when sketching
   new surfaces in Flutter.

@@ -38,14 +38,19 @@ void main() {
 
   Future<void> pumpMenu(
     WidgetTester tester,
-    FakeProjectDirectoryPicker picker,
-  ) async {
+    FakeProjectDirectoryPicker picker, {
+    VoidCallback? onOpenKeyboardShortcuts,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: Align(
             alignment: Alignment.topLeft,
-            child: ProjectMenu(controller: controller, picker: picker),
+            child: ProjectMenu(
+              controller: controller,
+              picker: picker,
+              onOpenKeyboardShortcuts: onOpenKeyboardShortcuts,
+            ),
           ),
         ),
       ),
@@ -66,6 +71,25 @@ void main() {
     expect(find.text('Save'), findsOneWidget);
     expect(find.text('Duplicate…'), findsOneWidget);
     expect(find.text('Rename…'), findsOneWidget);
+  });
+
+  testWidgets('Keyboard Shortcuts item shows Ctrl+/ and opens the overlay '
+      '(issue #487)', (tester) async {
+    controller = build();
+    var opened = 0;
+    await pumpMenu(
+      tester,
+      FakeProjectDirectoryPicker(),
+      onOpenKeyboardShortcuts: () => opened++,
+    );
+    await tester.tap(find.text('untitled'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Keyboard Shortcuts'), findsOneWidget);
+    expect(find.text('Ctrl+/'), findsOneWidget);
+    await tester.tap(find.text('Keyboard Shortcuts'));
+    await tester.pumpAndSettle();
+    expect(opened, 1);
   });
 
   testWidgets('Save on a new project prompts for a location and binds it', (

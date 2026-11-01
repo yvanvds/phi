@@ -45,6 +45,7 @@ List<PhiCommand> buildShellCommands({
   required VoidCallback onOpenCommandPalette,
   required VoidCallback onPanic,
   VoidCallback? onToggleLogPanel,
+  VoidCallback? onOpenKeyboardShortcuts,
   VoidCallback? onCopyDiagnostics,
   VoidCallback? onNewProject,
   VoidCallback? onOpenProject,
@@ -52,6 +53,9 @@ List<PhiCommand> buildShellCommands({
   VoidCallback? onDuplicateProject,
   VoidCallback? onRenameProject,
   VoidCallback? onOpenSettings,
+  VoidCallback? onOpenPatcherTutorial,
+  VoidCallback? onExportPatchTutorial,
+  bool Function()? isPatcherReady,
 }) {
   return [
     // Surfaces — one summon per rail identity (design §4, "surface focus/summon"),
@@ -121,6 +125,26 @@ List<PhiCommand> buildShellCommands({
         aliases: [SingleActivator(LogicalKeyboardKey.f1)],
       ),
     ),
+    // Keyboard shortcuts overlay (issue #487) — every global chord plus each
+    // surface's local table. Ctrl+/ as asked (F1 is the palette's); `/` is a
+    // punctuation key whose position wanders between layouts (on AZERTY it
+    // needs Shift, so the plain chord is unreachable there), so the numpad's
+    // layout-stable `/` answers too — and the palette and File menu reach it
+    // on any keyboard.
+    if (onOpenKeyboardShortcuts != null)
+      PhiCommand(
+        id: 'view.keyboardShortcuts',
+        title: 'Keyboard Shortcuts',
+        category: 'View',
+        invoke: onOpenKeyboardShortcuts,
+        shortcut: const CommandShortcut(
+          LogicalKeyboardKey.slash,
+          control: true,
+          aliases: [
+            SingleActivator(LogicalKeyboardKey.numpadDivide, control: true),
+          ],
+        ),
+      ),
     // Transport — the same intents the toolbar's play/stop buttons drive. Their
     // enabled-predicates keep the palette honest: you can only play when stopped,
     // only stop when playing (a natural exercise of disabled-command hiding).
@@ -221,6 +245,25 @@ List<PhiCommand> buildShellCommands({
         title: 'Rename Project…',
         category: 'Project',
         invoke: onRenameProject,
+      ),
+    // Patcher tutorials (issue #489) — the browser lives in the patcher
+    // palette; this summons the surface and switches the palette to it.
+    if (onOpenPatcherTutorial != null)
+      PhiCommand(
+        id: 'patcher.openTutorial',
+        title: 'Open Patcher Tutorial…',
+        category: 'Patcher',
+        invoke: onOpenPatcherTutorial,
+        isEnabled: isPatcherReady,
+      ),
+    // Dev-facing authoring: the open patch written in the tutorial format.
+    if (onExportPatchTutorial != null)
+      PhiCommand(
+        id: 'patcher.exportTutorial',
+        title: 'Export Patch as Tutorial…',
+        category: 'Patcher',
+        invoke: onExportPatchTutorial,
+        isEnabled: isPatcherReady,
       ),
     if (onOpenSettings != null)
       PhiCommand(

@@ -208,6 +208,13 @@ class PatcherCanvas extends StatefulWidget {
   /// while one is actually hovered, so its absence is assertable (issue #359).
   static const Key portHoverKey = Key('PatcherCanvas.portHover');
 
+  /// Key on the empty-canvas hint (issue #487) — shown over an empty patch in
+  /// edit mode so the way to add the first object is on screen.
+  static const Key emptyHintKey = Key('PatcherCanvas.emptyHint');
+
+  /// The empty-canvas hint's text (issue #487).
+  static const String emptyHintText = 'double-click or N to add an object';
+
   @override
   State<PatcherCanvas> createState() => _PatcherCanvasState();
 }
@@ -438,6 +445,28 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
                   ),
                 ),
               ),
+              // The way in to an empty patch, named where the first object
+              // would go (issue #487): only while both insert routes — the
+              // double-click and `N` — actually work, and never under an open
+              // box. Screen-space and inert, so it neither pans away nor eats
+              // the double-click it describes.
+              if (_canInsertInline && _inlineAt == null)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: ListenableBuilder(
+                      listenable: _controller.graph,
+                      builder: (context, _) => _controller.graph.nodes.isEmpty
+                          ? Center(
+                              child: Text(
+                                PatcherCanvas.emptyHintText.toUpperCase(),
+                                key: PatcherCanvas.emptyHintKey,
+                                style: PhiType.caption(),
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
               if (_notice != null)
                 Positioned(
                   key: _noticeKey,
@@ -856,6 +885,15 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     }
     _applyHover(local);
   }
+
+  /// Whether the inline object box can be opened at all — edit mode, a
+  /// catalogue to complete against, and a host to create through. Gates the
+  /// empty-canvas hint (issue #487), which must not promise a gesture that
+  /// would do nothing.
+  bool get _canInsertInline =>
+      widget.mode.isEdit &&
+      widget.objectTypes.isNotEmpty &&
+      widget.onCreateObject != null;
 
   /// Whether [event] is the `Ctrl+0` that frames the patch.
   ///

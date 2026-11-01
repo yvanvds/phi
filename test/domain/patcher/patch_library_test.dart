@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/patcher/patch_library.dart';
 import 'package:phi/domain/patcher/patch_payload.dart';
+import 'package:phi/domain/patcher/tutorial/patch_tutorial.dart';
 import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/project/project_registry.dart';
 import 'package:phi/domain/project/registry_kinds.dart';
@@ -64,5 +65,47 @@ void main() {
 
   test('duplicate throws when no patch entity sits at the source', () {
     expect(() => library.duplicate(patch('ghost')), throwsArgumentError);
+  });
+
+  group('fromTutorial (issue #489)', () {
+    final tutorial = PatchTutorial(
+      title: 'metro',
+      covers: const ['.metro'],
+      payload: PatchPayload(
+        dump: const {
+          'object 0': {'ID': 0, 'type': '.metro'},
+        },
+        placement: mix('master'),
+      ),
+    );
+    final at = EntityAddress(
+      kind: RegistryKinds.patch,
+      segments: const ['tutorials', 'metro'],
+    );
+
+    test('mints patch.tutorials.<slug> carrying the payload verbatim', () {
+      final command = library.fromTutorial(tutorial, slug: 'metro');
+      command.apply();
+      expect(command.address, at);
+      final stored = PatchPayload.fromJson(
+        (registry.entityAt(at)!.payload! as Map).cast(),
+      );
+      expect(stored, tutorial.payload);
+    });
+
+    test('a second copy is made unique, and undo removes it', () {
+      library.fromTutorial(tutorial, slug: 'metro').apply();
+      final second = library.fromTutorial(tutorial, slug: 'metro');
+      second.apply();
+      expect(second.address.name, 'metro_2');
+      second.revert();
+      expect(registry.contains(second.address), isFalse);
+      expect(registry.contains(at), isTrue);
+    });
+
+    test('a hyphenated slug becomes a valid address segment', () {
+      final command = library.fromTutorial(tutorial, slug: 'sig-plus');
+      expect(command.address.name, 'sig_plus');
+    });
   });
 }

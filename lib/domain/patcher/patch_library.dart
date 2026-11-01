@@ -6,6 +6,7 @@ import '../project/name_slug.dart';
 import '../project/project_registry.dart';
 import '../project/registry_kinds.dart';
 import 'patch_payload.dart';
+import 'tutorial/patch_tutorial.dart';
 
 /// The `patch.` library commands (design `docs/design/patcher.md` §3, §8) — the
 /// pure-domain half of the patcher entity strip (epic issue #224).
@@ -63,6 +64,30 @@ class PatchLibrary {
       registry,
       _freshAddress(group: source.parent, desired: '${source.name}_copy'),
       payload: _clonePayload(entity.payload),
+    );
+  }
+
+  /// The group a copied tutorial lands in — `patch.tutorials` (issue #489).
+  static const String tutorialsGroup = 'tutorials';
+
+  /// Builds a command that copies a bundled [tutorial] into the project as an
+  /// ordinary, freely editable patch at `patch.tutorials.<slug>` (made unique),
+  /// carrying the tutorial's dump and placement verbatim (issue #489). The
+  /// `tutorials` group is created on apply when it does not exist yet.
+  CreateEntityCommand fromTutorial(
+    PatchTutorial tutorial, {
+    required String slug,
+  }) {
+    return CreateEntityCommand(
+      registry,
+      _freshAddress(
+        group: EntityAddress(
+          kind: RegistryKinds.patch,
+          segments: const [tutorialsGroup],
+        ),
+        desired: NameSlug.of(slug, fallback: 'tutorial'),
+      ),
+      payload: _clonePayload(tutorial.payload),
     );
   }
 

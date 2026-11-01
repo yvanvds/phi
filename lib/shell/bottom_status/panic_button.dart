@@ -27,7 +27,7 @@ class PanicButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Tooltip(
-      message: 'panic — stop everything, all notes off',
+      message: 'panic — stop everything, all notes off (F12)',
       child: GestureDetector(
         key: buttonKey,
         behavior: HitTestBehavior.opaque,

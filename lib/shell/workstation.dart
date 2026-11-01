@@ -34,6 +34,7 @@ import '../surfaces/midi/midi_file_io.dart';
 import '../surfaces/midi/midi_surface.dart';
 import '../surfaces/mix/mix_surface.dart';
 import '../surfaces/patcher/patcher_surface.dart';
+import '../surfaces/patcher/tutorial/patch_tutorial_export.dart';
 import '../surfaces/racks/file_selector_rack_asset_source.dart';
 import '../surfaces/racks/racks_surface.dart';
 import '../surfaces/scene/scene_surface.dart';
@@ -62,6 +63,8 @@ import 'project/project_actions.dart';
 import 'right_inspector/right_inspector.dart';
 import 'settings/settings_dialog.dart';
 import 'settings/settings_section.dart';
+import 'shortcuts/keyboard_shortcuts_overlay.dart';
+import 'shortcuts/shortcut_catalog.dart';
 import 'top_toolbar/top_toolbar.dart';
 
 /// Phi workstation chrome — composes the four fixed regions (top toolbar,
@@ -443,6 +446,7 @@ class _WorkstationState extends State<Workstation> {
         onCycleTabForward: () => _layout.cycleTabInActivePane(),
         onCycleTabBackward: () => _layout.cycleTabInActivePane(forward: false),
         onOpenCommandPalette: _openCommandPalette,
+        onOpenKeyboardShortcuts: _openKeyboardShortcuts,
         // Panic routes through the shell handler (issue #264) — the same action
         // the status-bar button fires.
         onPanic: _onPanic,
@@ -468,13 +472,72 @@ class _WorkstationState extends State<Workstation> {
             ? null
             : () => unawaited(actions.rename(context)),
         onOpenSettings: widget.projectController == null ? null : _openSettings,
+        onOpenPatcherTutorial: _openPatcherTutorials,
+        onExportPatchTutorial: () => unawaited(_exportPatchTutorial()),
+        isPatcherReady: () => widget.engine.patcherOrNull != null,
       ),
     );
+  }
+
+  /// "Open Patcher Tutorial…" (issue #489): summon the patcher and switch its
+  /// palette to the Tutorials browser. The request goes out after the frame
+  /// that mounts the surface, so a surface the summon just opened hears it.
+  void _openPatcherTutorials() {
+    if (widget.engine.patcherOrNull == null) return;
+    _onSelect(SurfaceId.patcher);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.engine.patcherOrNull == null) return;
+      widget.engine.patchLibrary.requestTutorialBrowser();
+    });
+  }
+
+  /// "Export Patch as Tutorial…" (issue #489, dev-facing): write the open
+  /// patch in the tutorial file format through a save dialog.
+  Future<void> _exportPatchTutorial() async {
+    if (widget.engine.patcherOrNull == null) return;
+    final library = widget.engine.patchLibrary;
+    final json = library.exportOpenAsTutorial();
+    final name = library.openAddress?.name;
+    if (json == null || name == null) {
+      _noticeCenter.notice('Open a project patch to export it as a tutorial');
+      return;
+    }
+    final saved = await const PatchTutorialExport().save(
+      '$name.phitut.json',
+      json,
+    );
+    if (saved && mounted) {
+      _noticeCenter.notice(
+        'Tutorial exported — add its types to the tutorial index.json',
+      );
+    }
   }
 
   /// Opens the command palette overlay (design §4) on Ctrl+Shift+P / F1.
   void _openCommandPalette() =>
       unawaited(CommandPalette.show(context, registry: _commands));
+
+  /// Opens the keyboard shortcuts overlay (issue #487) on Ctrl+/: the focused
+  /// surface's local table first, then the registry's live global chords, then
+  /// the other surfaces' tables.
+  void _openKeyboardShortcuts() => unawaited(
+    KeyboardShortcutsOverlay.show(
+      context,
+      sections: ShortcutCatalog.sections(
+        commands: _commands.commands,
+        focused: _focusedSurfaceId,
+      ),
+    ),
+  );
+
+  /// The chord each rail surface's summon command is bound to (`Ctrl+2` for
+  /// the patcher), for the rail tooltips (issue #487) — read off the registry
+  /// so a rebinding shows up there too.
+  Map<SurfaceId, String> get _railShortcutLabels => {
+    for (final id in SurfaceId.values)
+      if (_commands.byId('surface.${id.name}')?.shortcut case final shortcut?)
+        id: shortcut.label,
+  };
 
   /// Copies the diagnostics bundle to the clipboard (issue #272, design §6) and
   /// confirms through the notice channel (toast + log). The palette command
@@ -863,6 +926,7 @@ class _WorkstationState extends State<Workstation> {
                     onOpenSettings: widget.projectController != null
                         ? _openSettings
                         : null,
+                    onOpenKeyboardShortcuts: _openKeyboardShortcuts,
                     metronome: widget.engine.metronomeOrNull,
                     countIn: widget.engine.midiOrNull?.countIn,
                   ),
@@ -872,6 +936,7 @@ class _WorkstationState extends State<Workstation> {
                         LeftRail(
                           selected: _focusedSurfaceId,
                           onSelect: _onSelect,
+                          shortcutLabels: _railShortcutLabels,
                         ),
                         Expanded(child: _buildCentre()),
                         RightInspector(session: widget.session),

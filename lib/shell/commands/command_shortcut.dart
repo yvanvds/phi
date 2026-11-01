@@ -59,6 +59,22 @@ class CommandShortcut {
     ].join('+');
   }
 
+  /// Every chord that fires the command, display form, primary first — the
+  /// [label] followed by one per alias (e.g. `Ctrl+Shift+Z`, `Ctrl+Y`). The
+  /// keyboard shortcuts overlay (issue #487) lists them all, where a palette
+  /// row shows only the primary.
+  List<String> get labels => [label, for (final a in aliases) describe(a)];
+
+  /// The display form of any [SingleActivator], e.g. `Ctrl+Y` — the same
+  /// naming [label] uses for the primary chord.
+  static String describe(SingleActivator activator) => <String>[
+    if (activator.control) 'Ctrl',
+    if (activator.shift) 'Shift',
+    if (activator.alt) 'Alt',
+    if (activator.meta) 'Meta',
+    _labelFor(activator.trigger),
+  ].join('+');
+
   static String _labelFor(LogicalKeyboardKey key) {
     // Keyed by `keyId` because `LogicalKeyboardKey` overrides `==`, so it can't
     // be a (const) map key itself.
@@ -73,6 +89,8 @@ class CommandShortcut {
   static final Map<int, String> _namedTriggers = {
     LogicalKeyboardKey.f1.keyId: 'F1',
     LogicalKeyboardKey.f2.keyId: 'F2',
+    LogicalKeyboardKey.f12.keyId: 'F12',
+    LogicalKeyboardKey.numpadDivide.keyId: 'Num /',
     LogicalKeyboardKey.tab.keyId: 'Tab',
     LogicalKeyboardKey.enter.keyId: 'Enter',
     LogicalKeyboardKey.escape.keyId: 'Esc',
