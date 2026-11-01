@@ -26,10 +26,13 @@ name: Integration tests
 #   * One `flutter test integration_test` run does NOT reliably drive the whole
 #     folder on Windows, so tool/run_integration_tests.ps1 runs each file as its
 #     own `flutter test` invocation and aggregates the results.
-#   * The app under test never opens the native engine: every file in the
-#     suite injects `FakeYseGateway`. `libyse.dll` still lands in the build —
-#     `package:yse`'s native-assets build hook fetches and bundles it as part
-#     of `flutter test -d windows` (#442) — so there is no engine step here.
+#   * The app under test almost never opens the native engine: the suite
+#     injects `FakeYseGateway`, except control_plane_real_bus_tap_test.dart
+#     (#480), which runs a `RealYseGateway` to prove frames arrive through the
+#     real bus tap — it needs no audio device (boot degrades to an offline
+#     session). `libyse.dll` lands in the build either way — `package:yse`'s
+#     native-assets build hook fetches and bundles it as part of
+#     `flutter test -d windows` (#442) — so there is no engine step here.
 #
 # The supply-chain rules this file follows — every `uses:` pinned to a commit
 # SHA, phi's resolve run with `--enforce-lockfile` — are stated once in the

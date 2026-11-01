@@ -25,8 +25,8 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 /// through the real fx port onto the **live** effect handle the rack
 /// materialiser placed on a bus's insert chain.
 ///
-/// The tap and the fx gateway are faked (no audio hardware; the tap C API is a
-/// pending engine dependency, design `docs/design/live-coding.md` §9), but
+/// The tap and the fx gateway are faked (no audio hardware; the real `Bus.tap`
+/// path is walked by `control_plane_real_bus_tap_test.dart`, issue #480), but
 /// every seam between them is the production one. The set is performance, not
 /// authorship: nothing is journaled and the authored `fx.` payload is
 /// untouched.

@@ -6,6 +6,8 @@ import 'package:phi/engine/bridge/audio_device_exception.dart';
 import 'package:phi/engine/bridge/audio_device_state.dart';
 import 'package:phi/engine/bridge/yse_gateway.dart';
 
+import 'fake_bus_tap.dart';
+
 /// In-memory [YseGateway] used in unit and widget tests.
 ///
 /// Records every call against the engine so tests can assert call sequence
@@ -229,10 +231,18 @@ class FakeYseGateway implements YseGateway {
     activeOutputLatencyValue = 0;
   }
 
+  /// The session-bound tap (issue #480): live between [init] / [initOffline]
+  /// and [close], like `RealYseGateway.busTap`. A test publishes through it
+  /// the way a script's `yse.send` would reach the real one.
+  @override
+  late final FakeBusTap busTap = FakeBusTap(sessionOpen: () => initialised);
+
   @override
   void close() {
     calls.add('close');
     initialised = false;
+    // `System.close()` releases every bus tap and ends its stream.
+    busTap.endSession();
     // `close()` is not a recording — it tears the engine down. The real one
     // closes the MIDI inputs, destroys every channel it minted, and calls
     // `System::close()`, which releases the audio device (the engine's own

@@ -7,6 +7,8 @@ import '../../domain/project/app_settings/speaker_layout.dart';
 import 'audio_device_descriptor.dart';
 import 'audio_device_exception.dart';
 import 'audio_device_state.dart';
+import 'bus_tap.dart' show BusTap;
+import 'real_bus_tap.dart';
 import 'real_materialised_synth.dart' show MixBusResolver;
 import 'yse_gateway.dart';
 
@@ -71,6 +73,11 @@ class RealYseGateway implements YseGateway {
     _destroyAllChannels();
     _system.close();
   }
+
+  /// Gated on the same session flag as the master writes (issue #421), so a
+  /// subscribe on a closed engine never reaches `yse_bus_tap_create`.
+  @override
+  late final BusTap busTap = RealBusTap(sessionOpen: () => _sessionOpen);
 
   @override
   String get engineVersion => System.version;

@@ -2090,9 +2090,25 @@ main + app          (orchestration)
   setter a definition edit uses, but **unjournaled** and leaving the handle's
   authored `definition` untouched, so an unrelated re-sync keeps the live value
   while a journaled edit of the effect re-applies over it (performance, not
-  authorship, like `applyLiveBusLevel`). Still silent in production until the tap C
-  API lands (the default `NoOpBusTap` yields no frames, mirroring #229's
-  present-but-silent seam), but live the moment a frame arrives. The dispatcher is
+  authorship, like `applyLiveBusLevel`). **Live in production since #480**: the
+  engine's tap defaults to the gateway's session-bound `YseGateway.busTap` —
+  `RealBusTap` (`lib/engine/bridge/real_bus_tap.dart`) over dart-yse 0.2.0's
+  `Bus.tap`, whose native callback is a `NativeCallable.isolateLocal` fired on the
+  control (main) isolate, inline for a control-thread publish or during
+  `System.update()` otherwise — never the audio thread, nothing polled. The adapter
+  attaches the native tap only on listen and only inside a session (the #421
+  session flag), filters the byte-wise native prefix down to `BusTap`'s
+  segment-aware one, drops valueless bangs, and lets `System.close()` end the
+  stream; the dispatcher is rebuilt on every `start` and after an audio-session
+  restart (#448), so it re-taps each new session. `FakeYseGateway.busTap` is a
+  session-bound `FakeBusTap` with the same lifecycle; an injected `FakeBusTap` /
+  `NoOpBusTap` still overrides it for tests. Covered by
+  `test/engine/bridge/real_bus_tap_engine_test.dart` (real engine, offline session:
+  every value type, segment filtering, cancel, the closed-engine gate, re-tap after
+  close/init) and `integration_test/control_plane_real_bus_tap_test.dart` (a
+  `RealYseGateway` engine with no injected tap: `Bus.publish` on `phi.ctl.*` moves
+  the live state, a runtime variable and a live fx param, again after stop →
+  start). The dispatcher is
   torn down first on `stop`, cancelling its subscription before the controllers it
   routes to. Covered by unit tests for each adapter (`lib/engine/state/*_control_port`)
   and an end-to-end `control_plane_activation_test.dart` that drives a fake tap

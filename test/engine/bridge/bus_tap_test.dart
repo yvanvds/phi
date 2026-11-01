@@ -3,6 +3,7 @@ import 'package:phi/engine/bridge/bus_tap.dart';
 import 'package:phi/engine/bridge/no_op_bus_tap.dart';
 
 import '../test_doubles/fake_bus_tap.dart';
+import '../test_doubles/fake_yse_gateway.dart';
 
 void main() {
   group('busAddressMatchesPrefix', () {
@@ -118,5 +119,55 @@ void main() {
       expect(done, isTrue);
       await tap.dispose(); // safe, idempotent
     });
+  });
+
+  // The fake gateway's tap mirrors `RealYseGateway.busTap` (issues #421, #480):
+  // live only inside a session, ended by close().
+  group('FakeYseGateway.busTap', () {
+    late FakeYseGateway gateway;
+
+    setUp(() => gateway = FakeYseGateway());
+    tearDown(() => gateway.dispose());
+
+    test(
+      'outside a session a subscribe ends empty and a publish throws',
+      () async {
+        var done = false;
+        gateway.busTap
+            .subscribe('phi.ctl')
+            .listen((_) {}, onDone: () => done = true);
+        await pumpEventQueue();
+        expect(done, isTrue);
+        expect(
+          () => gateway.busTap.publish('phi.ctl.var.a', const BusInt(1)),
+          throwsStateError,
+        );
+      },
+    );
+
+    test(
+      'close() ends the stream; the next session subscribes fresh',
+      () async {
+        gateway.initOffline();
+        final first = <BusTapFrame>[];
+        var ended = false;
+        gateway.busTap
+            .subscribe('phi.ctl')
+            .listen(first.add, onDone: () => ended = true);
+        gateway.busTap.publish('phi.ctl.var.a', const BusInt(1));
+        gateway.close();
+        await pumpEventQueue();
+        expect(first, const [BusTapFrame('phi.ctl.var.a', BusInt(1))]);
+        expect(ended, isTrue);
+
+        gateway.initOffline();
+        final second = <BusTapFrame>[];
+        gateway.busTap.subscribe('phi.ctl').listen(second.add);
+        gateway.busTap.publish('phi.ctl.var.a', const BusInt(2));
+        await pumpEventQueue();
+        expect(second, const [BusTapFrame('phi.ctl.var.a', BusInt(2))]);
+        expect(first, hasLength(1));
+      },
+    );
   });
 }
