@@ -9,6 +9,7 @@ import 'package:phi/design/widgets/patcher/patch_incdec_stepper.dart';
 import 'package:phi/design/widgets/patcher/patch_keyboard.dart';
 import 'package:phi/design/widgets/patcher/patch_led_lamp.dart';
 import 'package:phi/design/widgets/patcher/patch_list_box.dart';
+import 'package:phi/design/widgets/patcher/patch_matrix_grid.dart';
 import 'package:phi/design/widgets/patcher/patch_menu_box.dart';
 import 'package:phi/design/widgets/patcher/patch_radio_group.dart';
 import 'package:phi/design/widgets/patcher/patch_range_bar.dart';
@@ -986,6 +987,151 @@ void main() {
     expect(patcher.keyboardVelocityOf(keys.id), isNull);
     await chord(LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.keyZ);
     expect(patcher.keyboardVelocityOf(keys.id), 110);
+
+    session.dispose();
+    await engine.dispose();
+  });
+
+  testWidgets('a .matrixctrl renders its grid, toggles a cell in run mode and '
+      'sends it down outlet 0 as <column> <row> <value> (issue #474)', (
+    tester,
+  ) async {
+    final patcherGateway = FakePatcherGateway()
+      // The engine's `.l`: one inlet, one outlet — so it can be wired.
+      ..topologyOverrides[Obj.gList] = const PatcherNodeSnapshot(
+        inputs: 1,
+        outputs: 1,
+        inputKinds: [PatchPortKind.control],
+        outputKinds: [PatchPortKind.control],
+      );
+    final engine = PhiEngine(
+      FakeYseGateway(),
+      patcherGateway: patcherGateway,
+      telemetryInterval: const Duration(milliseconds: 20),
+    );
+    final session = SessionState();
+
+    await tester.pumpWidget(PhiApp(engine: engine, session: session));
+    await tester.pumpAndSettle();
+    await tester.tap(railFor(SurfaceId.patcher));
+    await tester.pumpAndSettle();
+
+    // An empty canvas: the demo seed would sit over the control under test.
+    final patcher = engine.patcher;
+    for (final id in patcher.graph.nodes.map((n) => n.id).toList()) {
+      patcher.removeNode(id);
+    }
+    await tester.pumpAndSettle();
+
+    PatchNode gui(String type, Offset position, {String args = ''}) {
+      final d = NodeTypeRegistry.instance.find(type)!;
+      return patcher.addNode(
+        desc: NodeDescriptor(
+          type: d.type,
+          defaultSize: d.defaultSize,
+          sizeForArgs: d.sizeForArgs,
+          defaultArgs: args,
+          inputs: d.inputs,
+          outputs: d.outputs,
+          buildBody: d.buildBody,
+          readsGuiValue: d.readsGuiValue,
+          guiValueRead: d.guiValueRead,
+        ),
+        position: position,
+      );
+    }
+
+    final gridNode = gui(Obj.gMatrixctrl, const Offset(40, 40), args: '6 4');
+    final list = gui(Obj.gList, const Offset(40, 220));
+    patcher.connect(
+      PatchPortId(nodeId: gridNode.id, side: PatchPortSide.output, index: 0),
+      PatchPortId(nodeId: list.id, side: PatchPortSide.input, index: 0),
+    );
+    await tester.pumpAndSettle();
+
+    // ─── it renders as its grid, at its configured size ────────────────────
+    PatchMatrixGrid grid() =>
+        tester.widget<PatchMatrixGrid>(find.byType(PatchMatrixGrid));
+    expect(find.byType(PatchMatrixGrid), findsOneWidget);
+    expect(grid().columns, 6);
+    expect(grid().rows, 4);
+    expect(grid().values, everyElement(0));
+    final rect = tester.getRect(find.byType(PatchMatrixGrid));
+    expect(rect.width / rect.height, closeTo(6 / 4, 0.01));
+    expect(tester.takeException(), isNull, reason: 'nothing overflows');
+
+    final handle = patcherGateway.nodes.entries
+        .firstWhere((e) => e.value.type == Obj.gMatrixctrl)
+        .key;
+    List<String> listsTo() => [
+      for (final c in patcherGateway.calls)
+        if (c.startsWith('sendList:$handle:0:'))
+          c.substring('sendList:$handle:0:'.length),
+    ];
+    String listShows() => tester
+        .widget<Text>(
+          find.descendant(
+            of: find.byType(ListNodeBody),
+            matching: find.byType(Text),
+          ),
+        )
+        .data!;
+    Offset cellAt(int column, int row) {
+      final box = tester.getRect(find.byType(PatchMatrixGrid));
+      return box.topLeft +
+          Offset(box.width * (column + 0.5) / 6, box.height * (row + 0.5) / 4);
+    }
+
+    // ─── edit mode: a press on the grid moves the node, writes nothing ─────
+    patcherGateway.calls.clear();
+    final before = gridNode.position;
+    await tester.dragFrom(cellAt(2, 1), const Offset(24, 24));
+    await tester.pumpAndSettle();
+    expect(gridNode.position, isNot(before), reason: 'the drag moved the node');
+    expect(listsTo(), isEmpty);
+    expect(grid().values, everyElement(0));
+
+    // ─── run mode: a click toggles the cell and sends it on ────────────────
+    await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<PatcherCanvas>(find.byType(PatcherCanvas)).mode,
+      PatchCanvasMode.run,
+    );
+
+    patcherGateway.calls.clear();
+    await tester.tapAt(cellAt(2, 1));
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    // Column 2, row 1 of a 4-row grid is cell 9.
+    expect(listsTo(), ['set 9 1']);
+    expect(grid().values[9], 1);
+    expect(listShows(), '2 1 1', reason: 'outlet 0 reached the .l');
+
+    // A drag paints along a row.
+    patcherGateway.calls.clear();
+    final stroke = await tester.startGesture(cellAt(0, 3));
+    for (var c = 1; c < 6; c++) {
+      await stroke.moveTo(cellAt(c, 3));
+      await tester.pump();
+    }
+    await stroke.up();
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    expect(listsTo(), hasLength(6));
+    expect(
+      [for (var c = 0; c < 6; c++) grid().values[c * 4 + 3]],
+      [1, 1, 1, 1, 1, 1],
+    );
+    expect(listShows(), '5 3 1');
+
+    // ─── a cable-driven change repaints the cell ───────────────────────────
+    patcherGateway.sendList(patcher.instanceId, handle, 0, '2 1 0');
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    expect(grid().values[9], 0);
+    expect(listShows(), '2 1 0');
+    expect(tester.takeException(), isNull);
 
     session.dispose();
     await engine.dispose();

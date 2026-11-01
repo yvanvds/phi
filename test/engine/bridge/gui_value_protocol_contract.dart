@@ -484,6 +484,67 @@ void guiValueProtocolContract(
     // scalar plan), so it is not pinned here.
   });
 
+  // ─── the grid (issue #474) ────────────────────────────────────────────
+
+  test('a .matrixctrl holds a cell per grid cell, column-major', () {
+    final grid = gateway.createObject(inst, Obj.gMatrixctrl, args: '3 2 0 4');
+    final cell = listen(grid, 0, Obj.gList);
+    expect(gateway.guiValueCount(inst, grid), 6);
+    expect(gateway.guiValueIsSettable(inst, grid), isTrue);
+    expect(numbers(cellsOf(grid)), [0, 0, 0, 0, 0, 0]);
+
+    // Column 2, row 1 is index 2 * 2 + 1.
+    gateway.sendList(inst, grid, 0, '2 1 3');
+    expect(numbers(cellsOf(grid)), [0, 0, 0, 0, 0, 3]);
+    expect(numbers(gateway.guiValue(inst, cell).split(' ')), [2, 1, 3]);
+
+    // A cell write is `set <index> <value>`, bounded, and sent as a triple.
+    expect(gateway.setGuiValueAt(inst, grid, 1, '9'), isTrue);
+    expect(numbers(cellsOf(grid)), [0, 4, 0, 0, 0, 3], reason: 'clamped');
+    expect(numbers(gateway.guiValue(inst, cell).split(' ')), [0, 1, 4]);
+    expect(gateway.setGuiValueAt(inst, grid, 6, '1'), isFalse);
+
+    // A cell off the grid is dropped.
+    gateway.sendList(inst, grid, 0, '3 0 1');
+    expect(numbers(cellsOf(grid)), [0, 4, 0, 0, 0, 3]);
+  });
+
+  test('a .matrixctrl defaults to 8 x 8 on and off, and starts at its '
+      'minimum', () {
+    final grid = gateway.createObject(inst, Obj.gMatrixctrl);
+    expect(gateway.guiValueCount(inst, grid), 64);
+    gateway.sendList(inst, grid, 0, '7 7 5');
+    expect(num.parse(gateway.guiValueAt(inst, grid, 63)), 1);
+
+    final raised = gateway.createObject(inst, Obj.gMatrixctrl, args: '2 2 1 3');
+    expect(numbers(cellsOf(raised)), [1, 1, 1, 1]);
+  });
+
+  test('a .matrixctrl takes a whole grid, clears, and answers a row or '
+      'column on outlet 1', () {
+    final grid = gateway.createObject(inst, Obj.gMatrixctrl, args: '2 3 0 9');
+    final cell = listen(grid, 0, Obj.gList);
+    final line = listen(grid, 1, Obj.gList);
+
+    expect(gateway.restoreGuiValue(inst, grid, '1 2 3 4 5 6'), isTrue);
+    expect(numbers(cellsOf(grid)), [1, 2, 3, 4, 5, 6]);
+    // Every cell is sent, the last one last.
+    expect(numbers(gateway.guiValue(inst, cell).split(' ')), [1, 2, 6]);
+
+    gateway.sendMessage(inst, grid, 0, 'getrow 1');
+    expect(numbers(gateway.guiValue(inst, line).split(' ')), [2, 5]);
+    gateway.sendMessage(inst, grid, 0, 'getcolumn 0');
+    expect(numbers(gateway.guiValue(inst, line).split(' ')), [1, 2, 3]);
+
+    gateway.sendList(inst, grid, 0, '0 2 7');
+    gateway.sendBang(inst, grid, 0);
+    expect(numbers(gateway.guiValue(inst, cell).split(' ')), [1, 2, 6]);
+
+    gateway.sendMessage(inst, grid, 0, 'clear');
+    expect(numbers(cellsOf(grid)), [0, 0, 0, 0, 0, 0]);
+    expect(numbers(gateway.guiValue(inst, cell).split(' ')), [1, 2, 0]);
+  });
+
   test('an unknown handle answers the empty protocol', () {
     expect(gateway.guiValueCount(inst, 999), 0);
     expect(gateway.guiValueAt(inst, 999, 0), '');

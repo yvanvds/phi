@@ -6,6 +6,7 @@ import '../../design/widgets/patcher/patch_canvas_constants.dart';
 import '../../design/widgets/patcher/patch_object_box_metrics.dart';
 import '../../domain/patcher/item_list_args.dart';
 import '../../domain/patcher/keyboard_layout.dart';
+import '../../domain/patcher/matrixctrl_args.dart';
 import '../../domain/patcher/multislider_args.dart';
 import '../../domain/patcher/patch_gui_property.dart';
 import '../../domain/patcher/patch_object_types.dart';
@@ -19,6 +20,7 @@ import 'nodes/item_list_node_body.dart';
 import 'nodes/kslider_node_body.dart';
 import 'nodes/label_switch_node_body.dart';
 import 'nodes/list_node_body.dart';
+import 'nodes/matrixctrl_node_body.dart';
 import 'nodes/message_node_body.dart';
 import 'nodes/multislider_node_body.dart';
 import 'nodes/nslider_node_body.dart';
@@ -456,7 +458,44 @@ void registerBuiltInPatcherNodes() {
       guiValueRead: GuiValueRead.cells,
     ),
   );
+
+  // ─── libYSE 3.0 grid (issue #474) ──────────────────────────────────────
+  // A `.matrixctrl`'s GUI value is one cell per grid cell — 65 536 of them
+  // at 256 × 256 — so it is polled per cell, never as one string. Its box is
+  // its `columns rows` arguments, a cell's side each, inside a ceiling.
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gMatrixctrl,
+      sizeForArgs: (args) {
+        final grid = MatrixctrlArgs.parse(args);
+        return Size(
+          (grid.columns * _gridCellSide).clamp(
+            PatchCanvasConstants.minWidthForPorts(2),
+            _gridMaxSide,
+          ),
+          (grid.rows * _gridCellSide).clamp(square, _gridMaxSide),
+        );
+      },
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [
+        PortSpec(kind: PatchPortKind.control, label: 'cell'),
+        PortSpec(kind: PatchPortKind.control, label: 'line'),
+      ],
+      buildBody: (ctx, node, controller) =>
+          MatrixctrlNodeBody(node: node, controller: controller),
+      readsGuiValue: true,
+      guiValueRead: GuiValueRead.cells,
+    ),
+  );
 }
+
+/// A `.matrixctrl` cell's side at creation (issue #474).
+const double _gridCellSide = 14;
+
+/// The widest and tallest a `.matrixctrl` opens at, however many cells it has.
+const double _gridMaxSide = 384;
 
 /// Width of one `.kslider` white key (issue #473).
 const double _whiteKeyWidth = 12;

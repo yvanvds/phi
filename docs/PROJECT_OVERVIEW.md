@@ -2830,6 +2830,21 @@ main + app          (orchestration)
   `patcher_node_gui` integration case (a key pressed in run mode sends pitch
   and velocity into two `.i`; inert in edit mode; a staff drag reaches a `.i`;
   cable-driven notes show on both).
+- **Grid body** (issue #474) — `.matrixctrl` (`MatrixctrlNodeBody` over
+  `PatchMatrixGrid`, columns by rows of cells filled to their level). Sized
+  from its `columns rows` args (`sizeForArgs`, 14 px a cell, capped at 384 px)
+  and polled **per cell** — up to 65 536 of them, never as one string. The
+  flat index is column-major, `column * rows + row` (`MatrixctrlArgs`). A click
+  toggles a cell between minimum and maximum, a drag paints that value across
+  the cells it crosses, and with a maximum above 1 a vertical drag steps one
+  cell in whole units (`MatrixGesture`, pure Dart). Each write is
+  `set <index> <value>`, answered by `<column> <row> <value>` on outlet 0.
+  `FakePatcherGateway` models the object (bounds, triples, `set`, whole-grid
+  lists, `clear`, bang, `getrow` / `getcolumn` on outlet 1), pinned to the
+  engine by the shared contract. Covered by domain unit tests,
+  `matrixctrl_node_body_test.dart`, and a `patcher_node_gui` integration case
+  (a cell clicked in run mode reaches a `.l` as `2 1 1`; inert in edit mode; a
+  painted row; a cable-driven change repaints).
 - **Keyboard range and velocity editing** (issue #515) — a selected `.kslider`
   gets a KEYBOARD section in the reference panel (`PatchKeyboardSettings`,
   `lib/surfaces/patcher/reference/`): the range shown as `C3 – C6`

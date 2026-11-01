@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:ui';
 
 import 'package:phi/domain/patcher/item_list_args.dart';
+import 'package:phi/domain/patcher/matrixctrl_args.dart';
 import 'package:phi/domain/patcher/multislider_args.dart';
 import 'package:phi/domain/patcher/patch_port_kind.dart';
 import 'package:phi/domain/patcher/slider_range.dart';
@@ -263,6 +264,8 @@ class FakePatcherGateway implements PatcherGateway {
       _musicalNumber(instanceId, handleId, inlet, value);
       return;
     }
+    // `gMatrixCtrl` takes lists and bangs only, so a bare number is dropped.
+    if (node.isGrid) return;
     // Model the engine's uncoerced inlet dispatch (issue #439): `gToggle`
     // registers int and bang handlers but **no float one**, so a float sent at
     // it lands nowhere — the real engine drops it silently. The fake dropping
@@ -299,6 +302,7 @@ class FakePatcherGateway implements PatcherGateway {
       _musicalNumber(instanceId, handleId, inlet, value.toDouble());
       return;
     }
+    if (node.isGrid) return;
     if (inlet != 0) return;
     if (node.receiveSwitchNumber(value.toDouble())) return;
     // The engine's `gToggle` displays its state as `on`/`off`, not as a
@@ -325,6 +329,9 @@ class FakePatcherGateway implements PatcherGateway {
     // A `.kslider` re-sends what it holds; a `.nslider` re-sends its note.
     if (inlet == 0 && node.isKeyboard) node.bangKeyboard();
     _emitMusical(instanceId, handleId, inlet: inlet);
+    // A `.matrixctrl` sends every cell.
+    if (inlet == 0 && node.isGrid) node.sendWholeGrid();
+    _emitGrid(instanceId, handleId);
     // A latching `.led` / `.textbutton` flips on a bang; a momentary one
     // takes it as a press (`gLabelSwitchBase`).
     if (inlet == 0 && node.isLabelSwitch) {
@@ -358,6 +365,7 @@ class FakePatcherGateway implements PatcherGateway {
       _emitMultiValueSlider(instanceId, handleId);
     }
     _emitMusical(instanceId, handleId, inlet: inlet);
+    _emitGrid(instanceId, handleId);
   }
 
   @override
@@ -373,6 +381,7 @@ class FakePatcherGateway implements PatcherGateway {
       _emitMultiValueSlider(instanceId, handleId);
     }
     _emitMusical(instanceId, handleId, inlet: inlet);
+    _emitGrid(instanceId, handleId);
   }
 
   /// A number landing on an item list (`gItemListBase::FloatIn`): on inlet 0
@@ -456,6 +465,22 @@ class FakePatcherGateway implements PatcherGateway {
     if (inlet != 0) return;
     deliver(1, int.parse(node.guiCells[1]));
     deliver(0, int.parse(node.guiCells[0]));
+  }
+
+  /// Model what a `.matrixctrl` sent after a message, in order, each list
+  /// delivered down every cable from its outlet: `<column> <row> <value>` on
+  /// outlet 0 for each changed cell, a row or column on outlet 1 for a query.
+  void _emitGrid(int instanceId, int handleId) {
+    final inst = _inst(instanceId);
+    final node = inst.nodes[handleId];
+    if (node == null || !node.isGrid) return;
+    for (final (outlet, list) in node.takeGridSends()) {
+      for (final c in [...inst.cables]) {
+        if (c.fromHandleId == handleId && c.outlet == outlet) {
+          sendList(instanceId, c.toHandleId, c.inlet, list);
+        }
+      }
+    }
   }
 
   /// Model a multi-value slider's send (`CALC`), right to left as the engine
@@ -552,6 +577,9 @@ class FakePatcherGateway implements PatcherGateway {
     // So do the keyboard and the staff: a new `velocity`, or new bounds the
     // held pitch is pulled into at once.
     if (node.isKeyboard || node.isStaff) node.reconfigureMusical();
+    // A `.matrixctrl` is re-shaped from its new arguments, every cell cleared
+    // (`gMatrixCtrl::ShapeGrid`).
+    if (node.isGrid) node.reshapeGrid();
   }
 
   /// A whole value renders without a trailing `.0` (`3` not `3.0`), matching
@@ -739,6 +767,14 @@ class FakePatcherGateway implements PatcherGateway {
           inputKinds: [PatchPortKind.control],
           outputKinds: [PatchPortKind.control, PatchPortKind.control],
         );
+      // The grid in; changed cells and a queried line out (issue #474).
+      case Obj.gMatrixctrl:
+        return const PatcherNodeSnapshot(
+          inputs: 1,
+          outputs: 2,
+          inputKinds: [PatchPortKind.control],
+          outputKinds: [PatchPortKind.control, PatchPortKind.control],
+        );
       // Pitch and velocity in; pitch and velocity out (issue #473).
       case Obj.gKslider:
         return const PatcherNodeSnapshot(
@@ -891,6 +927,7 @@ class FakeNode {
       _publishSlider();
     }
     if (isKeyboard || isStaff) reconfigureMusical();
+    if (isGrid) reshapeGrid();
   }
   final String type;
 
@@ -1064,6 +1101,10 @@ class FakeNode {
     if (inlet != 0) return;
     if (isStaff) {
       _receiveStaffList(list);
+      return;
+    }
+    if (isGrid) {
+      _receiveGridList(list);
       return;
     }
     if (type == Obj.gIncdec && _stepIncdec(list.trim())) return;
@@ -1467,6 +1508,120 @@ class FakeNode {
     _staffAccidental = numbers.length >= 2 ? numbers[1].truncate() : 0;
     _staffPitch = _boundPitch(numbers[0].truncate());
     _publishStaff();
+  }
+
+  // ─── the grid (issue #474) ──────────────────────────────────────────
+
+  /// Whether this is a `.matrixctrl`: one cell per grid cell, column-major.
+  bool get isGrid => type == Obj.gMatrixctrl;
+
+  /// The grid's shape and range, from its creation arguments.
+  MatrixctrlArgs get gridArgs => MatrixctrlArgs.parse(args);
+
+  /// Each cell as stored — bounded on the way in and again on the way out, as
+  /// `gMatrixCtrl` does (cells start at 0, which a range above 0 reports as
+  /// its minimum).
+  List<double> _grid = const [];
+
+  /// Lists the grid has sent and the gateway has not yet delivered, as
+  /// (outlet, list), in order.
+  final List<(int, String)> _gridSends = [];
+
+  /// The grid's sends since the last call, in order.
+  List<(int, String)> takeGridSends() {
+    final sends = [..._gridSends];
+    _gridSends.clear();
+    return sends;
+  }
+
+  /// `gMatrixCtrl::ShapeGrid`: a fresh grid of the arguments' shape, every
+  /// cell 0.
+  void reshapeGrid() {
+    _grid = List.filled(gridArgs.cellCount, 0);
+    _publishGrid();
+  }
+
+  void _publishGrid() {
+    final range = gridArgs.range;
+    guiCells = [for (final v in _grid) _spell(_bound(v, range))];
+  }
+
+  /// `SendCell`: the triple for the cell at [index].
+  void _sendCell(int index) {
+    final grid = gridArgs;
+    _gridSends.add((
+      0,
+      '${grid.columnOf(index)} ${grid.rowOf(index)} ${guiCells[index]}',
+    ));
+  }
+
+  /// `SendAll`: every cell, column by column.
+  void sendWholeGrid() {
+    for (var i = 0; i < _grid.length; i++) {
+      _sendCell(i);
+    }
+  }
+
+  /// `gMatrixCtrl::ListIn`: `set <index> <value>`, `clear`, `getrow <row>`,
+  /// `getcolumn <column>`, a list of every cell, or `<column> <row> <value>`.
+  /// Non-numeric tokens are skipped when counting numbers, as the engine's
+  /// parser skips them.
+  void _receiveGridList(String list) {
+    final tokens = list.trim().split(RegExp(r'\s+'));
+    if (tokens.first.isEmpty) return;
+    final grid = gridArgs;
+    final range = grid.range;
+    int whole(double n) =>
+        n.isFinite && n.abs() < 2147483648 ? n.truncate() : 0;
+    final keyword = tokens.first;
+    final numbers = [for (final t in tokens) ?double.tryParse(t)];
+    if (keyword == 'set') {
+      if (numbers.length < 2 || !(numbers[0] >= 0)) return;
+      final at = whole(numbers[0]);
+      if (at >= _grid.length) return;
+      _grid[at] = _bound(numbers[1], range);
+      _publishGrid();
+      _sendCell(at);
+      return;
+    }
+    if (keyword == 'clear') {
+      _grid = List.filled(_grid.length, 0);
+      _publishGrid();
+      sendWholeGrid();
+      return;
+    }
+    if (keyword == 'getrow' || keyword == 'getcolumn') {
+      final column = keyword == 'getcolumn';
+      if (numbers.isEmpty || !(numbers[0] >= 0)) return;
+      final at = whole(numbers[0]);
+      if (at >= (column ? grid.columns : grid.rows)) return;
+      final count = column ? grid.rows : grid.columns;
+      _gridSends.add((
+        1,
+        [
+          for (var i = 0; i < count; i++)
+            guiCells[column ? grid.indexOf(at, i) : grid.indexOf(i, at)],
+        ].join(' '),
+      ));
+      return;
+    }
+    if (numbers.length == _grid.length) {
+      for (var i = 0; i < _grid.length; i++) {
+        _grid[i] = _bound(numbers[i], range);
+      }
+      _publishGrid();
+      sendWholeGrid();
+      return;
+    }
+    if (numbers.length != 3) return;
+    if (!(numbers[0] >= 0) || !(numbers[1] >= 0)) return;
+    final column = whole(numbers[0]);
+    final row = whole(numbers[1]);
+    if (column >= grid.columns || row >= grid.rows) return;
+    final at = grid.indexOf(column, row);
+    _grid[at] = _bound(numbers[2], range);
+    _publishGrid();
+    _sendCell(at);
   }
 
   /// Objects whose GUI value the engine does not accept back.

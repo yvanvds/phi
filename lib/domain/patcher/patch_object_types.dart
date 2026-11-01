@@ -84,6 +84,10 @@ abstract final class PatchObjectTypes {
   /// (issue #473).
   static const String gNslider = '.nslider';
 
+  /// `Obj.gMatrixctrl` — a grid of cells, columns by rows, each addressed as
+  /// `<column> <row> <value>` (issue #474).
+  static const String gMatrixctrl = '.matrixctrl';
+
   /// Every id above, for the drift guard.
   static const List<String> all = [
     dSine,
@@ -108,5 +112,6 @@ abstract final class PatchObjectTypes {
     gMultislider,
     gKslider,
     gNslider,
+    gMatrixctrl,
   ];
 }
