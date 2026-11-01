@@ -2865,6 +2865,25 @@ main + app          (orchestration)
   three-point envelope drawn, moved, bent and edited in run mode bangs
   `0 0 0.5 250 1 750` into a `.line`; inert in edit mode; Delete reaches the
   body through the canvas; the points survive a flush and reload).
+- **Interpolation field** (issue #476) — `.nodes` (`NodesNodeBody` over
+  `PatchNodesField`, numbered translucent circles in a square field, each
+  filled by its weight, plus the cursor). 160 by 160 at creation, polled **per
+  cell**, one `<x> <y> <radius>` cell per node; the node count follows the live
+  cell count, not the `count` arg (`NodesArgs`). The field is the unit square,
+  y up, fitted and snapped by `NodesView`. In run mode a press or drag sends
+  the cursor (`<x> <y>`), answered by distances on outlet 1 and weights on
+  outlet 0; an Alt-drag on a node moves it (`set <i> <x> <y>`, radius kept)
+  and on its rim resizes it (`set <i> <x> <y> <radius>`) — `NodesGesture`,
+  pure Dart. The body keeps only the cursor (no read reports it) and shades
+  each node by `NodesField.weights`, the engine's sum. Writes are not
+  journaled; the object saves only its `count` (no `DumpState`), the live
+  layout being control state for `.preset`. `FakePatcherGateway` models the
+  bank (64 slots, count bound, cursor vs. whole field vs. `set`, the send after
+  every list / bang but no number, distances before weights), pinned to the
+  engine by the shared contract. Covered by domain unit tests,
+  `nodes_node_body_test.dart`, and a `patcher_node_gui` integration case (a
+  cable-driven layout redraws; inert in edit mode; a node moved and widened
+  with Alt-drags; the cursor dragged into it sends `0 1` into a `.l`).
 - **Keyboard range and velocity editing** (issue #515) — a selected `.kslider`
   gets a KEYBOARD section in the reference panel (`PatchKeyboardSettings`,
   `lib/surfaces/patcher/reference/`): the range shown as `C3 – C6`

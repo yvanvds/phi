@@ -679,6 +679,165 @@ void guiValueProtocolContract(
     );
   });
 
+  // ─── the interpolation field (issue #476) ─────────────────────────────
+
+  List<List<num?>> fieldOf(int handle) => [
+    for (final cell in cellsOf(handle)) numbers(cell.split(' ')),
+  ];
+
+  List<double> listOf(int handle) => [
+    for (final n in gateway.guiValue(inst, handle).trim().split(' '))
+      double.parse(n),
+  ];
+
+  test('a .nodes holds an <x> <y> <radius> cell per node, unit nodes at the '
+      'origin to start', () {
+    final field = gateway.createObject(inst, Obj.gNodes);
+    expect(fieldOf(field), List.filled(4, [0, 0, 1]));
+    expect(gateway.guiValueIsSettable(inst, field), isTrue);
+    expect(numbers(gateway.guiValue(inst, field).split(' ')), [
+      for (var i = 0; i < 4; i++) ...[0, 0, 1],
+    ]);
+
+    expect(
+      fieldOf(gateway.createObject(inst, Obj.gNodes, args: '2')),
+      List.filled(2, [0, 0, 1]),
+    );
+    expect(
+      gateway.guiValueCount(
+        inst,
+        gateway.createObject(inst, Obj.gNodes, args: '99'),
+      ),
+      64,
+      reason: 'the count is clamped to 64',
+    );
+    expect(
+      gateway.guiValueCount(
+        inst,
+        gateway.createObject(inst, Obj.gNodes, args: '0'),
+      ),
+      1,
+      reason: 'and to at least 1',
+    );
+  });
+
+  test('a .nodes takes a whole field back, resizing to its triples, and moves '
+      'one node with the cell write', () {
+    final field = gateway.createObject(inst, Obj.gNodes);
+    // A trailing partial triple is ignored.
+    expect(
+      gateway.restoreGuiValue(
+        inst,
+        field,
+        '0.25 0.25 0.5 0.75 0.75 0.25 0.5 0.5',
+      ),
+      isTrue,
+    );
+    expect(fieldOf(field), [
+      [0.25, 0.25, 0.5],
+      [0.75, 0.75, 0.25],
+    ]);
+
+    // `set <i> <x> <y>` keeps the radius; a fourth number replaces it.
+    expect(gateway.setGuiValueAt(inst, field, 1, '0.5 0.5'), isTrue);
+    expect(fieldOf(field)[1], [0.5, 0.5, 0.25]);
+    expect(gateway.setGuiValueAt(inst, field, 0, '0 1 0.125'), isTrue);
+    expect(fieldOf(field)[0], [0, 1, 0.125]);
+    expect(gateway.setGuiValueAt(inst, field, 2, '0.5 0.5'), isFalse);
+    expect(fieldOf(field), hasLength(2));
+
+    // A longer field grows the count past the creation argument.
+    final small = gateway.createObject(inst, Obj.gNodes, args: '2');
+    gateway.sendList(inst, small, 0, '0 0 0.5 0.5 0 0.5 1 0 0.5');
+    expect(fieldOf(small), hasLength(3));
+
+    final saved = gateway.guiValue(inst, field);
+    gateway.restoreGuiValue(inst, field, '0 0 1');
+    expect(fieldOf(field), hasLength(1));
+    gateway.restoreGuiValue(inst, field, saved);
+    expect(fieldOf(field), [
+      [0, 1, 0.125],
+      [0.5, 0.5, 0.25],
+    ]);
+  });
+
+  test('a .nodes weighs the cursor: weights on outlet 0 summing to 1 inside '
+      'a node, all 0 outside, distances on outlet 1', () {
+    final field = gateway.createObject(inst, Obj.gNodes, args: '2');
+    final weights = listen(field, 0, Obj.gList);
+    final distances = listen(field, 1, Obj.gList);
+    gateway.restoreGuiValue(inst, field, '0 0 1 1 0 1');
+
+    gateway.sendList(inst, field, 0, '0.25 0');
+    expect(listOf(weights), [closeTo(0.75, 1e-6), closeTo(0.25, 1e-6)]);
+    expect(listOf(distances), [closeTo(0.25, 1e-6), closeTo(0.75, 1e-6)]);
+
+    // Inside only the first node.
+    gateway.restoreGuiValue(inst, field, '0.25 0.25 0.2 0.75 0.75 0.2');
+    gateway.sendList(inst, field, 0, '0.25 0.25');
+    expect(listOf(weights), [1, 0]);
+    expect(listOf(distances), [0, closeTo(0.7071068, 1e-5)]);
+
+    // Outside every node.
+    gateway.sendList(inst, field, 0, '0.5 0.5');
+    expect(listOf(weights), [0, 0]);
+
+    // A muted node (radius 0) covers nothing.
+    gateway.restoreGuiValue(inst, field, '0.5 0.5 0 0.5 0.5 1');
+    gateway.sendList(inst, field, 0, '0.5 0.5');
+    expect(listOf(weights), [0, 1]);
+  });
+
+  test('a .nodes sends the distances first and the weights last, after every '
+      'list, set and bang, but not on a bare number', () {
+    final field = gateway.createObject(inst, Obj.gNodes, args: '2');
+    final last = listen(field, 0, Obj.gList);
+    gateway.connect(
+      inst,
+      fromHandleId: field,
+      outlet: 1,
+      toHandleId: last,
+      inlet: 0,
+    );
+    gateway.restoreGuiValue(inst, field, '0.25 0.25 0.2 0.75 0.75 0.2');
+    gateway.sendList(inst, field, 0, '0.75 0.75');
+    expect(listOf(last), [0, 1], reason: 'the weights arrive last');
+
+    gateway.sendList(inst, last, 0, '9');
+    gateway.sendFloat(inst, field, 0, 0.3);
+    gateway.sendInt(inst, field, 0, 1);
+    expect(listOf(last), [9], reason: 'no number handler');
+
+    gateway.sendBang(inst, field, 0);
+    expect(listOf(last), [0, 1], reason: 'a bang re-sends');
+
+    gateway.sendList(inst, last, 0, '9');
+    gateway.setGuiValueAt(inst, field, 0, '0.75 0.75');
+    expect(listOf(last), [0.5, 0.5], reason: 'a node move sends');
+
+    gateway.sendList(inst, last, 0, '9');
+    gateway.sendMessage(inst, field, 0, 'set 1 0 0 0.1');
+    expect(listOf(last), [1, 0], reason: 'so does a set message');
+  });
+
+  test('a .nodes saves only its count: a reload is that many fresh nodes', () {
+    final field = gateway.createObject(inst, Obj.gNodes, args: '3');
+    gateway.restoreGuiValue(inst, field, '0.25 0.25 0.5 0.75 0.75 0.25');
+    final dump = gateway.dumpJson(inst);
+
+    final copy = gateway.createInstance();
+    gateway.parseJson(copy, dump);
+    final reloaded = gateway
+        .enumerate(copy)
+        .objects
+        .firstWhere((o) => o.type == Obj.gNodes)
+        .handleId;
+    expect([
+      for (var i = 0; i < gateway.guiValueCount(copy, reloaded); i++)
+        numbers(gateway.guiValueAt(copy, reloaded, i).split(' ')),
+    ], List.filled(3, [0, 0, 1]));
+  });
+
   test('an unknown handle answers the empty protocol', () {
     expect(gateway.guiValueCount(inst, 999), 0);
     expect(gateway.guiValueAt(inst, 999, 0), '');

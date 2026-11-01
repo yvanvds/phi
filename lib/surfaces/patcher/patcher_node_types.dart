@@ -24,6 +24,7 @@ import 'nodes/list_node_body.dart';
 import 'nodes/matrixctrl_node_body.dart';
 import 'nodes/message_node_body.dart';
 import 'nodes/multislider_node_body.dart';
+import 'nodes/nodes_node_body.dart';
 import 'nodes/nslider_node_body.dart';
 import 'nodes/number_node_body.dart';
 import 'nodes/range_slider_node_body.dart';
@@ -513,11 +514,36 @@ void registerBuiltInPatcherNodes() {
       guiValueRead: GuiValueRead.cells,
     ),
   );
+
+  // ─── libYSE 3.0 interpolation field (issue #476) ───────────────────────
+  // A `.nodes` field's GUI value is one `<x> <y> <radius>` cell per node, up
+  // to 64 of them, so it is polled per cell. The object saves only its
+  // `count`; the live layout is control state, which `.preset` keeps.
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gNodes,
+      defaultSize: _nodesSize,
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [
+        PortSpec(kind: PatchPortKind.control, label: 'weights'),
+        PortSpec(kind: PatchPortKind.control, label: 'distances'),
+      ],
+      buildBody: (ctx, node, controller) =>
+          NodesNodeBody(node: node, controller: controller),
+      readsGuiValue: true,
+      guiValueRead: GuiValueRead.cells,
+    ),
+  );
 }
 
 /// A `.function` editor's size at creation (issue #475): wide enough to draw
 /// an envelope into, a Max-ish 200 by 100.
 const Size _functionSize = Size(200, 100);
+
+/// A `.nodes` field's size at creation (issue #476): square, as the field is.
+const Size _nodesSize = Size(160, 160);
 
 /// A `.matrixctrl` cell's side at creation (issue #474).
 const double _gridCellSide = 14;

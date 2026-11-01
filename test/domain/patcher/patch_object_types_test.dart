@@ -37,6 +37,7 @@ void main() {
     expect(PatchObjectTypes.gNslider, Obj.gNslider);
     expect(PatchObjectTypes.gMatrixctrl, Obj.gMatrixctrl);
     expect(PatchObjectTypes.gFunction, Obj.gFunction);
+    expect(PatchObjectTypes.gNodes, Obj.gNodes);
   });
 
   test('the list holds each id exactly once', () {

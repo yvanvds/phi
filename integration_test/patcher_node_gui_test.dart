@@ -12,6 +12,7 @@ import 'package:phi/design/widgets/patcher/patch_led_lamp.dart';
 import 'package:phi/design/widgets/patcher/patch_list_box.dart';
 import 'package:phi/design/widgets/patcher/patch_matrix_grid.dart';
 import 'package:phi/design/widgets/patcher/patch_menu_box.dart';
+import 'package:phi/design/widgets/patcher/patch_nodes_field.dart';
 import 'package:phi/design/widgets/patcher/patch_radio_group.dart';
 import 'package:phi/design/widgets/patcher/patch_range_bar.dart';
 import 'package:phi/design/widgets/patcher/patch_slider_bank.dart';
@@ -20,7 +21,9 @@ import 'package:phi/design/widgets/patcher/patch_tab_strip.dart';
 import 'package:phi/design/widgets/patcher/patch_text_button.dart';
 import 'package:phi/design/widgets/patcher/patch_text_edit_box.dart';
 import 'package:phi/design/widgets/patcher/patch_xy_pad.dart';
+import 'package:phi/domain/patcher/field_node.dart';
 import 'package:phi/domain/patcher/keyboard_layout.dart';
+import 'package:phi/domain/patcher/nodes_view.dart';
 import 'package:phi/domain/patcher/patch_node.dart';
 import 'package:phi/domain/patcher/patch_port.dart';
 import 'package:phi/domain/patcher/patch_port_id.dart';
@@ -1309,6 +1312,172 @@ void main() {
     expect(find.byType(PatchFunctionGraph), findsOneWidget);
     expect(graph().positions, [(0.0, 0.0), (0.25, 0.5), (1.0, 1.0)]);
     expect(graph().curves, [0, 0, -0.5]);
+    expect(tester.takeException(), isNull);
+
+    session.dispose();
+    await engine.dispose();
+  });
+
+  testWidgets('a .nodes field is laid out and played in run mode: the cursor '
+      'dragged into one node sends it a weight of 1 (issue #476)', (
+    tester,
+  ) async {
+    final patcherGateway = FakePatcherGateway()
+      // The engine's `.l`: one inlet, one outlet — so it can be wired.
+      ..topologyOverrides[Obj.gList] = const PatcherNodeSnapshot(
+        inputs: 1,
+        outputs: 1,
+        inputKinds: [PatchPortKind.control],
+        outputKinds: [PatchPortKind.control],
+      );
+    final engine = PhiEngine(
+      FakeYseGateway(),
+      patcherGateway: patcherGateway,
+      telemetryInterval: const Duration(milliseconds: 20),
+    );
+    final session = SessionState();
+
+    await tester.pumpWidget(PhiApp(engine: engine, session: session));
+    await tester.pumpAndSettle();
+    await tester.tap(railFor(SurfaceId.patcher));
+    await tester.pumpAndSettle();
+
+    // An empty canvas: the demo seed would sit over the control under test.
+    final patcher = engine.patcher;
+    for (final id in patcher.graph.nodes.map((n) => n.id).toList()) {
+      patcher.removeNode(id);
+    }
+    await tester.pumpAndSettle();
+
+    PatchNode gui(String type, Offset position, {String args = ''}) {
+      final d = NodeTypeRegistry.instance.find(type)!;
+      return patcher.addNode(
+        desc: NodeDescriptor(
+          type: d.type,
+          defaultSize: d.defaultSize,
+          defaultArgs: args,
+          inputs: d.inputs,
+          outputs: d.outputs,
+          buildBody: d.buildBody,
+          readsGuiValue: d.readsGuiValue,
+          guiValueRead: d.guiValueRead,
+        ),
+        position: position,
+      );
+    }
+
+    final fieldNode = gui(Obj.gNodes, const Offset(40, 40), args: '2');
+    final list = gui(Obj.gList, const Offset(40, 260));
+    patcher.connect(
+      PatchPortId(nodeId: fieldNode.id, side: PatchPortSide.output, index: 0),
+      PatchPortId(nodeId: list.id, side: PatchPortSide.input, index: 0),
+    );
+    await tester.pumpAndSettle();
+
+    // ─── it renders as its field, square, two unit nodes at the origin ─────
+    PatchNodesField field() =>
+        tester.widget<PatchNodesField>(find.byType(PatchNodesField));
+    expect(find.byType(PatchNodesField), findsOneWidget);
+    expect(field().nodes, List.filled(2, const FieldNode(0, 0, 1)));
+    final rect = tester.getRect(find.byType(PatchNodesField));
+    expect(rect.width / rect.height, closeTo(1, 0.01));
+    expect(tester.takeException(), isNull, reason: 'nothing overflows');
+
+    final handle = patcherGateway.nodes.entries
+        .firstWhere((e) => e.value.type == Obj.gNodes)
+        .key;
+    List<String> sentTo() => [
+      for (final c in patcherGateway.calls)
+        if (c.startsWith('sendList:$handle:0:'))
+          c.substring('sendList:$handle:0:'.length),
+    ];
+    String listShows() => tester
+        .widget<Text>(
+          find.descendant(
+            of: find.byType(ListNodeBody),
+            matching: find.byType(Text),
+          ),
+        )
+        .data!;
+    Offset fieldAt(double x, double y) {
+      final box = tester.getRect(find.byType(PatchNodesField));
+      final (px, py) = NodesView(
+        width: box.width,
+        height: box.height,
+      ).toPixel(x, y);
+      return box.topLeft + Offset(px, py);
+    }
+
+    Future<void> drag(Offset from, Offset to, {bool alt = false}) async {
+      if (alt) await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      final pointer = await tester.startGesture(from);
+      await tester.pump();
+      await pointer.moveTo(Offset.lerp(from, to, 0.5)!);
+      await tester.pump();
+      await pointer.moveTo(to);
+      await tester.pump();
+      await pointer.up();
+      if (alt) await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pumpAndSettle();
+    }
+
+    // ─── a layout driven over a cable redraws the field ────────────────────
+    patcherGateway.sendList(
+      patcher.instanceId,
+      handle,
+      0,
+      '0.25 0.25 0.2 0.75 0.75 0.2',
+    );
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    expect(field().nodes, const [
+      FieldNode(0.25, 0.25, 0.2),
+      FieldNode(0.75, 0.75, 0.2),
+    ]);
+
+    // ─── edit mode: a press on the field moves the node, writes nothing ────
+    patcherGateway.calls.clear();
+    final before = fieldNode.position;
+    await tester.dragFrom(fieldAt(0.5, 0.5), const Offset(24, 24));
+    await tester.pumpAndSettle();
+    expect(fieldNode.position, isNot(before), reason: 'the drag moved the box');
+    expect(sentTo(), isEmpty);
+
+    // ─── run mode ──────────────────────────────────────────────────────────
+    await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<PatcherCanvas>(find.byType(PatcherCanvas)).mode,
+      PatchCanvasMode.run,
+    );
+
+    // Alt-drag node 2 in from the corner, then its rim out to widen it.
+    patcherGateway.calls.clear();
+    await drag(fieldAt(0.75, 0.75), fieldAt(0.6, 0.6), alt: true);
+    expect(sentTo().last, 'set 1 0.6 0.6');
+    await drag(fieldAt(0.8, 0.6), fieldAt(0.9, 0.6), alt: true);
+    expect(sentTo().last, 'set 1 0.6 0.6 0.3');
+    expect(field().nodes[1], const FieldNode(0.6, 0.6, 0.3));
+    expect(
+      patcherGateway.nodes[handle]!.guiCells[1],
+      '0.6 0.6 0.3',
+      reason: 'the layout lives in the object, read back as its GUI value',
+    );
+
+    // Drag the cursor from outside every node into node 2 alone.
+    patcherGateway.calls.clear();
+    await drag(fieldAt(0.5, 0.05), fieldAt(0.6, 0.65));
+    expect(sentTo().first, '0.5 0.05');
+    expect(sentTo().last, '0.6 0.65');
+    expect(listShows(), '0 1', reason: 'node 2 takes the whole weight');
+    expect(field().cursor, (0.6, 0.65));
+    expect(field().weights, [0, 1]);
+
+    // Out of every node, the weights all fall to 0.
+    await drag(fieldAt(0.6, 0.65), fieldAt(0.05, 0.95));
+    expect(listShows(), '0 0');
+    expect(field().weights, [0, 0]);
     expect(tester.takeException(), isNull);
 
     session.dispose();

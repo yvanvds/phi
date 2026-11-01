@@ -92,6 +92,10 @@ abstract final class PatchObjectTypes {
   /// points, answered by x and banged out as a ramp (issue #475).
   static const String gFunction = '.function';
 
+  /// `Obj.gNodes` — an interpolation field: circular `<x> <y> <radius>` nodes
+  /// a cursor is weighed against, one weight per node out (issue #476).
+  static const String gNodes = '.nodes';
+
   /// Every id above, for the drift guard.
   static const List<String> all = [
     dSine,
@@ -118,5 +122,6 @@ abstract final class PatchObjectTypes {
     gNslider,
     gMatrixctrl,
     gFunction,
+    gNodes,
   ];
 }

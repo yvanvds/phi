@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'dart:ui';
 
+import 'package:phi/domain/patcher/field_node.dart';
 import 'package:phi/domain/patcher/function_args.dart';
 import 'package:phi/domain/patcher/function_point.dart';
 import 'package:phi/domain/patcher/item_list_args.dart';
 import 'package:phi/domain/patcher/matrixctrl_args.dart';
 import 'package:phi/domain/patcher/multislider_args.dart';
+import 'package:phi/domain/patcher/nodes_args.dart';
+import 'package:phi/domain/patcher/nodes_field.dart';
 import 'package:phi/domain/patcher/patch_port_kind.dart';
 import 'package:phi/domain/patcher/slider_range.dart';
 import 'package:phi/engine/bridge/patch_object_descriptor.dart';
@@ -268,6 +271,8 @@ class FakePatcherGateway implements PatcherGateway {
     }
     // `gMatrixCtrl` takes lists and bangs only, so a bare number is dropped.
     if (node.isGrid) return;
+    // So does `gNodes`: a single number is not a position (issue #476).
+    if (node.isNodes) return;
     // A `.function` reads a number as an x and answers its y (issue #475).
     if (node.isFunction) {
       if (inlet == 0) node.queryFunction(value);
@@ -310,7 +315,7 @@ class FakePatcherGateway implements PatcherGateway {
       _musicalNumber(instanceId, handleId, inlet, value.toDouble());
       return;
     }
-    if (node.isGrid) return;
+    if (node.isGrid || node.isNodes) return;
     if (node.isFunction) {
       if (inlet == 0) node.queryFunction(value.toDouble());
       _emitFunction(instanceId, handleId);
@@ -348,6 +353,8 @@ class FakePatcherGateway implements PatcherGateway {
     // A `.function` sends its ramp.
     if (inlet == 0 && node.isFunction) node.sendRamp();
     _emitFunction(instanceId, handleId);
+    // A `.nodes` re-sends against the cursor as it stands.
+    if (inlet == 0 && node.isNodes) _emitNodes(instanceId, handleId);
     // A latching `.led` / `.textbutton` flips on a bang; a momentary one
     // takes it as a press (`gLabelSwitchBase`).
     if (inlet == 0 && node.isLabelSwitch) {
@@ -383,6 +390,9 @@ class FakePatcherGateway implements PatcherGateway {
     _emitMusical(instanceId, handleId, inlet: inlet);
     _emitGrid(instanceId, handleId);
     _emitFunction(instanceId, handleId);
+    if (inlet == 0 && (node?.isNodes ?? false)) {
+      _emitNodes(instanceId, handleId);
+    }
   }
 
   @override
@@ -400,6 +410,9 @@ class FakePatcherGateway implements PatcherGateway {
     _emitMusical(instanceId, handleId, inlet: inlet);
     _emitGrid(instanceId, handleId);
     _emitFunction(instanceId, handleId);
+    if (inlet == 0 && (node?.isNodes ?? false)) {
+      _emitNodes(instanceId, handleId);
+    }
   }
 
   /// A number landing on an item list (`gItemListBase::FloatIn`): on inlet 0
@@ -516,6 +529,28 @@ class FakePatcherGateway implements PatcherGateway {
           sendFloat(instanceId, c.toHandleId, c.inlet, send);
         } else {
           sendList(instanceId, c.toHandleId, c.inlet, '$send');
+        }
+      }
+    }
+  }
+
+  /// Model a `.nodes`' send (`gNodes::CALC`), after every message on its hot
+  /// inlet: the distances on outlet 1 first, then the weights on outlet 0,
+  /// each one list delivered down every cable from that outlet (issue #476).
+  void _emitNodes(int instanceId, int handleId) {
+    final inst = _inst(instanceId);
+    final node = inst.nodes[handleId];
+    if (node == null || !node.isNodes) return;
+    final field = node.liveNodes;
+    final (cx, cy) = node.nodesCursor;
+    String spell(List<double> values) =>
+        [for (final v in values) FakeNode._spell(v)].join(' ');
+    final distances = spell(NodesField.distances(field, cx, cy));
+    final weights = spell(NodesField.weights(field, cx, cy));
+    for (final (outlet, list) in [(1, distances), (0, weights)]) {
+      for (final c in [...inst.cables]) {
+        if (c.fromHandleId == handleId && c.outlet == outlet) {
+          sendList(instanceId, c.toHandleId, c.inlet, list);
         }
       }
     }
@@ -825,6 +860,14 @@ class FakePatcherGateway implements PatcherGateway {
             PatchPortKind.control,
           ],
         );
+      // The field in; the weights and the distances out (issue #476).
+      case Obj.gNodes:
+        return const PatcherNodeSnapshot(
+          inputs: 1,
+          outputs: 2,
+          inputKinds: [PatchPortKind.control],
+          outputKinds: [PatchPortKind.control, PatchPortKind.control],
+        );
       // The grid in; changed cells and a queried line out (issue #474).
       case Obj.gMatrixctrl:
         return const PatcherNodeSnapshot(
@@ -986,6 +1029,7 @@ class FakeNode {
     }
     if (isKeyboard || isStaff) reconfigureMusical();
     if (isGrid) reshapeGrid();
+    if (isNodes) _shapeNodes();
   }
   final String type;
 
@@ -1169,6 +1213,10 @@ class FakeNode {
     }
     if (isFunction) {
       _receiveFunctionList(list);
+      return;
+    }
+    if (isNodes) {
+      _receiveNodesList(list);
       return;
     }
     if (type == Obj.gIncdec && _stepIncdec(list.trim())) return;
@@ -1882,6 +1930,80 @@ class FakeNode {
       }
     }
     _publishFunction();
+  }
+
+  // ─── the interpolation field (issue #476) ────────────────────────────
+
+  /// Whether this is a `.nodes`: one `<x> <y> <radius>` cell per node.
+  bool get isNodes => type == Obj.gNodes;
+
+  /// Every node bank slot, `MAX_NODES` of them, allocated once: the count
+  /// only decides how many are live, so a grown field reveals what a shrunk
+  /// one hid (`gNodes`' bound-not-capacity rule).
+  final List<FieldNode> _nodeBank = List.filled(
+    NodesArgs.maxCount,
+    const FieldNode(0, 0, NodesArgs.defaultRadius),
+  );
+  int _nodeCount = NodesArgs.defaultCount;
+
+  /// The cursor, as the last two-number list put it.
+  (double, double) nodesCursor = (0, 0);
+
+  /// The live nodes, in node order.
+  List<FieldNode> get liveNodes => _nodeBank.sublist(0, _nodeCount);
+
+  /// The count from the creation argument. The field itself is not saved
+  /// (no `DumpState`), so a reload is that many unit nodes at the origin.
+  void _shapeNodes() {
+    _nodeCount = NodesArgs.parse(args).count;
+    _publishNodes();
+  }
+
+  void _publishNodes() {
+    guiCells = [
+      for (final n in liveNodes)
+        '${_spell(n.x)} ${_spell(n.y)} ${_spell(n.radius)}',
+    ];
+  }
+
+  /// `gNodes::ListIn`: `set <i> <x> <y> [<radius>]` moves one node, two
+  /// numbers are the cursor, three or more the whole field as triples (a
+  /// trailing partial one ignored). Tokens that are not numbers are skipped.
+  /// The send that follows is the gateway's ([FakePatcherGateway._emitNodes]).
+  void _receiveNodesList(String list) {
+    final tokens = list.trim().split(RegExp(r'\s+'));
+    if (tokens.first.isEmpty) return;
+    if (tokens.first == 'set') {
+      final args = [for (final t in tokens.skip(1)) ?double.tryParse(t)];
+      if (args.length < 3) return;
+      if (!(args[0] >= 0)) return;
+      final at = args[0].truncate();
+      if (at >= _nodeCount) return;
+      final radius = args.length > 3 ? args[3] : _nodeBank[at].radius;
+      _nodeBank[at] = FieldNode(args[1], args[2], radius);
+      _publishNodes();
+      return;
+    }
+    final numbers = [for (final t in tokens) ?double.tryParse(t)];
+    if (numbers.length < 2) return;
+    if (numbers.length == 2) {
+      nodesCursor = (numbers[0], numbers[1]);
+      return;
+    }
+    var written = 0;
+    for (
+      var i = 0;
+      i + 2 < numbers.length && written < NodesArgs.maxCount;
+      i += 3
+    ) {
+      _nodeBank[written++] = FieldNode(
+        numbers[i],
+        numbers[i + 1],
+        numbers[i + 2],
+      );
+    }
+    _nodeCount = written;
+    _publishNodes();
   }
 
   /// Objects whose GUI value the engine does not accept back.
