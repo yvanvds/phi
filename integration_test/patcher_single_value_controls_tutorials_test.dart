@@ -115,6 +115,13 @@ void main() {
       required int notes,
       required String heading,
     }) async {
+      // Search for the type: the browser builds only the entries near its
+      // viewport, so a long list leaves later ones unbuilt (#524).
+      final search = find.byKey(PatchTutorialBrowser.searchKey);
+      await tester.tap(search);
+      await tester.pumpAndSettle();
+      await tester.enterText(search, type);
+      await tester.pumpAndSettle();
       final entry = find.byKey(PatchTutorialBrowser.entryKey(type));
       await tester.ensureVisible(entry);
       await tester.tap(entry);
