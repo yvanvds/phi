@@ -245,15 +245,26 @@ void main() {
       click(msg('1'));
       expect(value(count), '2', reason: 'the metro started');
       click(msg('stop'));
-      final out = at('.i', 60, 650);
+      // Replacement from the inlet, with the list built by pack: a
+      // multi-word message box keeps only its first word on libYSE 3.1.0
+      // (#521), which the note says.
+      final list = at('.l', 60, 690);
       final target = msg('0');
-      click(msg('1 2 3'));
-      expect(value(out), '0', reason: 'replacing sends nothing');
+      List<String> cells(int id) => [
+        for (var k = 0; k < gateway.guiValueCount(inst, id); k++)
+          gateway.guiValueAt(inst, id, k),
+      ];
+      final before = cells(list);
+      click(at('.b', 60, 520));
+      expect(cells(list), before, reason: 'replacing sends nothing');
+      expect(cells(target).join(' '), '1 2 3', reason: 'the whole list stored');
       click(target);
-      expect(value(out), '1', reason: 'it now sends 1 2 3');
-      click(msg('7 8 9'));
-      click(target);
-      expect(value(out), '7');
+      expect(cells(list).join(' '), '1 2 3', reason: 'it now sends 1 2 3');
+      expect(
+        graph.objects.where((o) => o.type == '.m' && o.args.contains(' ')),
+        isEmpty,
+        reason: 'no multi-word message box until the engine keeps all words',
+      );
     });
 
     test('text: notes have no ports', () {

@@ -147,7 +147,8 @@ void main() {
           .handleId;
     }
 
-    String value(int id) => gateway.guiValue(library.tutorial!.instanceId, id);
+    int instanceOf() => library.tutorial!.instanceId;
+    String value(int id) => gateway.guiValue(instanceOf(), id);
 
     Future<void> tap(Finder f) async {
       expect(f, findsOneWidget);
@@ -229,10 +230,18 @@ void main() {
     );
     await tap(message('bang'));
     expect(value(at('.i', 60, 440)), '1');
-    await tap(message('1 2 3'));
-    expect(value(at('.i', 60, 650)), '0', reason: 'replacing sends nothing');
+    // The button sends pack's list into the bottom message box, which
+    // stores it silently; a click then sends the whole list on to the `.l`.
+    final listBox = at('.l', 60, 690);
+    String cells(int id) => [
+      for (var k = 0; k < gateway.guiValueCount(instanceOf(), id); k++)
+        gateway.guiValueAt(instanceOf(), id, k),
+    ].join(' ');
+    final before = cells(listBox);
+    await tap(find.byType(PatchBangSquare));
+    expect(cells(listBox), before, reason: 'replacing sends nothing');
     await tap(message('0'));
-    expect(value(at('.i', 60, 650)), '1', reason: 'it now sends 1 2 3');
+    expect(cells(listBox), '1 2 3', reason: 'it now sends the whole list');
     await close();
 
     // ── .text: notes all the way down ───────────────────────────────────────
