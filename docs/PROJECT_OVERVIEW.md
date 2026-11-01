@@ -2999,10 +2999,12 @@ main + app          (orchestration)
   `adc-dac` for `~adc` + `~dac`, `signal-math` for `~+ ~- ~* ~/ ~clip`,
   `lp-hp`, `bp-vcf`) and control math (#495: `arithmetic`, `comparison`,
   `logic`, `range`, `math-functions`, `expr`, `conversions`, each shared by
-  its group of types) and stateful math (#496: `counter`, `accum`,
+  its group of types), stateful math (#496: `counter`, `accum`,
   `change-togedge`, `extremes`, `statistics`, `slide-linedrive`,
-  `div-swap-pong`, `cartopol-poltocar`). On libYSE 3.1.0 `.line`, `.delay`,
-  `.pipe`, `.thresh`, `.quickthresh`, `.qlim` and `.makenote`'s note-off run
+  `div-swap-pong`, `cartopol-poltocar`) and time (#497: `metro`, `delay`,
+  `pipe`, `line-bline`, `speedlim-qlim`, `timer-clocker`,
+  `thresh-quickthresh`). On libYSE 3.1.0 `.line`, `.delay`, `.pipe`,
+  `.thresh`, `.quickthresh`, `.speedlim`, `.qlim` and `.makenote`'s note-off run
   on the audio clock, only in a mounted, rendered patch (`.metro`, `.clocker`
   and `.timer` run on wall-clock time), which is why every tutorial is mounted
   (#528); the tutorial is its own session and never mounts the user's patch
@@ -3020,7 +3022,8 @@ main + app          (orchestration)
   `patcher_structured_controls_tutorials`,
   `patcher_audio_basics_tutorials`,
   `patcher_control_math_tutorials`,
-  `patcher_stateful_math_tutorials`: each opens its tutorials
+  `patcher_stateful_math_tutorials`,
+  `patcher_time_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
   that no note or object overlaps another). Every one of them opens a
   tutorial through the shared `openTutorialBySearch(tester, type)` helper in

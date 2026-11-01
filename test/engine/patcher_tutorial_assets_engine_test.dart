@@ -1880,6 +1880,347 @@ void main() {
     });
   });
 
+  test('every clock, delay and ramp type has a tutorial (#497)', () {
+    for (final type in [
+      '.metro', '.delay', '.pipe', '.line', '.bline', '.speedlim', //
+      '.qlim', '.timer', '.clocker', '.thresh', '.quickthresh',
+    ]) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+    expect(index.tutorialFor('.line'), index.tutorialFor('.bline'));
+    expect(index.tutorialFor('.speedlim'), index.tutorialFor('.qlim'));
+    expect(index.tutorialFor('.timer'), index.tutorialFor('.clocker'));
+    expect(index.tutorialFor('.thresh'), index.tutorialFor('.quickthresh'));
+  });
+
+  group('clock, delay and ramp tutorials (#497) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    // One block is 128 frames at 48 kHz: about 2.67 ms of audio.
+    const blockMs = 128 / 48;
+    void render(int blocks) {
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+      }
+    }
+
+    // [ms] milliseconds of audio time: delay, pipe, line, speedlim, qlim and
+    // thresh count it, and run only in a mounted patcher (#528).
+    void audio(double ms) => render((ms / blockMs).ceil());
+
+    // Every tutorial is mounted while open (#528); so is this copy.
+    void open(String slug) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+      gateway.mountAsSource(inst);
+      // Wait for the sound to join the mix before counting audio (#525).
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: '$slug mounted');
+      render(20);
+    }
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      render(20);
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    // A message box by its text: each tutorial's are unique.
+    int msg(String text) => graph.objects
+        .singleWhere((o) => o.type == '.m' && o.args == text)
+        .handleId;
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    String value(int id) => gateway.guiValue(inst, id);
+    double number(int id) => double.parse(value(id));
+    int whole(int id) => int.parse(value(id));
+    // metro, timer and clocker run on wall-clock time.
+    void wait(int ms) => sleep(Duration(milliseconds: ms));
+
+    test('metro: on and off, the interval while running, bang and stop', () {
+      open('metro');
+      final toggle = at('.t', 60, 160);
+      final ticks = at('.i', 60, 400);
+      expect(value(at('.i', 360, 230)), '500', reason: 'loadmess on load');
+      gateway.sendInt(inst, toggle, 0, 1);
+      expect(value(ticks), '1', reason: 'a tick the moment it starts');
+      wait(1120);
+      expect(whole(ticks), 3, reason: 'then one every 500 ms');
+      click(msg('125'));
+      final before = whole(ticks);
+      wait(530);
+      expect(
+        whole(ticks) - before,
+        inInclusiveRange(3, 5),
+        reason: 'four times as fast, without stopping',
+      );
+      gateway.sendInt(inst, toggle, 0, 0);
+      final stopped = whole(ticks);
+      wait(300);
+      expect(whole(ticks), stopped, reason: '0 stops it');
+      click(msg('bang'));
+      expect(whole(ticks), stopped + 1, reason: 'bang starts it, at once');
+      wait(80);
+      click(msg('bang'));
+      expect(whole(ticks), stopped + 2, reason: 'and restarts it from now');
+      click(msg('stop'));
+      final last = whole(ticks);
+      wait(300);
+      expect(whole(ticks), last, reason: 'stop stops it');
+      click(msg('1000'));
+      expect(value(at('.i', 360, 230)), '1000');
+    });
+
+    test('delay: later, restarted, cancelled, either inlet, chained', () {
+      open('delay');
+      final button = at('.b', 60, 160);
+      final arrived = at('.i', 60, 340);
+      final clicks = at('.i', 220, 340);
+      click(button);
+      expect((value(clicks), value(arrived)), ('1', '0'));
+      audio(900);
+      expect(value(arrived), '0', reason: 'not yet');
+      audio(150);
+      expect(value(arrived), '1', reason: 'a second later');
+      for (var i = 0; i < 3; i++) {
+        click(button);
+        audio(400);
+      }
+      expect(value(arrived), '1', reason: 'each bang starts the wait again');
+      audio(700);
+      expect(value(arrived), '2', reason: 'one bang, after the last click');
+      click(button);
+      audio(500);
+      click(msg('stop'));
+      audio(1000);
+      expect(value(arrived), '2', reason: 'stop cancels');
+      click(msg('250'));
+      expect(value(arrived), '2', reason: 'the right inlet does not start');
+      click(button);
+      audio(300);
+      expect(value(arrived), '3', reason: '250 ms');
+      click(msg('2000'));
+      audio(1900);
+      expect(value(arrived), '3');
+      audio(200);
+      expect(value(arrived), '4', reason: '2000 sets the time and starts');
+      click(msg('1000'));
+      click(at('.b', 60, 440));
+      audio(400);
+      expect(
+        (value(at('.i', 340, 490)), value(at('.i', 340, 560))),
+        ('0', '0'),
+      );
+      audio(200);
+      expect(
+        (value(at('.i', 340, 490)), value(at('.i', 340, 560))),
+        ('1', '0'),
+      );
+      audio(500);
+      expect(
+        (value(at('.i', 340, 490)), value(at('.i', 340, 560))),
+        ('1', '1'),
+      );
+    });
+
+    test('pipe: every value kept, its own delay, flush, clear, a list', () {
+      open('pipe');
+      final out = at('.f', 60, 340);
+      final arrived = at('.i', 170, 440);
+      click(msg('1'));
+      audio(100);
+      click(msg('2'));
+      audio(100);
+      click(msg('3.5'));
+      audio(750);
+      expect(value(arrived), '0', reason: 'nothing yet');
+      final seen = <double>[];
+      for (var i = 0; i < 3; i++) {
+        audio(100);
+        seen.add(number(out));
+      }
+      expect(seen, [1, 2, 3.5], reason: 'all three, in order and spacing');
+      expect(value(arrived), '3');
+      click(msg('1000'));
+      click(msg('1'));
+      audio(200);
+      click(msg('250'));
+      click(msg('2'));
+      audio(300);
+      expect(number(out), 2, reason: '2 overtakes 1');
+      audio(600);
+      expect(number(out), 1, reason: '1 keeps its second');
+      click(msg('1'));
+      click(msg('flush'));
+      expect(number(out), 1);
+      expect(value(arrived), '6', reason: 'flushed at once');
+      click(msg('2'));
+      click(msg('clear'));
+      audio(500);
+      expect(value(arrived), '6', reason: 'cleared, never arrives');
+      click(at('.b', 60, 520));
+      final list = at('.l', 60, 690);
+      audio(400);
+      expect(value(list), isEmpty);
+      audio(150);
+      expect(value(list), '60 64 67', reason: 'the list, half a second later');
+    });
+
+    test('line bline: a glide, the grain, a function stepped by bangs', () {
+      open('line-bline');
+      final smooth = at('.f', 110, 340);
+      final steps = at('.f', 270, 340);
+      final arrivals = at('.i', 400, 380);
+      click(msg('1'));
+      final path = <double>[];
+      final coarse = <double>[];
+      for (var i = 0; i < 22; i++) {
+        audio(50);
+        path.add(number(smooth));
+        coarse.add(number(steps));
+      }
+      expect(path.last, 1, reason: 'arrives in a second');
+      expect(coarse.last, 1);
+      expect(path.where((v) => v > 0 && v < 1).length, greaterThan(15));
+      expect(
+        coarse.where((v) => v > 0 && v < 1).toSet(),
+        hasLength(3),
+        reason: 'steps of 250 ms: 0.25 0.5 0.75',
+      );
+      expect(number(at('.slider', 60, 340)), 1, reason: 'the slider rose');
+      expect(value(arrivals), '1');
+      click(msg('0.3'));
+      audio(1100);
+      expect(number(smooth), closeTo(0.3, 1e-6));
+      expect(value(arrivals), '2');
+      // bline: the function's shape as bang counts.
+      click(at('.b', 60, 560));
+      final out = at('.f', 300, 740);
+      final done = at('.i', 440, 780);
+      final walk = <double>[];
+      for (var i = 0; i < 11; i++) {
+        click(at('.b', 300, 560));
+        walk.add(number(out));
+      }
+      expect(walk, [0, 0.25, 0.5, 0.75, 1, 0.75, 0.5, 0.375, 0.25, 0.125, 0]);
+      expect(value(done), '1', reason: 'at the end');
+      click(at('.b', 60, 560));
+      gateway.sendInt(inst, at('.t', 400, 560), 0, 1);
+      wait(1300);
+      gateway.sendInt(inst, at('.t', 400, 560), 0, 0);
+      expect(value(done), '2', reason: 'the metro played it through');
+    });
+
+    test('speedlim qlim: one per interval, the last value held by qlim', () {
+      open('speedlim-qlim');
+      final slider = at('.slider', 60, 160);
+      final raw = at('.i', 60, 440);
+      final sp = at('.i', 320, 390);
+      final ql = at('.i', 510, 390);
+      // A drag: a move every 20 ms for two seconds.
+      for (var i = 1; i <= 100; i++) {
+        gateway.sendFloat(inst, slider, 0, i / 100);
+        audio(20);
+      }
+      expect(whole(raw), 100);
+      expect(whole(sp), inInclusiveRange(4, 5), reason: 'twice a second');
+      expect(whole(ql), inInclusiveRange(4, 5));
+      audio(600);
+      expect(number(at('.f', 430, 290)), closeTo(100, 1e-3), reason: 'held');
+      expect(number(at('.f', 240, 290)), lessThan(100), reason: 'dropped');
+      expect(whole(ql), whole(sp) + 1, reason: 'qlim sent the last one');
+      click(msg('0'));
+      expect((value(raw), value(sp), value(ql)), ('0', '0', '0'));
+      click(msg('100'));
+      for (var i = 1; i <= 50; i++) {
+        gateway.sendFloat(inst, slider, 0, i / 50);
+        audio(20);
+      }
+      expect(whole(sp), inInclusiveRange(9, 11), reason: 'every 100 ms');
+    });
+
+    test('timer clocker: a tap tempo, a stopwatch, an elapsed count', () {
+      open('timer-clocker');
+      final tap = at('.b', 60, 160);
+      final ms = at('.f', 60, 340);
+      click(tap);
+      wait(500);
+      click(tap);
+      expect(number(ms), closeTo(500, 40), reason: 'between the taps');
+      expect(number(at('.f', 60, 450)), closeTo(60000 / number(ms), 1e-3));
+      expect(number(at('.f', 60, 450)), closeTo(120, 10), reason: 'bpm');
+      gateway.sendInt(inst, at('.t', 200, 160), 0, 1);
+      wait(1120);
+      gateway.sendInt(inst, at('.t', 200, 160), 0, 0);
+      expect(whole(at('.i', 200, 500)), 3, reason: 'the metro at the tempo');
+      final lap = at('.f', 360, 280);
+      click(at('.b', 360, 160));
+      wait(200);
+      click(at('.b', 460, 160));
+      expect(number(lap), closeTo(200, 40));
+      wait(200);
+      click(at('.b', 460, 160));
+      expect(number(lap), closeTo(400, 40), reason: 'lap keeps the start');
+      final elapsed = at('.i', 60, 700);
+      gateway.sendInt(inst, at('.t', 60, 580), 0, 1);
+      wait(450);
+      expect(whole(elapsed), 400, reason: 'every 100 ms, the time so far');
+      click(at('.b', 170, 580));
+      wait(150);
+      expect(whole(elapsed), lessThan(200), reason: 'the button restarts');
+      click(msg('1000'));
+      wait(400);
+      final held = whole(elapsed);
+      wait(300);
+      expect(whole(elapsed), held, reason: 'once a second now');
+      gateway.sendInt(inst, at('.t', 60, 580), 0, 0);
+      click(msg('100'));
+    });
+
+    test('thresh quickthresh: a chord, a pause, a trickle', () {
+      open('thresh-quickthresh');
+      final tl = at('.l', 60, 340);
+      final ql = at('.l', 300, 340);
+      final tn = at('.i', 180, 440);
+      final qn = at('.i', 420, 440);
+      click(at('.b', 400, 160));
+      audio(350);
+      expect((value(tl), value(ql)), ('60 64 67', '60 64 67'));
+      expect((value(tn), value(qn)), ('1', '1'));
+      // By hand: a click every 200 ms.
+      for (final m in ['60', '64', '67']) {
+        click(msg(m));
+        audio(200);
+      }
+      audio(400);
+      expect(value(tl), '60 64 67', reason: 'never a 300 ms pause');
+      expect(value(tn), '2');
+      expect(value(ql), '60 64', reason: 'closed 300 ms after the first');
+      expect(value(qn), '3', reason: '67 alone is a group of its own');
+      // The trickle: the counter stepped every 150 ms.
+      final counter = at('.counter', 60, 640);
+      for (var i = 0; i < 12; i++) {
+        click(counter);
+        audio(150);
+      }
+      expect(value(tn), '2', reason: 'thresh holds on');
+      expect(whole(qn), inInclusiveRange(6, 9), reason: 'two or three each');
+      audio(300);
+      expect(value(tl), '1 2 3 4 5 6 7 8 9 10 11 12', reason: 'one long list');
+    });
+  });
+
   test('report: object types with no tutorial yet', () {
     final missing = [
       for (final t in engineTypes.toList()..sort())

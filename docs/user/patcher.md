@@ -207,7 +207,10 @@ for:
   division, swapping and folding (`div`, `swap` and `pong`) and polar
   coordinates (`cartopol` and `poltocar`). Each group of two or more shares one
   tutorial.
-- **Time:** `metro`.
+- **Time:** the clock (`metro`), delays (`delay`, and `pipe` for numbers and
+  lists), control ramps (`line` and `bline`), rate limiting (`speedlim` and
+  `qlim`), measuring time (`timer` and `clocker`) and grouping notes into
+  chords (`thresh` and `quickthresh`). Each pair shares one tutorial.
 
 Each tutorial is a small working patch, with numbered notes that walk you
 through it. Where Phi's object differs from the Max object of the same name,
