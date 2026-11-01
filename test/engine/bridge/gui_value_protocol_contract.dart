@@ -820,6 +820,8 @@ void guiValueProtocolContract(
     expect(listOf(last), [1, 0], reason: 'so does a set message');
   });
 
+  // TODO(yvanvds/yse-soundengine#1228): .nodes has no DumpState yet; flip this
+  // to expect the layout back once the engine saves it under `state`.
   test('a .nodes saves only its count: a reload is that many fresh nodes', () {
     final field = gateway.createObject(inst, Obj.gNodes, args: '3');
     gateway.restoreGuiValue(inst, field, '0.25 0.25 0.5 0.75 0.75 0.25');
