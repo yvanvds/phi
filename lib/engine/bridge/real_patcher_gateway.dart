@@ -331,6 +331,17 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
   @override
   void unmountSource(int instanceId) => _inst(instanceId).unmount();
 
+  /// Whether [instanceId] is mounted and its [Sound] is ready, so that the
+  /// next rendered block carries its output.
+  ///
+  /// libyse finishes setting a new sound up on a worker thread, in wall-clock
+  /// time. A live device renders in real time, so the delay is never heard.
+  /// An offline session can render hundreds of blocks in the few milliseconds
+  /// that takes, all before the sound joins the mix. Tests that measure an
+  /// offline render wait on this first (issue #525).
+  bool isSourceReady(int instanceId) =>
+      _instances[instanceId]?.mounted?.isReady ?? false;
+
   @override
   Patcher? patcherFor(int patchInstanceId) =>
       _instances[patchInstanceId]?.patcher;

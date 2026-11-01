@@ -100,6 +100,7 @@ void main() {
     // and mounts it on master (#523). Silence it so the meter hears only the
     // tutorials.
     engine.patcher.unmountAudio();
+    expect(gateway.isSourceReady(engine.patcher.instanceId), isFalse);
     await tester.tap(
       find.byKey(PatcherPalette.tabKey(PatcherPaletteTab.tutorials)),
     );
@@ -156,6 +157,30 @@ void main() {
                   '${boxes[j].$1.type} ${boxes[j].$2}',
       ];
       expect(overlaps, isEmpty, reason: '$slug: overlapping nodes');
+      if (tutorial.mounted) {
+        // libyse sets the new sound up on a worker thread, in wall-clock
+        // time, while an offline render runs far ahead of real time. Render
+        // with real pauses until the sound is in the mix, so that nothing
+        // below measures blocks rendered before it joined (#525).
+        for (var i = 0; i < 5000; i++) {
+          if (gateway.isSourceReady(tutorial.instanceId)) break;
+          System.instance
+            ..renderOffline(1)
+            ..update();
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        }
+        expect(
+          gateway.isSourceReady(tutorial.instanceId),
+          isTrue,
+          reason: '$slug joined the mix',
+        );
+        // And let whatever the last tutorial left ringing drain away.
+        for (var i = 0; i < 20; i++) {
+          System.instance
+            ..renderOffline(1)
+            ..update();
+        }
+      }
       final graph = gateway.enumerate(tutorial.instanceId);
       return (String t, double x, double y) => graph.objects
           .firstWhere((o) => o.type == t && o.position == Offset(x, y))
@@ -204,6 +229,18 @@ void main() {
         if (p > peak) peak = p;
       }
       return peak;
+    }
+
+    // The mean of the per-block master peaks over [blocks] blocks, after 20
+    // blocks for a change to settle. A stable level for noise, filters and
+    // sweeps, where the single loudest block varies from run to run (#525).
+    double level([int blocks = 400]) {
+      loudness(20);
+      var sum = 0.0;
+      for (var i = 0; i < blocks; i++) {
+        sum += loudness(1);
+      }
+      return sum / blocks;
     }
 
     // A press at [from], dragged through to [to] in two steps.
@@ -264,12 +301,11 @@ void main() {
     );
     expect(read(at('.f', 340, 360)), closeTo(4050, 1e-3), reason: 'loadmess');
     await tap(toggleAt(60, 140));
-    final bright = loudness();
+    final bright = level();
     expect(bright, greaterThan(0.05));
     await slide(340, 140, 0.05);
     expect(read(at('.f', 340, 360)), lessThan(1000), reason: 'dragged down');
-    loudness(200);
-    expect(loudness(), lessThan(bright), reason: 'darker, quieter');
+    expect(level(), lessThan(bright), reason: 'darker, quieter');
     await tap(toggleAt(60, 140));
     await tap(toggleAt(200, 140));
     expect(loudness(), greaterThan(0.05), reason: 'the sine');
@@ -284,18 +320,18 @@ void main() {
     );
     expect(loudness(), lessThan(1e-4));
     await tap(toggleAt(60, 140));
-    final hiss = loudness();
+    final hiss = level();
     expect(hiss, greaterThan(0.01));
     await slide(480, 190, 0);
     expect(read(at('.slider', 480, 190)), lessThan(0.05));
-    expect(loudness(), lessThan(0.15 * hiss), reason: 'turned down');
+    expect(level(), lessThan(0.15 * hiss), reason: 'turned down');
     await slide(480, 190, 0.5);
     await tap(toggleAt(60, 140));
     await tap(toggleAt(200, 140));
-    expect(loudness(), inExclusiveRange(0, hiss), reason: 'the lowpass');
+    expect(level(), inExclusiveRange(0, hiss), reason: 'the lowpass');
     await tap(toggleAt(200, 140));
     await tap(toggleAt(340, 140));
-    expect(loudness(), inExclusiveRange(0, hiss), reason: 'the bandpass');
+    expect(level(), inExclusiveRange(0, hiss), reason: 'the bandpass');
     await close();
 
     // ── ~line: a fade in, a held ramp, quick fades, the unpacked list ───────
@@ -390,14 +426,14 @@ void main() {
     );
     expect(read(at('.f', 340, 360)), closeTo(1000, 1e-3), reason: 'loadmess');
     await tap(toggleAt(60, 140));
-    final lp1000 = loudness();
+    final lp1000 = level();
     expect(lp1000, greaterThan(0.01));
     await slide(340, 140, 0.02);
-    final rumble = loudness();
+    final rumble = level();
     expect(rumble, lessThan(0.5 * lp1000), reason: 'a low cutoff');
     await tap(toggleAt(60, 140));
     await tap(toggleAt(200, 140));
-    expect(loudness(), greaterThan(3 * rumble), reason: 'hp keeps the rest');
+    expect(level(), greaterThan(3 * rumble), reason: 'hp keeps the rest');
     await close();
     await open('~hp', slug: 'lp-hp', notes: 4, heading: 'A ~lp lets');
     await close();
@@ -411,17 +447,20 @@ void main() {
     );
     expect(loudness(), lessThan(1e-4));
     await tap(toggleAt(60, 140));
-    final wide = loudness();
+    final wide = level();
     expect(wide, greaterThan(0.01));
     await tap(message('10.'));
-    expect(loudness(), inExclusiveRange(0, wide), reason: 'Q 10');
+    expect(level(), inExclusiveRange(0, wide), reason: 'Q 10');
     await tap(message('1.'));
     await tap(toggleAt(60, 140));
     await tap(toggleAt(60, 400));
-    final soft = loudness(400);
+    // Each level spans one 4 s cycle of the 0.25 Hz sweep, so where the
+    // sweep stands does not matter.
+    final sweep = (4 * 48000 / System.blockSize).ceil();
+    final soft = level(sweep);
     expect(soft, greaterThan(0.01), reason: 'the vcf sweeps');
     await tap(message('20.'));
-    expect(loudness(400), inExclusiveRange(0, soft), reason: 'sharper');
+    expect(level(sweep), inExclusiveRange(0, soft), reason: 'sharper');
     await close();
     await open('~vcf', slug: 'bp-vcf', notes: 5, heading: 'A ~bp passes');
     await close();

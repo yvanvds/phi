@@ -848,12 +848,28 @@ void main() {
       for (var i = 0; i < blocks; i++) loudness(1),
     ];
 
+    // The mean of the per-block master peaks over [blocks] blocks, after 20
+    // blocks for a change to settle. A stable level for noise and filters,
+    // where the single loudest block varies from run to run (#525).
+    double level([int blocks = 400]) {
+      loudness(20);
+      final p = peaks(blocks);
+      return p.reduce((a, b) => a + b) / p.length;
+    }
+
     void open(String slug) {
       inst = gateway.createInstance();
       gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
       graph = gateway.enumerate(inst);
       gateway.mountAsSource(inst);
-      loudness(20); // the mount settles
+      // libyse sets a new sound up on a worker thread, in wall-clock time;
+      // an offline render outruns it, so wait until the sound is in the mix
+      // before measuring anything (#525).
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        loudness(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: '$slug mounted');
     }
 
     tearDown(() {
@@ -919,17 +935,17 @@ void main() {
       expect(loudness(), lessThan(1e-4));
       final raw = at('.t', 60, 140);
       toggle(raw, true);
-      final full = loudness(100);
+      final full = level();
       expect(full, greaterThan(0.01));
       gateway.sendFloat(inst, at('.slider', 480, 190), 0, 0);
       expect(loudness(), lessThan(1e-4), reason: 'level 0');
       gateway.sendFloat(inst, at('.slider', 480, 190), 0, 0.5);
       toggle(raw, false);
       toggle(at('.t', 200, 140), true);
-      final low = loudness(100);
+      final low = level();
       toggle(at('.t', 200, 140), false);
       toggle(at('.t', 340, 140), true);
-      final band = loudness(100);
+      final band = level();
       expect(low, inExclusiveRange(0, 0.5 * full), reason: 'lp 500');
       expect(band, inExclusiveRange(0, 0.5 * full), reason: 'bp 1000 5');
     });
@@ -1016,18 +1032,18 @@ void main() {
       final low = at('.t', 60, 140);
       final high = at('.t', 200, 140);
       toggle(low, true);
-      final lp1000 = loudness(200);
+      final lp1000 = level();
       gateway.sendFloat(inst, slider, 0, 1);
       expect(number(cutoff), closeTo(5000, 1e-3));
-      final lp5000 = loudness(200);
+      final lp5000 = level();
       expect(lp5000, greaterThan(lp1000), reason: 'more of the hiss');
       toggle(low, false);
       toggle(high, true);
       gateway.sendFloat(inst, slider, 0, 0.02); // 100 Hz
-      final hp100 = loudness(200);
+      final hp100 = level();
       toggle(high, false);
       toggle(low, true);
-      final lp100 = loudness(200);
+      final lp100 = level();
       expect(lp100, lessThan(0.5 * lp1000), reason: 'a rumble');
       expect(hp100, greaterThan(3 * lp100), reason: 'hp keeps the rest');
     });
@@ -1036,21 +1052,24 @@ void main() {
       open('bp-vcf');
       expect(loudness(), lessThan(1e-4));
       toggle(at('.t', 60, 140), true);
-      final wide = loudness(200);
+      final wide = level();
       expect(wide, greaterThan(0.01));
       click(at('.m', 280, 140)); // Q 10.
-      final narrow = loudness(200);
+      final narrow = level();
       expect(narrow, inExclusiveRange(0, wide), reason: 'a narrower band');
       click(at('.m', 170, 140)); // Q 1.
       toggle(at('.t', 60, 140), false);
       toggle(at('.t', 60, 400), true);
-      final soft = loudness(400);
+      // Each level spans one 4 s cycle of the 0.25 Hz sweep, so where the
+      // sweep stands does not matter.
+      final sweep = (4 * 48000 / System.blockSize).ceil();
+      final soft = level(sweep);
       expect(soft, greaterThan(0.01), reason: 'the vcf sweeps');
       click(at('.m', 280, 400)); // 20.
-      expect(loudness(400), inExclusiveRange(0, soft), reason: 'narrower');
+      expect(level(sweep), inExclusiveRange(0, soft), reason: 'narrower');
       // Sharpness 0 passes the saw through unfiltered, at full level.
       gateway.sendFloat(inst, at('~vcf', 250, 580), 2, 0);
-      expect(loudness(400), greaterThan(soft));
+      expect(level(sweep), greaterThan(soft));
     });
   });
 

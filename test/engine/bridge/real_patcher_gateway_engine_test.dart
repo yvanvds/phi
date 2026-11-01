@@ -125,4 +125,31 @@ void main() {
     expect(dac.inlets.every((i) => i.isDspInput), isTrue);
     expect(dac.outlets, isEmpty);
   });
+
+  test('isSourceReady: false until mounted, true once the sound is set up, '
+      'false again after unmounting (issue #525)', () async {
+    final inst = gateway.createInstance();
+    final sine = gateway.createObject(inst, Obj.dSine, args: '440');
+    final dac = gateway.createObject(inst, Obj.dDac);
+    gateway.connect(
+      inst,
+      fromHandleId: sine,
+      outlet: 0,
+      toHandleId: dac,
+      inlet: 0,
+    );
+    expect(gateway.isSourceReady(inst), isFalse, reason: 'not mounted');
+    gateway.mountAsSource(inst);
+    // The worker thread finishes the setup in wall-clock time.
+    for (var i = 0; i < 2000 && !gateway.isSourceReady(inst); i++) {
+      System.instance
+        ..renderOffline(1)
+        ..update();
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    expect(gateway.isSourceReady(inst), isTrue);
+    gateway.unmountSource(inst);
+    expect(gateway.isSourceReady(inst), isFalse, reason: 'unmounted');
+    expect(gateway.isSourceReady(999), isFalse, reason: 'no such instance');
+  });
 }
