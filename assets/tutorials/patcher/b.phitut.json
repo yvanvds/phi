@@ -41,7 +41,7 @@
           "y": "360.0",
           "w": "300"
         },
-        "parms": "4. The counter counts every press, wherever it came from. A button is the usual way to feed bangs to objects such as counter.",
+        "parms": "4. The counter counts every press, wherever it came from. A button is the usual way to feed bangs to objects such as counter. For now the button lights only when you click it, not when a bang reaches it over a cable; that needs an update to the engine wrapper (issue #519).",
         "type": ".text"
       },
       "object 2": {
@@ -157,7 +157,7 @@
           "y": "270.0",
           "w": "300"
         },
-        "parms": "3. Click the toggle to start the metro. Every tick presses the button: it flashes, and the counter climbs four times a second. Click the toggle again to stop it.",
+        "parms": "3. Click the toggle to start the metro. Every tick presses the button, so the counter climbs four times a second. Click the toggle again to stop it.",
         "type": ".text"
       }
     }

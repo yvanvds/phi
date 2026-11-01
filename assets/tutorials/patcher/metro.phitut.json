@@ -41,7 +41,7 @@
           "x": "340.0",
           "y": "320.0"
         },
-        "parms": "3. Every tick flashes the bang and adds one to the counter below it.",
+        "parms": "3. Every tick adds one to the counter. The button beside it does not light on ticks yet (it lights when you click it); that needs an update to the engine wrapper (issue #519).",
         "type": ".text"
       },
       "object 2": {
