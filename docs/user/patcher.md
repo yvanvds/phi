@@ -200,6 +200,13 @@ for:
   `zmap`), math functions (`sin` to `atanh`, `atan2`, `pow` and `sqrt`),
   expressions (`expr` and `vexpr`) and pitch and level conversions (`mtof`,
   `ftom`, `dbtoa` and `atodb`). Each group shares one tutorial.
+- **Stateful math:** the counter (`counter`), the accumulator (`accum`),
+  change detection (`change` and `togedge`), thresholds and records (`past`,
+  `peak`, `trough`, `maximum` and `minimum`), running statistics (`mean`,
+  `histo` and `anal`), smoothing and curves (`slide` and `linedrive`), whole
+  division, swapping and folding (`div`, `swap` and `pong`) and polar
+  coordinates (`cartopol` and `poltocar`). Each group of two or more shares one
+  tutorial.
 - **Time:** `metro`.
 
 Each tutorial is a small working patch, with numbered notes that walk you

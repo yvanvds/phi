@@ -2998,7 +2998,11 @@ main + app          (orchestration)
   `adc-dac` for `~adc` + `~dac`, `signal-math` for `~+ ~- ~* ~/ ~clip`,
   `lp-hp`, `bp-vcf`) and control math (#495: `arithmetic`, `comparison`,
   `logic`, `range`, `math-functions`, `expr`, `conversions`, each shared by
-  its group of types). Covered by domain unit tests, a `patch_library_tutorial_test`, a real-engine
+  its group of types) and stateful math (#496: `counter`, `accum`,
+  `change-togedge`, `extremes`, `statistics`, `slide-linedrive`,
+  `div-swap-pong`, `cartopol-poltocar`). Only a tutorial with a `~dac` is mounted, and on
+  libYSE 3.1.0 a `.line` ramps only in a mounted patch (#528), so a tutorial
+  that ramps drives a sound. Covered by domain unit tests, a `patch_library_tutorial_test`, a real-engine
   `patcher_tutorial_assets_engine_test` (every index entry has a file, every
   type exists in the engine, every payload parses, a report of uncovered
   types), surface/reference-panel widget tests, and an end-to-end
@@ -3010,7 +3014,8 @@ main + app          (orchestration)
   `patcher_selection_slider_controls_tutorials`,
   `patcher_structured_controls_tutorials`,
   `patcher_audio_basics_tutorials`,
-  `patcher_control_math_tutorials`: each opens its tutorials
+  `patcher_control_math_tutorials`,
+  `patcher_stateful_math_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
   that no note or object overlaps another). Every one of them opens a
   tutorial through the shared `openTutorialBySearch(tester, type)` helper in

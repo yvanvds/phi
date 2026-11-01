@@ -1,0 +1,452 @@
+{
+  "title": "cartopol poltocar — points and angles",
+  "covers": [
+    ".cartopol",
+    ".poltocar"
+  ],
+  "summary": "Read the distance and angle of a point on an xyslider with cartopol, turn them back into x and y with poltocar, and trace a circle on the pad.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# cartopol poltocar — points and angles\ncartopol turns a point x y into polar form: its distance from the centre and its angle in radians, from -π to π, counted from the positive x axis. poltocar turns a distance and an angle back into x and y. In both, the left inlet is hot and the right inlet cold, and the right outlet sends first.\nThey work as Max's do, for control numbers; Max also has signal versions, which this engine does not.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "-1 1 -1 1",
+        "type": ".xyslider",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 2
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 4
+            },
+            "Count": 2
+          },
+          "output 2": {
+            "Count": 0
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "650.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "170.0",
+          "y": "650.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "330.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "330.0",
+          "y": "210.0"
+        },
+        "parms": "50",
+        "type": ".metro",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "330.0",
+          "y": "260.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "330.0",
+          "y": "310.0"
+        },
+        "parms": "40",
+        "type": ".%",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "330.0",
+          "y": "360.0"
+        },
+        "parms": "0.15708",
+        "type": ".*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "330.0",
+          "y": "410.0"
+        },
+        "parms": "b f",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 1,
+              "Object": 19
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "460.0",
+          "y": "410.0"
+        },
+        "parms": "0.8",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "330.0",
+          "y": "470.0"
+        },
+        "parms": "",
+        "type": ".poltocar",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 1,
+              "Object": 20
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "60.0",
+          "y": "320.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "330.0",
+          "y": "530.0"
+        },
+        "parms": "0. 0.",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 1
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Drag in the pad: x and y run from -1 to 1, with 0 0 in the middle. cartopol sends the distance from the middle and the angle. Up and to the right the angle is between 0 and π/2; straight left it is π.",
+        "type": ".text"
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "640.0",
+          "y": "310.0",
+          "w": "300"
+        },
+        "parms": "2. The angle is in radians: * 57.2958 turns it into degrees. Below the middle the angle is negative, down to -π, -180 degrees.",
+        "type": ".text"
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "640.0",
+          "y": "420.0",
+          "w": "300"
+        },
+        "parms": "3. poltocar goes back: given the distance and the angle, it sends the x and y the pad has. The right outlets send first, into the cold right inlets, so each pair arrives in the order the hot left inlet needs.",
+        "type": ".text"
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "640.0",
+          "y": "570.0",
+          "w": "300"
+        },
+        "parms": "4. A circle. Turn on the toggle: metro steps an angle round a full circle every 40 steps, and poltocar turns each angle, at a distance of 0.8, into x and y. pack sends the pair to the pad, which moves round in a circle while cartopol reads back 0.8 and the angle.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "150.0",
+          "y": "320.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "380.0"
+        },
+        "parms": "",
+        "type": ".cartopol",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 2
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 9
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "430.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "170.0",
+          "y": "430.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "170.0",
+          "y": "490.0"
+        },
+        "parms": "57.2958",
+        "type": ".*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "170.0",
+          "y": "540.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "600.0"
+        },
+        "parms": "",
+        "type": ".poltocar",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

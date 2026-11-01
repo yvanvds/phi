@@ -1,0 +1,603 @@
+{
+  "title": "change togedge — only what changes",
+  "covers": [
+    ".change",
+    ".togedge"
+  ],
+  "summary": "Filter out repeated numbers with change, catch the moments a value leaves 0 and returns to it, and count switch-ons and switch-offs with togedge.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# change togedge — only what changes\nchange passes a number on only when it differs from the one before, so a stream that repeats itself sends each value once. Its two other outlets send 1 when the value leaves 0 and when it comes back to 0. togedge watches for those same two moments and bangs a separate outlet for each.\nMax's change compares whole numbers unless its argument is a float, and Max's togedge truncates a float, so 0.5 counts as 0. Here both take the number as it is: 0.5 counts as on.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".slider",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "420.0",
+          "y": "330.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "420.0",
+          "y": "380.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "480.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "170.0",
+          "y": "480.0"
+        },
+        "parms": "1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "280.0",
+          "y": "480.0"
+        },
+        "parms": "2",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "390.0",
+          "y": "480.0"
+        },
+        "parms": "0.5",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "500.0",
+          "y": "480.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "60.0",
+          "y": "540.0"
+        },
+        "parms": "",
+        "type": ".change",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 21
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "360.0",
+          "y": "540.0"
+        },
+        "parms": "",
+        "type": ".togedge",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 26
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 27
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "60.0",
+          "y": "600.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "140.0",
+          "y": "160.0"
+        },
+        "parms": "4",
+        "type": ".*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "150.0",
+          "y": "600.0"
+        },
+        "parms": "b",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "250.0",
+          "y": "600.0"
+        },
+        "parms": "b",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 23
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "150.0",
+          "y": "650.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 24
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "250.0",
+          "y": "650.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 25
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "150.0",
+          "y": "700.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "250.0",
+          "y": "700.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "360.0",
+          "y": "600.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 28
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 27": {
+        "ID": 27,
+        "gui": {
+          "x": "470.0",
+          "y": "600.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 29
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 28": {
+        "ID": 28,
+        "gui": {
+          "x": "360.0",
+          "y": "650.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 29": {
+        "ID": 29,
+        "gui": {
+          "x": "470.0",
+          "y": "650.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "140.0",
+          "y": "220.0"
+        },
+        "parms": "1",
+        "type": ".round",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 30": {
+        "ID": 30,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Drag the slider slowly. * 4 and round 1 turn it into the whole numbers 0 to 4, sent on every move, so the same number arrives again and again: the left count climbs fast. change lets a number through only when it differs from the last one: the right count goes up once per step.",
+        "type": ".text"
+      },
+      "object 31": {
+        "ID": 31,
+        "gui": {
+          "x": "640.0",
+          "y": "340.0",
+          "w": "300"
+        },
+        "parms": "2. change's other outlets. The counts below change say how often each fired. Click 1: it passes, and the left count goes up because the value left 0. Click 2: it passes, and neither count moves. Click 0: the right count goes up, back at 0. Click 0 again: nothing at all.",
+        "type": ".text"
+      },
+      "object 32": {
+        "ID": 32,
+        "gui": {
+          "x": "640.0",
+          "y": "510.0",
+          "w": "300"
+        },
+        "parms": "3. togedge bangs its left outlet when the value turns on, from 0 to anything else, and its right outlet when it turns off. The counts below it say how often each happened: 1 then 2 is still one switch-on. 0.5 counts as on.",
+        "type": ".text"
+      },
+      "object 33": {
+        "ID": 33,
+        "gui": {
+          "x": "640.0",
+          "y": "660.0",
+          "w": "300"
+        },
+        "parms": "4. The button flips togedge: a bang turns 0 on and anything else off, and reports it like a number would.",
+        "type": ".text"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "140.0",
+          "y": "280.0"
+        },
+        "parms": "",
+        "type": ".change",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 2
+          },
+          "output 1": {
+            "Count": 0
+          },
+          "output 2": {
+            "Count": 0
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "140.0",
+          "y": "330.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "300.0",
+          "y": "280.0"
+        },
+        "parms": "b",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "300.0",
+          "y": "330.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "300.0",
+          "y": "380.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "420.0",
+          "y": "280.0"
+        },
+        "parms": "b",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

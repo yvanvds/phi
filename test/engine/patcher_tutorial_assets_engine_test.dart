@@ -1419,6 +1419,467 @@ void main() {
     });
   });
 
+  test('every stateful math type has a tutorial (#496)', () {
+    for (final type in [
+      '.counter', '.accum', '.change', '.togedge', //
+      '.past', '.peak', '.trough', '.maximum', '.minimum', //
+      '.mean', '.histo', '.anal', '.slide', '.linedrive', //
+      '.div', '.swap', '.pong', '.cartopol', '.poltocar',
+    ]) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+  });
+
+  group('stateful math tutorials (#496) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    double loudness([int blocks = 200]) {
+      var peak = 0.0;
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+        final p = Channel.master.peakLinearPost();
+        if (p > peak) peak = p;
+      }
+      return peak;
+    }
+
+    void open(String slug, {bool mount = false}) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+      if (!mount) return;
+      gateway.mountAsSource(inst);
+      // Wait for the sound to join the mix before measuring (#525).
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        loudness(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: '$slug mounted');
+      loudness(20);
+    }
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      loudness(20);
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    // A message box by its text: each tutorial's are unique.
+    int msg(String text) => graph.objects
+        .singleWhere((o) => o.type == '.m' && o.args == text)
+        .handleId;
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    String value(int id) => gateway.guiValue(inst, id);
+    double number(int id) => double.parse(value(id));
+    List<double> numbers(int id) => [
+      for (final t in value(id).split(' '))
+        if (t.isNotEmpty) double.parse(t),
+    ];
+    // A counter wired to [outlet] of [from], counting what leaves it.
+    int tally(int from, int outlet) {
+      final c = gateway.createObject(inst, '.counter');
+      final t = gateway.createObject(inst, '.trigger', args: 'b');
+      gateway
+        ..connect(
+          inst,
+          fromHandleId: from,
+          outlet: outlet,
+          toHandleId: t,
+          inlet: 0,
+        )
+        ..connect(inst, fromHandleId: t, outlet: 0, toHandleId: c, inlet: 0);
+      return c;
+    }
+
+    test('counter: bangs, a set count, the step, reset, wrap, fold, steps', () {
+      open('counter', mount: true);
+      final count = at('.i', 60, 270);
+      final button = at('.b', 60, 160);
+      final seen = <String>[];
+      for (var i = 0; i < 3; i++) {
+        click(button);
+        seen.add(value(count));
+      }
+      expect(seen, ['1', '2', '3'], reason: 'start 0 plus the step');
+      click(msg('20'));
+      expect(value(count), '20');
+      click(button);
+      expect(value(count), '21');
+      click(msg('3'));
+      click(button);
+      expect(value(count), '24', reason: 'step 3');
+      click(msg('-1'));
+      click(button);
+      expect(value(count), '23', reason: 'counting down');
+      click(msg('reset'));
+      expect(value(count), '23', reason: 'reset sends nothing');
+      click(button);
+      expect(value(count), '-1', reason: 'the start value plus the step');
+      final wrapped = <String>[];
+      final folded = <String>[];
+      for (var i = 0; i < 7; i++) {
+        click(at('.b', 60, 350));
+        wrapped.add(value(at('.i', 60, 510)));
+        folded.add(value(at('.i', 170, 510)));
+      }
+      expect(wrapped, ['1', '2', '3', '0', '1', '2', '3']);
+      expect(folded, ['1', '2', '3', '2', '1', '0', '1']);
+      // The sequencer, stepped by hand: metro runs in real time.
+      expect(loudness(), lessThan(1e-4), reason: 'silent until switched on');
+      final clock = at('.counter', 60, 690);
+      final steps = <String>[];
+      final hz = <double>[];
+      for (var i = 0; i < 8; i++) {
+        click(clock);
+        steps.add(value(at('.i', 200, 740)));
+        hz.add(number(at('.f', 170, 920)));
+      }
+      expect(steps, ['1', '2', '3', '0', '1', '2', '3', '0']);
+      final want = [
+        64,
+        67,
+        72,
+        60,
+      ].map((n) => 440 * math.pow(2, (n - 69) / 12));
+      for (var i = 0; i < 8; i++) {
+        expect(hz[i], closeTo(want.elementAt(i % 4), 0.01), reason: 'step $i');
+      }
+      expect(value(at('.i', 500, 910)), '2', reason: 'two bars: the carry');
+      gateway.sendInt(inst, at('.t', 60, 590), 0, 1);
+      expect(loudness(), greaterThan(0.05), reason: 'the sequence on master');
+      gateway.sendInt(inst, at('.t', 60, 590), 0, 0);
+    });
+
+    test('accum: add, multiply, replace, reset, a running sum, a fade', () {
+      open('accum');
+      final out = at('.f', 60, 330);
+      final button = at('.b', 60, 220);
+      click(button);
+      expect(number(out), 10, reason: 'the argument');
+      click(msg('5'));
+      expect(number(out), 10, reason: 'adds without sending');
+      click(button);
+      expect(number(out), 15);
+      click(msg('1'));
+      click(msg('1'));
+      click(button);
+      expect(number(out), 17);
+      click(msg('2'));
+      click(button);
+      expect(number(out), 34, reason: 'multiplied');
+      click(msg('0.5'));
+      click(button);
+      expect(number(out), 17);
+      click(msg('100'));
+      expect(number(out), 100, reason: 'replaced and sent');
+      click(msg('reset'));
+      expect(number(out), 100, reason: 'reset sends nothing');
+      click(button);
+      expect(number(out), 10);
+      final sum = at('.f', 60, 580);
+      final sums = <double>[];
+      for (final m in ['3', '4', '10']) {
+        click(msg(m));
+        sums.add(number(sum));
+      }
+      expect(sums, [3, 7, 17]);
+      click(msg('0'));
+      click(msg('4'));
+      expect(number(sum), 4, reason: 'started again');
+      final fade = at('.f', 60, 820);
+      final fades = <double>[];
+      for (var i = 0; i < 3; i++) {
+        click(at('.b', 60, 660));
+        fades.add(number(fade));
+      }
+      expect(fades[0], closeTo(0.8, 1e-6));
+      expect(fades[1], closeTo(0.64, 1e-6));
+      expect(fades[2], closeTo(0.512, 1e-6));
+      click(msg('1.'));
+      click(at('.b', 60, 660));
+      expect(number(fade), closeTo(0.8, 1e-6), reason: 'from 1 again');
+    });
+
+    test('change togedge: repeats filtered, leaving and returning to 0', () {
+      open('change-togedge');
+      final slider = at('.slider', 60, 160);
+      for (final v in [0.0, 0.05, 0.1, 0.2, 0.3, 0.35, 0.4, 0.6, 0.7]) {
+        gateway.sendFloat(inst, slider, 0, v);
+      }
+      expect(value(at('.i', 300, 380)), '9', reason: 'every move arrives');
+      // 0 0 0 1 1 1 2 2 3, against a starting 0: 1, 2 and 3 pass.
+      expect(value(at('.i', 420, 380)), '3', reason: 'only the changes pass');
+      expect(number(at('.f', 140, 330)), 3);
+      final change = at('.change', 60, 540);
+      final rises = at('.i', 150, 700);
+      final falls = at('.i', 250, 700);
+      final passed = tally(change, 0);
+      click(msg('1'));
+      expect((value(passed), value(rises), value(falls)), ('1', '1', '0'));
+      click(msg('2'));
+      expect((value(passed), value(rises), value(falls)), ('2', '1', '0'));
+      click(msg('0'));
+      expect((value(passed), value(rises), value(falls)), ('3', '1', '1'));
+      click(msg('0'));
+      expect((value(passed), value(rises), value(falls)), ('3', '1', '1'));
+      final on = at('.i', 360, 650);
+      final off = at('.i', 470, 650);
+      expect((value(on), value(off)), ('1', '1'), reason: '1 2 is one on');
+      click(msg('0.5'));
+      expect((value(on), value(off)), ('2', '1'), reason: '0.5 counts as on');
+      click(at('.b', 500, 480));
+      expect((value(on), value(off)), ('2', '2'), reason: 'a bang flips off');
+      click(at('.b', 500, 480));
+      expect((value(on), value(off)), ('3', '2'), reason: 'and on again');
+    });
+
+    test('extremes: a threshold once, records, larger and smaller', () {
+      open('extremes');
+      final slider = at('.slider', 60, 160);
+      final crossings = at('.i', 140, 330);
+      for (final v in [0.2, 0.5, 0.6, 0.8, 0.55, 0.3, 0.7]) {
+        gateway.sendFloat(inst, slider, 0, v);
+      }
+      expect(value(crossings), '2', reason: 'at 50, and again after 30');
+      click(msg('clear'));
+      gateway.sendFloat(inst, slider, 0, 0.75);
+      expect(value(crossings), '3', reason: 'clear re-arms above 50');
+      final peaks = <String>[];
+      final troughs = <String>[];
+      final newPeak = <String>[];
+      final newTrough = <String>[];
+      for (final m in ['5', '3', '9', '1']) {
+        click(msg(m));
+        peaks.add(value(at('.f', 60, 540)));
+        newPeak.add(value(at('.i', 150, 540)));
+        troughs.add(value(at('.f', 300, 540)));
+        newTrough.add(value(at('.i', 390, 540)));
+      }
+      expect(peaks.map(double.parse), [5, 5, 9, 9]);
+      expect(newPeak, ['1', '0', '1', '0']);
+      expect(troughs.map(double.parse), [5, 3, 3, 1]);
+      expect(newTrough, ['1', '1', '0', '1']);
+      click(msg('reset'));
+      gateway.sendBang(inst, at('.peak', 60, 480), 0);
+      gateway.sendBang(inst, at('.trough', 300, 480), 0);
+      expect(
+        (number(at('.f', 60, 540)), number(at('.f', 300, 540))),
+        (0, 128),
+        reason: 'reset goes back to 0 and 128',
+      );
+      final mx = at('.f', 60, 800);
+      final mn = at('.f', 200, 800);
+      click(msg('4'));
+      expect((number(mx), number(mn)), (6, 4));
+      click(msg('12'));
+      expect((number(mx), number(mn)), (12, 6));
+      click(msg('20'));
+      click(msg('12'));
+      expect((number(mx), number(mn)), (20, 12));
+      click(at('.b', 390, 630));
+      expect((number(mx), number(mn)), (17, 2), reason: 'a list');
+      click(msg('4'));
+      expect((number(mx), number(mn)), (8, 4), reason: 'second largest');
+    });
+
+    test('statistics: an average, a histogram, pairs into prob', () {
+      open('statistics');
+      final mean = at('.f', 60, 270);
+      final count = at('.i', 150, 270);
+      final means = <double>[];
+      for (final m in ['2', '4', '9']) {
+        click(msg(m));
+        means.add(number(mean));
+      }
+      expect(means, [2, 3, 5]);
+      expect(value(count), '3');
+      click(msg('reset'));
+      click(msg('4'));
+      expect((number(mean), value(count)), (4, '1'), reason: 'reset');
+      click(at('.b', 500, 160));
+      expect((number(mean), value(count)), (4, '4'), reason: 'a list');
+      click(msg('9'));
+      expect(number(mean), 5, reason: '(1+2+3+10+9)/5');
+      final histo = at('.l', 60, 470);
+      final rejects = at('.i', 200, 520);
+      final counts = <String>[];
+      for (final m in ['1', '3', '3', '6']) {
+        click(msg(m));
+        counts.add(value(histo));
+      }
+      expect(counts, ['1 1', '3 1', '3 2', '6 1']);
+      click(msg('12'));
+      expect(value(rejects), '1', reason: 'outside 0 to 7');
+      expect(value(histo), '6 1');
+      click(msg('clear'));
+      click(msg('3'));
+      expect(value(histo), '3 1', reason: 'cleared');
+      final pairs = <String>[];
+      for (final m in ['60', '62', '60', '62', '64']) {
+        click(msg(m));
+        pairs.add(value(at('.l', 60, 670)));
+      }
+      expect(pairs, ['', '60 62 1', '62 60 1', '60 62 2', '62 64 1']);
+      final prob = at('.prob', 300, 680);
+      final stuck = tally(prob, 1);
+      final jumps = tally(prob, 0);
+      // Follow the chain bang by bang: what may come next from where it is.
+      // From 64 nothing ever followed, so that bang sends nothing, bangs the
+      // stuck outlet, and the chain is back at 60.
+      var state = '60';
+      final seen = <String>{};
+      var dead = 0;
+      for (var i = 0; i < 60; i++) {
+        final before = value(jumps);
+        click(at('.b', 390, 620));
+        final now = value(at('.i', 300, 730));
+        if (state == '64') {
+          expect(value(jumps), before, reason: 'a dead end sends nothing');
+          dead++;
+          expect(value(stuck), '$dead');
+          state = '60';
+          continue;
+        }
+        final allowed = state == '60' ? {'62'} : {'60', '64'};
+        expect(allowed, contains(now), reason: 'from $state');
+        seen.add(now);
+        state = now;
+      }
+      expect(seen, {'60', '62', '64'});
+      expect(dead, greaterThan(0));
+    });
+
+    test('slide linedrive: slides, jitter, the curve, line to a sine', () {
+      open('slide-linedrive', mount: true);
+      final out = at('.f', 60, 270);
+      click(msg('100'));
+      expect(number(out), closeTo(33.333, 1e-3));
+      click(msg('100'));
+      expect(number(out), closeTo(55.556, 1e-3));
+      click(at('.b', 280, 160));
+      expect(number(out), closeTo(70.370, 1e-3), reason: 'the button');
+      click(msg('0'));
+      expect(number(out), closeTo(70.370 * 11 / 12, 1e-3), reason: 'a 12th');
+      // Jitter: random stepped by hand, metro runs in real time.
+      final random = at('.random', 60, 450);
+      final raw = <double>[];
+      final smooth = <double>[];
+      for (var i = 0; i < 200; i++) {
+        click(random);
+        raw.add(number(at('.f', 200, 450)));
+        smooth.add(number(at('.f', 60, 560)));
+      }
+      double spread(List<double> xs) {
+        final tail = xs.sublist(100);
+        return tail.reduce(math.max) - tail.reduce(math.min);
+      }
+
+      for (final r in raw) {
+        expect(r, inInclusiveRange(0, 99));
+      }
+      expect(spread(smooth), lessThan(0.6 * spread(raw)), reason: 'smoothed');
+      final slider = at('.slider', 60, 650);
+      gateway.sendFloat(inst, slider, 0, 1);
+      expect(number(at('.f', 140, 760)), closeTo(2000, 1e-2));
+      expect(numbers(at('.l', 300, 820)), [closeTo(2000, 1e-2), 300]);
+      gateway.sendFloat(inst, slider, 0, 0.5);
+      expect(
+        number(at('.f', 140, 760)),
+        closeTo(2000 * math.pow(1.06, -63.5), 0.01),
+      );
+      expect(number(at('.f', 140, 760)), closeTo(49, 0.5), reason: 'about 49');
+      gateway.sendFloat(inst, slider, 0, (127 - 12) / 127);
+      expect(
+        number(at('.f', 140, 760)),
+        closeTo(2000 / math.pow(1.06, 12), 0.01),
+      );
+      expect(number(at('.f', 140, 760)), closeTo(1000, 10), reason: '12 halve');
+      // line glides on the audio clock: render, and watch it arrive.
+      final glide = at('.f', 140, 930);
+      loudness(400);
+      expect(number(glide), closeTo(2000 / math.pow(1.06, 12), 0.01));
+      gateway.sendFloat(inst, slider, 0, 1);
+      final path = <double>[];
+      for (var i = 0; i < 40; i++) {
+        loudness(10);
+        path.add(number(glide));
+      }
+      expect(path.last, closeTo(2000, 1e-3), reason: 'arrives in 300 ms');
+      expect(path.where((v) => v > 1000 && v < 1990), isNotEmpty);
+      expect(loudness(), lessThan(1e-4), reason: 'silent until switched on');
+      gateway.sendInt(inst, at('.t', 300, 880), 0, 1);
+      expect(loudness(), greaterThan(0.1), reason: 'the sine on master');
+      gateway.sendInt(inst, at('.t', 300, 880), 0, 0);
+    });
+
+    test('div swap pong: whole parts, a crossed pair, fold wrap clip', () {
+      open('div-swap-pong');
+      final q = at('.i', 60, 270);
+      final r = at('.i', 170, 270);
+      click(msg('17'));
+      expect((value(q), value(r)), ('3', '2'));
+      click(msg('-17'));
+      expect((value(q), value(r)), ('-3', '-2'));
+      click(msg('0'));
+      click(msg('17'));
+      expect(value(q), '0', reason: 'divided by 0');
+      click(msg('7'));
+      expect(value(at('.l', 60, 570)), isEmpty, reason: 'stored only');
+      click(msg('3'));
+      expect((number(at('.f', 60, 460)), number(at('.f', 170, 460))), (7, 3));
+      expect(numbers(at('.l', 60, 570)), [7, 3]);
+      List<double> pongs() => [
+        for (final x in [60.0, 200.0, 340.0]) number(at('.f', x, 810)),
+      ];
+      click(msg('13'));
+      expect(pongs(), [7, 3, 10]);
+      click(msg('-3'));
+      expect(pongs(), [3, 7, 0]);
+      click(msg('25'));
+      expect(pongs(), [5, 5, 10]);
+    });
+
+    test('cartopol poltocar: the pad in polar form, back, and a circle', () {
+      open('cartopol-poltocar');
+      final pad = at('.xyslider', 60, 160);
+      final amp = at('.f', 60, 430);
+      final angle = at('.f', 170, 430);
+      final degrees = at('.f', 170, 540);
+      gateway.sendList(inst, pad, 0, '0.6 0.8');
+      expect(number(amp), closeTo(1, 1e-5));
+      expect(number(angle), closeTo(math.atan2(0.8, 0.6), 1e-5));
+      expect(number(at('.f', 60, 650)), closeTo(0.6, 1e-5), reason: 'x back');
+      expect(number(at('.f', 170, 650)), closeTo(0.8, 1e-5), reason: 'y back');
+      gateway.sendList(inst, pad, 0, '-1 0');
+      expect(number(angle), closeTo(math.pi, 1e-5), reason: 'straight left');
+      expect(number(degrees), closeTo(180, 1e-3));
+      gateway.sendList(inst, pad, 0, '0 -0.5');
+      expect(number(degrees), closeTo(-90, 1e-3), reason: 'below: negative');
+      expect(number(amp), closeTo(0.5, 1e-5));
+      final clock = at('.counter', 330, 260);
+      final angles = <double>[];
+      for (var i = 0; i < 40; i++) {
+        click(clock);
+        expect(number(amp), closeTo(0.8, 1e-4), reason: 'on the circle');
+        angles.add(number(angle));
+      }
+      final xy = numbers(pad);
+      expect(xy[0], closeTo(0.8, 1e-4), reason: 'step 40: angle 0');
+      expect(xy[1], closeTo(0, 1e-4));
+      expect(angles[9], closeTo(math.pi / 2, 1e-4), reason: 'step 10: up');
+      expect(angles.reduce(math.min), lessThan(-3));
+      expect(angles.reduce(math.max), greaterThan(2.9));
+    });
+  });
+
   test('report: object types with no tutorial yet', () {
     final missing = [
       for (final t in engineTypes.toList()..sort())

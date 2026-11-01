@@ -1,0 +1,534 @@
+{
+  "title": "mean histo anal — counting what arrives",
+  "covers": [
+    ".mean",
+    ".histo",
+    ".anal"
+  ],
+  "summary": "Keep a running average, count how often each number arrives, and count which number follows which to drive a Markov chain.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# mean histo anal — counting what arrives\nmean sends the average of every number so far, with the count beside it. histo counts how often each number arrives and sends the number with its count. anal counts how often each number follows the one before it, and sends the previous number, the current one and the count: the table a Markov chain plays from.\nMax's histo sends the number and its count from two outlets. Here they leave the left outlet as one list, and the right outlet bangs for a number outside the range.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "2",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "360.0"
+        },
+        "parms": "1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "170.0",
+          "y": "360.0"
+        },
+        "parms": "3",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "280.0",
+          "y": "360.0"
+        },
+        "parms": "6",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "390.0",
+          "y": "360.0"
+        },
+        "parms": "12",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "500.0",
+          "y": "360.0"
+        },
+        "parms": "clear",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "60.0",
+          "y": "420.0"
+        },
+        "parms": "8",
+        "type": ".histo",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "60.0",
+          "y": "470.0"
+        },
+        "parms": "",
+        "type": ".l",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "200.0",
+          "y": "470.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "200.0",
+          "y": "520.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "60.0",
+          "y": "560.0"
+        },
+        "parms": "60",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "160.0"
+        },
+        "parms": "4",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "170.0",
+          "y": "560.0"
+        },
+        "parms": "62",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "280.0",
+          "y": "560.0"
+        },
+        "parms": "64",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "60.0",
+          "y": "620.0"
+        },
+        "parms": "",
+        "type": ".anal",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 23
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 25
+            },
+            "Count": 2
+          },
+          "output 1": {
+            "Count": 0
+          }
+        }
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "60.0",
+          "y": "670.0"
+        },
+        "parms": "",
+        "type": ".l",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "390.0",
+          "y": "620.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 25
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "300.0",
+          "y": "680.0"
+        },
+        "parms": "60 7",
+        "type": ".prob",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 26
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "Count": 0
+          },
+          "output 2": {
+            "Count": 0
+          }
+        }
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "300.0",
+          "y": "730.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 27": {
+        "ID": 27,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Click 2, 4 and 9: mean sends 2, 3 and 5, with the count beside it. Each number counts the same, so the average moves less as more arrive. reset starts over. The button sends the list 1 2 3 10: a list is averaged on its own, 4, and the numbers before it are forgotten.",
+        "type": ".text"
+      },
+      "object 28": {
+        "ID": 28,
+        "gui": {
+          "x": "640.0",
+          "y": "330.0",
+          "w": "300"
+        },
+        "parms": "2. Click 1, 3, 3 and 6: histo sends each number with how often it has arrived so far: 1 1, 3 1, 3 2, 6 1. histo 8 counts the numbers 0 to 7, so 12 is not counted, and the count of rejected numbers beside it goes up. clear sets every count back to 0.",
+        "type": ".text"
+      },
+      "object 29": {
+        "ID": 29,
+        "gui": {
+          "x": "640.0",
+          "y": "500.0",
+          "w": "300"
+        },
+        "parms": "3. anal counts pairs: which number followed which. Click 60, 62, 60, 62 and 64: 60 62 1, 62 60 1, 60 62 2, 62 64 1.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "160.0"
+        },
+        "parms": "9",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 30": {
+        "ID": 30,
+        "gui": {
+          "x": "640.0",
+          "y": "590.0",
+          "w": "300"
+        },
+        "parms": "4. prob plays from those counts. Each pair anal sends becomes a way from one number to the next, weighted by its count. Click the button: from 60, prob jumps to 62, the only number that ever followed 60. From 62 it goes on to 60 or 64. Nothing ever followed 64, so there the next bang sends nothing, and prob starts again from 60.",
+        "type": ".text"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "390.0",
+          "y": "160.0"
+        },
+        "parms": "reset",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "500.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "440.0",
+          "y": "220.0"
+        },
+        "parms": "1 2 3 10",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".mean",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "270.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "150.0",
+          "y": "270.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      }
+    }
+  }
+}

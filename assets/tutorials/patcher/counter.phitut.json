@@ -1,0 +1,644 @@
+{
+  "title": "counter — counting bangs",
+  "covers": [
+    ".counter"
+  ],
+  "summary": "Count bangs up and down with a start value and a step, wrap and fold the count into a range, and clock a four-step sequencer with metro.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# counter — counting bangs\nEach bang adds the step to the count and sends the new count as an int. The first argument is the start value, 0 by default, and the second the step, 1 by default. The right inlet changes the step, a number on the left inlet sets the count and sends it, and reset goes back to the start value without sending.\nMax's counter also counts between a minimum and a maximum, up, down or back and forth, and has a carry outlet. Here counter has one outlet and counts on for ever: wrap it with %, fold it with pong, and catch the wrap with sel 0.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "460.0"
+        },
+        "parms": "4",
+        "type": ".%",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "170.0",
+          "y": "460.0"
+        },
+        "parms": "0 3",
+        "type": ".pong",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "510.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "170.0",
+          "y": "510.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "590.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 29
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "60.0",
+          "y": "640.0"
+        },
+        "parms": "150",
+        "type": ".metro",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "60.0",
+          "y": "690.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "60.0",
+          "y": "740.0"
+        },
+        "parms": "4",
+        "type": ".%",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "200.0",
+          "y": "740.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "60.0",
+          "y": "800.0"
+        },
+        "parms": "0 1 2 3",
+        "type": ".sel",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 24
+            },
+            "Count": 2
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 21
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 1
+          },
+          "output 3": {
+            "0": {
+              "Inlet": 0,
+              "Object": 23
+            },
+            "Count": 1
+          },
+          "output 4": {
+            "Count": 0
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "110.0",
+          "y": "160.0"
+        },
+        "parms": "reset",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "60.0",
+          "y": "860.0"
+        },
+        "parms": "60",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 26
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "170.0",
+          "y": "860.0"
+        },
+        "parms": "64",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 26
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "280.0",
+          "y": "860.0"
+        },
+        "parms": "67",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 26
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "390.0",
+          "y": "860.0"
+        },
+        "parms": "72",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 26
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "500.0",
+          "y": "860.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 25
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "500.0",
+          "y": "910.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "60.0",
+          "y": "920.0"
+        },
+        "parms": "",
+        "type": ".mtof",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 28
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 27
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 27": {
+        "ID": 27,
+        "gui": {
+          "x": "170.0",
+          "y": "920.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 28": {
+        "ID": 28,
+        "gui": {
+          "x": "60.0",
+          "y": "980.0"
+        },
+        "parms": "261.63",
+        "type": "~sine",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 29
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 29": {
+        "ID": 29,
+        "gui": {
+          "x": "60.0",
+          "y": "1040.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 30
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "220.0",
+          "y": "160.0"
+        },
+        "parms": "20",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 30": {
+        "ID": 30,
+        "gui": {
+          "x": "60.0",
+          "y": "1100.0"
+        },
+        "parms": "0.2",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 31
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 31
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 31": {
+        "ID": 31,
+        "gui": {
+          "x": "60.0",
+          "y": "1160.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 32": {
+        "ID": 32,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Click the button: 1, 2, 3 … each bang adds the step, 1, to the count. The first bang sends the start value plus the step, so a counter starting at 0 sends 1 first. Click 20: the count jumps to 20 and is sent, and the next bang gives 21.",
+        "type": ".text"
+      },
+      "object 33": {
+        "ID": 33,
+        "gui": {
+          "x": "640.0",
+          "y": "310.0",
+          "w": "300"
+        },
+        "parms": "2. The right inlet sets the step. Click 3 and bang: the count goes up by 3. Click -1: it counts down. Click reset: back to the start value, without sending; the next bang sends the start value plus the step.",
+        "type": ".text"
+      },
+      "object 34": {
+        "ID": 34,
+        "gui": {
+          "x": "640.0",
+          "y": "460.0",
+          "w": "300"
+        },
+        "parms": "3. Counting in a range. Click the lower button a few times. % 4 wraps the count: 1 2 3 0 1 … and pong 0 3 folds it back from the limits: 1 2 3 2 1 0 1 …, up and down.",
+        "type": ".text"
+      },
+      "object 35": {
+        "ID": 35,
+        "gui": {
+          "x": "640.0",
+          "y": "590.0",
+          "w": "300"
+        },
+        "parms": "4. A step sequencer. Turn on the toggle: metro bangs the counter every 150 ms, % 4 turns the count into the steps 0 to 3, and sel sends each step to its own note, through mtof into a sine on the master bus. The toggle also opens its level.",
+        "type": ".text"
+      },
+      "object 36": {
+        "ID": 36,
+        "gui": {
+          "x": "640.0",
+          "y": "740.0",
+          "w": "300"
+        },
+        "parms": "5. The carry. sel's first outlet fires each time the steps wrap round to 0, once a bar, and bangs a second counter that counts the bars: what Max's carry outlet does.",
+        "type": ".text"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "330.0",
+          "y": "160.0"
+        },
+        "parms": "3",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "440.0",
+          "y": "160.0"
+        },
+        "parms": "-1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "270.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "350.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "400.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 2
+          }
+        }
+      }
+    }
+  }
+}
