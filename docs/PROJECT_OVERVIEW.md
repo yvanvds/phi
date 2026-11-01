@@ -2788,6 +2788,27 @@ main + app          (orchestration)
   `patcher_node_gui` integration case (all three render; picks in run mode, a
   `.umenu` pick reaches a connected `.i` through outlet 0; inert in edit mode;
   a cable-driven selection and a retype both show).
+- **Multi-value slider bodies** (issue #472) — `.rslider`
+  (`RangeSliderNodeBody` over `PatchRangeBar`, an upright range bar),
+  `.xyslider` (`XySliderNodeBody` over `PatchXyPad`, a pad with a crosshair
+  puck) and `.multislider` (`MultisliderNodeBody` over `PatchSliderBank`, a
+  bank of upright bars). All three are polled **per cell**
+  (`GuiValueRead.cells`) and read through the controller's cell cache; their
+  cells are real values inside the object's bound parameters, which
+  `SliderRange` (domain) maps to and from 0–1 positions. The drag maths are
+  pure Dart: `RangeSliderGesture` (grab an end, or the middle to slide the
+  range) and `MultisliderStroke` (a swipe writes every crossed cell along the
+  line). The range and the pad send both values as one list
+  (`setControlList`); the bank writes each cell with `set <i> <v>`
+  (`setGuiValueCell`), and its bar count follows the live cell count, so a
+  list of another length re-lays it. `MultisliderArgs` reads `size minimum
+  maximum`; a `.multislider`'s box follows `size` through `sizeForArgs`.
+  `FakePatcherGateway` models bounding, `.rslider`'s sorted ends, the cold
+  inlet 1, the bank's hidden tail, `fetch`, and every outlet delivered down
+  cables, pinned to the engine by the shared contract. Covered by domain unit
+  tests, `multi_value_slider_bodies_test.dart`, and a `patcher_node_gui`
+  integration case (a `.multislider` drawn in run mode sends its bank down
+  outlet 0 into a `.l`; inert in edit mode; a cable-driven resize re-lays it).
 - Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
   switched off for now, issue #447)
 

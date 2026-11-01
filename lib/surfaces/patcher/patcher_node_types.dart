@@ -5,8 +5,10 @@ import 'package:flutter/widgets.dart';
 import '../../design/widgets/patcher/patch_canvas_constants.dart';
 import '../../design/widgets/patcher/patch_object_box_metrics.dart';
 import '../../domain/patcher/item_list_args.dart';
+import '../../domain/patcher/multislider_args.dart';
 import '../../domain/patcher/patch_object_types.dart';
 import '../../domain/patcher/patch_port_kind.dart';
+import '../../engine/state/gui_value_read.dart';
 import '../../engine/state/node_type_registry.dart';
 import 'nodes/button_node_body.dart';
 import 'nodes/dial_node_body.dart';
@@ -15,10 +17,13 @@ import 'nodes/item_list_node_body.dart';
 import 'nodes/label_switch_node_body.dart';
 import 'nodes/list_node_body.dart';
 import 'nodes/message_node_body.dart';
+import 'nodes/multislider_node_body.dart';
 import 'nodes/number_node_body.dart';
+import 'nodes/range_slider_node_body.dart';
 import 'nodes/slider_node_body.dart';
 import 'nodes/textedit_node_body.dart';
 import 'nodes/toggle_node_body.dart';
+import 'nodes/xy_slider_node_body.dart';
 
 /// Register the node types this PR supports. Idempotent — re-registering
 /// the same type overwrites the previous descriptor, so calling this
@@ -323,7 +328,94 @@ void registerBuiltInPatcherNodes() {
       readsGuiValue: true,
     ),
   );
+
+  // ─── libYSE 3.0 multi-value sliders (issue #472) ───────────────────────
+  // Controls whose GUI value is several cells — two ends, an x and a y, a
+  // bank — in the object's own units inside its bound parameters. They are
+  // polled per cell (`GuiValueRead.cells`), the protocol's form for multi-cell
+  // state, and each body answers from the controller's cache of that read.
+  // Upright like the `.slider`: a higher value is further up.
+
+  const twoEndInputs = [
+    PortSpec(kind: PatchPortKind.control),
+    PortSpec(kind: PatchPortKind.control),
+  ];
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gRslider,
+      // A fader's throw tall, and as wide as its three outlets need.
+      defaultSize: Size(PatchCanvasConstants.minWidthForPorts(3), 140),
+      defaultArgs: '',
+      inputs: twoEndInputs,
+      outputs: const [
+        PortSpec(kind: PatchPortKind.control, label: 'low'),
+        PortSpec(kind: PatchPortKind.control, label: 'high'),
+        PortSpec(kind: PatchPortKind.control, label: 'range'),
+      ],
+      buildBody: (ctx, node, controller) =>
+          RangeSliderNodeBody(node: node, controller: controller),
+      readsGuiValue: true,
+      guiValueRead: GuiValueRead.cells,
+    ),
+  );
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gXyslider,
+      // Square: one surface for two equal axes.
+      defaultSize: const Size(_xyPadSize, _xyPadSize),
+      defaultArgs: '',
+      inputs: twoEndInputs,
+      outputs: const [
+        PortSpec(kind: PatchPortKind.control, label: 'x'),
+        PortSpec(kind: PatchPortKind.control, label: 'y'),
+        PortSpec(kind: PatchPortKind.control, label: 'position'),
+      ],
+      buildBody: (ctx, node, controller) =>
+          XySliderNodeBody(node: node, controller: controller),
+      readsGuiValue: true,
+      guiValueRead: GuiValueRead.cells,
+    ),
+  );
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gMultislider,
+      // As wide as its `size` argument asks — a bar's width each, inside a
+      // floor for the ports and a ceiling a 1024-cell bank cannot push past.
+      sizeForArgs: (args) => Size(
+        (MultisliderArgs.parse(args).size * _bankBarWidth).clamp(
+          PatchCanvasConstants.minWidthForPorts(2),
+          _bankMaxWidth,
+        ),
+        _bankHeight,
+      ),
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [
+        PortSpec(kind: PatchPortKind.control, label: 'bank'),
+        PortSpec(kind: PatchPortKind.control, label: 'cell'),
+      ],
+      buildBody: (ctx, node, controller) =>
+          MultisliderNodeBody(node: node, controller: controller),
+      readsGuiValue: true,
+      guiValueRead: GuiValueRead.cells,
+    ),
+  );
 }
+
+/// Side of a `.xyslider` pad (issue #472).
+const double _xyPadSize = 120;
+
+/// Width of one `.multislider` bar at creation (issue #472).
+const double _bankBarWidth = 14;
+
+/// The widest a `.multislider` opens at, however many cells it is built with.
+const double _bankMaxWidth = 384;
+
+/// Height of a `.multislider` — a fader's throw.
+const double _bankHeight = 110;
 
 /// The width the longest of [items]' names needs on one line — measured the
 /// way an object box measures its line, padding and border included, so a name

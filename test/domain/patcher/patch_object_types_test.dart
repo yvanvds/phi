@@ -30,6 +30,9 @@ void main() {
     expect(PatchObjectTypes.gUmenu, Obj.gUmenu);
     expect(PatchObjectTypes.gRadiogroup, Obj.gRadiogroup);
     expect(PatchObjectTypes.gTab, Obj.gTab);
+    expect(PatchObjectTypes.gRslider, Obj.gRslider);
+    expect(PatchObjectTypes.gXyslider, Obj.gXyslider);
+    expect(PatchObjectTypes.gMultislider, Obj.gMultislider);
   });
 
   test('the list holds each id exactly once', () {

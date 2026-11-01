@@ -198,7 +198,8 @@ void main() {
       final bank = add(Obj.gMultislider, args: '2', read: GuiValueRead.cells);
       controller.refreshGuiValues();
       controller.setControlValue(bank.id, inlet: 0, value: 0.5);
-      expect(controller.guiValueCellsOf(bank.id), ['0.5']);
+      // A number sets every live cell of the bank, as the engine does.
+      expect(controller.guiValueCellsOf(bank.id), ['0.5', '0.5']);
     });
   });
 

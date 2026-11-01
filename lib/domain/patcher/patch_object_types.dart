@@ -66,6 +66,16 @@ abstract final class PatchObjectTypes {
   /// `Obj.gTab` — `.umenu`'s value model drawn as a row of tabs (issue #471).
   static const String gTab = '.tab';
 
+  /// `Obj.gRslider` — the range control, two ends inside its bounds
+  /// (issue #472).
+  static const String gRslider = '.rslider';
+
+  /// `Obj.gXyslider` — the two-dimensional pad, an x and a y (issue #472).
+  static const String gXyslider = '.xyslider';
+
+  /// `Obj.gMultislider` — a bank of sliders, one cell each (issue #472).
+  static const String gMultislider = '.multislider';
+
   /// Every id above, for the drift guard.
   static const List<String> all = [
     dSine,
@@ -85,5 +95,8 @@ abstract final class PatchObjectTypes {
     gUmenu,
     gRadiogroup,
     gTab,
+    gRslider,
+    gXyslider,
+    gMultislider,
   ];
 }

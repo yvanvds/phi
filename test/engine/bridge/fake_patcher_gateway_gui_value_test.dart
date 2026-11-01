@@ -30,7 +30,9 @@ void main() {
         1: ['0.4'],
         0: ['set 0 0.2'],
       });
-      expect(gateway.nodes[pack]!.guiCells, ['0.2', '0']);
+      // Cell 0 is the low end, and the engine presents the ends sorted: 0.2
+      // written over a 0–0 range becomes the top of it (issue #472).
+      expect(gateway.nodes[pack]!.guiCells, ['0', '0.2']);
     });
 
     test('writes travel as lists on inlet 0, as yse sends them', () {

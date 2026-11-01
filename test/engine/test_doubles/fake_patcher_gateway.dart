@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:ui';
 
 import 'package:phi/domain/patcher/item_list_args.dart';
+import 'package:phi/domain/patcher/multislider_args.dart';
 import 'package:phi/domain/patcher/patch_port_kind.dart';
+import 'package:phi/domain/patcher/slider_range.dart';
 import 'package:phi/engine/bridge/patch_object_descriptor.dart';
 import 'package:phi/engine/bridge/patcher_gateway.dart';
 import 'package:phi/engine/bridge/patcher_graph_snapshot.dart';
@@ -251,6 +253,11 @@ class FakePatcherGateway implements PatcherGateway {
       _itemListNumber(instanceId, handleId, inlet, value);
       return;
     }
+    if (node.isMultiValueSlider) {
+      node.lastValueByInlet[inlet] = value;
+      _multiValueSliderNumber(instanceId, handleId, inlet, value);
+      return;
+    }
     // Model the engine's uncoerced inlet dispatch (issue #439): `gToggle`
     // registers int and bang handlers but **no float one**, so a float sent at
     // it lands nowhere — the real engine drops it silently. The fake dropping
@@ -279,6 +286,10 @@ class FakePatcherGateway implements PatcherGateway {
       _itemListNumber(instanceId, handleId, inlet, value.toDouble());
       return;
     }
+    if (node.isMultiValueSlider) {
+      _multiValueSliderNumber(instanceId, handleId, inlet, value.toDouble());
+      return;
+    }
     if (inlet != 0) return;
     if (node.receiveSwitchNumber(value.toDouble())) return;
     // The engine's `gToggle` displays its state as `on`/`off`, not as a
@@ -297,6 +308,11 @@ class FakePatcherGateway implements PatcherGateway {
     node.bangedInlets.add(inlet);
     // An item list re-sends on a bang (`gItemListBase`).
     if (inlet == 0 && node.isItemList) _emitItemList(instanceId, handleId);
+    // So does a multi-value slider (`gRSlider` / `gXYSlider` /
+    // `gMultiSlider`): the hot inlet calculates after every message.
+    if (inlet == 0 && node.isMultiValueSlider) {
+      _emitMultiValueSlider(instanceId, handleId);
+    }
     // A latching `.led` / `.textbutton` flips on a bang; a momentary one
     // takes it as a press (`gLabelSwitchBase`).
     if (inlet == 0 && node.isLabelSwitch) {
@@ -326,6 +342,9 @@ class FakePatcherGateway implements PatcherGateway {
     if (inlet == 0 && (node?.isItemList ?? false)) {
       _emitItemList(instanceId, handleId);
     }
+    if (inlet == 0 && (node?.isMultiValueSlider ?? false)) {
+      _emitMultiValueSlider(instanceId, handleId);
+    }
   }
 
   @override
@@ -336,6 +355,9 @@ class FakePatcherGateway implements PatcherGateway {
     node?.receiveList(inlet, message);
     if (inlet == 0 && (node?.isItemList ?? false)) {
       _emitItemList(instanceId, handleId);
+    }
+    if (inlet == 0 && (node?.isMultiValueSlider ?? false)) {
+      _emitMultiValueSlider(instanceId, handleId);
     }
   }
 
@@ -366,6 +388,53 @@ class FakePatcherGateway implements PatcherGateway {
     deliver(2, (c) => sendList(instanceId, c.toHandleId, c.inlet, state));
     deliver(1, (c) => sendList(instanceId, c.toHandleId, c.inlet, label));
     deliver(0, (c) => sendInt(instanceId, c.toHandleId, c.inlet, at));
+  }
+
+  /// A number landing on a multi-value slider: stored by the node, and on the
+  /// hot inlet sent on.
+  void _multiValueSliderNumber(
+    int instanceId,
+    int handleId,
+    int inlet,
+    double value,
+  ) {
+    _inst(instanceId).nodes[handleId]!.receiveSliderNumber(inlet, value);
+    if (inlet == 0) _emitMultiValueSlider(instanceId, handleId);
+  }
+
+  /// Model a multi-value slider's send (`CALC`), right to left as the engine
+  /// fires it, each delivered down every cable from that outlet:
+  ///
+  /// - `.rslider` / `.xyslider`: the pair as a list on outlet 2, then the high
+  ///   end (y) on outlet 1, then the low end (x) on outlet 0.
+  /// - `.multislider`: a pending `fetch` answer on outlet 1 first (it is sent
+  ///   from the handler), then the whole bank as a list on outlet 0.
+  void _emitMultiValueSlider(int instanceId, int handleId) {
+    final inst = _inst(instanceId);
+    final node = inst.nodes[handleId]!;
+    void deliver(int outlet, void Function(FakeCable c) send) {
+      for (final c in [...inst.cables]) {
+        if (c.fromHandleId == handleId && c.outlet == outlet) send(c);
+      }
+    }
+
+    final cells = node.guiCells;
+    if (node.type == Obj.gMultislider) {
+      final fetched = node.takeFetched();
+      if (fetched != null) {
+        final value = double.parse(cells[fetched]);
+        deliver(1, (c) => sendFloat(instanceId, c.toHandleId, c.inlet, value));
+      }
+      final bank = node.guiValue;
+      deliver(0, (c) => sendList(instanceId, c.toHandleId, c.inlet, bank));
+      return;
+    }
+    final pair = node.guiValue;
+    final first = double.parse(cells[0]);
+    final second = double.parse(cells[1]);
+    deliver(2, (c) => sendList(instanceId, c.toHandleId, c.inlet, pair));
+    deliver(1, (c) => sendFloat(instanceId, c.toHandleId, c.inlet, second));
+    deliver(0, (c) => sendFloat(instanceId, c.toHandleId, c.inlet, first));
   }
 
   @override
@@ -420,6 +489,10 @@ class FakePatcherGateway implements PatcherGateway {
     // New items rebuild an item list (the engine replaces the object), so it
     // comes back with item 0 selected and every flag clear.
     if (node.isItemList) node.reshapeItems();
+    // A multi-value slider survives a re-range (the scalar plan): its bounds
+    // apply on the way out at once, and a `.multislider`'s `size` becomes its
+    // live count, values kept.
+    if (node.isMultiValueSlider) node.reconfigureSlider();
   }
 
   /// A whole value renders without a trailing `.0` (`3` not `3.0`), matching
@@ -586,6 +659,27 @@ class FakePatcherGateway implements PatcherGateway {
           inputKinds: [],
           outputKinds: [PatchPortKind.control],
         );
+      // Hot and cold inlets; low/x, high/y and the pair out (issue #472).
+      case Obj.gRslider:
+      case Obj.gXyslider:
+        return const PatcherNodeSnapshot(
+          inputs: 2,
+          outputs: 3,
+          inputKinds: [PatchPortKind.control, PatchPortKind.control],
+          outputKinds: [
+            PatchPortKind.control,
+            PatchPortKind.control,
+            PatchPortKind.control,
+          ],
+        );
+      // One hot inlet; the bank and a fetched cell out (issue #472).
+      case Obj.gMultislider:
+        return const PatcherNodeSnapshot(
+          inputs: 1,
+          outputs: 2,
+          inputKinds: [PatchPortKind.control],
+          outputKinds: [PatchPortKind.control, PatchPortKind.control],
+        );
       // One hot inlet; index, item name and whole selection out (issue #471).
       case Obj.gUmenu:
       case Obj.gRadiogroup:
@@ -716,7 +810,12 @@ class FakeInstance {
 class FakeNode {
   FakeNode({required this.type, required this.args})
     : guiCells = _initialCells(type, args),
-      guiSettable = !_unsettable.contains(type) && type.startsWith('.');
+      guiSettable = !_unsettable.contains(type) && type.startsWith('.') {
+    if (isMultiValueSlider) {
+      _bankSize = MultisliderArgs.parse(args).size;
+      _publishSlider();
+    }
+  }
   final String type;
 
   /// Creation-argument string — mutable so [FakePatcherGateway.setParams] can
@@ -888,6 +987,10 @@ class FakeNode {
       _receiveItemList(list);
       return;
     }
+    if (isMultiValueSlider) {
+      _receiveSliderList(list);
+      return;
+    }
     if (type == Obj.gList) {
       guiCells = [list];
       return;
@@ -935,6 +1038,163 @@ class FakeNode {
     }
     guiValue = '$bounded';
     return true;
+  }
+
+  // ─── the multi-value sliders (issue #472) ───────────────────────────
+
+  /// Whether this is a `.rslider`, `.xyslider` or `.multislider` — the GUI
+  /// controls whose state is several cells in their own bounded units.
+  bool get isMultiValueSlider => _multiValueSliderTypes.contains(type);
+
+  static const Set<String> _multiValueSliderTypes = {
+    Obj.gRslider,
+    Obj.gXyslider,
+    Obj.gMultislider,
+  };
+
+  /// `.rslider`'s two ends in write order (not sorted: `first` is what inlet 0
+  /// writes, `second` inlet 1), or `.xyslider`'s x and y.
+  double _first = 0;
+  double _second = 0;
+
+  /// `.multislider`'s bank: allocated whole at the engine's 1024 cells, of
+  /// which [_bankSize] are live — so a shrink hides the tail and a regrow shows
+  /// it again, as `gMultiSlider` does.
+  final List<double> _bank = List.filled(MultisliderArgs.maxSize, 0);
+  int _bankSize = MultisliderArgs.defaultSize;
+
+  /// A `fetch <i>` not yet answered — read once by the gateway's send.
+  int? _fetched;
+
+  /// The cell a `fetch` asked for, cleared by the read.
+  int? takeFetched() {
+    final at = _fetched;
+    _fetched = null;
+    return at;
+  }
+
+  SliderRange get _rangeX =>
+      SliderRange.fromArgs(type == Obj.gMultislider ? _argsWithoutSize : args);
+  SliderRange get _rangeY => SliderRange.fromArgs(args, at: 2);
+  String get _argsWithoutSize {
+    final parts = args.trim().split(RegExp(r'\s+'));
+    return parts.length <= 1 ? '' : parts.skip(1).join(' ');
+  }
+
+  /// Clamp into [range], a NaN answered with the low bound (the engine's
+  /// `Bound`).
+  static double _bound(double value, SliderRange range) {
+    if (!(value >= range.low)) return range.low;
+    if (value > range.high) return range.high;
+    return value;
+  }
+
+  /// Re-render the cells from the stored state, bounded and (for `.rslider`)
+  /// sorted on the way out, as the engine reports them.
+  void _publishSlider() {
+    switch (type) {
+      case Obj.gRslider:
+        final a = _bound(_first, _rangeX);
+        final b = _bound(_second, _rangeX);
+        guiCells = [_spell(a < b ? a : b), _spell(a < b ? b : a)];
+      case Obj.gXyslider:
+        guiCells = [
+          _spell(_bound(_first, _rangeX)),
+          _spell(_bound(_second, _rangeY)),
+        ];
+      case Obj.gMultislider:
+        guiCells = [
+          for (var i = 0; i < _bankSize; i++) _spell(_bound(_bank[i], _rangeX)),
+        ];
+    }
+  }
+
+  static String _spell(double v) =>
+      v == v.roundToDouble() ? '${v.toInt()}' : '$v';
+
+  /// The object's parameters changed (`setParams`).
+  void reconfigureSlider() {
+    if (type == Obj.gMultislider) {
+      _bankSize = MultisliderArgs.parse(args).size;
+    }
+    _publishSlider();
+  }
+
+  /// A number on [inlet]: `.rslider` one end (inlet 0) or the other (inlet 1),
+  /// `.xyslider` x or y, `.multislider` every live cell.
+  void receiveSliderNumber(int inlet, double value) {
+    if (type == Obj.gMultislider) {
+      if (inlet != 0) return;
+      final bounded = _bound(value, _rangeX);
+      for (var i = 0; i < _bankSize; i++) {
+        _bank[i] = bounded;
+      }
+    } else if (inlet == 0) {
+      _first = _bound(value, _rangeX);
+    } else {
+      _second = _bound(value, type == Obj.gXyslider ? _rangeY : _rangeX);
+    }
+    _publishSlider();
+  }
+
+  /// A list on inlet 0: `set <i> <v>` writes one cell, `.multislider`'s
+  /// `fetch <i>` asks for one, and otherwise the numbers are the whole state —
+  /// the first two for a pair, every one (resizing the bank) for a
+  /// `.multislider`. Non-numeric tokens are skipped, as the engine's parser
+  /// skips them.
+  void _receiveSliderList(String list) {
+    final tokens = list.trim().split(RegExp(r'\s+'));
+    if (tokens.first.isEmpty) return;
+    final numbers = [for (final t in tokens) ?double.tryParse(t)];
+    final keyword = tokens.first;
+    if (keyword == 'set' || keyword == 'fetch') {
+      if (numbers.isEmpty || !(numbers[0] >= 0)) return;
+      final at = numbers[0].truncate();
+      if (keyword == 'fetch') {
+        if (type == Obj.gMultislider && at < _bankSize) _fetched = at;
+        return;
+      }
+      if (numbers.length < 2) return;
+      final value = numbers[1];
+      switch (type) {
+        case Obj.gRslider:
+          if (at > 1) return;
+          // The index names a presented cell, not a storage slot.
+          final firstIsLow =
+              !(_bound(_second, _rangeX) < _bound(_first, _rangeX));
+          if ((at == 0) == firstIsLow) {
+            _first = _bound(value, _rangeX);
+          } else {
+            _second = _bound(value, _rangeX);
+          }
+        case Obj.gXyslider:
+          if (at > 1) return;
+          if (at == 0) {
+            _first = _bound(value, _rangeX);
+          } else {
+            _second = _bound(value, _rangeY);
+          }
+        case Obj.gMultislider:
+          if (at >= _bankSize) return;
+          _bank[at] = _bound(value, _rangeX);
+      }
+      _publishSlider();
+      return;
+    }
+    if (numbers.isEmpty) return;
+    if (type == Obj.gMultislider) {
+      final count = numbers.length.clamp(0, MultisliderArgs.maxSize);
+      for (var i = 0; i < count; i++) {
+        _bank[i] = _bound(numbers[i], _rangeX);
+      }
+      _bankSize = count;
+    } else {
+      _first = _bound(numbers[0], _rangeX);
+      if (numbers.length >= 2) {
+        _second = _bound(numbers[1], type == Obj.gXyslider ? _rangeY : _rangeX);
+      }
+    }
+    _publishSlider();
   }
 
   /// Objects whose GUI value the engine does not accept back.

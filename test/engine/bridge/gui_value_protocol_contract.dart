@@ -272,6 +272,121 @@ void guiValueProtocolContract(
     expect(gateway.guiValue(inst, tabs), '0');
   });
 
+  // ─── the multi-value sliders (issue #472) ─────────────────────────────
+
+  /// Wire [from]'s [outlet] into a fresh object of [type]'s inlet 0.
+  int listen(int from, int outlet, String type) {
+    final to = gateway.createObject(inst, type);
+    gateway.connect(
+      inst,
+      fromHandleId: from,
+      outlet: outlet,
+      toHandleId: to,
+      inlet: 0,
+    );
+    return to;
+  }
+
+  test('an .rslider bounds its ends and reports them low first', () {
+    final range = gateway.createObject(inst, Obj.gRslider, args: '20 20000');
+    expect(numbers(cellsOf(range)), [20, 20], reason: 'bounded on the way out');
+
+    gateway.sendFloat(inst, range, 0, 500);
+    expect(numbers(cellsOf(range)), [20, 500]);
+    gateway.sendFloat(inst, range, 1, 100);
+    expect(numbers(cellsOf(range)), [100, 500]);
+    gateway.sendFloat(inst, range, 0, 50);
+    expect(numbers(cellsOf(range)), [50, 100], reason: 'the ends swap');
+    gateway.sendList(inst, range, 0, '30000 10');
+    expect(numbers(cellsOf(range)), [20, 20000], reason: 'both clamped');
+    expect(gateway.setGuiValueAt(inst, range, 0, '64'), isTrue);
+    expect(numbers(cellsOf(range)), [64, 20000]);
+  });
+
+  test('an .rslider sends low, high and the pair from its hot inlet only', () {
+    final range = gateway.createObject(inst, Obj.gRslider);
+    final low = listen(range, 0, Obj.gFloat);
+    final high = listen(range, 1, Obj.gFloat);
+    final pair = listen(range, 2, Obj.gList);
+
+    gateway.sendList(inst, range, 0, '96 32');
+    expect(num.parse(gateway.guiValue(inst, low)), 32);
+    expect(num.parse(gateway.guiValue(inst, high)), 96);
+    expect(numbers(gateway.guiValue(inst, pair).split(' ')), [32, 96]);
+
+    gateway.sendFloat(inst, range, 1, 8);
+    expect(
+      num.parse(gateway.guiValue(inst, low)),
+      32,
+      reason: 'inlet 1 is cold',
+    );
+    // Inlet 1 wrote the other end, the one 32 came from, so 96 is still high.
+    gateway.sendBang(inst, range, 0);
+    expect(num.parse(gateway.guiValue(inst, low)), 8);
+    expect(num.parse(gateway.guiValue(inst, high)), 96);
+  });
+
+  test('an .xyslider bounds x and y on their own axes', () {
+    final pad = gateway.createObject(inst, Obj.gXyslider, args: '0 1 -1 1');
+    expect(gateway.guiValueCount(inst, pad), 2);
+    expect(gateway.guiValueIsSettable(inst, pad), isTrue);
+
+    gateway.sendList(inst, pad, 0, '0.5 -0.25');
+    expect(numbers(cellsOf(pad)), [0.5, -0.25]);
+    gateway.sendList(inst, pad, 0, '2 -5');
+    expect(numbers(cellsOf(pad)), [1, -1]);
+    expect(gateway.setGuiValueAt(inst, pad, 1, '0.5'), isTrue);
+    expect(numbers(cellsOf(pad)), [1, 0.5]);
+    gateway.sendFloat(inst, pad, 1, 0.75);
+    expect(numbers(cellsOf(pad)), [1, 0.75]);
+  });
+
+  test('an .xyslider sends x, y and the pair', () {
+    final pad = gateway.createObject(inst, Obj.gXyslider);
+    final x = listen(pad, 0, Obj.gFloat);
+    final y = listen(pad, 1, Obj.gFloat);
+    final pair = listen(pad, 2, Obj.gList);
+
+    gateway.sendList(inst, pad, 0, '12 100');
+    expect(num.parse(gateway.guiValue(inst, x)), 12);
+    expect(num.parse(gateway.guiValue(inst, y)), 100);
+    expect(numbers(gateway.guiValue(inst, pair).split(' ')), [12, 100]);
+  });
+
+  test('a .multislider bounds its cells and a number sets every one', () {
+    final bank = gateway.createObject(inst, Obj.gMultislider, args: '4 2 10');
+    expect(numbers(cellsOf(bank)), [2, 2, 2, 2], reason: 'bounded');
+
+    gateway.sendFloat(inst, bank, 0, 3);
+    expect(numbers(cellsOf(bank)), [3, 3, 3, 3]);
+    expect(gateway.setGuiValueAt(inst, bank, 2, '12'), isTrue);
+    expect(numbers(cellsOf(bank)), [3, 3, 10, 3]);
+    expect(gateway.setGuiValueAt(inst, bank, 4, '5'), isFalse);
+  });
+
+  test('a .multislider sends its bank, and a fetched cell on outlet 1', () {
+    final bank = gateway.createObject(inst, Obj.gMultislider, args: '3');
+    final whole = listen(bank, 0, Obj.gList);
+    final cell = listen(bank, 1, Obj.gFloat);
+
+    gateway.sendList(inst, bank, 0, '1 2 3');
+    expect(numbers(gateway.guiValue(inst, whole).split(' ')), [1, 2, 3]);
+    expect(gateway.setGuiValueAt(inst, bank, 1, '64'), isTrue);
+    expect(numbers(gateway.guiValue(inst, whole).split(' ')), [1, 64, 3]);
+
+    gateway.sendMessage(inst, bank, 0, 'fetch 1');
+    expect(num.parse(gateway.guiValue(inst, cell)), 64);
+  });
+
+  test('a .multislider keeps the cells a shorter list hid', () {
+    final bank = gateway.createObject(inst, Obj.gMultislider, args: '4');
+    gateway.sendList(inst, bank, 0, '1 2 3 4');
+    gateway.sendList(inst, bank, 0, '5 6');
+    expect(numbers(cellsOf(bank)), [5, 6]);
+    gateway.sendList(inst, bank, 0, '7 8 9');
+    expect(numbers(cellsOf(bank)), [7, 8, 9]);
+  });
+
   test('an unknown handle answers the empty protocol', () {
     expect(gateway.guiValueCount(inst, 999), 0);
     expect(gateway.guiValueAt(inst, 999, 0), '');
