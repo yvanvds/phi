@@ -14,7 +14,7 @@
           "y": "20.0",
           "w": "640"
         },
-        "parms": "# timer clocker — measuring time\ntimer measures the time between a bang on its left inlet, which marks the start, and a bang on its right inlet, which sends the milliseconds since then. clocker counts by itself: while it runs, it sends the time since it started every interval, its argument.\nThey work as Max's do, and can count beats on a domain clock too. Unlike delay, they keep time while the audio engine is stopped.",
+        "parms": "# timer clocker — measuring time\ntimer measures the time between a bang on its left inlet, which marks the start, and a bang on its right inlet, which sends the milliseconds since then. clocker counts by itself: while it runs, it sends the time since it started every interval, its argument.\nThey work as Max's do, and can count beats on a domain clock too: see the setclock tutorial. Unlike delay, they keep time while the audio engine is stopped.",
         "type": ".text"
       },
       "object 1": {

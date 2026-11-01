@@ -13,7 +13,7 @@
           "y": "20.0",
           "w": "640"
         },
-        "parms": "# metro — a steady pulse of bangs\nA steady pulse: while it runs, metro sends a bang at a regular interval, starting with one the moment it starts. The argument is the interval in milliseconds, 1000 by default, and the right inlet changes it.\nMax's metro can count in note values on the transport. Here it counts milliseconds, or beats on a domain clock bound with clock <name>.",
+        "parms": "# metro — a steady pulse of bangs\nA steady pulse: while it runs, metro sends a bang at a regular interval, starting with one the moment it starts. The argument is the interval in milliseconds, 1000 by default, and the right inlet changes it.\nMax's metro can count in note values on the transport. Here it counts milliseconds, or beats on a domain clock bound with clock <name>: see the setclock tutorial.",
         "type": ".text"
       },
       "object 1": {

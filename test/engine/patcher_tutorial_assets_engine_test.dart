@@ -2221,6 +2221,324 @@ void main() {
     });
   });
 
+  test(
+    'every transport, tempo and domain clock type has a tutorial (#498)',
+    () {
+      for (final type in [
+        '.transport', '.tempo', '.timepoint', '.setclock', '.when', //
+        '.translate',
+      ]) {
+        expect(index.hasTutorial(type), isTrue, reason: type);
+      }
+    },
+  );
+
+  group('transport, tempo and domain clock tutorials (#498) do what their '
+      'notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    // One block is 128 frames at 48 kHz: about 2.67 ms of audio.
+    const blockMs = 128 / 48;
+    void render(int blocks) {
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+      }
+    }
+
+    // [ms] milliseconds of audio time. Domain clocks advance with the audio
+    // blocks, and a tempo write lands on the next block.
+    void audio(double ms) => render((ms / blockMs).ceil());
+
+    // Every tutorial is mounted while open (#528); so is this copy.
+    void open(String slug) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+      gateway.mountAsSource(inst);
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: '$slug mounted');
+      render(20);
+    }
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      render(20);
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    // A message box by its text: each tutorial's are unique.
+    int msg(String text) => graph.objects
+        .singleWhere((o) => o.type == '.m' && o.args == text)
+        .handleId;
+    // A click, and the block a tempo write takes to land on its clock.
+    void click(int id) {
+      gateway.sendBang(inst, id, 0);
+      render(1);
+    }
+
+    void toggle(int id, int on) {
+      gateway.sendInt(inst, id, 0, on);
+      render(1);
+    }
+
+    String value(int id) => gateway.guiValue(inst, id);
+    double number(int id) => double.parse(value(id));
+    int whole(int id) => int.parse(value(id));
+    // metro keeps wall-clock time.
+    void wait(int ms) => sleep(Duration(milliseconds: ms));
+
+    test('transport: start, stop, the tempo, a glide, the beat on a bang', () {
+      open('transport');
+      final beat = at('.f', 60, 440);
+      final bpm = at('.f', 220, 440);
+      // The button above transport asks where the clock is.
+      void ask() => gateway.sendBang(inst, at('.b', 260, 320), 0);
+      ask();
+      expect(number(bpm), 0, reason: 'loadmess 0: stopped on load');
+      final start = number(beat);
+      click(msg('start'));
+      audio(1000);
+      ask();
+      expect(number(bpm), 120);
+      expect(number(beat), closeTo(start + 2, 0.02), reason: '2 a second');
+      click(msg('stop'));
+      ask();
+      final held = number(beat);
+      audio(500);
+      ask();
+      expect((number(beat), number(bpm)), (held, 0), reason: 'a pause');
+      toggle(at('.t', 60, 160), 1);
+      audio(500);
+      ask();
+      expect(number(beat), closeTo(held + 1, 0.02), reason: 'carries on');
+      click(msg('60'));
+      final slow = number(beat);
+      audio(1000);
+      ask();
+      expect(number(bpm), 60, reason: 'at once while running');
+      expect(number(beat), closeTo(slow + 1, 0.02));
+      toggle(at('.t', 60, 160), 0);
+      click(msg('120'));
+      ask();
+      expect(number(bpm), 0, reason: 'kept for the next start');
+      click(msg('start'));
+      audio(100);
+      ask();
+      expect(number(bpm), 120);
+      expect(
+        whole(at('.i', 60, 550)),
+        (number(beat) / 4).floor(),
+        reason: 'the bar in 4/4',
+      );
+      click(at('.b', 360, 220));
+      audio(2000);
+      ask();
+      expect(number(bpm), closeTo(180, 2), reason: 'half way to 240');
+      audio(2100);
+      ask();
+      expect(number(bpm), 240, reason: 'over 4 seconds');
+      // The watch toggle: metro asks ten times a second.
+      final before = number(beat);
+      toggle(at('.t', 540, 250), 1);
+      audio(500);
+      wait(250);
+      expect(number(beat), greaterThan(before + 1.5), reason: 'followed');
+      toggle(at('.t', 540, 250), 0);
+      click(msg('stop'));
+    });
+
+    test('tempo: quarter notes round a bar, the tempo, the division', () {
+      open('tempo');
+      final count = at('.i', 60, 360);
+      final bars = at('.i', 200, 460);
+      final steps = at('.i', 340, 460);
+      toggle(at('.t', 60, 160), 1);
+      expect((value(count), value(bars), value(steps)), ('0', '1', '1'));
+      final seen = <int>[];
+      for (var i = 0; i < 16; i++) {
+        audio(125);
+        if (seen.isEmpty || seen.last != whole(count)) seen.add(whole(count));
+      }
+      expect(seen, [0, 1, 2, 3, 0], reason: 'a quarter note is 500 ms');
+      expect((value(bars), value(steps)), ('2', '5'));
+      click(msg('60'));
+      audio(900);
+      expect(value(steps), '5', reason: 'a beat is a second now');
+      audio(200);
+      expect(value(steps), '6');
+      click(msg('180'));
+      click(msg('16'));
+      final from = whole(steps);
+      audio(1000);
+      expect(
+        whole(steps) - from,
+        inInclusiveRange(11, 13),
+        reason: '12 sixteenths a second at 180',
+      );
+      final shown = <int>{};
+      for (var i = 0; i < 40; i++) {
+        audio(1000 / 12);
+        shown.add(whole(count));
+      }
+      expect(shown.reduce(math.max), 15, reason: 'a cycle of 16');
+      toggle(at('.t', 60, 160), 0);
+      final stopped = whole(steps);
+      audio(500);
+      expect(whole(steps), stopped, reason: 'off stops the count');
+    });
+
+    test('timepoint: a bang four beats from now, a passed beat, active', () {
+      open('timepoint');
+      final now = at('.f', 60, 320);
+      final target = at('.f', 220, 320);
+      final fired = at('.i', 220, 490);
+      final firedAt = at('.f', 360, 490);
+      double ask() {
+        gateway.sendBang(inst, at('.when', 60, 260), 0);
+        return number(now);
+      }
+
+      final start = ask();
+      audio(500);
+      expect(ask(), closeTo(start + 0.5, 0.02), reason: '60 BPM');
+      click(at('.b', 220, 160));
+      expect(number(target), closeTo(ask() + 4, 0.02), reason: 'now + 4');
+      audio(3800);
+      expect(value(fired), '0', reason: 'not yet');
+      audio(400);
+      expect(value(fired), '1', reason: 'four beats later');
+      expect(number(firedAt), closeTo(number(target), 0.02));
+      // A beat already passed never bangs.
+      gateway.sendFloat(inst, target, 0, ask() - 1);
+      audio(1500);
+      expect(value(fired), '1', reason: 'spent');
+      // active 0 lets the beat go by; active 1 arms it again.
+      gateway.sendFloat(inst, target, 0, ask() + 1);
+      click(msg('0'));
+      audio(1500);
+      expect(value(fired), '1', reason: 'active 0');
+      gateway.sendFloat(inst, target, 0, ask() + 2);
+      click(msg('0'));
+      audio(500);
+      click(msg('1'));
+      audio(2000);
+      expect(value(fired), '2', reason: 'active 1, still ahead');
+      // The watch: metro asks four times a second.
+      toggle(at('.t', 60, 160), 1);
+      final watched = number(now);
+      audio(1000);
+      wait(400);
+      expect(number(now), greaterThan(watched + 0.9));
+      toggle(at('.t', 60, 160), 0);
+    });
+
+    test('setclock: two clocks, a metro on each, a delay in beats', () {
+      open('setclock');
+      final left = at('.i', 60, 470);
+      final right = at('.i', 300, 470);
+      toggle(at('.t', 60, 300), 1);
+      expect((value(left), value(right)), ('1', '1'), reason: 'at once');
+      audio(1020);
+      expect((value(left), value(right)), ('2', '5'), reason: '60 and 240');
+      click(msg('120'));
+      audio(1020);
+      expect(whole(left), 4, reason: 'twice as fast at 120');
+      click(msg('0'));
+      audio(2000);
+      expect(whole(left), 4, reason: 'a stopped clock');
+      expect(whole(right), greaterThan(12), reason: 'fast runs on');
+      click(msg('60'));
+      toggle(at('.t', 60, 300), 0);
+      final arrived = at('.i', 60, 730);
+      click(at('.b', 60, 560));
+      audio(3800);
+      expect(value(arrived), '0', reason: 'four beats at 60');
+      audio(400);
+      expect(value(arrived), '1');
+      click(msg('120'));
+      click(at('.b', 60, 560));
+      audio(1800);
+      expect(value(arrived), '1', reason: 'four beats at 120');
+      audio(400);
+      expect(value(arrived), '2');
+      click(msg('0'));
+      click(at('.b', 60, 560));
+      audio(3000);
+      expect(value(arrived), '2', reason: 'not while slow is at 0');
+      click(msg('60'));
+      audio(4200);
+      expect(value(arrived), '3', reason: 'and on again');
+    });
+
+    test('when: beat and tempo on any input; asking makes no clock', () {
+      open('when');
+      final beat = at('.f', 300, 340);
+      final bpm = at('.f', 440, 340);
+      click(at('.b', 300, 160));
+      expect(number(bpm), 0, reason: 'loadmess 0');
+      final start = number(beat);
+      toggle(at('.t', 60, 160), 1);
+      audio(1000);
+      click(at('.b', 300, 160));
+      expect(number(beat), closeTo(start + 2, 0.02), reason: '2 a second');
+      expect(number(bpm), 120);
+      audio(500);
+      click(msg('42'));
+      expect(number(beat), closeTo(start + 3, 0.02), reason: 'any input');
+      toggle(at('.t', 500, 160), 1);
+      audio(1000);
+      wait(600);
+      expect(number(beat), greaterThan(start + 4.4), reason: 'the metro');
+      toggle(at('.t', 500, 160), 0);
+      toggle(at('.t', 60, 160), 0);
+      click(at('.b', 300, 160));
+      expect(number(bpm), 0, reason: 'paused');
+      click(at('.b', 300, 440));
+      expect(value(at('.i', 300, 660)), '0', reason: 'no answer at all');
+    });
+
+    test('translate: ms to beats, ticks and Hz, again, note values', () {
+      open('translate');
+      final beats = at('.f', 60, 480);
+      final ticks = at('.f', 270, 480);
+      final hz = at('.f', 480, 480);
+      final ms = at('.f', 60, 680);
+      click(msg('500'));
+      expect((number(beats), number(ticks), number(hz)), (1, 480, 2));
+      click(msg('250'));
+      expect((number(beats), number(ticks), number(hz)), (0.5, 240, 4));
+      click(msg('1000'));
+      click(msg('240'));
+      expect(number(beats), 2, reason: 'not followed by itself');
+      click(at('.b', 420, 300));
+      expect((number(beats), number(ticks), number(hz)), (4, 1920, 1));
+      click(msg('4n'));
+      expect(number(ms), 250, reason: 'a quarter note at 240');
+      click(msg('120'));
+      click(msg('4n'));
+      expect(number(ms), 500);
+      click(msg('8n'));
+      expect(number(ms), 250);
+      click(msg('8nt'));
+      expect(number(ms), closeTo(1000 / 6, 1e-3));
+      click(msg('4nd'));
+      expect(number(ms), 750);
+      click(msg('2'));
+      expect(number(ms), 1000);
+    });
+  });
+
   test('report: object types with no tutorial yet', () {
     final missing = [
       for (final t in engineTypes.toList()..sort())

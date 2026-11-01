@@ -3001,10 +3001,16 @@ main + app          (orchestration)
   `logic`, `range`, `math-functions`, `expr`, `conversions`, each shared by
   its group of types), stateful math (#496: `counter`, `accum`,
   `change-togedge`, `extremes`, `statistics`, `slide-linedrive`,
-  `div-swap-pong`, `cartopol-poltocar`) and time (#497: `metro`, `delay`,
+  `div-swap-pong`, `cartopol-poltocar`), time (#497: `metro`, `delay`,
   `pipe`, `line-bline`, `speedlim-qlim`, `timer-clocker`,
-  `thresh-quickthresh`). On libYSE 3.1.0 `.line`, `.delay`, `.pipe`,
-  `.thresh`, `.quickthresh`, `.speedlim`, `.qlim` and `.makenote`'s note-off run
+  `thresh-quickthresh`) and domain clocks (#498: `transport`, `tempo`,
+  `timepoint`, `setclock`, `when`, `translate`). Those six reach a libYSE
+  domain clock by name; their clocks advance with the audio blocks whether or
+  not the patch is mounted, are never destroyed by a patch object, and are not
+  Phi's time domains (Phi mints its own `phi.midi.*` / `phi.metronome`
+  clocks; a patch following a `TimeDomain` is #529). On libYSE 3.1.0
+  `.line`, `.delay`, `.pipe`, `.thresh`, `.quickthresh`, `.speedlim`, `.qlim`
+  and `.makenote`'s note-off run
   on the audio clock, only in a mounted, rendered patch (`.metro`, `.clocker`
   and `.timer` run on wall-clock time), which is why every tutorial is mounted
   (#528); the tutorial is its own session and never mounts the user's patch
@@ -3023,7 +3029,8 @@ main + app          (orchestration)
   `patcher_audio_basics_tutorials`,
   `patcher_control_math_tutorials`,
   `patcher_stateful_math_tutorials`,
-  `patcher_time_tutorials`: each opens its tutorials
+  `patcher_time_tutorials`,
+  `patcher_clock_domain_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
   that no note or object overlaps another). Every one of them opens a
   tutorial through the shared `openTutorialBySearch(tester, type)` helper in

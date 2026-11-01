@@ -211,6 +211,13 @@ for:
   lists), control ramps (`line` and `bline`), rate limiting (`speedlim` and
   `qlim`), measuring time (`timer` and `clocker`) and grouping notes into
   chords (`thresh` and `quickthresh`). Each pair shares one tutorial.
+- **Transport, tempo and domain clocks:** starting, stopping and reading a
+  named clock (`transport`), counting notes on it (`tempo`), a bang at a beat
+  (`timepoint`), a clock for `metro` and `delay` to count beats on
+  (`setclock`), asking where a clock is (`when`) and converting between
+  milliseconds, beats, ticks and Hz (`translate`). These clocks belong to the
+  patch: `START` does not start them, and a patch cannot follow one of Phi's
+  time domains yet.
 
 Each tutorial is a small working patch, with numbered notes that walk you
 through it. Where Phi's object differs from the Max object of the same name,
