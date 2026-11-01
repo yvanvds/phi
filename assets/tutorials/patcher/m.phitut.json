@@ -1,0 +1,297 @@
+{
+  "title": "m — the message box",
+  "covers": [
+    ".m"
+  ],
+  "summary": "Send a number, a bang and a command from message boxes, and replace a message box's message from its inlet.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "620"
+        },
+        "parms": "# m — the message box\nA message box holds a line of text. Click it, or send it a bang, and it sends the message that text spells.\nUnlike Max, a message arriving on the inlet only replaces the text and sends nothing. Only a click or a bang sends.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "130.0"
+        },
+        "parms": "440",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "440.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "520.0"
+        },
+        "parms": "1 2 3",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "170.0",
+          "y": "520.0"
+        },
+        "parms": "7 8 9",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "590.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "650.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "420.0",
+          "y": "120.0",
+          "w": "300"
+        },
+        "parms": "1. Click 440 and 0.5. A single number is sent as a number: an int or a float, by how it is written.",
+        "type": ".text"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "420.0",
+          "y": "240.0",
+          "w": "300"
+        },
+        "parms": "2. The word bang is sent as a bang: click it and the counter below adds one.",
+        "type": ".text"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "420.0",
+          "y": "310.0",
+          "w": "300"
+        },
+        "parms": "3. Text starting with another word is a command. Click 1 to start the metro, and the counter climbs. Click stop to stop it: stop is a command metro understands.",
+        "type": ".text"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "420.0",
+          "y": "500.0",
+          "w": "300"
+        },
+        "parms": "4. A list or a word message arriving on the inlet replaces the stored message without sending it. Click 1 2 3: nothing happens below. Now click the box under it, which held 0: it sends 1 2 3, and the number box keeps the first number, 1. Try 7 8 9 the same way.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "130.0"
+        },
+        "parms": "0.5",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "60.0",
+          "y": "190.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "170.0",
+          "y": "190.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "260.0"
+        },
+        "parms": "bang",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "170.0",
+          "y": "260.0"
+        },
+        "parms": "1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "280.0",
+          "y": "260.0"
+        },
+        "parms": "stop",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "170.0",
+          "y": "320.0"
+        },
+        "parms": "250",
+        "type": ".metro",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "380.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,3 +1,10 @@
 {
-  ".metro": "metro"
+  ".b": "b",
+  ".f": "number-boxes",
+  ".i": "number-boxes",
+  ".m": "m",
+  ".metro": "metro",
+  ".slider": "slider",
+  ".t": "t",
+  ".text": "text"
 }

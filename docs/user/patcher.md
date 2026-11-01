@@ -164,8 +164,17 @@ an `OPEN TUTORIAL` button.
 Tutorials are example patches that come with Phi, each demonstrating an
 object. Find them in the palette's TUTORIALS tab (grouped by category,
 searchable), through the reference panel's `OPEN TUTORIAL` button, or with
-the command palette's `Open Patcher Tutorial…`. Only a few tutorials exist
-so far.
+the command palette's `Open Patcher Tutorial…`. So far there are tutorials
+for:
+
+- **GUI basics:** the button (`b`), the toggle (`t`), the slider (`slider`),
+  the number boxes (`i` and `f`, which share one tutorial), the message box
+  (`m`) and notes (`text`).
+- **Time:** `metro`.
+
+Each tutorial is a small working patch, with numbered notes that walk you
+through it. Where Phi's object differs from the Max object of the same name,
+the tutorial says so.
 
 A tutorial opens read-only, in run mode. A banner reads
 `TUTORIAL — READ-ONLY · <title>` instead of the placement bar, and `Ctrl+E`

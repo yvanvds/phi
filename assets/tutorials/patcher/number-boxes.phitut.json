@@ -1,0 +1,220 @@
+{
+  "title": "i and f — number boxes",
+  "covers": [
+    ".i",
+    ".f"
+  ],
+  "summary": "Store and send a number, store one silently on the right inlet, resend it with a bang, and compare int truncation with float.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "620"
+        },
+        "parms": "# i and f — number boxes\nA number box shows a number and passes it on. i holds an int and f a float; otherwise they work the same.\nIn Max, i and f are invisible storage objects and the box you see is a number or flonum. Here .i and .f are both: a visible box that stores, sends and resends like Max's i and f.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "130.0"
+        },
+        "parms": "7",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "360.0",
+          "y": "120.0",
+          "w": "300"
+        },
+        "parms": "1. Click 7. A number on the left inlet is stored and sent: the box shows 7, and so does the one below it.",
+        "type": ".text"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "360.0",
+          "y": "190.0",
+          "w": "300"
+        },
+        "parms": "2. Click 99. The right inlet stores a number without sending it: the box shows 99, the one below does not change. Now click the button: a bang sends the stored number again, and 99 arrives below.",
+        "type": ".text"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "360.0",
+          "y": "300.0",
+          "w": "300"
+        },
+        "parms": "3. In run mode you can play a box directly. Click it, type a number and press Enter (Esc puts the old value back), or drag it up and down, holding Shift for finer steps.",
+        "type": ".text"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "360.0",
+          "y": "390.0",
+          "w": "300"
+        },
+        "parms": "4. Click 2.9, then -2.9. The f box keeps the fraction. The i box truncates toward zero: 2.9 becomes 2 and -2.9 becomes -2. It does not round.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "130.0"
+        },
+        "parms": "99",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "130.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "200.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "270.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "350.0"
+        },
+        "parms": "2.9",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "170.0",
+          "y": "350.0"
+        },
+        "parms": "-2.9",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "170.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,290 @@
+{
+  "title": "slider — a fader from 0 to 1",
+  "covers": [
+    ".slider"
+  ],
+  "summary": "Move a slider by hand and by message, and scale its 0 to 1 position to a frequency for a sine oscillator.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "620"
+        },
+        "parms": "# slider — a fader from 0 to 1\nA slider holds a position from 0 (bottom) to 1 (top), and sends it as a float whenever it moves or a message reaches it.\nMax's slider counts 0 to 127 in whole numbers. This one is always 0 to 1: for another range, put a scale after it.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "130.0"
+        },
+        "parms": "0.25",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "170.0",
+          "y": "540.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 11
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "170.0",
+          "y": "600.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "340.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "340.0",
+          "y": "480.0"
+        },
+        "parms": "0 1 0 0.2",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "530.0",
+          "y": "120.0",
+          "w": "300"
+        },
+        "parms": "1. Drag the slider up and down. The number under it shows the position, always between 0 and 1.",
+        "type": ".text"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "530.0",
+          "y": "200.0",
+          "w": "300"
+        },
+        "parms": "2. A number sets the position and sends it: click 0.25. A number outside 0 to 1 is clamped, so 2 puts the slider at the top. A bang sends the position again. loadmess set it to 0.5 when this patch opened.",
+        "type": ".text"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "530.0",
+          "y": "330.0",
+          "w": "300"
+        },
+        "parms": "3. scale 0 1 200 2000 maps the position onto 200 to 2000 Hz, and the sine oscillator plays that frequency.",
+        "type": ".text"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "530.0",
+          "y": "420.0",
+          "w": "300"
+        },
+        "parms": "4. Click the toggle to hear it on the master bus. Its 0 or 1 is scaled to a gain of 0 or 0.2, so it is never loud. Click it again for silence.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "130.0"
+        },
+        "parms": "2",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "130.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "330.0",
+          "y": "130.0"
+        },
+        "parms": "0.5",
+        "type": ".loadmess",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "190.0"
+        },
+        "parms": "",
+        "type": ".slider",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "360.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "170.0",
+          "y": "360.0"
+        },
+        "parms": "0 1 200 2000",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "170.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "170.0",
+          "y": "480.0"
+        },
+        "parms": "",
+        "type": "~sine",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

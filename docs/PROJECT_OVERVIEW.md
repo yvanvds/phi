@@ -2979,14 +2979,19 @@ main + app          (orchestration)
   bar — the surface forces run mode, refuses `Ctrl+E`, and offers no drop
   target. Shell commands **Open Patcher Tutorial…** (summons the patcher on
   the Tutorials tab) and the dev-facing **Export Patch as Tutorial…** (writes
-  the open patch in the file format via `PatchTutorialExport`). One real
-  tutorial ships (`metro`). Covered by domain unit tests, a
+  the open patch in the file format via `PatchTutorialExport`). Shipped
+  tutorials: `metro` (#489) and the GUI basics (#490: `b`, `t`, `slider`,
+  `number-boxes` for `.i` + `.f`, `m`, `text`). Covered by domain unit tests, a
   `patch_library_tutorial_test`, a real-engine
   `patcher_tutorial_assets_engine_test` (every index entry has a file, every
   type exists in the engine, every payload parses, a report of uncovered
   types), surface/reference-panel widget tests, and an end-to-end
   `patcher_tutorial` integration test on the real patcher engine and asset
-  bundle.
+  bundle. Content issues add per-tutorial cases to the asset test that
+  replay what each tutorial's notes promise on the real engine (objects found
+  by type + canvas position), plus an end-to-end run per batch
+  (`patcher_gui_basics_tutorials` opens each from the Tutorials tab, plays its
+  controls with real taps, and checks that no note or object overlaps another).
 - Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
   switched off for now, issue #447)
 
