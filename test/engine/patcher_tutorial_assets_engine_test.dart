@@ -1948,32 +1948,94 @@ void main() {
     // metro, timer and clocker run on wall-clock time.
     void wait(int ms) => sleep(Duration(milliseconds: ms));
 
+    // Their readings depend on how much real time the test takes, and a
+    // sleep can overshoot on a busy or coarse-timed runner (#532). So each
+    // reading is bounded by real time measured on this stopwatch, not by a
+    // fixed window: at least the time from the end of one action to the
+    // start of the next, at most the time from the start of the first to
+    // the end of the second.
+    final clock = Stopwatch()..start();
+    double now() => clock.elapsedMicroseconds / 1000;
+    // Runs [act] and returns when, on [clock], it started and ended.
+    ({double start, double end}) timed(void Function() act) {
+      final start = now();
+      act();
+      return (start: start, end: now());
+    }
+
+    // Scheduling jitter of a wall-clock object, in ms.
+    const slack = 50.0;
+    // How far the engine's clock and this stopwatch may disagree, in ms.
+    const margin = 5.0;
+    // The ticks of a metro of [period] ms switched on by [on] and read (or
+    // switched off) at [off]: one at once, then one per period.
+    Matcher ticksBetween(
+      ({double start, double end}) on,
+      ({double start, double end}) off,
+      double period,
+    ) => inInclusiveRange(
+      1 + math.max(0, ((off.start - on.end - slack) / period).floor()),
+      1 + ((off.end - on.start + slack) / period).floor(),
+    );
+    // The same, read now.
+    Matcher ticksSince(({double start, double end}) on, double period) {
+      final t = now();
+      return ticksBetween(on, (start: t, end: t), period);
+    }
+
+    // What a timer bounded by [from] and [to] can have measured.
+    Matcher spanning(
+      ({double start, double end}) from,
+      ({double start, double end}) to,
+    ) => inInclusiveRange(
+      to.start - from.end - margin,
+      to.end - from.start + margin,
+    );
+
     test('metro: on and off, the interval while running, bang and stop', () {
       open('metro');
       final toggle = at('.t', 60, 160);
       final ticks = at('.i', 60, 400);
       expect(value(at('.i', 360, 230)), '500', reason: 'loadmess on load');
-      gateway.sendInt(inst, toggle, 0, 1);
-      expect(value(ticks), '1', reason: 'a tick the moment it starts');
+      final on = timed(() => gateway.sendInt(inst, toggle, 0, 1));
+      expect(whole(ticks), ticksSince(on, 500), reason: 'a tick at once');
       wait(1120);
-      expect(whole(ticks), 3, reason: 'then one every 500 ms');
-      click(msg('125'));
+      expect(whole(ticks), ticksSince(on, 500), reason: 'one every 500 ms');
+      expect(whole(ticks), greaterThanOrEqualTo(3));
       final before = whole(ticks);
-      wait(530);
+      final faster = timed(() => click(msg('125')));
+      wait(1030);
+      // The new interval takes over from the next tick of the old one,
+      // which is at most 500 ms away; after it, one tick every 125 ms. At
+      // 500 ms no more than three ticks fit in this wait.
+      final t = now();
       expect(
         whole(ticks) - before,
-        inInclusiveRange(3, 5),
+        inInclusiveRange(
+          math.max(4, 1 + ((t - faster.end - 500 - slack) / 125).floor()),
+          1 + ((t - faster.start + slack) / 125).floor(),
+        ),
         reason: 'four times as fast, without stopping',
       );
       gateway.sendInt(inst, toggle, 0, 0);
       final stopped = whole(ticks);
       wait(300);
       expect(whole(ticks), stopped, reason: '0 stops it');
-      click(msg('bang'));
-      expect(whole(ticks), stopped + 1, reason: 'bang starts it, at once');
+      final banged = timed(() => click(msg('bang')));
+      expect(
+        whole(ticks) - stopped,
+        ticksSince(banged, 125),
+        reason: 'bang starts it, at once',
+      );
       wait(80);
-      click(msg('bang'));
-      expect(whole(ticks), stopped + 2, reason: 'and restarts it from now');
+      final readAt = now();
+      final mid = whole(ticks);
+      final again = timed(() => click(msg('bang')));
+      expect(
+        whole(ticks) - mid,
+        ticksSince((start: readAt, end: again.end), 125),
+        reason: 'and restarts it from now, with a tick',
+      );
       click(msg('stop'));
       final last = whole(ticks);
       wait(300);
@@ -2154,36 +2216,72 @@ void main() {
       open('timer-clocker');
       final tap = at('.b', 60, 160);
       final ms = at('.f', 60, 340);
-      click(tap);
+      final tap1 = timed(() => click(tap));
       wait(500);
-      click(tap);
-      expect(number(ms), closeTo(500, 40), reason: 'between the taps');
-      expect(number(at('.f', 60, 450)), closeTo(60000 / number(ms), 1e-3));
-      expect(number(at('.f', 60, 450)), closeTo(120, 10), reason: 'bpm');
-      gateway.sendInt(inst, at('.t', 200, 160), 0, 1);
+      final tap2 = timed(() => click(tap));
+      final between = number(ms);
+      expect(between, greaterThanOrEqualTo(500), reason: 'the wait at least');
+      expect(between, spanning(tap1, tap2), reason: 'between the taps');
+      expect(number(at('.f', 60, 450)), closeTo(60000 / between, 1e-3));
+      final on = timed(() => gateway.sendInt(inst, at('.t', 200, 160), 0, 1));
       wait(1120);
-      gateway.sendInt(inst, at('.t', 200, 160), 0, 0);
-      expect(whole(at('.i', 200, 500)), 3, reason: 'the metro at the tempo');
+      final off = timed(() => gateway.sendInt(inst, at('.t', 200, 160), 0, 0));
+      expect(
+        whole(at('.i', 200, 500)),
+        ticksBetween(on, off, between),
+        reason: 'the metro at the tempo',
+      );
       final lap = at('.f', 360, 280);
-      click(at('.b', 360, 160));
+      final start = timed(() => click(at('.b', 360, 160)));
       wait(200);
-      click(at('.b', 460, 160));
-      expect(number(lap), closeTo(200, 40));
+      final lap1 = timed(() => click(at('.b', 460, 160)));
+      expect(number(lap), greaterThanOrEqualTo(200));
+      expect(number(lap), spanning(start, lap1), reason: 'the stopwatch');
+      final first = number(lap);
       wait(200);
-      click(at('.b', 460, 160));
-      expect(number(lap), closeTo(400, 40), reason: 'lap keeps the start');
+      final lap2 = timed(() => click(at('.b', 460, 160)));
+      expect(number(lap), spanning(start, lap2), reason: 'lap keeps the start');
+      expect(number(lap) - first, spanning(lap1, lap2));
       final elapsed = at('.i', 60, 700);
-      gateway.sendInt(inst, at('.t', 60, 580), 0, 1);
+      final started = timed(
+        () => gateway.sendInt(inst, at('.t', 60, 580), 0, 1),
+      );
       wait(450);
-      expect(whole(elapsed), 400, reason: 'every 100 ms, the time so far');
-      click(at('.b', 170, 580));
-      wait(150);
-      expect(whole(elapsed), lessThan(200), reason: 'the button restarts');
-      click(msg('1000'));
+      // Every 100 ms clocker sends the whole milliseconds since its start:
+      // within jitter of a multiple of 100, at most one interval old.
+      final readAt = now();
+      final so = whole(elapsed);
+      expect(
+        so,
+        inInclusiveRange(
+          readAt - started.end - 100 - slack,
+          now() - started.start + margin,
+        ),
+        reason: 'every 100 ms, the time so far',
+      );
+      expect(so, greaterThanOrEqualTo(450 - 100), reason: 'the wait');
+      expect(so % 100, lessThanOrEqualTo(slack), reason: 'on the interval');
+      final restart = timed(() => click(at('.b', 170, 580)));
+      // Long enough for a report (100 ms plus jitter) to arrive.
+      wait(250);
+      expect(
+        whole(elapsed),
+        lessThanOrEqualTo(now() - restart.start + margin),
+        reason: 'the button restarts',
+      );
+      final slower = timed(() => click(msg('1000')));
       wait(400);
       final held = whole(elapsed);
       wait(300);
-      expect(whole(elapsed), held, reason: 'once a second now');
+      // The next report comes a second after the last one, which was at
+      // most 100 ms before the click: none can land sooner than that.
+      if (whole(elapsed) != held) {
+        expect(
+          now() - slower.start,
+          greaterThan(900 - slack),
+          reason: 'once a second now',
+        );
+      }
       gateway.sendInt(inst, at('.t', 60, 580), 0, 0);
       click(msg('100'));
     });
