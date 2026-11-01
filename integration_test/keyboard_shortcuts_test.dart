@@ -12,6 +12,7 @@ import 'package:phi/surfaces/patcher/patcher_canvas.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/lay_demo_chain.dart';
 
 /// End-to-end proof of the keyboard shortcuts overlay (issue #487), driven
 /// through the real [PhiApp]: real rail navigation, the real focus tree with
@@ -53,6 +54,11 @@ void main() {
     expect(find.byTooltip('Patcher (Ctrl+2)'), findsOneWidget);
 
     await tester.tap(railFor(SurfaceId.patcher));
+    await tester.pumpAndSettle();
+    // A new patch opens empty, naming the way in (issue #523); lay a chain so
+    // the last leg can empty it again.
+    expect(find.byKey(PatcherCanvas.emptyHintKey), findsOneWidget);
+    layDemoChain(engine.patcher);
     await tester.pumpAndSettle();
     // Give the canvas the keyboard, the way a performer would: a click on an
     // empty corner of it.

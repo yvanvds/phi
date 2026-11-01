@@ -19,6 +19,7 @@ import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/lay_demo_chain.dart';
 
 /// End-to-end proof that inlets sit on a node's **top** edge and outlets on its
 /// **bottom** one (issue #377), driven through the real [PhiApp] — real rail
@@ -65,6 +66,8 @@ void main() {
 
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
+    layDemoChain(engine.patcher);
+    await tester.pumpAndSettle();
 
     final patcher = engine.patcher;
     PatchNode nodeOfType(String type) =>
@@ -73,7 +76,7 @@ void main() {
     // ── 1) the patch that was already there loads with every cable intact ────
     //
     // Ports are computed from the live topology the gateway reports and only
-    // node *positions* persist, so moving the ports migrates nothing: the seed
+    // node *positions* persist, so moving the ports migrates nothing: the chain
     // graph is the stand-in for a patch saved before this change.
     expect(patcher.graph.nodes, hasLength(3));
     expect(patcher.graph.cables, hasLength(2));

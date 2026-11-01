@@ -19,6 +19,7 @@ import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/lay_demo_chain.dart';
 
 /// End-to-end proof that an object can be **retyped in place** (issue #383),
 /// through the real [PhiApp] — real rail navigation, real double-click timing,
@@ -34,7 +35,7 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  /// A second oscillator to retype the seeded `~sine` into: same shape, so
+  /// A second oscillator to retype the laid `~sine` into: same shape, so
   /// every cable in the patch survives the change.
   const saw = PatchObjectDescriptor(
     type: '~saw',
@@ -108,8 +109,10 @@ void main() {
 
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
+    layDemoChain(engine.patcher);
+    await tester.pumpAndSettle();
 
-    // The seed lays down slider → sine → dac: three nodes, two cables, and one
+    // The laid chain is slider → sine → dac: three nodes, two cables, and one
     // object box printing what it is.
     final graph = engine.patcher.graph;
     expect(graph.cables, hasLength(2));

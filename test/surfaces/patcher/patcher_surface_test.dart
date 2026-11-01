@@ -20,6 +20,7 @@ import 'package:yse/yse.dart';
 
 import '../../engine/test_doubles/fake_patcher_gateway.dart';
 import '../../engine/test_doubles/fake_yse_gateway.dart';
+import 'test_support/lay_demo_chain.dart';
 
 void main() {
   group('PatcherSurface — offline', () {
@@ -83,7 +84,7 @@ void main() {
       NodeTypeRegistry.instance.clear();
     });
 
-    testWidgets('seeds three nodes and two cables on first build', (
+    testWidgets('an empty patch stays empty and unmounted on first build', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -91,8 +92,29 @@ void main() {
           home: Scaffold(body: PatcherSurface(engine: engine)),
         ),
       );
-      // First frame triggers the seed in initState; pump once more so the
-      // ListenableBuilder picks up the graph changes.
+      await tester.pump();
+
+      // A project opens with every patch stopped (docs/user/patcher.md): the
+      // surface lays no demo graph into the empty patch and does not mount it
+      // on master behind the performer's back (issue #523).
+      expect(find.byType(PatcherNodeView), findsNothing);
+      expect(engine.patcher.graph.nodes, isEmpty);
+      expect(engine.patcher.graph.cables, isEmpty);
+      expect(patcherGateway.cables, isEmpty);
+      expect(patcherGateway.mounted, isFalse);
+      expect(
+        patcherGateway.calls.where((c) => c.startsWith('mountAsSource')),
+        isEmpty,
+      );
+    });
+
+    testWidgets('the chain renders its nodes and cables', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: PatcherSurface(engine: engine)),
+        ),
+      );
+      layDemoChain(engine.patcher);
       await tester.pump();
 
       expect(find.byType(PatcherNodeView), findsNWidgets(3));
@@ -102,10 +124,8 @@ void main() {
       expect(find.byType(PatchGuiObject), findsOneWidget);
       expect(engine.patcher.graph.cables, hasLength(2));
       expect(patcherGateway.cables, hasLength(2));
-      // The seed mounts the patcher as a source once a `~dac` exists — the
-      // surface → controller → gateway audio path survives the multi-instance
-      // generalisation (issue #219).
-      expect(patcherGateway.mounted, isTrue);
+      // Laying a graph never mounts it: that is START's job (issue #523).
+      expect(patcherGateway.mounted, isFalse);
     });
 
     testWidgets('dragging the slider pushes a sendFloat through the gateway', (
@@ -116,6 +136,7 @@ void main() {
           home: Scaffold(body: PatcherSurface(engine: engine)),
         ),
       );
+      layDemoChain(engine.patcher);
       await tester.pump();
 
       final faderFinder = find.byType(PhiFader);
@@ -143,7 +164,7 @@ void main() {
 
       final controller = engine.patcher;
       final before = {for (final n in controller.graph.nodes) n.id};
-      expect(before, hasLength(3)); // the seeded slider · sine · dac
+      expect(before, isEmpty); // a new patch opens empty (issue #523)
 
       final canvas = find.byType(PatcherCanvas);
       final dropGlobal = tester.getCenter(canvas);
@@ -171,9 +192,9 @@ void main() {
     });
 
     /// One node's chrome, named by its **logical id** rather than by what it
-    /// prints: an object box prints its type and arguments (issue #379), and
-    /// the seeded patch already holds a `~sine` and a `~dac` of its own — the
-    /// friendly titles that used to tell a dropped node apart are gone with the
+    /// prints: an object box prints its type and arguments (issue #379), and a
+    /// patch may already hold a `~sine` and a `~dac` of its own — the friendly
+    /// titles that used to tell a dropped node apart are gone with the
     /// headers. Kind-agnostic, so it names a bare GUI control just as well.
     Finder viewOf(PatchNode node) => find.byWidgetPredicate(
       (w) => w is PatcherNodeView && w.node.id == node.id,
@@ -252,7 +273,7 @@ void main() {
       );
       await tester.pump();
 
-      // Double-click a patch of empty grid, well below the seeded chain.
+      // Double-click a patch of empty grid.
       final canvas = find.byType(PatcherCanvas);
       final at = tester.getBottomRight(canvas) - const Offset(40, 40);
       await tester.tapAt(at);

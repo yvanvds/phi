@@ -14,10 +14,11 @@ import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/lay_demo_chain.dart';
 
 /// End-to-end proof of the patcher's **edit / run mode** (issue #378), driven
 /// through the real [PhiApp]: real rail navigation, real panes, the real focus
-/// tree, the real placement bar above the canvas, and the real seeded
+/// tree, the real placement bar above the canvas, and a laid
 /// `slider → ~sine → ~dac` patch — backed by a [FakePatcherGateway], so no
 /// native `libyse.dll` is touched.
 ///
@@ -56,6 +57,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(railFor(SurfaceId.patcher));
+    await tester.pumpAndSettle();
+    layDemoChain(engine.patcher);
     await tester.pumpAndSettle();
 
     final patcher = engine.patcher;

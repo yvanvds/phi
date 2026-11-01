@@ -22,6 +22,7 @@ import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/lay_demo_chain.dart';
 
 /// End-to-end proof of **GUI objects as bare controls** (issue #381, design §7,
 /// §12.2) through the real [PhiApp] — real rail navigation, real canvas layout,
@@ -67,6 +68,8 @@ void main() {
 
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
+    layDemoChain(engine.patcher);
+    await tester.pumpAndSettle();
 
     final patcher = engine.patcher;
 
@@ -77,7 +80,7 @@ void main() {
       position: position,
     );
 
-    // The seeded `.slider` first, moved near the scene origin so the whole row
+    // The laid `.slider` first, moved near the scene origin so the whole row
     // is certainly on screen whatever the strip and panels around it cost.
     final slider = patcher.graph.nodes.firstWhere((n) => n.type == Obj.gSlider);
     patcher.placeNode(slider.id, const Offset(30, 30));

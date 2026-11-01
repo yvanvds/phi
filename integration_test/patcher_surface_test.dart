@@ -16,17 +16,17 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 /// `libyse.dll` is touched (the real gateway can't run headless).
 ///
 /// `PhiApp` starts the engine on mount, so a wired patcher gateway means the
-/// engine builds its `PatcherController` (one gateway instance); summoning
-/// the surface seeds the demo graph and, once a `~dac` exists, mounts the
-/// patcher as a source. This is the one cross-layer path the multi-instance
-/// generalisation touches — surface → controller → gateway.
+/// engine builds its `PatcherController` (one gateway instance). Summoning the
+/// surface then leaves the new project's empty patch exactly as it was: no
+/// demo graph laid into it and nothing mounted on master, because a project
+/// always opens with every patch stopped (issue #523).
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   Finder railFor(SurfaceId id) =>
       find.byWidgetPredicate((w) => w is RailButton && w.label == id.label);
 
-  testWidgets('patcher: summon seeds the demo graph and mounts as a source', (
+  testWidgets('patcher: summon leaves the empty patch empty and unmounted', (
     tester,
   ) async {
     final patcherGateway = FakePatcherGateway();
@@ -41,8 +41,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Engine started on mount → exactly one gateway instance was created for
-    // the open patcher (the multi-instance lifecycle), and nothing is mounted
-    // yet (mounting an empty patcher crashes the audio thread).
+    // the open patcher (the multi-instance lifecycle), and nothing is mounted.
     expect(patcherGateway.instances, hasLength(1));
     expect(patcherGateway.mounted, isFalse);
 
@@ -50,13 +49,17 @@ void main() {
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
 
-    // The surface seeds slider → sine → dac (3 nodes, 2 cables) and, now that
-    // a `~dac` exists, mounts the patcher as a source. All three ops routed
-    // through the single instance the controller owns.
-    expect(find.byType(PatcherNodeView), findsNWidgets(3));
-    expect(engine.patcher.graph.cables, hasLength(2));
-    expect(patcherGateway.cables, hasLength(2));
-    expect(patcherGateway.mounted, isTrue);
+    // The canvas shows the empty patch: no nodes, no cables, and still nothing
+    // mounted — the performer hears nothing until they build and press START.
+    expect(find.byType(PatcherNodeView), findsNothing);
+    expect(engine.patcher.graph.nodes, isEmpty);
+    expect(engine.patcher.graph.cables, isEmpty);
+    expect(patcherGateway.cables, isEmpty);
+    expect(patcherGateway.mounted, isFalse);
+    expect(
+      patcherGateway.calls.where((c) => c.startsWith('mountAsSource')),
+      isEmpty,
+    );
     expect(patcherGateway.instances, hasLength(1));
 
     session.dispose();

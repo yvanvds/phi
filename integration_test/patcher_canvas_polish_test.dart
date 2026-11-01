@@ -71,12 +71,8 @@ void main() {
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
 
-    // Start from an empty canvas. The demo seed is not what this test is
-    // about, and its nodes and cables would sit over the ones that are.
     final patcher = engine.patcher;
-    for (final id in patcher.graph.nodes.map((n) => n.id).toList()) {
-      patcher.removeNode(id);
-    }
+    expect(patcher.graph.nodes, isEmpty, reason: 'a new patch opens empty');
     await tester.pumpAndSettle();
     expect(patcher.graph.cables, isEmpty);
 

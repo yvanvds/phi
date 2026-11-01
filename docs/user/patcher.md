@@ -25,7 +25,8 @@ Every patch is a named project item. The patches strip lists them in a tree
 group. The `…` menu on a patch duplicates, renames or deletes it. Drag a patch
 to reorder it or move it between groups. Renaming refactors, and deleting
 warns you when an insert still uses the patch. A project that has no patch
-gets one to start with.
+gets an empty one to start with. It stays empty and silent until you add
+objects and press `START`.
 
 One patch is open on the canvas at a time. Click another patch to switch.
 

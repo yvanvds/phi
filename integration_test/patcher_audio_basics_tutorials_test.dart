@@ -96,11 +96,20 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
-    // The surface's first visit seeds a demo sine into the empty project patch
-    // and mounts it on master (#523). Silence it so the meter hears only the
-    // tutorials.
-    engine.patcher.unmountAudio();
+    // The first visit leaves the new project's empty patch empty and stopped
+    // (#523): nothing is mounted, and master stays silent, so the meter below
+    // hears only the tutorials.
+    expect(engine.patcher.graph.nodes, isEmpty);
     expect(gateway.isSourceReady(engine.patcher.instanceId), isFalse);
+    var idle = 0.0;
+    for (var i = 0; i < 400; i++) {
+      System.instance
+        ..renderOffline(1)
+        ..update();
+      final p = Channel.master.peakLinearPost();
+      if (p > idle) idle = p;
+    }
+    expect(idle, 0, reason: 'nothing plays before a tutorial opens');
     await tester.tap(
       find.byKey(PatcherPalette.tabKey(PatcherPaletteTab.tutorials)),
     );
@@ -195,11 +204,11 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    // Closes the tutorial. Back on the project patch, the demo seed plays
-    // again (#523): silence it too.
+    // Closes the tutorial. Back on the project patch, which is still empty
+    // and stopped (#523).
     Future<void> close() async {
       await tap(find.byKey(PatchTutorialBar.closeKey));
-      engine.patcher.unmountAudio();
+      expect(gateway.isSourceReady(engine.patcher.instanceId), isFalse);
     }
 
     double read(int id) => double.parse(value(id));
