@@ -1948,32 +1948,94 @@ void main() {
     // metro, timer and clocker run on wall-clock time.
     void wait(int ms) => sleep(Duration(milliseconds: ms));
 
+    // Their readings depend on how much real time the test takes, and a
+    // sleep can overshoot on a busy or coarse-timed runner (#532). So each
+    // reading is bounded by real time measured on this stopwatch, not by a
+    // fixed window: at least the time from the end of one action to the
+    // start of the next, at most the time from the start of the first to
+    // the end of the second.
+    final clock = Stopwatch()..start();
+    double now() => clock.elapsedMicroseconds / 1000;
+    // Runs [act] and returns when, on [clock], it started and ended.
+    ({double start, double end}) timed(void Function() act) {
+      final start = now();
+      act();
+      return (start: start, end: now());
+    }
+
+    // Scheduling jitter of a wall-clock object, in ms.
+    const slack = 50.0;
+    // How far the engine's clock and this stopwatch may disagree, in ms.
+    const margin = 5.0;
+    // The ticks of a metro of [period] ms switched on by [on] and read (or
+    // switched off) at [off]: one at once, then one per period.
+    Matcher ticksBetween(
+      ({double start, double end}) on,
+      ({double start, double end}) off,
+      double period,
+    ) => inInclusiveRange(
+      1 + math.max(0, ((off.start - on.end - slack) / period).floor()),
+      1 + ((off.end - on.start + slack) / period).floor(),
+    );
+    // The same, read now.
+    Matcher ticksSince(({double start, double end}) on, double period) {
+      final t = now();
+      return ticksBetween(on, (start: t, end: t), period);
+    }
+
+    // What a timer bounded by [from] and [to] can have measured.
+    Matcher spanning(
+      ({double start, double end}) from,
+      ({double start, double end}) to,
+    ) => inInclusiveRange(
+      to.start - from.end - margin,
+      to.end - from.start + margin,
+    );
+
     test('metro: on and off, the interval while running, bang and stop', () {
       open('metro');
       final toggle = at('.t', 60, 160);
       final ticks = at('.i', 60, 400);
       expect(value(at('.i', 360, 230)), '500', reason: 'loadmess on load');
-      gateway.sendInt(inst, toggle, 0, 1);
-      expect(value(ticks), '1', reason: 'a tick the moment it starts');
+      final on = timed(() => gateway.sendInt(inst, toggle, 0, 1));
+      expect(whole(ticks), ticksSince(on, 500), reason: 'a tick at once');
       wait(1120);
-      expect(whole(ticks), 3, reason: 'then one every 500 ms');
-      click(msg('125'));
+      expect(whole(ticks), ticksSince(on, 500), reason: 'one every 500 ms');
+      expect(whole(ticks), greaterThanOrEqualTo(3));
       final before = whole(ticks);
-      wait(530);
+      final faster = timed(() => click(msg('125')));
+      wait(1030);
+      // The new interval takes over from the next tick of the old one,
+      // which is at most 500 ms away; after it, one tick every 125 ms. At
+      // 500 ms no more than three ticks fit in this wait.
+      final t = now();
       expect(
         whole(ticks) - before,
-        inInclusiveRange(3, 5),
+        inInclusiveRange(
+          math.max(4, 1 + ((t - faster.end - 500 - slack) / 125).floor()),
+          1 + ((t - faster.start + slack) / 125).floor(),
+        ),
         reason: 'four times as fast, without stopping',
       );
       gateway.sendInt(inst, toggle, 0, 0);
       final stopped = whole(ticks);
       wait(300);
       expect(whole(ticks), stopped, reason: '0 stops it');
-      click(msg('bang'));
-      expect(whole(ticks), stopped + 1, reason: 'bang starts it, at once');
+      final banged = timed(() => click(msg('bang')));
+      expect(
+        whole(ticks) - stopped,
+        ticksSince(banged, 125),
+        reason: 'bang starts it, at once',
+      );
       wait(80);
-      click(msg('bang'));
-      expect(whole(ticks), stopped + 2, reason: 'and restarts it from now');
+      final readAt = now();
+      final mid = whole(ticks);
+      final again = timed(() => click(msg('bang')));
+      expect(
+        whole(ticks) - mid,
+        ticksSince((start: readAt, end: again.end), 125),
+        reason: 'and restarts it from now, with a tick',
+      );
       click(msg('stop'));
       final last = whole(ticks);
       wait(300);
@@ -2154,36 +2216,72 @@ void main() {
       open('timer-clocker');
       final tap = at('.b', 60, 160);
       final ms = at('.f', 60, 340);
-      click(tap);
+      final tap1 = timed(() => click(tap));
       wait(500);
-      click(tap);
-      expect(number(ms), closeTo(500, 40), reason: 'between the taps');
-      expect(number(at('.f', 60, 450)), closeTo(60000 / number(ms), 1e-3));
-      expect(number(at('.f', 60, 450)), closeTo(120, 10), reason: 'bpm');
-      gateway.sendInt(inst, at('.t', 200, 160), 0, 1);
+      final tap2 = timed(() => click(tap));
+      final between = number(ms);
+      expect(between, greaterThanOrEqualTo(500), reason: 'the wait at least');
+      expect(between, spanning(tap1, tap2), reason: 'between the taps');
+      expect(number(at('.f', 60, 450)), closeTo(60000 / between, 1e-3));
+      final on = timed(() => gateway.sendInt(inst, at('.t', 200, 160), 0, 1));
       wait(1120);
-      gateway.sendInt(inst, at('.t', 200, 160), 0, 0);
-      expect(whole(at('.i', 200, 500)), 3, reason: 'the metro at the tempo');
+      final off = timed(() => gateway.sendInt(inst, at('.t', 200, 160), 0, 0));
+      expect(
+        whole(at('.i', 200, 500)),
+        ticksBetween(on, off, between),
+        reason: 'the metro at the tempo',
+      );
       final lap = at('.f', 360, 280);
-      click(at('.b', 360, 160));
+      final start = timed(() => click(at('.b', 360, 160)));
       wait(200);
-      click(at('.b', 460, 160));
-      expect(number(lap), closeTo(200, 40));
+      final lap1 = timed(() => click(at('.b', 460, 160)));
+      expect(number(lap), greaterThanOrEqualTo(200));
+      expect(number(lap), spanning(start, lap1), reason: 'the stopwatch');
+      final first = number(lap);
       wait(200);
-      click(at('.b', 460, 160));
-      expect(number(lap), closeTo(400, 40), reason: 'lap keeps the start');
+      final lap2 = timed(() => click(at('.b', 460, 160)));
+      expect(number(lap), spanning(start, lap2), reason: 'lap keeps the start');
+      expect(number(lap) - first, spanning(lap1, lap2));
       final elapsed = at('.i', 60, 700);
-      gateway.sendInt(inst, at('.t', 60, 580), 0, 1);
+      final started = timed(
+        () => gateway.sendInt(inst, at('.t', 60, 580), 0, 1),
+      );
       wait(450);
-      expect(whole(elapsed), 400, reason: 'every 100 ms, the time so far');
-      click(at('.b', 170, 580));
-      wait(150);
-      expect(whole(elapsed), lessThan(200), reason: 'the button restarts');
-      click(msg('1000'));
+      // Every 100 ms clocker sends the whole milliseconds since its start:
+      // within jitter of a multiple of 100, at most one interval old.
+      final readAt = now();
+      final so = whole(elapsed);
+      expect(
+        so,
+        inInclusiveRange(
+          readAt - started.end - 100 - slack,
+          now() - started.start + margin,
+        ),
+        reason: 'every 100 ms, the time so far',
+      );
+      expect(so, greaterThanOrEqualTo(450 - 100), reason: 'the wait');
+      expect(so % 100, lessThanOrEqualTo(slack), reason: 'on the interval');
+      final restart = timed(() => click(at('.b', 170, 580)));
+      // Long enough for a report (100 ms plus jitter) to arrive.
+      wait(250);
+      expect(
+        whole(elapsed),
+        lessThanOrEqualTo(now() - restart.start + margin),
+        reason: 'the button restarts',
+      );
+      final slower = timed(() => click(msg('1000')));
       wait(400);
       final held = whole(elapsed);
       wait(300);
-      expect(whole(elapsed), held, reason: 'once a second now');
+      // The next report comes a second after the last one, which was at
+      // most 100 ms before the click: none can land sooner than that.
+      if (whole(elapsed) != held) {
+        expect(
+          now() - slower.start,
+          greaterThan(900 - slack),
+          reason: 'once a second now',
+        );
+      }
       gateway.sendInt(inst, at('.t', 60, 580), 0, 0);
       click(msg('100'));
     });
@@ -2536,6 +2634,294 @@ void main() {
       expect(number(ms), 750);
       click(msg('2'));
       expect(number(ms), 1000);
+    });
+  });
+
+  test('every control flow and ordering type has a tutorial (#499)', () {
+    for (final type in [
+      '.trigger', '.bangbang', '.uzi', '.if', '.loadbang', '.loadmess', //
+      '.onebang', '.buddy', '.bondo', '.next', '.match',
+    ]) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+    expect(index.tutorialFor('.loadbang'), index.tutorialFor('.loadmess'));
+    expect(index.tutorialFor('.buddy'), index.tutorialFor('.bondo'));
+    expect(index.tutorialFor('.next'), index.tutorialFor('.match'));
+  });
+
+  group('control flow and ordering tutorials (#499) do what their notes '
+      'say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    void render(int blocks) {
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+      }
+    }
+
+    // The loudest master peak over the next [blocks] blocks.
+    double loudness([int blocks = 60]) {
+      var peak = 0.0;
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+        final p = Channel.master.peakLinearPost();
+        if (p > peak) peak = p;
+      }
+      return peak;
+    }
+
+    // Every tutorial is mounted while open (#528); so is this copy.
+    void open(String slug) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+      gateway.mountAsSource(inst);
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: '$slug mounted');
+      render(20);
+    }
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      render(20);
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    // A message box by its text: each tutorial's are unique.
+    int msg(String text) => graph.objects
+        .singleWhere((o) => o.type == '.m' && o.args == text)
+        .handleId;
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    // Typing a number into a box sends it on.
+    void type(int id, num v) => v is int
+        ? gateway.sendInt(inst, id, 0, v)
+        : gateway.sendFloat(inst, id, 0, v.toDouble());
+    String value(int id) => gateway.guiValue(inst, id);
+    double number(int id) => double.parse(value(id));
+    // metro keeps wall-clock time.
+    void wait(int ms) => sleep(Duration(milliseconds: ms));
+
+    test('trigger: five conversions, right to left, broken vs fixed', () {
+      open('trigger');
+      final bangs = at('.i', 60, 380);
+      final i = at('.i', 160, 380);
+      final f = at('.f', 250, 380);
+      final l = at('.l', 340, 380);
+      final constant = at('.i', 460, 380);
+      type(at('.f', 60, 160), 2.7);
+      expect(value(bangs), '1', reason: 'b bangs the counter');
+      expect(value(i), '2', reason: 'i truncates');
+      expect(number(f), closeTo(2.7, 1e-6), reason: 'f keeps it');
+      expect(value(constant), '7', reason: 'a constant');
+      click(at('.b', 180, 160));
+      expect(value(l), '5 6', reason: 'l passes the list on');
+      expect((value(i), number(f)), ('0', 0), reason: 'no list in i or f');
+      expect(value(bangs), '2');
+      click(at('.b', 480, 160));
+      expect(value(at('.l', 480, 320)), '3 2 1', reason: 'right to left');
+      final x = at('.i', 60, 480);
+      final broken = at('.i', 60, 610);
+      final fixed = at('.i', 240, 670);
+      type(x, 5);
+      expect((value(broken), value(fixed)), ('5', '10'));
+      type(x, 7);
+      expect((value(broken), value(fixed)), ('12', '14'));
+    });
+
+    test('bangbang: right to left, and store then fire', () {
+      open('bangbang');
+      click(at('.b', 60, 160));
+      expect(value(at('.l', 60, 390)), '3 2 1');
+      click(msg('42'));
+      expect(value(at('.l', 60, 390)), '3 2 1', reason: 'a number bangs');
+      final box = at('.i', 60, 650);
+      final out = at('.i', 60, 770);
+      for (var n = 1; n <= 3; n++) {
+        click(at('.b', 60, 480));
+        expect(value(box), '$n');
+        expect(value(out), '${n * 10}', reason: 'the right branch first');
+      }
+    });
+
+    test('uzi: four bangs, a carry, the count, a table in one click', () {
+      open('uzi');
+      final bangs = at('.i', 60, 330);
+      final carry = at('.i', 200, 330);
+      final index = at('.i', 340, 330);
+      click(at('.b', 60, 160));
+      expect((value(bangs), value(carry), value(index)), ('4', '1', '4'));
+      click(msg('5'));
+      expect((value(bangs), value(carry), value(index)), ('9', '2', '5'));
+      click(msg('2'));
+      expect(value(bangs), '9', reason: 'the right inlet only sets');
+      click(at('.b', 60, 160));
+      expect((value(bangs), value(carry), value(index)), ('11', '3', '2'));
+      final out = at('.i', 60, 770);
+      click(at('.b', 60, 430));
+      for (final a in [0, 3, 7]) {
+        type(at('.i', 420, 650), a);
+        expect(value(out), '${a * 12}', reason: 'address $a');
+      }
+      click(msg('sum'));
+      expect(value(out), '336');
+      click(msg('clear'));
+      click(msg('sum'));
+      expect(value(out), '0');
+    });
+
+    test('if: then and else, two inlets, a filter', () {
+      open('if');
+      final above = at('.i', 60, 490);
+      final below = at('.i', 360, 440);
+      final box = at('.i', 60, 320);
+      type(box, 100);
+      expect(value(above), '1');
+      type(box, 65);
+      expect(value(above), '2');
+      type(box, 64);
+      expect((value(above), value(below)), ('2', '64'));
+      type(box, 10);
+      expect((value(above), value(below)), ('2', '10'));
+      // The slider drives the box.
+      gateway.sendFloat(inst, at('.slider', 60, 160), 0, 0.75);
+      expect((value(box), value(above)), ('95', '3'), reason: '0.75 * 127');
+      final larger = at('.i', 60, 700);
+      type(at('.i', 200, 580), 30);
+      expect(value(larger), '0', reason: 'the right inlet only stores');
+      type(at('.i', 60, 580), 20);
+      expect(value(larger), '30');
+      type(at('.i', 60, 580), 50);
+      expect(value(larger), '50');
+      final even = at('.i', 400, 700);
+      type(at('.i', 400, 580), 4);
+      expect(value(even), '4');
+      type(at('.i', 400, 580), 3);
+      expect(value(even), '4', reason: 'odd: nothing');
+      type(at('.i', 400, 580), 8);
+      expect(value(even), '8');
+    });
+
+    test('loadbang and loadmess: a gain and a metro set up on open', () {
+      open('loadbang-loadmess');
+      final gain = at('.f', 60, 220);
+      expect(number(gain), closeTo(0.1, 1e-6), reason: 'loadmess 0.1');
+      // Master reads a centred mono sine 3 dB up.
+      final level = loudness();
+      expect(level, closeTo(0.1 * math.sqrt2, 0.01), reason: 'the sine at 0.1');
+      final ticks = at('.i', 60, 720);
+      expect(value(at('.t', 60, 500)), 'on', reason: 'loadbang');
+      final first = int.parse(value(ticks));
+      expect(first, greaterThanOrEqualTo(1));
+      wait(1100);
+      expect(int.parse(value(ticks)), greaterThanOrEqualTo(first + 2));
+      gateway.sendInt(inst, at('.t', 60, 500), 0, 0);
+      click(msg('0'));
+      expect(loudness(), 0, reason: 'silenced');
+      click(at('.b', 300, 560));
+      expect(number(gain), closeTo(0.1, 1e-6), reason: 'sent again');
+      gateway.sendFloat(inst, at('.loadmess', 60, 160), 0, 0.5);
+      expect(number(gain), closeTo(0.1, 1e-6), reason: 'a number: ignored');
+      click(msg('0.02'));
+      expect(number(gain), closeTo(0.1, 1e-6), reason: 'set does not send');
+      click(at('.b', 300, 560));
+      expect(number(gain), closeTo(0.02, 1e-6));
+      expect(loudness(), closeTo(level / 5, 0.005), reason: 'a fifth as loud');
+      click(msg('0'));
+    });
+
+    test('onebang: once, then the other way, armed again, stop', () {
+      open('onebang');
+      final passed = at('.i', 60, 350);
+      final held = at('.i', 220, 350);
+      final trigger = at('.b', 60, 160);
+      final arm = at('.b', 400, 160);
+      click(trigger);
+      expect((value(passed), value(held)), ('1', '0'), reason: 'armed');
+      click(trigger);
+      click(trigger);
+      expect((value(passed), value(held)), ('1', '2'));
+      click(arm);
+      click(arm);
+      click(msg('0'));
+      click(trigger);
+      expect((value(passed), value(held)), ('2', '3'), reason: 'once');
+      click(arm);
+      click(msg('stop'));
+      expect((value(passed), value(held)), ('2', '3'), reason: 'silent');
+      click(trigger);
+      expect((value(passed), value(held)), ('2', '4'), reason: 'called off');
+    });
+
+    test('buddy and bondo: wait for all, or send on any change', () {
+      open('buddy-bondo');
+      final o0 = at('.i', 60, 280);
+      final o1 = at('.i', 200, 280);
+      final sends = at('.i', 340, 380);
+      type(at('.i', 200, 160), 60);
+      expect(value(sends), '0', reason: 'waiting for the left');
+      type(at('.i', 60, 160), 100);
+      expect((value(o0), value(o1), value(sends)), ('100', '60', '1'));
+      type(at('.i', 60, 160), 72);
+      expect(value(sends), '1', reason: 'empty again');
+      click(msg('clear'));
+      type(at('.i', 200, 160), 61);
+      expect(value(sends), '1', reason: 'clear forgot the 72');
+      type(at('.i', 60, 160), 73);
+      expect((value(o0), value(o1), value(sends)), ('73', '61', '2'));
+      final q0 = at('.i', 60, 600);
+      final q1 = at('.i', 200, 600);
+      final sends2 = at('.i', 340, 700);
+      type(at('.i', 200, 480), 60);
+      expect((value(q0), value(q1), value(sends2)), ('0', '60', '1'));
+      type(at('.i', 60, 480), 100);
+      expect((value(q0), value(q1), value(sends2)), ('100', '60', '2'));
+      click(at('.b', 340, 480));
+      expect((value(q0), value(q1), value(sends2)), ('100', '60', '3'));
+    });
+
+    test('next and match: one event per click, a pattern with nn', () {
+      open('next-match');
+      final first = at('.i', 60, 420);
+      final rest = at('.i', 200, 420);
+      click(at('.b', 60, 160));
+      expect((value(first), value(rest)), ('1', '0'));
+      click(msg('42'));
+      expect((value(first), value(rest)), ('2', '0'), reason: 'a click');
+      click(at('.b', 300, 160));
+      expect((value(first), value(rest)), ('3', '2'), reason: 'uzi 3');
+      final found = at('.i', 240, 740);
+      final list = at('.l', 60, 640);
+      for (final n in ['60', '64', '67']) {
+        click(msg(n));
+      }
+      expect((value(list), value(found)), ('60 64 67', '1'));
+      for (final n in ['60', '62', '67']) {
+        click(msg(n));
+      }
+      expect((value(list), value(found)), ('60 62 67', '2'));
+      click(msg('60'));
+      click(msg('67'));
+      expect(value(found), '2', reason: '67 took the nn place');
+      click(msg('64'));
+      expect(value(found), '2', reason: '60 67 64 is no match');
+      click(msg('clear'));
+      for (final n in ['60', '64', '67']) {
+        click(msg(n));
+      }
+      expect(value(found), '3');
     });
   });
 
