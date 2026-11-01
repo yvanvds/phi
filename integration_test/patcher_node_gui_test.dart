@@ -8,15 +8,23 @@ import 'package:phi/design/widgets/patcher/patch_dial_knob.dart';
 import 'package:phi/design/widgets/patcher/patch_incdec_stepper.dart';
 import 'package:phi/design/widgets/patcher/patch_led_lamp.dart';
 import 'package:phi/design/widgets/patcher/patch_list_box.dart';
+import 'package:phi/design/widgets/patcher/patch_menu_box.dart';
+import 'package:phi/design/widgets/patcher/patch_radio_group.dart';
+import 'package:phi/design/widgets/patcher/patch_tab_strip.dart';
 import 'package:phi/design/widgets/patcher/patch_text_button.dart';
 import 'package:phi/design/widgets/patcher/patch_text_edit_box.dart';
 import 'package:phi/domain/patcher/patch_node.dart';
+import 'package:phi/domain/patcher/patch_port.dart';
+import 'package:phi/domain/patcher/patch_port_id.dart';
+import 'package:phi/domain/patcher/patch_port_kind.dart';
 import 'package:phi/domain/session/session_state.dart';
+import 'package:phi/engine/bridge/patcher_node_snapshot.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/engine/state/node_type_registry.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
 import 'package:phi/surfaces/patcher/create/patch_inline_object_box.dart';
+import 'package:phi/surfaces/patcher/nodes/number_node_body.dart';
 import 'package:phi/surfaces/patcher/patch_canvas_mode.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
 import 'package:phi/surfaces/patcher/placement/patch_placement_bar.dart';
@@ -303,6 +311,176 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
     expect(pressed(), isFalse);
+
+    session.dispose();
+    await engine.dispose();
+  });
+
+  testWidgets('the selection controls render from their items, pick in run '
+      'mode, and drive a connected .i (issue #471)', (tester) async {
+    final patcherGateway = FakePatcherGateway()
+      // The engine's `.i`: one inlet, one outlet — so it can be wired.
+      ..topologyOverrides[Obj.gInt] = const PatcherNodeSnapshot(
+        inputs: 1,
+        outputs: 1,
+        inputKinds: [PatchPortKind.control],
+        outputKinds: [PatchPortKind.control],
+      );
+    final engine = PhiEngine(
+      FakeYseGateway(),
+      patcherGateway: patcherGateway,
+      telemetryInterval: const Duration(milliseconds: 20),
+    );
+    final session = SessionState();
+
+    await tester.pumpWidget(PhiApp(engine: engine, session: session));
+    await tester.pumpAndSettle();
+    await tester.tap(railFor(SurfaceId.patcher));
+    await tester.pumpAndSettle();
+
+    // An empty canvas: the demo seed would sit over the controls under test.
+    final patcher = engine.patcher;
+    for (final id in patcher.graph.nodes.map((n) => n.id).toList()) {
+      patcher.removeNode(id);
+    }
+    await tester.pumpAndSettle();
+
+    PatchNode gui(String type, Offset position, {String args = ''}) {
+      final d = NodeTypeRegistry.instance.find(type)!;
+      return patcher.addNode(
+        desc: NodeDescriptor(
+          type: d.type,
+          defaultSize: d.defaultSize,
+          sizeForArgs: d.sizeForArgs,
+          defaultArgs: args,
+          inputs: d.inputs,
+          outputs: d.outputs,
+          buildBody: d.buildBody,
+          readsGuiValue: d.readsGuiValue,
+          guiValueRead: d.guiValueRead,
+        ),
+        position: position,
+      );
+    }
+
+    final radio = gui(
+      Obj.gRadiogroup,
+      const Offset(30, 30),
+      args: 'sine square saw',
+    );
+    final tabs = gui(Obj.gTab, const Offset(220, 30), args: 'multi a b c');
+    final menu = gui(
+      Obj.gUmenu,
+      const Offset(30, 170),
+      args: 'sine square saw',
+    );
+    final number = gui(Obj.gInt, const Offset(30, 260));
+    patcher.connect(
+      PatchPortId(nodeId: menu.id, side: PatchPortSide.output, index: 0),
+      PatchPortId(nodeId: number.id, side: PatchPortSide.input, index: 0),
+    );
+    await tester.pumpAndSettle();
+
+    // ─── all three render their items, in the real font ────────────────────
+    expect(find.byType(PatchRadioGroup), findsOneWidget);
+    expect(find.byType(PatchTabStrip), findsOneWidget);
+    expect(find.byType(PatchMenuBox), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(PatchRadioGroup),
+        matching: find.text('square'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: find.byType(PatchTabStrip), matching: find.text('c')),
+      findsOneWidget,
+    );
+    expect(radio.size.height, greaterThan(menu.size.height * 2.5));
+    expect(tester.takeException(), isNull, reason: 'nothing overflows');
+
+    Set<int> radioLit() =>
+        tester.widget<PatchRadioGroup>(find.byType(PatchRadioGroup)).selected;
+    Set<int> tabsLit() =>
+        tester.widget<PatchTabStrip>(find.byType(PatchTabStrip)).selected;
+    String numberShows() => tester
+        .widget<TextField>(
+          find.descendant(
+            of: find.byType(NumberNodeBody),
+            matching: find.byType(TextField),
+          ),
+        )
+        .controller!
+        .text;
+
+    // ─── edit mode: inert ─────────────────────────────────────────────────
+    patcherGateway.calls.clear();
+    await tester.tap(
+      find.byKey(PatchRadioGroup.itemKey(2)),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(patcherGateway.calls.where((c) => c.startsWith('sendInt')), isEmpty);
+    expect(radioLit(), {0});
+
+    // ─── run mode: pick in each ───────────────────────────────────────────
+    await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<PatcherCanvas>(find.byType(PatcherCanvas)).mode,
+      PatchCanvasMode.run,
+    );
+
+    await tester.tap(find.byKey(PatchRadioGroup.itemKey(2)));
+    await tester.pumpAndSettle();
+    expect(radioLit(), {2});
+
+    await tester.tap(find.byKey(PatchTabStrip.itemKey(0)));
+    await tester.tap(find.byKey(PatchTabStrip.itemKey(2)));
+    await tester.pumpAndSettle();
+    expect(tabsLit(), {0, 2}, reason: 'multi lights more than one');
+
+    // The drop-down: open it, pick `saw`, and outlet 0 lands on the `.i`.
+    await tester.tap(find.byType(PatchMenuBox));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('saw').last);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(PatchMenuBox),
+        matching: find.text('saw'),
+      ),
+      findsOneWidget,
+    );
+    expect(numberShows(), '2', reason: 'outlet 0 through the cable');
+
+    // ─── a selection driven from the graph reaches the body ────────────────
+    patcherGateway.sendList(
+      patcher.instanceId,
+      patcherGateway.nodes.entries
+          .firstWhere((e) => e.value.type == Obj.gRadiogroup)
+          .key,
+      0,
+      'square',
+    );
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    expect(radioLit(), {1});
+
+    // ─── a retype re-reads the items and re-measures the box ───────────────
+    final before = tabs.size.width;
+    patcher.applyParams(tabs.id, 'multi a b c d e');
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    expect(tabs.size.width, greaterThan(before));
+    expect(
+      find.descendant(of: find.byType(PatchTabStrip), matching: find.text('e')),
+      findsOneWidget,
+    );
+    expect(tabsLit(), isEmpty, reason: 'new items start clear');
+    expect(tester.takeException(), isNull);
 
     session.dispose();
     await engine.dispose();

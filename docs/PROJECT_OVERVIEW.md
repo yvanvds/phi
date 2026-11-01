@@ -2768,6 +2768,26 @@ main + app          (orchestration)
   `patcher_node_gui` integration test (all six render in the real app; a
   `.dial` and a `.led` operate in run mode, stay inert in edit mode, and follow
   values driven from the graph).
+- **Selection control bodies** (issue #471) — `.umenu`, `.radiogroup` and
+  `.tab`, one engine object (`gItemListBase`) drawn three ways, so one
+  `ItemListNodeBody` (`.menu` / `.radioGroup` / `.tabs` constructors, an
+  `ItemListFace`) over `PatchMenuBox` (a dense `PhiSelect`, which gained
+  `dense`, `isSelected`, `keepOpenOnSelect` and `displayLabel` for it),
+  `PatchRadioGroup` and `PatchTabStrip`. `ItemListArgs` (domain) mirrors the
+  engine's `ShapeItems` — `[multi] items…` or a single count — and reads the
+  GUI value (the index, or one flag per item with `multi`). A pick `sendInt`s
+  the item number (selects it, or toggles it with `multi`) and re-reads the
+  engine's answer. **`NodeDescriptor.sizeForArgs`** lets a GUI control's box
+  follow its creation arguments: the controller sizes from it at creation and
+  re-measures from it on every `setParams` (a radio group is a row per item, a
+  tab strip a tab per item, a menu as wide as its longest name).
+  `FakePatcherGateway` models the item list (touch/toggle, names, `set`, whole
+  state, rebuild on `setParams`, and the three outlets delivered down cables),
+  pinned to the engine by the shared contract. Covered by `ItemListArgs` unit
+  tests, `item_list_node_bodies_test.dart`, a `PhiSelect` test, and a
+  `patcher_node_gui` integration case (all three render; picks in run mode, a
+  `.umenu` pick reaches a connected `.i` through outlet 0; inert in edit mode;
+  a cable-driven selection and a retype both show).
 - Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
   switched off for now, issue #447)
 

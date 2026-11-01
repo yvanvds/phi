@@ -1,13 +1,17 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
 import '../../design/widgets/patcher/patch_canvas_constants.dart';
 import '../../design/widgets/patcher/patch_object_box_metrics.dart';
+import '../../domain/patcher/item_list_args.dart';
 import '../../domain/patcher/patch_object_types.dart';
 import '../../domain/patcher/patch_port_kind.dart';
 import '../../engine/state/node_type_registry.dart';
 import 'nodes/button_node_body.dart';
 import 'nodes/dial_node_body.dart';
 import 'nodes/incdec_node_body.dart';
+import 'nodes/item_list_node_body.dart';
 import 'nodes/label_switch_node_body.dart';
 import 'nodes/list_node_body.dart';
 import 'nodes/message_node_body.dart';
@@ -250,7 +254,93 @@ void registerBuiltInPatcherNodes() {
       readsGuiValue: true,
     ),
   );
+
+  // ─── libYSE 3.0 selection controls (issue #471) ────────────────────────
+  // One engine object (`gItemListBase`) drawn three ways, so one body
+  // (`ItemListNodeBody`) and one port shape: a hot inlet, and the item number,
+  // its name and the whole selection out. Each control's box follows its
+  // `items` argument (`sizeForArgs`), so a retype re-measures it. The GUI value
+  // is the index, or with `multi` one flag per item — at most 256 short cells,
+  // so the whole-state read is still the right one.
+
+  const itemListInputs = [PortSpec(kind: PatchPortKind.control)];
+  const itemListOutputs = [
+    PortSpec(kind: PatchPortKind.control, label: 'index'),
+    PortSpec(kind: PatchPortKind.control, label: 'item'),
+    PortSpec(kind: PatchPortKind.control, label: 'state'),
+  ];
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gUmenu,
+      sizeForArgs: (args) => Size(
+        _itemLabelWidth(ItemListArgs.parse(args)) + _menuChevronWidth,
+        lineHeight,
+      ),
+      defaultArgs: '',
+      inputs: itemListInputs,
+      outputs: itemListOutputs,
+      buildBody: (ctx, node, controller) =>
+          ItemListNodeBody.menu(node: node, controller: controller),
+      readsGuiValue: true,
+    ),
+  );
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gRadiogroup,
+      sizeForArgs: (args) {
+        final items = ItemListArgs.parse(args);
+        // A row per item, each a one-line control's height, and room for the
+        // mark beside the longest name.
+        return Size(
+          _itemLabelWidth(items) + lineHeight,
+          items.count * lineHeight,
+        );
+      },
+      defaultArgs: '',
+      inputs: itemListInputs,
+      outputs: itemListOutputs,
+      buildBody: (ctx, node, controller) =>
+          ItemListNodeBody.radioGroup(node: node, controller: controller),
+      readsGuiValue: true,
+    ),
+  );
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gTab,
+      sizeForArgs: (args) {
+        final items = ItemListArgs.parse(args);
+        // Equal tabs, each as wide as the longest name needs.
+        return Size(items.count * _itemLabelWidth(items), lineHeight);
+      },
+      defaultArgs: '',
+      inputs: itemListInputs,
+      outputs: itemListOutputs,
+      buildBody: (ctx, node, controller) =>
+          ItemListNodeBody.tabs(node: node, controller: controller),
+      readsGuiValue: true,
+    ),
+  );
 }
+
+/// The width the longest of [items]' names needs on one line — measured the
+/// way an object box measures its line, padding and border included, so a name
+/// fits wherever the box allowed it to (issue #471).
+double _itemLabelWidth(ItemListArgs items) {
+  var widest = 0.0;
+  for (final label in items.labels) {
+    widest = math.max(
+      widest,
+      PatchObjectBoxMetrics.sizeFor(text: label, inputs: 0, outputs: 0).width,
+    );
+  }
+  return widest;
+}
+
+/// Room a `.umenu` keeps right of its name for the drop-down chevron.
+const double _menuChevronWidth = 24;
 
 /// Width a bare number box opens at — room for a few digits and their sign
 /// before the cut corner, and no more: a readout that says `0.5` has no use for

@@ -56,6 +56,16 @@ abstract final class PatchObjectTypes {
   /// `Obj.gList` — the list box (issue #470).
   static const String gList = '.l';
 
+  /// `Obj.gUmenu` — the drop-down menu over named items (issue #471).
+  static const String gUmenu = '.umenu';
+
+  /// `Obj.gRadiogroup` — `.umenu`'s value model drawn as a column of radio
+  /// buttons, or check boxes with `multi` (issue #471).
+  static const String gRadiogroup = '.radiogroup';
+
+  /// `Obj.gTab` — `.umenu`'s value model drawn as a row of tabs (issue #471).
+  static const String gTab = '.tab';
+
   /// Every id above, for the drift guard.
   static const List<String> all = [
     dSine,
@@ -72,5 +82,8 @@ abstract final class PatchObjectTypes {
     gTextbutton,
     gTextedit,
     gList,
+    gUmenu,
+    gRadiogroup,
+    gTab,
   ];
 }

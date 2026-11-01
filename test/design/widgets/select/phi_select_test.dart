@@ -275,4 +275,43 @@ void main() {
       expect(icon.color, PhiColors.fg3);
     });
   });
+
+  group('multi-select options (issue #471)', () {
+    testWidgets('checks every isSelected option and stays open on a pick', (
+      tester,
+    ) async {
+      final picked = <int>[];
+      await tester.pumpWidget(
+        host(
+          SizedBox(
+            height: 22,
+            child: PhiSelect<int>.flat(
+              key: key,
+              value: null,
+              dense: true,
+              isSelected: {0, 2}.contains,
+              keepOpenOnSelect: true,
+              displayLabel: 'a, c',
+              options: const [
+                PhiSelectOption(value: 0, label: 'a'),
+                PhiSelectOption(value: 1, label: 'b'),
+                PhiSelectOption(value: 2, label: 'c'),
+              ],
+              onChanged: picked.add,
+            ),
+          ),
+        ),
+      );
+      expect(find.text('a, c'), findsOneWidget);
+      expect(tester.getSize(find.byKey(key)).height, 22, reason: 'dense');
+
+      await open(tester);
+      expect(find.byIcon(Icons.check), findsNWidgets(2));
+
+      await tester.tap(find.text('b'));
+      await tester.pumpAndSettle();
+      expect(picked, [1]);
+      expect(find.text('b'), findsOneWidget, reason: 'the list stayed open');
+    });
+  });
 }

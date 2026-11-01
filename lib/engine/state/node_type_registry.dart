@@ -46,6 +46,7 @@ class NodeDescriptor {
     required this.inputs,
     required this.outputs,
     this.defaultSize,
+    this.sizeForArgs,
     this.buildBody,
     this.readsGuiValue = false,
     this.guiValueRead = GuiValueRead.whole,
@@ -58,6 +59,12 @@ class NodeDescriptor {
   /// edge to edge (issue #381). Null for an object box, which is measured from
   /// its line of text by `PatchObjectBoxMetrics` instead.
   final Size? defaultSize;
+
+  /// A GUI control whose box follows its **creation arguments** — a
+  /// `.radiogroup` as tall as its item count, a `.tab` as wide (issue #471) —
+  /// sizes itself from this instead of [defaultSize], at creation and again on
+  /// every `setParams`. Null for a control of fixed size.
+  final Size Function(String args)? sizeForArgs;
 
   /// Creation argument string passed to `Patcher.createObject`.
   final String defaultArgs;

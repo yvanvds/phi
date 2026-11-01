@@ -210,7 +210,7 @@ class PatcherController {
       args: desc.defaultArgs,
       voice: voice,
       position: position,
-      size: desc.defaultSize,
+      size: desc.sizeForArgs?.call(desc.defaultArgs) ?? desc.defaultSize,
     );
   }
 
@@ -419,7 +419,11 @@ class PatcherController {
   }) {
     // A note wraps (issue #488): its box is its text laid out at its width.
     if (PatchTypeName.isNote(type)) return _noteSize(args, gui);
-    final tuned = declared ?? NodeTypeRegistry.instance.find(type)?.defaultSize;
+    final registered = NodeTypeRegistry.instance.find(type);
+    final tuned =
+        declared ??
+        registered?.sizeForArgs?.call(args) ??
+        registered?.defaultSize;
     if (tuned != null) {
       final floor = PatchCanvasConstants.minWidthForPorts(
         math.max(inputs, outputs),
@@ -1480,7 +1484,9 @@ class PatcherController {
   /// back is as correct as growing. A **GUI object** keeps its tuned size and
   /// only ever grows, and only in **width**, when a new port count needs more
   /// than the current box seats — the axis ports spread along since #377 — so a
-  /// hand-authored body never jumps around as ports come and go.
+  /// hand-authored body never jumps around as ports come and go. The exception
+  /// is a control that declares `sizeForArgs` (issue #471): its box *is* its
+  /// arguments, so it is re-measured from them.
   Size _sizeSeating(PatchNode node, int inputs, int outputs) {
     if (PatchTypeName.isNote(node.type)) {
       return _noteSize(argsOf(node.id), _guiByNode[node.id] ?? const {});
@@ -1495,6 +1501,15 @@ class PatcherController {
     final needed = PatchCanvasConstants.minWidthForPorts(
       math.max(inputs, outputs),
     );
+    // A control sized by its arguments (issue #471) is re-measured outright,
+    // shrinking as well as growing: fewer items is a smaller control.
+    final measured = NodeTypeRegistry.instance
+        .find(node.type)
+        ?.sizeForArgs
+        ?.call(argsOf(node.id));
+    if (measured != null) {
+      return Size(math.max(measured.width, needed), measured.height);
+    }
     return node.size.width >= needed
         ? node.size
         : Size(needed, node.size.height);

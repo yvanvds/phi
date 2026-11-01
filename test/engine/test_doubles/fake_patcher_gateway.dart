@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:ui';
 
+import 'package:phi/domain/patcher/item_list_args.dart';
 import 'package:phi/domain/patcher/patch_port_kind.dart';
 import 'package:phi/engine/bridge/patch_object_descriptor.dart';
 import 'package:phi/engine/bridge/patcher_gateway.dart';
@@ -245,6 +246,11 @@ class FakePatcherGateway implements PatcherGateway {
     calls.add('sendFloat:$handleId:$inlet:${value.toStringAsFixed(3)}');
     final node = _inst(instanceId).nodes[handleId];
     if (node == null) return;
+    if (node.isItemList) {
+      node.lastValueByInlet[inlet] = value;
+      _itemListNumber(instanceId, handleId, inlet, value);
+      return;
+    }
     // Model the engine's uncoerced inlet dispatch (issue #439): `gToggle`
     // registers int and bang handlers but **no float one**, so a float sent at
     // it lands nowhere — the real engine drops it silently. The fake dropping
@@ -269,6 +275,10 @@ class FakePatcherGateway implements PatcherGateway {
     final node = _inst(instanceId).nodes[handleId];
     if (node == null) return;
     node.lastValueByInlet[inlet] = value.toDouble();
+    if (node.isItemList) {
+      _itemListNumber(instanceId, handleId, inlet, value.toDouble());
+      return;
+    }
     if (inlet != 0) return;
     if (node.receiveSwitchNumber(value.toDouble())) return;
     // The engine's `gToggle` displays its state as `on`/`off`, not as a
@@ -285,6 +295,8 @@ class FakePatcherGateway implements PatcherGateway {
     final node = _inst(instanceId).nodes[handleId];
     if (node == null) return;
     node.bangedInlets.add(inlet);
+    // An item list re-sends on a bang (`gItemListBase`).
+    if (inlet == 0 && node.isItemList) _emitItemList(instanceId, handleId);
     // A latching `.led` / `.textbutton` flips on a bang; a momentary one
     // takes it as a press (`gLabelSwitchBase`).
     if (inlet == 0 && node.isLabelSwitch) {
@@ -309,14 +321,51 @@ class FakePatcherGateway implements PatcherGateway {
   @override
   void sendList(int instanceId, int handleId, int inlet, String list) {
     calls.add('sendList:$handleId:$inlet:$list');
-    _inst(instanceId).nodes[handleId]?.receiveList(inlet, list);
+    final node = _inst(instanceId).nodes[handleId];
+    node?.receiveList(inlet, list);
+    if (inlet == 0 && (node?.isItemList ?? false)) {
+      _emitItemList(instanceId, handleId);
+    }
   }
 
   @override
   void sendMessage(int instanceId, int handleId, int inlet, String message) {
     calls.add('sendMessage:$handleId:$inlet:$message');
     // Same native call as a list, exactly as the real gateway sends it.
-    _inst(instanceId).nodes[handleId]?.receiveList(inlet, message);
+    final node = _inst(instanceId).nodes[handleId];
+    node?.receiveList(inlet, message);
+    if (inlet == 0 && (node?.isItemList ?? false)) {
+      _emitItemList(instanceId, handleId);
+    }
+  }
+
+  /// A number landing on an item list (`gItemListBase::FloatIn`): on inlet 0
+  /// it touches that item, and the hot inlet sends either way.
+  void _itemListNumber(int instanceId, int handleId, int inlet, double value) {
+    if (inlet != 0) return;
+    _inst(instanceId).nodes[handleId]!.touchItem(value);
+    _emitItemList(instanceId, handleId);
+  }
+
+  /// Model an item list's send (`gItemListBase`'s `CALC`), right to left as
+  /// the engine fires it: the whole selection on outlet 2, the pointed-at
+  /// item's name on outlet 1, its number on outlet 0 — each delivered down
+  /// every cable from that outlet, so a connected `.i` follows outlet 0.
+  void _emitItemList(int instanceId, int handleId) {
+    final inst = _inst(instanceId);
+    final node = inst.nodes[handleId]!;
+    final at = node.itemCurrent;
+    final label = node.itemArgs.labels[at];
+    final state = node.guiValue;
+    void deliver(int outlet, void Function(FakeCable c) send) {
+      for (final c in [...inst.cables]) {
+        if (c.fromHandleId == handleId && c.outlet == outlet) send(c);
+      }
+    }
+
+    deliver(2, (c) => sendList(instanceId, c.toHandleId, c.inlet, state));
+    deliver(1, (c) => sendList(instanceId, c.toHandleId, c.inlet, label));
+    deliver(0, (c) => sendInt(instanceId, c.toHandleId, c.inlet, at));
   }
 
   @override
@@ -365,7 +414,12 @@ class FakePatcherGateway implements PatcherGateway {
   @override
   void setParams(int instanceId, int handleId, String args) {
     calls.add('setParams:$handleId:$args');
-    _inst(instanceId).nodes[handleId]?.args = args;
+    final node = _inst(instanceId).nodes[handleId];
+    if (node == null) return;
+    node.args = args;
+    // New items rebuild an item list (the engine replaces the object), so it
+    // comes back with item 0 selected and every flag clear.
+    if (node.isItemList) node.reshapeItems();
   }
 
   /// A whole value renders without a trailing `.0` (`3` not `3.0`), matching
@@ -532,6 +586,20 @@ class FakePatcherGateway implements PatcherGateway {
           inputKinds: [],
           outputKinds: [PatchPortKind.control],
         );
+      // One hot inlet; index, item name and whole selection out (issue #471).
+      case Obj.gUmenu:
+      case Obj.gRadiogroup:
+      case Obj.gTab:
+        return const PatcherNodeSnapshot(
+          inputs: 1,
+          outputs: 3,
+          inputKinds: [PatchPortKind.control],
+          outputKinds: [
+            PatchPortKind.control,
+            PatchPortKind.control,
+            PatchPortKind.control,
+          ],
+        );
     }
     return const PatcherNodeSnapshot(
       inputs: 0,
@@ -673,6 +741,100 @@ class FakeNode {
   String get guiValue => guiCells.join(' ');
   set guiValue(String value) => guiCells = [value];
 
+  /// Whether this is a `.umenu` / `.radiogroup` / `.tab` (`gItemListBase`).
+  bool get isItemList => _itemListTypes.contains(type);
+
+  /// An item list's shape, read from its creation arguments.
+  ItemListArgs get itemArgs => ItemListArgs.parse(args);
+
+  /// The item an item list points at — the selection in single select, the
+  /// item last touched with `multi`. What its outlet 0 sends.
+  int itemCurrent = 0;
+
+  /// Rebuild an item list's state for its current arguments
+  /// (`gItemListBase::ShapeItems`): item 0, every flag clear.
+  void reshapeItems() {
+    guiCells = _itemCells(args);
+    itemCurrent = 0;
+  }
+
+  /// "The user touched item [value]" (`gItemListBase::Touch`): selects it, or
+  /// with `multi` toggles it, and points at it. An item the list does not have
+  /// changes nothing.
+  void touchItem(double value) {
+    if (!(value >= 0)) return;
+    final item = value.truncate();
+    if (item >= itemArgs.count) return;
+    if (itemArgs.multi) {
+      guiCells = [...guiCells]..[item] = guiCells[item] == '0' ? '1' : '0';
+    } else {
+      guiCells = ['$item'];
+    }
+    itemCurrent = item;
+  }
+
+  /// A list on an item list's inlet 0 (`gItemListBase::ListIn`): `set <i> <v>`
+  /// writes one cell outright, a leading name selects that item, and numbers
+  /// are the whole state — the index, or with `multi` the flags positionally.
+  void _receiveItemList(String list) {
+    final tokens = list.trim().split(RegExp(r'\s+'));
+    if (tokens.first.isEmpty) return;
+    final items = itemArgs;
+    if (tokens.first == 'set') {
+      if (tokens.length < 3) return;
+      final cell = num.tryParse(tokens[1]);
+      final value = num.tryParse(tokens[2]);
+      if (cell == null || value == null || cell < 0) return;
+      final at = cell.truncate();
+      if (items.multi) {
+        if (at >= items.count) return;
+        guiCells = [...guiCells]..[at] = value == 0 ? '0' : '1';
+        itemCurrent = at;
+        return;
+      }
+      if (at != 0 || value < 0) return;
+      final item = value.truncate();
+      if (item >= items.count) return;
+      guiCells = ['$item'];
+      itemCurrent = item;
+      return;
+    }
+    final number = num.tryParse(tokens.first);
+    if (number == null) {
+      final at = items.labels.indexOf(tokens.first);
+      if (at >= 0) touchItem(at.toDouble());
+      return;
+    }
+    if (!items.multi) {
+      touchItem(number.toDouble());
+      return;
+    }
+    final flags = [...guiCells];
+    var written = 0;
+    for (final t in tokens) {
+      if (written >= items.count) break;
+      final flag = num.tryParse(t);
+      if (flag == null) break;
+      flags[written++] = flag == 0 ? '0' : '1';
+    }
+    if (written == 0) return;
+    guiCells = flags;
+    final lowest = flags.indexOf('1');
+    if (lowest >= 0) itemCurrent = lowest;
+  }
+
+  /// A fresh item list's cells: the index alone, or one flag per item.
+  static List<String> _itemCells(String args) {
+    final items = ItemListArgs.parse(args);
+    return items.multi ? List.filled(items.count, '0') : ['0'];
+  }
+
+  static const Set<String> _itemListTypes = {
+    Obj.gUmenu,
+    Obj.gRadiogroup,
+    Obj.gTab,
+  };
+
   /// Whether this is a `.led` / `.textbutton` (`gLabelSwitchBase`).
   bool get isLabelSwitch => type == Obj.gLed || type == Obj.gTextbutton;
 
@@ -722,6 +884,10 @@ class FakeNode {
     listsByInlet.putIfAbsent(inlet, () => []).add(list);
     if (inlet != 0) return;
     if (type == Obj.gIncdec && _stepIncdec(list.trim())) return;
+    if (isItemList) {
+      _receiveItemList(list);
+      return;
+    }
     if (type == Obj.gList) {
       guiCells = [list];
       return;
@@ -792,6 +958,10 @@ class FakeNode {
       // A fresh `.textedit` holds its `text` argument, joined with spaces.
       case Obj.gTextedit:
         return [args.trim().split(RegExp(r'\s+')).join(' ')];
+      case Obj.gUmenu:
+      case Obj.gRadiogroup:
+      case Obj.gTab:
+        return _itemCells(args);
       case Obj.gMultislider:
         final size = int.tryParse(args.trim().split(RegExp(r'\s+')).first);
         return List.filled(size ?? 8, '0');

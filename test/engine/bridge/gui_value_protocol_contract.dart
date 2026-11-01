@@ -201,6 +201,77 @@ void guiValueProtocolContract(
     expect(gateway.guiValue(inst, text), 'foo bar');
   });
 
+  // ─── the selection controls (issue #471) ─────────────────────────────
+
+  for (final type in [Obj.gUmenu, Obj.gRadiogroup, Obj.gTab]) {
+    test('a single-select $type holds one index, picked by number or name', () {
+      final menu = gateway.createObject(inst, type, args: 'sine square saw');
+      expect(gateway.guiValueCount(inst, menu), 1);
+      expect(gateway.guiValue(inst, menu), '0');
+      expect(gateway.guiValueIsSettable(inst, menu), isTrue);
+
+      gateway.sendInt(inst, menu, 0, 2);
+      expect(gateway.guiValue(inst, menu), '2');
+      gateway.sendFloat(inst, menu, 0, 1);
+      expect(gateway.guiValue(inst, menu), '1');
+      gateway.sendList(inst, menu, 0, 'saw');
+      expect(gateway.guiValue(inst, menu), '2');
+      gateway.sendInt(inst, menu, 0, 7);
+      expect(gateway.guiValue(inst, menu), '2', reason: 'no item 7');
+      gateway.sendList(inst, menu, 0, 'triangle');
+      expect(gateway.guiValue(inst, menu), '2', reason: 'no such name');
+      expect(gateway.setGuiValueAt(inst, menu, 0, '0'), isTrue);
+      expect(gateway.guiValueAt(inst, menu, 0), '0');
+    });
+  }
+
+  for (final type in [Obj.gUmenu, Obj.gRadiogroup, Obj.gTab]) {
+    test('a multi $type has a flag per item, and a number toggles one', () {
+      final group = gateway.createObject(inst, type, args: 'multi 4');
+      expect(gateway.guiValueCount(inst, group), 4);
+      expect(gateway.guiValue(inst, group), '0 0 0 0');
+
+      gateway.sendInt(inst, group, 0, 1);
+      gateway.sendInt(inst, group, 0, 3);
+      expect(gateway.guiValue(inst, group), '0 1 0 1');
+      gateway.sendInt(inst, group, 0, 1);
+      expect(gateway.guiValue(inst, group), '0 0 0 1', reason: 'toggled off');
+      expect(gateway.guiValueAt(inst, group, 3), '1');
+
+      expect(gateway.restoreGuiValue(inst, group, '1 1 0 0'), isTrue);
+      expect(gateway.guiValue(inst, group), '1 1 0 0');
+      expect(gateway.setGuiValueAt(inst, group, 3, '1'), isTrue);
+      expect(gateway.guiValue(inst, group), '1 1 0 1');
+    });
+  }
+
+  test('an item list sends the item number down outlet 0', () {
+    final menu = gateway.createObject(inst, Obj.gUmenu, args: 'a b c');
+    final number = gateway.createObject(inst, Obj.gInt);
+    gateway.connect(
+      inst,
+      fromHandleId: menu,
+      outlet: 0,
+      toHandleId: number,
+      inlet: 0,
+    );
+    gateway.sendInt(inst, menu, 0, 2);
+    expect(gateway.guiValue(inst, number), '2');
+    gateway.sendList(inst, menu, 0, 'b');
+    expect(gateway.guiValue(inst, number), '1');
+  });
+
+  test('new items rebuild an item list at item 0', () {
+    final tabs = gateway.createObject(inst, Obj.gTab, args: 'a b c');
+    gateway.sendInt(inst, tabs, 0, 2);
+    gateway.setParams(inst, tabs, 'multi w x y z');
+    expect(gateway.guiValueCount(inst, tabs), 4);
+    expect(gateway.guiValue(inst, tabs), '0 0 0 0');
+    gateway.setParams(inst, tabs, '');
+    expect(gateway.guiValueCount(inst, tabs), 1);
+    expect(gateway.guiValue(inst, tabs), '0');
+  });
+
   test('an unknown handle answers the empty protocol', () {
     expect(gateway.guiValueCount(inst, 999), 0);
     expect(gateway.guiValueAt(inst, 999, 0), '');

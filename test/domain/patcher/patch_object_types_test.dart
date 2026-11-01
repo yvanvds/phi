@@ -27,6 +27,9 @@ void main() {
     expect(PatchObjectTypes.gTextbutton, Obj.gTextbutton);
     expect(PatchObjectTypes.gTextedit, Obj.gTextedit);
     expect(PatchObjectTypes.gList, Obj.gList);
+    expect(PatchObjectTypes.gUmenu, Obj.gUmenu);
+    expect(PatchObjectTypes.gRadiogroup, Obj.gRadiogroup);
+    expect(PatchObjectTypes.gTab, Obj.gTab);
   });
 
   test('the list holds each id exactly once', () {
