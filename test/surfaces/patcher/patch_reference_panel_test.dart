@@ -426,4 +426,39 @@ void main() {
       expect(find.text('KEYBOARD'), findsNothing);
     });
   });
+
+  group('open tutorial (issue #489)', () {
+    testWidgets('the button shows only when a tutorial callback is given', (
+      tester,
+    ) async {
+      await pumpPanel(tester, sine);
+      expect(find.byKey(PatchReferencePanel.openTutorialKey), findsNothing);
+
+      var opened = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PatchReferencePanel(
+              descriptor: sine,
+              onOpenTutorial: () => opened++,
+            ),
+          ),
+        ),
+      );
+      expect(find.byKey(PatchReferencePanel.openTutorialKey), findsOneWidget);
+      await tester.tap(find.byKey(PatchReferencePanel.openTutorialKey));
+      expect(opened, 1);
+    });
+
+    testWidgets('no button in the empty state', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PatchReferencePanel(descriptor: null, onOpenTutorial: () {}),
+          ),
+        ),
+      );
+      expect(find.byKey(PatchReferencePanel.openTutorialKey), findsNothing);
+    });
+  });
 }

@@ -7,6 +7,9 @@ import '../../../design/tokens/phi_type.dart';
 import '../../../design/widgets/patcher/patch_type_style.dart';
 import '../../../domain/patcher/patch_type_name.dart';
 import '../../../engine/bridge/patch_object_descriptor.dart';
+import '../tutorial/patch_tutorial_browser.dart';
+import '../tutorial/patch_word_button.dart';
+import 'patcher_palette_tab.dart';
 
 /// The patcher's **object palette** (design `docs/design/patcher.md` §5) — the
 /// engine's whole object catalogue, grouped into [PatchObjectCategory] sections,
@@ -23,11 +26,20 @@ import '../../../engine/bridge/patch_object_descriptor.dart';
 /// palette renders identically off the real gateway and a fake in tests. The
 /// subpatch type is already filtered upstream (`PatcherGateway.objectTypes`,
 /// design §10 decision 2), so it never reaches here.
+///
+/// With [onOpenTutorial] set, the palette grows two tabs (issue #489):
+/// **objects** (the catalogue) and **tutorials** (the [PatchTutorialBrowser]
+/// over [tutorialTypes]). The tab is controlled by the host ([tab] /
+/// [onTabChanged]) so the "Open Patcher Tutorial…" command can switch it.
 class PatcherPalette extends StatefulWidget {
   const PatcherPalette({
     required this.objectTypes,
     required this.selected,
     required this.onSelect,
+    this.tab = PatcherPaletteTab.objects,
+    this.onTabChanged,
+    this.tutorialTypes = const {},
+    this.onOpenTutorial,
     super.key,
   });
 
@@ -39,6 +51,47 @@ class PatcherPalette extends StatefulWidget {
 
   /// Tapping an entry selects it (drives the reference panel).
   final ValueChanged<PatchObjectDescriptor> onSelect;
+
+  /// The tab shown — only read while [onOpenTutorial] is set.
+  final PatcherPaletteTab tab;
+
+  /// Called when a tab is picked.
+  final ValueChanged<PatcherPaletteTab>? onTabChanged;
+
+  /// The types with a bundled tutorial.
+  final Set<String> tutorialTypes;
+
+  /// Opens a type's tutorial. Null hides the tutorials tab altogether.
+  final ValueChanged<String>? onOpenTutorial;
+
+  /// Key on a tab button.
+  static Key tabKey(PatcherPaletteTab tab) =>
+      Key('PatcherPalette.tab.${tab.name}');
+
+  /// The section heading for a [PatchObjectCategory] — shared by the object
+  /// list and the Tutorials browser so both read the same.
+  static String categoryLabel(PatchObjectCategory category) =>
+      switch (category) {
+        PatchObjectCategory.unset => 'other',
+        PatchObjectCategory.oscillator => 'oscillators',
+        PatchObjectCategory.filter => 'filters',
+        PatchObjectCategory.math => 'math',
+        PatchObjectCategory.generic => 'utility',
+        PatchObjectCategory.gui => 'control',
+        PatchObjectCategory.time => 'timing',
+        PatchObjectCategory.midi => 'midi',
+        PatchObjectCategory.routing => 'routing',
+        PatchObjectCategory.control => 'control flow',
+        PatchObjectCategory.list => 'lists',
+        PatchObjectCategory.string => 'text',
+        PatchObjectCategory.collection => 'collections',
+        PatchObjectCategory.dict => 'dict',
+        PatchObjectCategory.array => 'arrays',
+        PatchObjectCategory.random => 'random',
+        PatchObjectCategory.io => 'i / o',
+        PatchObjectCategory.encapsulation => 'subpatchers',
+        PatchObjectCategory.sequence => 'sequencing',
+      };
 
   /// Fixed pane width — the left column of the patcher layout.
   static const double width = 200;
@@ -76,7 +129,9 @@ class _PatcherPaletteState extends State<PatcherPalette> {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = widget.objectTypes.where(_matches).toList();
+    final onOpenTutorial = widget.onOpenTutorial;
+    final showTutorials =
+        onOpenTutorial != null && widget.tab == PatcherPaletteTab.tutorials;
     return Container(
       width: PatcherPalette.width,
       decoration: const BoxDecoration(
@@ -86,30 +141,72 @@ class _PatcherPaletteState extends State<PatcherPalette> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Header(
-            controller: _search,
-            onChanged: (v) => setState(() => _query = v),
-          ),
+          if (onOpenTutorial != null) _tabs(),
           Expanded(
-            child: filtered.isEmpty
-                ? const _EmptyHint(text: 'no objects match')
-                : ListView(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: PhiSpacing.s1,
-                    ),
-                    children: [
-                      // Enum order gives a stable canonical section order;
-                      // within a section, registry (catalogue) order is kept.
-                      for (final category in PatchObjectCategory.values)
-                        ..._section(category, [
-                          for (final d in filtered)
-                            if (d.category == category) d,
-                        ]),
-                    ],
-                  ),
+            child: showTutorials
+                ? PatchTutorialBrowser(
+                    objectTypes: widget.objectTypes,
+                    tutorialTypes: widget.tutorialTypes,
+                    onOpen: onOpenTutorial,
+                  )
+                : _objects(),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _tabs() {
+    Widget tab(PatcherPaletteTab t, String label) => PatchWordButton(
+      key: PatcherPalette.tabKey(t),
+      label: label,
+      selected: widget.tab == t,
+      color: widget.tab == t ? PhiColors.fg0 : PhiColors.fg2,
+      onTap: () => widget.onTabChanged?.call(t),
+    );
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        PhiSpacing.s3,
+        PhiSpacing.s2,
+        PhiSpacing.s2,
+        0,
+      ),
+      child: Row(
+        children: [
+          Flexible(child: tab(PatcherPaletteTab.objects, 'objects')),
+          const SizedBox(width: PhiSpacing.s1),
+          Flexible(child: tab(PatcherPaletteTab.tutorials, 'tutorials')),
+        ],
+      ),
+    );
+  }
+
+  Widget _objects() {
+    final filtered = widget.objectTypes.where(_matches).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Header(
+          controller: _search,
+          onChanged: (v) => setState(() => _query = v),
+        ),
+        Expanded(
+          child: filtered.isEmpty
+              ? const _EmptyHint(text: 'no objects match')
+              : ListView(
+                  padding: const EdgeInsets.symmetric(vertical: PhiSpacing.s1),
+                  children: [
+                    // Enum order gives a stable canonical section order;
+                    // within a section, registry (catalogue) order is kept.
+                    for (final category in PatchObjectCategory.values)
+                      ..._section(category, [
+                        for (final d in filtered)
+                          if (d.category == category) d,
+                      ]),
+                  ],
+                ),
+        ),
+      ],
     );
   }
 
@@ -128,7 +225,7 @@ class _PatcherPaletteState extends State<PatcherPalette> {
           PhiSpacing.s1,
         ),
         child: Text(
-          _categoryLabel(category),
+          PatcherPalette.categoryLabel(category),
           style: PhiType.caption().copyWith(color: PhiColors.fg2),
         ),
       ),
@@ -141,29 +238,6 @@ class _PatcherPaletteState extends State<PatcherPalette> {
         ),
     ];
   }
-
-  static String _categoryLabel(PatchObjectCategory category) =>
-      switch (category) {
-        PatchObjectCategory.unset => 'other',
-        PatchObjectCategory.oscillator => 'oscillators',
-        PatchObjectCategory.filter => 'filters',
-        PatchObjectCategory.math => 'math',
-        PatchObjectCategory.generic => 'utility',
-        PatchObjectCategory.gui => 'control',
-        PatchObjectCategory.time => 'timing',
-        PatchObjectCategory.midi => 'midi',
-        PatchObjectCategory.routing => 'routing',
-        PatchObjectCategory.control => 'control flow',
-        PatchObjectCategory.list => 'lists',
-        PatchObjectCategory.string => 'text',
-        PatchObjectCategory.collection => 'collections',
-        PatchObjectCategory.dict => 'dict',
-        PatchObjectCategory.array => 'arrays',
-        PatchObjectCategory.random => 'random',
-        PatchObjectCategory.io => 'i / o',
-        PatchObjectCategory.encapsulation => 'subpatchers',
-        PatchObjectCategory.sequence => 'sequencing',
-      };
 }
 
 /// The palette header: a title and a live search field.

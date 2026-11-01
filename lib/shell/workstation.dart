@@ -34,6 +34,7 @@ import '../surfaces/midi/midi_file_io.dart';
 import '../surfaces/midi/midi_surface.dart';
 import '../surfaces/mix/mix_surface.dart';
 import '../surfaces/patcher/patcher_surface.dart';
+import '../surfaces/patcher/tutorial/patch_tutorial_export.dart';
 import '../surfaces/racks/file_selector_rack_asset_source.dart';
 import '../surfaces/racks/racks_surface.dart';
 import '../surfaces/scene/scene_surface.dart';
@@ -468,8 +469,45 @@ class _WorkstationState extends State<Workstation> {
             ? null
             : () => unawaited(actions.rename(context)),
         onOpenSettings: widget.projectController == null ? null : _openSettings,
+        onOpenPatcherTutorial: _openPatcherTutorials,
+        onExportPatchTutorial: () => unawaited(_exportPatchTutorial()),
+        isPatcherReady: () => widget.engine.patcherOrNull != null,
       ),
     );
+  }
+
+  /// "Open Patcher Tutorial…" (issue #489): summon the patcher and switch its
+  /// palette to the Tutorials browser. The request goes out after the frame
+  /// that mounts the surface, so a surface the summon just opened hears it.
+  void _openPatcherTutorials() {
+    if (widget.engine.patcherOrNull == null) return;
+    _onSelect(SurfaceId.patcher);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.engine.patcherOrNull == null) return;
+      widget.engine.patchLibrary.requestTutorialBrowser();
+    });
+  }
+
+  /// "Export Patch as Tutorial…" (issue #489, dev-facing): write the open
+  /// patch in the tutorial file format through a save dialog.
+  Future<void> _exportPatchTutorial() async {
+    if (widget.engine.patcherOrNull == null) return;
+    final library = widget.engine.patchLibrary;
+    final json = library.exportOpenAsTutorial();
+    final name = library.openAddress?.name;
+    if (json == null || name == null) {
+      _noticeCenter.notice('Open a project patch to export it as a tutorial');
+      return;
+    }
+    final saved = await const PatchTutorialExport().save(
+      '$name.phitut.json',
+      json,
+    );
+    if (saved && mounted) {
+      _noticeCenter.notice(
+        'Tutorial exported — add its types to the tutorial index.json',
+      );
+    }
   }
 
   /// Opens the command palette overlay (design §4) on Ctrl+Shift+P / F1.

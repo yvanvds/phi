@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../design/tokens/phi_colors.dart';
@@ -17,12 +19,14 @@ import '../../engine/state/patcher_controller.dart';
 import '../surface.dart';
 import 'library/patch_entity_strip.dart';
 import 'palette/patcher_palette.dart';
+import 'palette/patcher_palette_tab.dart';
 import 'patch_canvas_mode.dart';
 import 'patch_gui_poller.dart';
 import 'patcher_canvas.dart';
 import 'patcher_node_types.dart';
 import 'placement/patch_placement_bar.dart';
 import 'reference/patch_reference_panel.dart';
+import 'tutorial/patch_tutorial_bar.dart';
 
 /// A verb on the node context menu (issue #356). Every one of them already has
 /// a keyboard route; the menu is what makes them discoverable without one.
@@ -134,6 +138,11 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   /// the canvas is re-keyed per open patch, while the mode deliberately is not.
   PatchCanvasMode _mode = PatchCanvasMode.edit;
 
+  /// Which list the palette shows (issue #489) — switched to the tutorials by
+  /// the "Open Patcher Tutorial…" command through
+  /// [PatchLibraryController.tutorialBrowserRequests].
+  PatcherPaletteTab _paletteTab = PatcherPaletteTab.objects;
+
   /// The engine's patch library, held so its listener can be detached on
   /// dispose. Stable for the viewport's lifetime: a project swap rebinds it
   /// and a session restart re-opens through it, neither replaces it.
@@ -151,7 +160,29 @@ class _PatcherViewportState extends State<_PatcherViewport> {
     _objectTypes = widget.engine.patcher.objectTypes();
     _library = widget.engine.patchLibrary;
     _library.addListener(_syncUndoScope);
+    _library.tutorialBrowserRequests.addListener(_showTutorials);
     _syncUndoScope();
+  }
+
+  void _showTutorials() =>
+      setState(() => _paletteTab = PatcherPaletteTab.tutorials);
+
+  /// A tutorial is open: the canvas is **read-only** (issue #489) — run mode
+  /// only (its demo controls must be playable), no edit gesture, no undo.
+  bool get _readOnly => _library.tutorial != null;
+
+  /// The mode the canvas actually runs in: run while a tutorial is open,
+  /// whatever the performer chose otherwise. [_mode] itself is left alone, so
+  /// closing the tutorial puts the patch back the way it was.
+  PatchCanvasMode get _effectiveMode => _readOnly ? PatchCanvasMode.run : _mode;
+
+  /// Open [type]'s tutorial. The node the reference panel was reading values
+  /// from belongs to the patch being left, so it is forgotten; the documented
+  /// type stays, since the tutorial is about it.
+  Future<void> _openTutorial(String type) async {
+    final opened = await _library.openTutorial(type);
+    if (!opened || !mounted) return;
+    setState(() => _selectedNodeId = null);
   }
 
   @override
@@ -166,6 +197,7 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   @override
   void dispose() {
     _library.removeListener(_syncUndoScope);
+    _library.tutorialBrowserRequests.removeListener(_showTutorials);
     _withdrawUndoScope(widget.undoScopes);
     _canvasFocus.dispose();
     super.dispose();
@@ -180,7 +212,7 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   void _syncUndoScope() {
     final scopes = widget.undoScopes;
     if (scopes == null) return;
-    final scope = _mode.isRun ? null : _library.openEditor?.undoScope;
+    final scope = _effectiveMode.isRun ? null : _library.openEditor?.undoScope;
     if (identical(scope, _registeredScope)) return;
     if (scope == null) {
       scopes.unregister(PatcherController.undoScopeId);
@@ -206,7 +238,10 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   /// Leaving edit mode drops the selection: a selection is an editing state,
   /// and a run-mode canvas that cannot select or deselect anything must not
   /// keep drawing rings around nodes nothing can do anything to.
+  ///
+  /// Refused while a tutorial is open: a tutorial is read-only (issue #489).
   void _setMode(PatchCanvasMode mode) {
+    if (_readOnly) return;
     if (mode == _mode) return;
     if (mode.isRun) widget.engine.patchLibrary.openEditor?.clearSelection();
     setState(() => _mode = mode);
@@ -245,6 +280,7 @@ class _PatcherViewportState extends State<_PatcherViewport> {
     Offset position, {
     String? args,
   }) {
+    if (_readOnly) return;
     final controller = widget.engine.patcher;
     final id = controller.createObject(
       desc: desc,
@@ -364,6 +400,8 @@ class _PatcherViewportState extends State<_PatcherViewport> {
       listenable: library,
       builder: (context, _) {
         final editor = library.openEditor;
+        final tutorial = library.tutorial;
+        final mode = _effectiveMode;
         return Row(
           children: [
             PatchEntityStrip(controller: library),
@@ -371,17 +409,28 @@ class _PatcherViewportState extends State<_PatcherViewport> {
               objectTypes: _objectTypes,
               selected: _selected,
               onSelect: _select,
+              tab: _paletteTab,
+              onTabChanged: (tab) => setState(() => _paletteTab = tab),
+              tutorialTypes: library.tutorials.types.toSet(),
+              onOpenTutorial: (type) => unawaited(_openTutorial(type)),
             ),
             Expanded(
               child: Column(
                 children: [
-                  PatchPlacementBar(
-                    controller: library,
-                    snapToGrid: _snapToGrid,
-                    onSnapChanged: (on) => setState(() => _snapToGrid = on),
-                    mode: _mode,
-                    onModeChanged: _setMode,
-                  ),
+                  if (tutorial != null)
+                    PatchTutorialBar(
+                      title: tutorial.tutorial.title,
+                      onCopyToProject: library.copyTutorialToProject,
+                      onClose: library.closeTutorial,
+                    )
+                  else
+                    PatchPlacementBar(
+                      controller: library,
+                      snapToGrid: _snapToGrid,
+                      onSnapChanged: (on) => setState(() => _snapToGrid = on),
+                      mode: _mode,
+                      onModeChanged: _setMode,
+                    ),
                   Expanded(
                     child: editor == null
                         ? const _NoPatchOpen()
@@ -399,13 +448,24 @@ class _PatcherViewportState extends State<_PatcherViewport> {
                             child: PatcherCanvas(
                               // Re-key on the open address so switching patches
                               // rebuilds the canvas against the new editor.
-                              key: ValueKey(library.openAddress),
+                              // A tutorial is not a project patch: keyed on
+                              // its session so opening / closing one rebuilds
+                              // the canvas too (issue #489).
+                              key: ValueKey<Object?>(
+                                tutorial ?? library.openAddress,
+                              ),
                               controller: editor,
                               objectTypes: _objectTypes,
                               snapToGrid: _snapToGrid,
-                              mode: _mode,
-                              onToggleMode: () => _setMode(_mode.flipped),
-                              onCreateObject: _createObject,
+                              mode: mode,
+                              // Read-only: no way into edit mode, and no
+                              // drop target to create through.
+                              onToggleMode: tutorial != null
+                                  ? null
+                                  : () => _setMode(_mode.flipped),
+                              onCreateObject: tutorial != null
+                                  ? null
+                                  : _createObject,
                               onNodeTap: _selectNode,
                               onNodeContextMenu: _onNodeContextMenu,
                               // The panel switches the moment the inline box's
@@ -442,21 +502,33 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   /// on its own, which is exactly what a palette tap shows.
   Widget _reference(PatcherController? editor) {
     final id = _selectedNodeId;
+    final type = _selected?.type;
+    // "Open tutorial" under the heading whenever the documented type has one
+    // (issue #489) — palette tap and canvas selection alike.
+    final onOpenTutorial = type != null && _library.hasTutorial(type)
+        ? () => unawaited(_openTutorial(type))
+        : null;
     if (editor == null || id == null) {
-      return PatchReferencePanel(descriptor: _selected);
+      return PatchReferencePanel(
+        descriptor: _selected,
+        onOpenTutorial: onOpenTutorial,
+      );
     }
     return ListenableBuilder(
       listenable: editor.graph,
       builder: (context, _) {
         final node = editor.graph.nodeById(id);
         final documented = node != null && node.type == _selected?.type;
+        // Nothing in a read-only tutorial is edited from the panel either.
+        final editable = documented && !_readOnly;
         return PatchReferencePanel(
           descriptor: _selected,
+          onOpenTutorial: onOpenTutorial,
           args: documented ? editor.argsOf(id) : null,
           // A selected note's colour (issue #511), journaled by the editor so
           // Ctrl+Z puts it back; the graph wakes this builder on every change.
-          noteColor: documented ? editor.noteColorOf(id) : null,
-          onNoteColor: documented
+          noteColor: editable ? editor.noteColorOf(id) : null,
+          onNoteColor: editable
               ? (name) {
                   editor.setNoteColor(id, name);
                   _canvasFocus.requestFocus();
@@ -464,15 +536,15 @@ class _PatcherViewportState extends State<_PatcherViewport> {
               : null,
           // A selected keyboard's range and velocity (issue #515), journaled
           // the same way; the panel only shows them for a `.kslider`.
-          keyboardRange: documented ? editor.keyboardLayoutOf(id) : null,
-          keyboardVelocity: documented ? editor.keyboardVelocityOf(id) : null,
-          onKeyboardRange: documented
+          keyboardRange: editable ? editor.keyboardLayoutOf(id) : null,
+          keyboardVelocity: editable ? editor.keyboardVelocityOf(id) : null,
+          onKeyboardRange: editable
               ? (range) {
                   editor.setKeyboardRange(id, range);
                   _canvasFocus.requestFocus();
                 }
               : null,
-          onKeyboardVelocity: documented
+          onKeyboardVelocity: editable
               ? (velocity) {
                   editor.setKeyboardVelocity(id, velocity);
                   _canvasFocus.requestFocus();

@@ -92,6 +92,8 @@ import 'state/state_application_notice.dart';
 import 'state/state_machine_control_port.dart';
 import 'state/state_machine_controller.dart';
 import 'state/state_trigger_scheduler.dart';
+import 'state/tutorial/bundle_patch_tutorial_source.dart';
+import 'state/tutorial/patch_tutorial_source.dart';
 
 /// High-level façade over the YSE audio engine.
 ///
@@ -111,6 +113,7 @@ class PhiEngine {
     this._engineLogSource = const NoOpEngineLogSource(),
     this._telemetryInterval = const Duration(milliseconds: 50),
     this._audioRecoverySchedule = AudioDeviceRecovery.defaultSchedule,
+    this._patchTutorialSource = const BundlePatchTutorialSource(),
   }) : _busTap = busTap ?? _gateway.busTap,
        _mirrorBinder = RegistryMirrorBinder(registryMirror) {
     // The registry is the source of truth for the channel set (design §8): the
@@ -186,6 +189,10 @@ class PhiEngine {
   final YseGateway _gateway;
   final SceneRenderer? _sceneRenderer;
   final PatcherGateway? _patcherGateway;
+
+  /// Where the patcher's bundled tutorials are read from (issue #489) — the
+  /// asset bundle in production, an in-memory map in tests.
+  final PatchTutorialSource _patchTutorialSource;
   final MidiGateway? _midiGateway;
   final SynthGateway? _synthGateway;
   final FxGateway? _fxGateway;
@@ -1263,7 +1270,11 @@ class PhiEngine {
         gateway: pg,
         busOptions: patchBusOptions,
         recordCommand: _recordCommand,
+        tutorialSource: _patchTutorialSource,
       )..openFirst();
+      // The tutorial index is an asset read — async, and harmless to miss: the
+      // tutorial buttons simply appear once it lands (issue #489).
+      unawaited(_patchLibrary!.loadTutorials());
     } else {
       library.rebind(
         registry: _mixRegistry,

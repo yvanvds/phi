@@ -52,6 +52,9 @@ List<PhiCommand> buildShellCommands({
   VoidCallback? onDuplicateProject,
   VoidCallback? onRenameProject,
   VoidCallback? onOpenSettings,
+  VoidCallback? onOpenPatcherTutorial,
+  VoidCallback? onExportPatchTutorial,
+  bool Function()? isPatcherReady,
 }) {
   return [
     // Surfaces — one summon per rail identity (design §4, "surface focus/summon"),
@@ -221,6 +224,25 @@ List<PhiCommand> buildShellCommands({
         title: 'Rename Project…',
         category: 'Project',
         invoke: onRenameProject,
+      ),
+    // Patcher tutorials (issue #489) — the browser lives in the patcher
+    // palette; this summons the surface and switches the palette to it.
+    if (onOpenPatcherTutorial != null)
+      PhiCommand(
+        id: 'patcher.openTutorial',
+        title: 'Open Patcher Tutorial…',
+        category: 'Patcher',
+        invoke: onOpenPatcherTutorial,
+        isEnabled: isPatcherReady,
+      ),
+    // Dev-facing authoring: the open patch written in the tutorial format.
+    if (onExportPatchTutorial != null)
+      PhiCommand(
+        id: 'patcher.exportTutorial',
+        title: 'Export Patch as Tutorial…',
+        category: 'Patcher',
+        invoke: onExportPatchTutorial,
+        isEnabled: isPatcherReady,
       ),
     if (onOpenSettings != null)
       PhiCommand(

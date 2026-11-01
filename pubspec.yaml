@@ -41,3 +41,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Bundled patcher tutorials (issue #489): index.json maps an object type to
+  # a slug, `<slug>.phitut.json` holds the tutorial patch.
+  assets:
+    - assets/tutorials/patcher/
