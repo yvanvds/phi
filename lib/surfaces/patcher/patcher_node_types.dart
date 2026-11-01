@@ -15,6 +15,7 @@ import '../../engine/state/gui_value_read.dart';
 import '../../engine/state/node_type_registry.dart';
 import 'nodes/button_node_body.dart';
 import 'nodes/dial_node_body.dart';
+import 'nodes/function_node_body.dart';
 import 'nodes/incdec_node_body.dart';
 import 'nodes/item_list_node_body.dart';
 import 'nodes/kslider_node_body.dart';
@@ -489,7 +490,34 @@ void registerBuiltInPatcherNodes() {
       guiValueRead: GuiValueRead.cells,
     ),
   );
+
+  // ─── libYSE 3.0 breakpoint function (issue #475) ───────────────────────
+  // A `.function`'s GUI value is one `<x> <y> <curve>` cell per point, up to
+  // 1024 of them, so it is polled per cell. Its points are saved with the
+  // patch by the object itself.
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gFunction,
+      defaultSize: _functionSize,
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [
+        PortSpec(kind: PatchPortKind.control, label: 'y'),
+        PortSpec(kind: PatchPortKind.control, label: 'ramp'),
+        PortSpec(kind: PatchPortKind.control, label: 'dump'),
+      ],
+      buildBody: (ctx, node, controller) =>
+          FunctionNodeBody(node: node, controller: controller),
+      readsGuiValue: true,
+      guiValueRead: GuiValueRead.cells,
+    ),
+  );
 }
+
+/// A `.function` editor's size at creation (issue #475): wide enough to draw
+/// an envelope into, a Max-ish 200 by 100.
+const Size _functionSize = Size(200, 100);
 
 /// A `.matrixctrl` cell's side at creation (issue #474).
 const double _gridCellSide = 14;

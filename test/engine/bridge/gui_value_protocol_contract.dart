@@ -545,6 +545,140 @@ void guiValueProtocolContract(
     expect(numbers(gateway.guiValue(inst, cell).split(' ')), [1, 2, 0]);
   });
 
+  // ─── the breakpoint function (issue #475) ─────────────────────────────
+
+  List<List<num?>> pointsOf(int handle) => [
+    for (final cell in cellsOf(handle)) numbers(cell.split(' ')),
+  ];
+
+  test('a .function holds a sorted <x> <y> <curve> cell per point', () {
+    final fn = gateway.createObject(inst, Obj.gFunction, args: '8 0 2');
+    expect(gateway.guiValueCount(inst, fn), 0, reason: 'starts empty');
+    expect(gateway.guiValue(inst, fn), 'clear');
+    expect(gateway.guiValueIsSettable(inst, fn), isTrue);
+
+    // Two numbers add a point, in x order, y bounded, curve 0.
+    gateway.sendList(inst, fn, 0, '500 1.5');
+    gateway.sendList(inst, fn, 0, '0 0.25');
+    gateway.sendList(inst, fn, 0, '250 9');
+    expect(pointsOf(fn), [
+      [0, 0.25, 0],
+      [250, 2, 0],
+      [500, 1.5, 0],
+    ]);
+
+    // The cell write is `set <i> <x> <y>`, keeping the curve; a point at an
+    // existing x replaces it.
+    gateway.sendMessage(inst, fn, 0, 'setcurve 2 0.5');
+    expect(gateway.setGuiValueAt(inst, fn, 2, '750 1'), isTrue);
+    expect(pointsOf(fn).last, [750, 1, 0.5]);
+    expect(gateway.setGuiValueAt(inst, fn, 3, '1 1'), isFalse);
+    gateway.sendList(inst, fn, 0, '250 0.5');
+    expect(pointsOf(fn)[1], [250, 0.5, 0]);
+
+    // `clear <i>` removes one point, `clear` all of them.
+    gateway.sendMessage(inst, fn, 0, 'clear 1');
+    expect(pointsOf(fn), [
+      [0, 0.25, 0],
+      [750, 1, 0.5],
+    ]);
+    gateway.sendMessage(inst, fn, 0, 'clear');
+    expect(gateway.guiValueCount(inst, fn), 0);
+  });
+
+  test('a .function takes its whole state back and refuses a point past its '
+      'capacity', () {
+    final fn = gateway.createObject(inst, Obj.gFunction, args: '2');
+    expect(gateway.restoreGuiValue(inst, fn, '100 0.5 -0.5 0 0.25 0'), isTrue);
+    expect(pointsOf(fn), [
+      [0, 0.25, 0],
+      [100, 0.5, -0.5],
+    ]);
+    gateway.sendList(inst, fn, 0, '50 1');
+    expect(gateway.guiValueCount(inst, fn), 2, reason: 'the store is full');
+
+    final saved = gateway.guiValue(inst, fn);
+    gateway.sendMessage(inst, fn, 0, 'clear');
+    gateway.restoreGuiValue(inst, fn, saved);
+    expect(pointsOf(fn), [
+      [0, 0.25, 0],
+      [100, 0.5, -0.5],
+    ]);
+  });
+
+  test('a .function answers an x on outlet 0, a bang with its ramp on outlet '
+      '1, and dump on outlet 2', () {
+    final fn = gateway.createObject(inst, Obj.gFunction);
+    final y = listen(fn, 0, Obj.gFloat);
+    final ramp = listen(fn, 1, Obj.gList);
+    final dump = listen(fn, 2, Obj.gList);
+    gateway.restoreGuiValue(inst, fn, '0 0 0 100 1 0 300 0.5 0');
+
+    gateway.sendFloat(inst, fn, 0, 50);
+    expect(num.parse(gateway.guiValue(inst, y)), 0.5);
+    gateway.sendInt(inst, fn, 0, 200);
+    expect(num.parse(gateway.guiValue(inst, y)), 0.75);
+    gateway.sendFloat(inst, fn, 0, 1000);
+    expect(num.parse(gateway.guiValue(inst, y)), 0.5, reason: 'past the end');
+    gateway.sendMessage(inst, fn, 0, 'nth 1');
+    expect(num.parse(gateway.guiValue(inst, y)), 1);
+
+    // A curve bends the query, not the ramp.
+    gateway.sendMessage(inst, fn, 0, 'setcurve 1 0.5');
+    gateway.sendFloat(inst, fn, 0, 50);
+    expect(num.parse(gateway.guiValue(inst, y)), closeTo(0.125, 1e-4));
+
+    gateway.sendBang(inst, fn, 0);
+    expect(numbers(gateway.guiValue(inst, ramp).split(' ')), [
+      0,
+      0,
+      1,
+      100,
+      0.5,
+      200,
+    ]);
+
+    gateway.sendMessage(inst, fn, 0, 'dump');
+    expect(numbers(gateway.guiValue(inst, dump).split(' ')), [2, 300, 0.5, 0]);
+  });
+
+  test('a .function sends nothing on an edit', () {
+    final fn = gateway.createObject(inst, Obj.gFunction);
+    final y = listen(fn, 0, Obj.gFloat);
+    final ramp = listen(fn, 1, Obj.gList);
+    gateway.sendList(inst, fn, 0, '0 1');
+    gateway.sendList(inst, fn, 0, '10 0');
+    gateway.setGuiValueAt(inst, fn, 1, '20 0.5');
+    gateway.sendMessage(inst, fn, 0, 'setcurve 1 0.5');
+    expect(num.tryParse(gateway.guiValue(inst, y)) ?? 0, 0);
+    expect(gateway.guiValue(inst, ramp), isEmpty);
+  });
+
+  test('a .function keeps its points through a dump and a reload', () {
+    final fn = gateway.createObject(inst, Obj.gFunction, args: '16 0 10');
+    gateway.restoreGuiValue(inst, fn, '0 2 0 40 8 0.5 100 0 -0.25');
+    final dump = gateway.dumpJson(inst);
+
+    final copy = gateway.createInstance();
+    gateway.parseJson(copy, dump);
+    final reloaded = gateway
+        .enumerate(copy)
+        .objects
+        .firstWhere((o) => o.type == Obj.gFunction)
+        .handleId;
+    expect(
+      [
+        for (var i = 0; i < gateway.guiValueCount(copy, reloaded); i++)
+          numbers(gateway.guiValueAt(copy, reloaded, i).split(' ')),
+      ],
+      [
+        [0, 2, 0],
+        [40, 8, 0.5],
+        [100, 0, -0.25],
+      ],
+    );
+  });
+
   test('an unknown handle answers the empty protocol', () {
     expect(gateway.guiValueCount(inst, 999), 0);
     expect(gateway.guiValueAt(inst, 999, 0), '');

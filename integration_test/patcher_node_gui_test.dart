@@ -5,6 +5,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
 import 'package:phi/design/widgets/fader/phi_fader.dart';
 import 'package:phi/design/widgets/patcher/patch_dial_knob.dart';
+import 'package:phi/design/widgets/patcher/patch_function_graph.dart';
 import 'package:phi/design/widgets/patcher/patch_incdec_stepper.dart';
 import 'package:phi/design/widgets/patcher/patch_keyboard.dart';
 import 'package:phi/design/widgets/patcher/patch_led_lamp.dart';
@@ -29,6 +30,7 @@ import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/bridge/patch_object_descriptor.dart';
 import 'package:phi/engine/bridge/patcher_node_snapshot.dart';
 import 'package:phi/engine/engine.dart';
+import 'package:phi/engine/state/gui_value_read.dart';
 import 'package:phi/engine/state/node_type_registry.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
@@ -1131,6 +1133,182 @@ void main() {
     await tester.pumpAndSettle();
     expect(grid().values[9], 0);
     expect(listShows(), '2 1 0');
+    expect(tester.takeException(), isNull);
+
+    session.dispose();
+    await engine.dispose();
+  });
+  testWidgets('a .function is drawn on the canvas in run mode, bangs its ramp '
+      'into a .line, and keeps its points through a reload (issue #475)', (
+    tester,
+  ) async {
+    final patcherGateway = FakePatcherGateway()
+      // The engine's `.line`: target-and-time in, the ramp out.
+      ..topologyOverrides[Obj.gLine] = const PatcherNodeSnapshot(
+        inputs: 2,
+        outputs: 2,
+        inputKinds: [PatchPortKind.control, PatchPortKind.control],
+        outputKinds: [PatchPortKind.control, PatchPortKind.control],
+      );
+    final engine = PhiEngine(
+      FakeYseGateway(),
+      patcherGateway: patcherGateway,
+      telemetryInterval: const Duration(milliseconds: 20),
+    );
+    final session = SessionState();
+
+    await tester.pumpWidget(PhiApp(engine: engine, session: session));
+    await tester.pumpAndSettle();
+    await tester.tap(railFor(SurfaceId.patcher));
+    await tester.pumpAndSettle();
+
+    // An empty canvas: the demo seed would sit over the control under test.
+    final patcher = engine.patcher;
+    for (final id in patcher.graph.nodes.map((n) => n.id).toList()) {
+      patcher.removeNode(id);
+    }
+    await tester.pumpAndSettle();
+
+    PatchNode gui(String type, Offset position) {
+      final d = NodeTypeRegistry.instance.find(type);
+      return patcher.addNode(
+        desc: NodeDescriptor(
+          type: type,
+          defaultSize: d?.defaultSize,
+          defaultArgs: '',
+          inputs: d?.inputs ?? const [PortSpec(kind: PatchPortKind.control)],
+          outputs: d?.outputs ?? const [PortSpec(kind: PatchPortKind.control)],
+          buildBody: d?.buildBody,
+          readsGuiValue: d?.readsGuiValue ?? false,
+          guiValueRead: d?.guiValueRead ?? GuiValueRead.whole,
+        ),
+        position: position,
+      );
+    }
+
+    final fnNode = gui(Obj.gFunction, const Offset(40, 40));
+    final line = gui(Obj.gLine, const Offset(40, 240));
+    patcher.connect(
+      PatchPortId(nodeId: fnNode.id, side: PatchPortSide.output, index: 1),
+      PatchPortId(nodeId: line.id, side: PatchPortSide.input, index: 0),
+    );
+    await tester.pumpAndSettle();
+
+    // ─── it renders as its editor, at its tuned size ───────────────────────
+    PatchFunctionGraph graph() =>
+        tester.widget<PatchFunctionGraph>(find.byType(PatchFunctionGraph));
+    expect(find.byType(PatchFunctionGraph), findsOneWidget);
+    expect(graph().positions, isEmpty);
+    final rect = tester.getRect(find.byType(PatchFunctionGraph));
+    expect(rect.width / rect.height, closeTo(2, 0.01));
+    expect(tester.takeException(), isNull, reason: 'nothing overflows');
+
+    final handle = patcherGateway.nodes.entries
+        .firstWhere((e) => e.value.type == Obj.gFunction)
+        .key;
+    final lineHandle = patcherGateway.nodes.entries
+        .firstWhere((e) => e.value.type == Obj.gLine)
+        .key;
+    List<String> sentTo() => [
+      for (final c in patcherGateway.calls)
+        for (final verb in const ['sendList', 'sendMessage'])
+          if (c.startsWith('$verb:$handle:0:'))
+            c.substring('$verb:$handle:0:'.length),
+    ];
+    Offset plotAt(double x, double y) {
+      final box = tester.getRect(find.byType(PatchFunctionGraph));
+      const inset = PatchFunctionGraph.inset;
+      return box.topLeft +
+          Offset(
+            inset + x * (box.width - 2 * inset),
+            inset + (1 - y) * (box.height - 2 * inset),
+          );
+    }
+
+    Future<void> click(double x, double y) async {
+      await tester.tapAt(plotAt(x, y));
+      // Past the double-click window, so each click stands alone.
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+    }
+
+    // ─── edit mode: a press on the editor moves the node, writes nothing ───
+    patcherGateway.calls.clear();
+    final before = fnNode.position;
+    await tester.dragFrom(plotAt(0.5, 0.5), const Offset(24, 24));
+    await tester.pumpAndSettle();
+    expect(fnNode.position, isNot(before), reason: 'the drag moved the node');
+    expect(sentTo(), isEmpty);
+    expect(graph().positions, isEmpty);
+
+    // ─── run mode: draw a three-point envelope ─────────────────────────────
+    await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<PatcherCanvas>(find.byType(PatcherCanvas)).mode,
+      PatchCanvasMode.run,
+    );
+
+    patcherGateway.calls.clear();
+    await click(0, 0);
+    await click(1, 1);
+    await click(0.5, 0.5);
+    expect(sentTo(), ['0 0', '1000 1', '500 0.5']);
+    expect(graph().positions, [(0.0, 0.0), (0.5, 0.5), (1.0, 1.0)]);
+
+    // Drag the middle point left.
+    final drag = await tester.startGesture(plotAt(0.5, 0.5));
+    await drag.moveTo(plotAt(0.4, 0.5));
+    await tester.pump();
+    await drag.moveTo(plotAt(0.25, 0.5));
+    await tester.pump();
+    await drag.up();
+    await tester.pumpAndSettle();
+    expect(sentTo().last, 'set 1 250 0.5');
+    expect(graph().positions[1], (0.25, 0.5));
+
+    // Alt-drag the rising segment into it upwards: an early, negative curve.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    final bendAt = plotAt(0.6, 0.5);
+    final bend = await tester.startGesture(bendAt);
+    await bend.moveTo(bendAt - const Offset(0, 50));
+    await tester.pump();
+    await bend.up();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    await tester.pumpAndSettle();
+    expect(sentTo().last, 'setcurve 2 -0.5');
+    expect(graph().curves, [0, 0, -0.5]);
+
+    // A fourth point, removed again with Delete — the key reaches the body
+    // through the canvas, and does not delete the node.
+    await click(0.75, 0.25);
+    expect(sentTo().last, '750 0.25');
+    expect(graph().positions, hasLength(4));
+    await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+    await tester.pumpAndSettle();
+    expect(sentTo().last, 'clear 2');
+    expect(graph().positions, hasLength(3));
+    expect(patcher.graph.nodes, hasLength(2), reason: 'the node is still here');
+
+    // ─── a bang sends the ramp into the .line ──────────────────────────────
+    patcherGateway.calls.clear();
+    patcher.setControlBang(fnNode.id, inlet: 0);
+    await tester.pumpAndSettle();
+    expect(
+      patcherGateway.calls,
+      contains('sendList:$lineHandle:0:0 0 0.5 250 1 750'),
+    );
+
+    // ─── the points survive save and reload ────────────────────────────────
+    // Duplicating flushes the live dump to the patch's payload and opens the
+    // copy from it, as a reload does.
+    final library = engine.patchLibrary;
+    library.duplicate(library.openAddress!);
+    await tester.pumpAndSettle();
+    expect(library.openAddress!.name, endsWith('_copy'));
+    expect(find.byType(PatchFunctionGraph), findsOneWidget);
+    expect(graph().positions, [(0.0, 0.0), (0.25, 0.5), (1.0, 1.0)]);
+    expect(graph().curves, [0, 0, -0.5]);
     expect(tester.takeException(), isNull);
 
     session.dispose();

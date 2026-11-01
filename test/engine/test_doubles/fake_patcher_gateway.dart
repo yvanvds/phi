@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:ui';
 
+import 'package:phi/domain/patcher/function_args.dart';
+import 'package:phi/domain/patcher/function_point.dart';
 import 'package:phi/domain/patcher/item_list_args.dart';
 import 'package:phi/domain/patcher/matrixctrl_args.dart';
 import 'package:phi/domain/patcher/multislider_args.dart';
@@ -266,6 +268,12 @@ class FakePatcherGateway implements PatcherGateway {
     }
     // `gMatrixCtrl` takes lists and bangs only, so a bare number is dropped.
     if (node.isGrid) return;
+    // A `.function` reads a number as an x and answers its y (issue #475).
+    if (node.isFunction) {
+      if (inlet == 0) node.queryFunction(value);
+      _emitFunction(instanceId, handleId);
+      return;
+    }
     // Model the engine's uncoerced inlet dispatch (issue #439): `gToggle`
     // registers int and bang handlers but **no float one**, so a float sent at
     // it lands nowhere — the real engine drops it silently. The fake dropping
@@ -303,6 +311,11 @@ class FakePatcherGateway implements PatcherGateway {
       return;
     }
     if (node.isGrid) return;
+    if (node.isFunction) {
+      if (inlet == 0) node.queryFunction(value.toDouble());
+      _emitFunction(instanceId, handleId);
+      return;
+    }
     if (inlet != 0) return;
     if (node.receiveSwitchNumber(value.toDouble())) return;
     // The engine's `gToggle` displays its state as `on`/`off`, not as a
@@ -332,6 +345,9 @@ class FakePatcherGateway implements PatcherGateway {
     // A `.matrixctrl` sends every cell.
     if (inlet == 0 && node.isGrid) node.sendWholeGrid();
     _emitGrid(instanceId, handleId);
+    // A `.function` sends its ramp.
+    if (inlet == 0 && node.isFunction) node.sendRamp();
+    _emitFunction(instanceId, handleId);
     // A latching `.led` / `.textbutton` flips on a bang; a momentary one
     // takes it as a press (`gLabelSwitchBase`).
     if (inlet == 0 && node.isLabelSwitch) {
@@ -366,6 +382,7 @@ class FakePatcherGateway implements PatcherGateway {
     }
     _emitMusical(instanceId, handleId, inlet: inlet);
     _emitGrid(instanceId, handleId);
+    _emitFunction(instanceId, handleId);
   }
 
   @override
@@ -382,6 +399,7 @@ class FakePatcherGateway implements PatcherGateway {
     }
     _emitMusical(instanceId, handleId, inlet: inlet);
     _emitGrid(instanceId, handleId);
+    _emitFunction(instanceId, handleId);
   }
 
   /// A number landing on an item list (`gItemListBase::FloatIn`): on inlet 0
@@ -478,6 +496,26 @@ class FakePatcherGateway implements PatcherGateway {
       for (final c in [...inst.cables]) {
         if (c.fromHandleId == handleId && c.outlet == outlet) {
           sendList(instanceId, c.toHandleId, c.inlet, list);
+        }
+      }
+    }
+  }
+
+  /// Model what a `.function` sent after a message, in order, delivered down
+  /// every cable from its outlet: a y as a float on outlet 0 (a query or
+  /// `nth`), the ramp list on outlet 1 (a bang), a point per list on outlet 2
+  /// (`dump`). Edits send nothing (issue #475).
+  void _emitFunction(int instanceId, int handleId) {
+    final inst = _inst(instanceId);
+    final node = inst.nodes[handleId];
+    if (node == null || !node.isFunction) return;
+    for (final (outlet, send) in node.takeFunctionSends()) {
+      for (final c in [...inst.cables]) {
+        if (c.fromHandleId != handleId || c.outlet != outlet) continue;
+        if (send is double) {
+          sendFloat(instanceId, c.toHandleId, c.inlet, send);
+        } else {
+          sendList(instanceId, c.toHandleId, c.inlet, '$send');
         }
       }
     }
@@ -580,6 +618,9 @@ class FakePatcherGateway implements PatcherGateway {
     // A `.matrixctrl` is re-shaped from its new arguments, every cell cleared
     // (`gMatrixCtrl::ShapeGrid`).
     if (node.isGrid) node.reshapeGrid();
+    // A `.function` is rebuilt from its new arguments with an empty store
+    // (`gFunction::ShapeStore`).
+    if (node.isFunction) node.reshapeFunction();
   }
 
   /// A whole value renders without a trailing `.0` (`3` not `3.0`), matching
@@ -647,6 +688,9 @@ class FakePatcherGateway implements PatcherGateway {
             if (entry.value.position != null) 'x': entry.value.position!.dx,
             if (entry.value.position != null) 'y': entry.value.position!.dy,
             if (entry.value.gui.isNotEmpty) 'gui': entry.value.gui,
+            // What the object holds beyond its arguments, under `state` as
+            // libYSE nests it (`DumpState`): a `.function`'s points.
+            'state': ?entry.value.dumpState(),
           },
       ],
       'cables': [
@@ -694,6 +738,8 @@ class FakePatcherGateway implements PatcherGateway {
           for (final e in gui.entries) '${e.key}': '${e.value}',
         });
       }
+      final state = raw['state'];
+      if (state is Map) node.restoreState(state);
       inst.nodes[id] = node;
       if (type == Obj.gReceive && args.isNotEmpty) inst.receivers.add(args);
       // Keep freshly-minted ids clear of the reconstructed ones.
@@ -766,6 +812,18 @@ class FakePatcherGateway implements PatcherGateway {
           outputs: 2,
           inputKinds: [PatchPortKind.control],
           outputKinds: [PatchPortKind.control, PatchPortKind.control],
+        );
+      // The function in; a y, the ramp and the dump out (issue #475).
+      case Obj.gFunction:
+        return const PatcherNodeSnapshot(
+          inputs: 1,
+          outputs: 3,
+          inputKinds: [PatchPortKind.control],
+          outputKinds: [
+            PatchPortKind.control,
+            PatchPortKind.control,
+            PatchPortKind.control,
+          ],
         );
       // The grid in; changed cells and a queried line out (issue #474).
       case Obj.gMatrixctrl:
@@ -950,7 +1008,9 @@ class FakeNode {
   /// Live GUI display value (yse's `guiValue`): every cell, space-separated.
   /// Updated by a `sendFloat` into inlet 0; a test can also set it directly to
   /// simulate a cable-driven change, which makes it a one-cell state.
-  String get guiValue => guiCells.join(' ');
+  String get guiValue =>
+      // An empty `.function` spells its state as the message that empties it.
+      isFunction && guiCells.isEmpty ? 'clear' : guiCells.join(' ');
   set guiValue(String value) => guiCells = [value];
 
   /// Whether this is a `.umenu` / `.radiogroup` / `.tab` (`gItemListBase`).
@@ -1105,6 +1165,10 @@ class FakeNode {
     }
     if (isGrid) {
       _receiveGridList(list);
+      return;
+    }
+    if (isFunction) {
+      _receiveFunctionList(list);
       return;
     }
     if (type == Obj.gIncdec && _stepIncdec(list.trim())) return;
@@ -1624,6 +1688,202 @@ class FakeNode {
     _sendCell(at);
   }
 
+  // ─── the breakpoint function (issue #475) ───────────────────────────
+
+  /// Whether this is a `.function`: one `<x> <y> <curve>` cell per point.
+  bool get isFunction => type == Obj.gFunction;
+
+  /// The function's capacity and y range, from its creation arguments.
+  FunctionArgs get functionArgs => FunctionArgs.parse(args);
+
+  /// The points as stored, ascending by x — bounded on the way in, as
+  /// `gFunction::StorePoint` keeps them.
+  final List<(double, double, double)> _function = [];
+
+  /// What the function has sent and the gateway has not yet delivered, as
+  /// (outlet, value): a double for outlet 0's float, a list string otherwise.
+  final List<(int, Object)> _functionSends = [];
+
+  /// The function's sends since the last call, in order.
+  List<(int, Object)> takeFunctionSends() {
+    final sends = [..._functionSends];
+    _functionSends.clear();
+    return sends;
+  }
+
+  /// `ShapeStore`: an empty store for the new arguments.
+  void reshapeFunction() {
+    _function.clear();
+    _publishFunction();
+  }
+
+  void _publishFunction() {
+    guiCells = [
+      for (final (x, y, c) in _function)
+        '${_spell(x)} ${_spell(y)} ${_spell(c)}',
+    ];
+  }
+
+  /// `BoundCurve`: into [-1, 1], a NaN read as 0.
+  static double _boundCurve(double c) {
+    if (c.isNaN) return 0;
+    return c.clamp(-1.0, 1.0);
+  }
+
+  /// `StorePoint`: replace the point at exactly [x], or insert in order.
+  /// Refused when the store is full. [x] is already sanitised.
+  void _storePoint(double x, double y, double curve) {
+    var at = 0;
+    while (at < _function.length && _function[at].$1 < x) {
+      at++;
+    }
+    final point = (x, _bound(y, functionArgs.range), curve);
+    if (at < _function.length && _function[at].$1 == x) {
+      _function[at] = point;
+      return;
+    }
+    if (_function.length >= functionArgs.capacity) return;
+    _function.insert(at, point);
+  }
+
+  /// `SanitizeX`: a negative x folds onto 0, a NaN is refused (null).
+  static double? _sanitizeX(double x) {
+    if (x.isNaN) return null;
+    return x < 0 ? 0 : x;
+  }
+
+  /// `Query`: the curved y between the points either side of [x], or the
+  /// nearest end's y outside them; nothing for an empty function.
+  void queryFunction(double x) {
+    if (x.isNaN || _function.isEmpty) return;
+    double y;
+    if (x <= _function.first.$1) {
+      y = _function.first.$2;
+    } else if (x >= _function.last.$1) {
+      y = _function.last.$2;
+    } else {
+      var hi = 0;
+      while (_function[hi].$1 < x) {
+        hi++;
+      }
+      final (lx, ly, _) = _function[hi - 1];
+      final (rx, ry, rc) = _function[hi];
+      y = ly + FunctionPoint.shape((x - lx) / (rx - lx), rc) * (ry - ly);
+    }
+    _functionSends.add((0, y));
+  }
+
+  /// `EmitRamp`: `<y> <time>` per point, the first time 0 and each later one
+  /// the distance in x from the point before, out outlet 1.
+  void sendRamp() {
+    if (_function.isEmpty) return;
+    final parts = <String>[];
+    for (var i = 0; i < _function.length; i++) {
+      final delta = i == 0 ? 0.0 : _function[i].$1 - _function[i - 1].$1;
+      parts
+        ..add(_spell(_function[i].$2))
+        ..add(_spell(delta));
+    }
+    _functionSends.add((1, parts.join(' ')));
+  }
+
+  /// `gFunction::ListIn`: `set`, `setcurve`, `nth`, `clear`, `dump`, then
+  /// two numbers as a new point or 3N as the whole state. Edits send nothing.
+  void _receiveFunctionList(String list) {
+    final tokens = list.trim().split(RegExp(r'\s+'));
+    if (tokens.first.isEmpty) return;
+    final keyword = tokens.first;
+    final args = [for (final t in tokens.skip(1)) ?double.tryParse(t)];
+    int? index(double n) => n >= 0 ? n.truncate() : null;
+    switch (keyword) {
+      case 'set':
+        if (args.length < 3) return;
+        final at = index(args[0]);
+        final x = _sanitizeX(args[1]);
+        if (at == null || x == null || at >= _function.length) return;
+        final curve = args.length > 3 ? _boundCurve(args[3]) : _function[at].$3;
+        _function.removeAt(at);
+        _storePoint(x, args[2], curve);
+        _publishFunction();
+        return;
+      case 'setcurve':
+        if (args.length < 2) return;
+        final at = index(args[0]);
+        if (at == null || at >= _function.length) return;
+        final (x, y, _) = _function[at];
+        _function[at] = (x, y, _boundCurve(args[1]));
+        _publishFunction();
+        return;
+      case 'nth':
+        if (args.isEmpty) return;
+        final at = index(args[0]);
+        if (at == null || at >= _function.length) return;
+        _functionSends.add((0, _function[at].$2));
+        return;
+      case 'clear':
+        if (args.isEmpty) {
+          _function.clear();
+        } else {
+          final at = index(args[0]);
+          if (at == null || at >= _function.length) return;
+          _function.removeAt(at);
+        }
+        _publishFunction();
+        return;
+      case 'dump':
+        for (var i = 0; i < _function.length; i++) {
+          final (x, y, c) = _function[i];
+          _functionSends.add((2, '$i ${_spell(x)} ${_spell(y)} ${_spell(c)}'));
+        }
+        return;
+    }
+    final numbers = [for (final t in tokens) ?double.tryParse(t)];
+    if (numbers.length == 2) {
+      final x = _sanitizeX(numbers[0]);
+      if (x == null) return;
+      _storePoint(x, numbers[1], 0);
+      _publishFunction();
+      return;
+    }
+    if (numbers.length >= 3 && numbers.length % 3 == 0) {
+      _function.clear();
+      for (var i = 0; i < numbers.length; i += 3) {
+        final x = _sanitizeX(numbers[i]);
+        if (x == null) continue;
+        _storePoint(x, numbers[i + 1], _boundCurve(numbers[i + 2]));
+      }
+      _publishFunction();
+    }
+  }
+
+  /// What the object saves beyond its arguments (`DumpState`), or null when
+  /// it holds nothing: a `.function`'s points.
+  Map<String, Object?>? dumpState() {
+    if (!isFunction || _function.isEmpty) return null;
+    return {
+      'points': [
+        for (final (x, y, c) in _function) {'x': x, 'y': y, 'curve': c},
+      ],
+    };
+  }
+
+  /// `RestoreState`: refill through the same sorted, bounded store.
+  void restoreState(Map<Object?, Object?> state) {
+    if (!isFunction) return;
+    _function.clear();
+    final points = state['points'];
+    if (points is List) {
+      for (final p in points) {
+        if (p is! Map) continue;
+        double read(String key) => (p[key] as num?)?.toDouble() ?? 0;
+        final x = _sanitizeX(read('x'));
+        if (x == null) continue;
+        _storePoint(x, read('y'), _boundCurve(read('curve')));
+      }
+    }
+    _publishFunction();
+  }
+
   /// Objects whose GUI value the engine does not accept back.
   static const Set<String> _unsettable = {Obj.gButton, Obj.gMessage, Obj.gList};
 
@@ -1652,6 +1912,9 @@ class FakeNode {
       case Obj.gMultislider:
         final size = int.tryParse(args.trim().split(RegExp(r'\s+')).first);
         return List.filled(size ?? 8, '0');
+      // A fresh `.function` holds no points, so it has no cells.
+      case Obj.gFunction:
+        return const [];
     }
     return [''];
   }

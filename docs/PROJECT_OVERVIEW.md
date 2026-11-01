@@ -2845,6 +2845,26 @@ main + app          (orchestration)
   `matrixctrl_node_body_test.dart`, and a `patcher_node_gui` integration case
   (a cell clicked in run mode reaches a `.l` as `2 1 1`; inert in edit mode; a
   painted row; a cable-driven change repaints).
+- **Breakpoint editor** (issue #475) — `.function` (`FunctionNodeBody` over
+  `PatchFunctionGraph`, the points joined by their curved segments). 200 by 100
+  at creation, polled **per cell**, one `<x> <y> <curve>` cell per point in x
+  order. The y axis is the `points minimum maximum` args' range
+  (`FunctionArgs`), the x axis the domain the points span (0 to the last x,
+  1000 while none lies past 0), and values snap to a power-of-ten step no finer
+  than a pixel (`FunctionView`). In run mode a press on empty space adds a
+  point (`<x> <y>`) and drags it on, a drag moves a point between its
+  neighbours (`set <i> <x> <y>`, curve kept), an Alt-drag bends a segment
+  (`setcurve <i> <c>`), and a double-click or Delete removes the taken point
+  (`clear <i>`) — `FunctionGesture`, pure Dart. Edits are silent and not
+  journaled (run-mode performance values); the object saves its points under
+  its dump's `state`. `FakePatcherGateway` models the store (sorted, bounded,
+  capacity, `set` / `setcurve` / `nth` / `clear` / `dump`, the x query on
+  outlet 0, the ramp on outlet 1, `state` in the dump), pinned to the engine by
+  the shared contract. Covered by domain unit tests,
+  `function_node_body_test.dart`, and a `patcher_node_gui` integration case (a
+  three-point envelope drawn, moved, bent and edited in run mode bangs
+  `0 0 0.5 250 1 750` into a `.line`; inert in edit mode; Delete reaches the
+  body through the canvas; the points survive a flush and reload).
 - **Keyboard range and velocity editing** (issue #515) — a selected `.kslider`
   gets a KEYBOARD section in the reference panel (`PatchKeyboardSettings`,
   `lib/surfaces/patcher/reference/`): the range shown as `C3 – C6`

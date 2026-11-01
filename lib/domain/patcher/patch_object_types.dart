@@ -88,6 +88,10 @@ abstract final class PatchObjectTypes {
   /// `<column> <row> <value>` (issue #474).
   static const String gMatrixctrl = '.matrixctrl';
 
+  /// `Obj.gFunction` — a breakpoint function: sorted `<x> <y> <curve>`
+  /// points, answered by x and banged out as a ramp (issue #475).
+  static const String gFunction = '.function';
+
   /// Every id above, for the drift guard.
   static const List<String> all = [
     dSine,
@@ -113,5 +117,6 @@ abstract final class PatchObjectTypes {
     gKslider,
     gNslider,
     gMatrixctrl,
+    gFunction,
   ];
 }
