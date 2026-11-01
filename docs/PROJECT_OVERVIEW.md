@@ -2721,6 +2721,130 @@ main + app          (orchestration)
   `patcher_retype_object` integration test through the real app (`sine 440` →
   `saw 300` keeps both cables and the reference panel follows; retyping to a
   `.slider` drops both and names them; `Ctrl+Z` puts it all back).
+- **GUI value protocol in the patcher gateway** (issue #469, prerequisite for
+  the libYSE 3.x control bodies #470–#473) — every new GUI control keeps its
+  state as a list of **cells**, so `PatcherGateway` (real + fake) grows
+  `guiValueCount` / `guiValueAt` / `guiValueIsSettable`, `restoreGuiValue` /
+  `setGuiValueAt` (both return whether they were sent: an unsettable object, an
+  out-of-range cell or an unknown handle sends nothing instead of throwing), and
+  `sendList` / `sendMessage` (a selector such as `inc` or `store 3`, the same
+  native list call). The engine's **one read form per object per frame** rule
+  is a `NodeDescriptor.guiValueRead` (`GuiValueRead.whole` | `.cells`,
+  `lib/engine/state/gui_value_read.dart`): `PatcherController.refreshGuiValues`
+  polls a `cells` node by count + cells only, limited to the window a large
+  control repaints (`setGuiCellWindow`), and `guiValueOf` answers such a node
+  from those cells rather than reading the whole state a second time. Controller
+  wrappers: `guiValueCellsOf` / `guiValueCountOf` / `guiValueCellOf`,
+  `guiValueIsSettableOf`, `restoreGuiValueOf`, `setGuiValueCell`,
+  `setControlList`, `sendControlMessage`. No UI yet. Covered by one shared
+  contract (`test/engine/bridge/gui_value_protocol_contract.dart`) run against
+  both the real engine and `FakePatcherGateway` (an `.rslider` round-trips
+  `setGuiValueAt` → `guiValueAt`, a list resizes a `.multislider`, `.b` refuses
+  writes, ...), an engine-only selector test (`.incdec` `inc`/`dec`), and
+  controller unit tests for the per-cell poll, the window and the wrappers.
+- **Single-value control bodies** (issue #470, on the #469 protocol) — six
+  libYSE 3.0 GUI objects stop rendering as object boxes and become their
+  controls, operable in run mode and followed through the GUI poll: `.dial`
+  (`PatchDialKnob`; a vertical drag `sendFloat`s the 0–1 position, the readout
+  is the value it sends, mapped by the pure-Dart `DialMapping` mirror of the
+  engine's `MapRange` because no read reports it), `.incdec`
+  (`PatchIncdecStepper`; top half `inc`, bottom half `dec` via
+  `sendControlMessage`), `.led` / `.textbutton` (one `LabelSwitchNodeBody`
+  with `.led` / `.textButton` constructors over `PatchLedLamp` /
+  `PatchTextButton`; `LabelSwitchArgs` reads `[momentary] label…`; latching
+  clicks `sendInt` 1/0, momentary presses `sendInt` 1 while held), `.textedit`
+  (`PatchTextEditBox`; the number box's focus rules, Enter commits through
+  `restoreGuiValueOf`) and `.l` (`PatchListBox`; shows its live stored list, a
+  tap bangs it). **The pattern for every later control body (#471–#473):** a
+  `PatchObjectTypes` id plus its drift-guard line, a visual-only `Patch…`
+  widget in `lib/design/widgets/patcher/`, a `…NodeBody` in
+  `lib/surfaces/patcher/nodes/` that writes through the controller and follows
+  the engine with a `GuiValueLink`, and one `register(...)` block in
+  `patcher_node_types.dart`. `FakePatcherGateway` now models `.incdec`
+  `inc`/`dec`, a `.dial`'s clamp, a latching `.led`'s bang flip and a
+  `.textedit`'s initial text, all pinned to the engine by the shared contract.
+  Covered by domain unit tests, widget tests per body
+  (`test/surfaces/patcher/nodes/single_value_control_bodies_test.dart`) and the
+  `patcher_node_gui` integration test (all six render in the real app; a
+  `.dial` and a `.led` operate in run mode, stay inert in edit mode, and follow
+  values driven from the graph).
+- **Selection control bodies** (issue #471) — `.umenu`, `.radiogroup` and
+  `.tab`, one engine object (`gItemListBase`) drawn three ways, so one
+  `ItemListNodeBody` (`.menu` / `.radioGroup` / `.tabs` constructors, an
+  `ItemListFace`) over `PatchMenuBox` (a dense `PhiSelect`, which gained
+  `dense`, `isSelected`, `keepOpenOnSelect` and `displayLabel` for it),
+  `PatchRadioGroup` and `PatchTabStrip`. `ItemListArgs` (domain) mirrors the
+  engine's `ShapeItems` — `[multi] items…` or a single count — and reads the
+  GUI value (the index, or one flag per item with `multi`). A pick `sendInt`s
+  the item number (selects it, or toggles it with `multi`) and re-reads the
+  engine's answer. **`NodeDescriptor.sizeForArgs`** lets a GUI control's box
+  follow its creation arguments: the controller sizes from it at creation and
+  re-measures from it on every `setParams` (a radio group is a row per item, a
+  tab strip a tab per item, a menu as wide as its longest name).
+  `FakePatcherGateway` models the item list (touch/toggle, names, `set`, whole
+  state, rebuild on `setParams`, and the three outlets delivered down cables),
+  pinned to the engine by the shared contract. Covered by `ItemListArgs` unit
+  tests, `item_list_node_bodies_test.dart`, a `PhiSelect` test, and a
+  `patcher_node_gui` integration case (all three render; picks in run mode, a
+  `.umenu` pick reaches a connected `.i` through outlet 0; inert in edit mode;
+  a cable-driven selection and a retype both show).
+- **Multi-value slider bodies** (issue #472) — `.rslider`
+  (`RangeSliderNodeBody` over `PatchRangeBar`, an upright range bar),
+  `.xyslider` (`XySliderNodeBody` over `PatchXyPad`, a pad with a crosshair
+  puck) and `.multislider` (`MultisliderNodeBody` over `PatchSliderBank`, a
+  bank of upright bars). All three are polled **per cell**
+  (`GuiValueRead.cells`) and read through the controller's cell cache; their
+  cells are real values inside the object's bound parameters, which
+  `SliderRange` (domain) maps to and from 0–1 positions. The drag maths are
+  pure Dart: `RangeSliderGesture` (grab an end, or the middle to slide the
+  range) and `MultisliderStroke` (a swipe writes every crossed cell along the
+  line). The range and the pad send both values as one list
+  (`setControlList`); the bank writes each cell with `set <i> <v>`
+  (`setGuiValueCell`), and its bar count follows the live cell count, so a
+  list of another length re-lays it. `MultisliderArgs` reads `size minimum
+  maximum`; a `.multislider`'s box follows `size` through `sizeForArgs`.
+  `FakePatcherGateway` models bounding, `.rslider`'s sorted ends, the cold
+  inlet 1, the bank's hidden tail, `fetch`, and every outlet delivered down
+  cables, pinned to the engine by the shared contract. Covered by domain unit
+  tests, `multi_value_slider_bodies_test.dart`, and a `patcher_node_gui`
+  integration case (a `.multislider` drawn in run mode sends its bank down
+  outlet 0 into a `.l`; inert in edit mode; a cable-driven resize re-lays it).
+- **Keyboard and staff bodies** (issue #473) — `.kslider`
+  (`KsliderNodeBody` over `PatchKeyboard`, a horizontal piano keyboard) and
+  `.nslider` (`NsliderNodeBody` over `PatchStaff`, a grand staff with one note
+  head, its accidental, ledger lines and an ottava mark past the window). Both
+  are polled **per cell**: the keyboard's 128 velocity cells only across the
+  keys it shows (`setGuiCellWindow`), the staff's pitch and accidental. The
+  keyboard's visible range and an optional fixed press velocity are decoration
+  (`PatchGuiProperty.keyLow` / `keyHigh` / `keyVelocity`), not engine state. A
+  press sends `set <pitch> <velocity>` (louder lower down the key), a slide
+  releases and replays (`KeyboardGesture`), a lift sends velocity 0; held keys
+  light from the cells, so cable-driven notes show. Dragging the staff sends
+  the pitch as an int inside `minimum maximum` (`StaffDrag`, `NsliderArgs`).
+  Geometry is pure Dart: `KeyboardLayout`, `StaffNote`, and
+  `domain/midi/midi_pitch.dart` (`MidiPitch`: black keys, diatonic staff step).
+  `FakePatcherGateway` models both objects (stored velocity, `set`, `clear`,
+  the 128-number restore, spelling, bounds, velocity-before-pitch and
+  accidental-before-pitch sends), pinned to the engine by the shared contract.
+  Covered by domain unit tests, `keyboard_staff_bodies_test.dart`, and a
+  `patcher_node_gui` integration case (a key pressed in run mode sends pitch
+  and velocity into two `.i`; inert in edit mode; a staff drag reaches a `.i`;
+  cable-driven notes show on both).
+- **Keyboard range and velocity editing** (issue #515) — a selected `.kslider`
+  gets a KEYBOARD section in the reference panel (`PatchKeyboardSettings`,
+  `lib/surfaces/patcher/reference/`): the range shown as `C3 – C6`
+  (`MidiPitch.name`), shifted, or its low / high end moved, an octave at a
+  time (`KeyboardLayout.shifted` / `movedLow` / `movedHigh`, held inside MIDI
+  and to at least an octave), and a depth / fixed velocity switch with ±1 / ±10
+  steps. The controller journals them (`setKeyboardRange` through the new
+  multi-key `SetPatchGuiPropertiesCommand`, so a shift is one undo;
+  `setKeyboardVelocity`); the default range is stored as none. Focus goes back
+  to the canvas after each step. **`NodeDescriptor.sizeForGui`** sizes a GUI
+  control from its decoration ahead of `sizeForArgs`, on reload and on every
+  decoration change: a keyboard stays 12 px per white key. Covered by domain
+  unit tests, `patcher_controller_keyboard_test.dart`, reference-panel widget
+  tests, and a `patcher_node_gui` integration case (select, shift and widen,
+  the box follows, undo / redo, a fixed velocity played in run mode).
 - Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
   switched off for now, issue #447)
 

@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../domain/patcher/patch_node.dart';
 import '../../domain/patcher/patch_port_kind.dart';
+import 'gui_value_read.dart';
 import 'patcher_controller.dart';
 
 /// How a node body widget is built. Lives in the [NodeDescriptor] so the
@@ -45,8 +46,11 @@ class NodeDescriptor {
     required this.inputs,
     required this.outputs,
     this.defaultSize,
+    this.sizeForArgs,
+    this.sizeForGui,
     this.buildBody,
     this.readsGuiValue = false,
+    this.guiValueRead = GuiValueRead.whole,
   });
 
   /// One of the `Obj.*` string constants from `package:yse`.
@@ -56,6 +60,19 @@ class NodeDescriptor {
   /// edge to edge (issue #381). Null for an object box, which is measured from
   /// its line of text by `PatchObjectBoxMetrics` instead.
   final Size? defaultSize;
+
+  /// A GUI control whose box follows its **creation arguments** — a
+  /// `.radiogroup` as tall as its item count, a `.tab` as wide (issue #471) —
+  /// sizes itself from this instead of [defaultSize], at creation and again on
+  /// every `setParams`. Null for a control of fixed size.
+  final Size Function(String args)? sizeForArgs;
+
+  /// A GUI control whose box follows its **decoration** (`PatchGuiProperty`) —
+  /// a `.kslider` as wide as the keys it shows (issue #515) — sizes itself
+  /// from this, ahead of [sizeForArgs], on a reload and again on every
+  /// decoration change. [gui] is the node's key → value map, empty when it
+  /// carries none. Null for a control whose decoration never moves its box.
+  final Size Function(Map<String, String> gui)? sizeForGui;
 
   /// Creation argument string passed to `Patcher.createObject`.
   final String defaultArgs;
@@ -90,6 +107,14 @@ class NodeDescriptor {
   /// every body is inert so the node can be dragged from anywhere on it, and in
   /// run mode every body is live.
   final bool readsGuiValue;
+
+  /// **How** a [readsGuiValue] body is polled — the whole state in one read,
+  /// or per cell (issue #469). The engine allows one read form per object per
+  /// frame, so this is the only form `PatcherController.refreshGuiValues` uses
+  /// for the node, and `PatcherController.guiValueOf` answers a
+  /// [GuiValueRead.cells] node from those cells rather than reading the whole
+  /// state a second time. Ignored when [readsGuiValue] is false.
+  final GuiValueRead guiValueRead;
 }
 
 /// Global singleton mapping `Obj.*` strings to their [NodeDescriptor].

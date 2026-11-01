@@ -462,6 +462,22 @@ class _PatcherViewportState extends State<_PatcherViewport> {
                   _canvasFocus.requestFocus();
                 }
               : null,
+          // A selected keyboard's range and velocity (issue #515), journaled
+          // the same way; the panel only shows them for a `.kslider`.
+          keyboardRange: documented ? editor.keyboardLayoutOf(id) : null,
+          keyboardVelocity: documented ? editor.keyboardVelocityOf(id) : null,
+          onKeyboardRange: documented
+              ? (range) {
+                  editor.setKeyboardRange(id, range);
+                  _canvasFocus.requestFocus();
+                }
+              : null,
+          onKeyboardVelocity: documented
+              ? (velocity) {
+                  editor.setKeyboardVelocity(id, velocity);
+                  _canvasFocus.requestFocus();
+                }
+              : null,
         );
       },
     );

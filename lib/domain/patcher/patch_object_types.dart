@@ -36,6 +36,54 @@ abstract final class PatchObjectTypes {
   /// `Obj.gMessage` — the message box.
   static const String gMessage = '.m';
 
+  /// `Obj.gDial` — the knob, a 0–1 position mapped onto its own range
+  /// (issue #470).
+  static const String gDial = '.dial';
+
+  /// `Obj.gIncdec` — the whole-number stepper (issue #470).
+  static const String gIncdec = '.incdec';
+
+  /// `Obj.gLed` — the labelled on/off lamp (issue #470).
+  static const String gLed = '.led';
+
+  /// `Obj.gTextbutton` — the labelled button; `.led`'s value model drawn as a
+  /// button (issue #470).
+  static const String gTextbutton = '.textbutton';
+
+  /// `Obj.gTextedit` — the one-line editable text field (issue #470).
+  static const String gTextedit = '.textedit';
+
+  /// `Obj.gList` — the list box (issue #470).
+  static const String gList = '.l';
+
+  /// `Obj.gUmenu` — the drop-down menu over named items (issue #471).
+  static const String gUmenu = '.umenu';
+
+  /// `Obj.gRadiogroup` — `.umenu`'s value model drawn as a column of radio
+  /// buttons, or check boxes with `multi` (issue #471).
+  static const String gRadiogroup = '.radiogroup';
+
+  /// `Obj.gTab` — `.umenu`'s value model drawn as a row of tabs (issue #471).
+  static const String gTab = '.tab';
+
+  /// `Obj.gRslider` — the range control, two ends inside its bounds
+  /// (issue #472).
+  static const String gRslider = '.rslider';
+
+  /// `Obj.gXyslider` — the two-dimensional pad, an x and a y (issue #472).
+  static const String gXyslider = '.xyslider';
+
+  /// `Obj.gMultislider` — a bank of sliders, one cell each (issue #472).
+  static const String gMultislider = '.multislider';
+
+  /// `Obj.gKslider` — a piano keyboard, the velocity held on each of its 128
+  /// keys (issue #473).
+  static const String gKslider = '.kslider';
+
+  /// `Obj.gNslider` — a note on a staff, its pitch and accidental
+  /// (issue #473).
+  static const String gNslider = '.nslider';
+
   /// Every id above, for the drift guard.
   static const List<String> all = [
     dSine,
@@ -46,5 +94,19 @@ abstract final class PatchObjectTypes {
     gFloat,
     gInt,
     gMessage,
+    gDial,
+    gIncdec,
+    gLed,
+    gTextbutton,
+    gTextedit,
+    gList,
+    gUmenu,
+    gRadiogroup,
+    gTab,
+    gRslider,
+    gXyslider,
+    gMultislider,
+    gKslider,
+    gNslider,
   ];
 }

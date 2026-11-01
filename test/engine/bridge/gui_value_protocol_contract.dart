@@ -1,0 +1,496 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/engine/bridge/patcher_gateway.dart';
+import 'package:yse/yse.dart';
+
+/// The GUI value protocol contract (issue #469), run against **both**
+/// gateways: `real_patcher_gateway_gui_value_engine_test.dart` drives it
+/// through the real engine and `fake_patcher_gateway_gui_value_test.dart`
+/// through [FakePatcherGateway], so the fake the controller and widget tests
+/// lean on cannot drift from libYSE.
+///
+/// Values are compared as numbers: the engine spells a float `0.25` or `0.`,
+/// the fake `0.25` or `0`, and no caller depends on the spelling.
+///
+/// [pressReadSkip], when set, skips the check that a momentary control's
+/// pending press reads as `1` — for a gateway that cannot report one yet (the
+/// real one, until yvanvds/dart-yse#106 reads the native value only once). The
+/// check that the read then clears the press runs regardless.
+void guiValueProtocolContract(
+  PatcherGateway Function() makeGateway, {
+  String? pressReadSkip,
+}) {
+  late PatcherGateway gateway;
+  late int inst;
+
+  setUp(() {
+    gateway = makeGateway();
+    inst = gateway.createInstance();
+  });
+
+  tearDown(() => gateway.disposeAll());
+
+  List<num?> numbers(Iterable<String> cells) => [
+    for (final c in cells) num.tryParse(c),
+  ];
+
+  List<String> cellsOf(int handle) => [
+    for (var i = 0; i < gateway.guiValueCount(inst, handle); i++)
+      gateway.guiValueAt(inst, handle, i),
+  ];
+
+  test('a scalar control has one cell, equal to its whole value', () {
+    final slider = gateway.createObject(inst, Obj.gSlider);
+    gateway.sendFloat(inst, slider, 0, 0.5);
+
+    expect(gateway.guiValueCount(inst, slider), 1);
+    expect(gateway.guiValueAt(inst, slider, 0), gateway.guiValue(inst, slider));
+    expect(num.parse(gateway.guiValueAt(inst, slider, 0)), 0.5);
+    expect(gateway.guiValueAt(inst, slider, 1), '', reason: 'past the end');
+    expect(gateway.guiValueAt(inst, slider, -1), '', reason: 'negative');
+    expect(gateway.guiValueIsSettable(inst, slider), isTrue);
+  });
+
+  test('an .rslider round-trips one cell through setGuiValueAt', () {
+    final range = gateway.createObject(inst, Obj.gRslider);
+    expect(gateway.guiValueCount(inst, range), 2);
+    expect(gateway.guiValueIsSettable(inst, range), isTrue);
+
+    expect(gateway.setGuiValueAt(inst, range, 1, '0.75'), isTrue);
+    expect(gateway.setGuiValueAt(inst, range, 0, '0.25'), isTrue);
+
+    expect(num.parse(gateway.guiValueAt(inst, range, 0)), 0.25);
+    expect(num.parse(gateway.guiValueAt(inst, range, 1)), 0.75);
+    expect(numbers(gateway.guiValue(inst, range).split(' ')), [0.25, 0.75]);
+  });
+
+  test('a cell write past the count is refused and sends nothing', () {
+    final range = gateway.createObject(inst, Obj.gRslider);
+    gateway.restoreGuiValue(inst, range, '0.1 0.9');
+
+    expect(gateway.setGuiValueAt(inst, range, 2, '0.5'), isFalse);
+    expect(gateway.setGuiValueAt(inst, range, -1, '0.5'), isFalse);
+    expect(numbers(cellsOf(range)), [0.1, 0.9]);
+  });
+
+  test('restoreGuiValue puts a whole multi-cell state back', () {
+    final range = gateway.createObject(inst, Obj.gRslider);
+    expect(gateway.restoreGuiValue(inst, range, '0.1 0.9'), isTrue);
+    expect(numbers(cellsOf(range)), [0.1, 0.9]);
+
+    // Read whole, restore whole: the documented round trip.
+    final saved = gateway.guiValue(inst, range);
+    gateway.setGuiValueAt(inst, range, 0, '0.5');
+    gateway.restoreGuiValue(inst, range, saved);
+    expect(numbers(cellsOf(range)), [0.1, 0.9]);
+  });
+
+  test('a list resizes a .multislider bank', () {
+    final bank = gateway.createObject(inst, Obj.gMultislider, args: '4');
+    expect(gateway.guiValueCount(inst, bank), 4);
+
+    gateway.sendList(inst, bank, 0, '0.1 0.2 0.3 0.4 0.5 0.6');
+
+    expect(gateway.guiValueCount(inst, bank), 6);
+    expect(numbers(cellsOf(bank)), [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]);
+  });
+
+  test('a .kslider reports one cell per key', () {
+    final keys = gateway.createObject(inst, Obj.gKslider);
+    expect(gateway.guiValueCount(inst, keys), 128);
+    expect(gateway.setGuiValueAt(inst, keys, 60, '100'), isTrue);
+    expect(num.parse(gateway.guiValueAt(inst, keys, 60)), 100);
+    expect(num.parse(gateway.guiValueAt(inst, keys, 61)), 0);
+  });
+
+  test('a .textedit cell is free text, written whole', () {
+    final text = gateway.createObject(inst, Obj.gTextedit);
+    expect(gateway.setGuiValueAt(inst, text, 0, 'hello world'), isTrue);
+    expect(gateway.guiValueCount(inst, text), 1);
+    expect(gateway.guiValueAt(inst, text, 0), 'hello world');
+  });
+
+  test('a .b is not settable, so neither write is sent', () {
+    final bang = gateway.createObject(inst, Obj.gButton);
+    expect(gateway.guiValueIsSettable(inst, bang), isFalse);
+    expect(gateway.restoreGuiValue(inst, bang, '1'), isFalse);
+    expect(gateway.setGuiValueAt(inst, bang, 0, '1'), isFalse);
+  });
+
+  test('a .l stores the list it is sent, but is not settable', () {
+    final list = gateway.createObject(inst, Obj.gList);
+    gateway.sendList(inst, list, 0, '1 2 three');
+    expect(gateway.guiValue(inst, list), '1 2 three');
+    expect(gateway.guiValueIsSettable(inst, list), isFalse);
+  });
+
+  // ─── the single-value control bodies (issue #470) ──────────────────
+
+  test('.incdec steps by its step argument inside a clamped range', () {
+    final stepper = gateway.createObject(inst, Obj.gIncdec, args: '2 0 5 0');
+    expect(num.parse(gateway.guiValue(inst, stepper)), 0);
+    for (var i = 0; i < 4; i++) {
+      gateway.sendMessage(inst, stepper, 0, 'inc');
+    }
+    expect(gateway.guiValue(inst, stepper), '5', reason: 'clamped at max');
+    gateway.sendMessage(inst, stepper, 0, 'dec');
+    expect(gateway.guiValue(inst, stepper), '3');
+  });
+
+  test('.incdec wraps when asked to', () {
+    final stepper = gateway.createObject(inst, Obj.gIncdec, args: '1 0 2 1');
+    for (var i = 0; i < 3; i++) {
+      gateway.sendMessage(inst, stepper, 0, 'inc');
+    }
+    expect(gateway.guiValue(inst, stepper), '0');
+    gateway.sendMessage(inst, stepper, 0, 'dec');
+    expect(gateway.guiValue(inst, stepper), '2');
+  });
+
+  test('a .dial reports its position, clamped to 0-1', () {
+    final dial = gateway.createObject(inst, Obj.gDial, args: '0 127 1 1');
+    gateway.sendFloat(inst, dial, 0, 0.25);
+    expect(num.parse(gateway.guiValue(inst, dial)), 0.25);
+    gateway.sendFloat(inst, dial, 0, 2);
+    expect(num.parse(gateway.guiValue(inst, dial)), 1);
+    expect(gateway.guiValueIsSettable(inst, dial), isTrue);
+  });
+
+  for (final type in [Obj.gLed, Obj.gTextbutton]) {
+    test('a latching $type takes an int as its state and flips on a bang', () {
+      final lamp = gateway.createObject(inst, type, args: 'mute');
+      gateway.sendInt(inst, lamp, 0, 1);
+      expect(gateway.guiValue(inst, lamp), '1');
+      gateway.sendBang(inst, lamp, 0);
+      expect(gateway.guiValue(inst, lamp), '0');
+      gateway.sendBang(inst, lamp, 0);
+      expect(gateway.guiValue(inst, lamp), '1');
+      gateway.sendInt(inst, lamp, 0, 0);
+      expect(gateway.guiValue(inst, lamp), '0');
+    });
+  }
+
+  for (final type in [Obj.gLed, Obj.gTextbutton]) {
+    // The engine's momentary read is destructive (issue #514): a press is
+    // reported once, then cleared, so a host must read it once per frame.
+    test('a momentary $type reports a press once, then idle', () {
+      final lamp = gateway.createObject(inst, type, args: 'momentary go');
+      expect(gateway.guiValue(inst, lamp), '0');
+      gateway.sendInt(inst, lamp, 0, 1);
+      expect(gateway.guiValue(inst, lamp), '1', reason: 'the press');
+      expect(gateway.guiValue(inst, lamp), '0', reason: 'consumed');
+      gateway.sendBang(inst, lamp, 0);
+      expect(gateway.guiValueAt(inst, lamp, 0), '1', reason: 'a bang too');
+      expect(gateway.guiValueAt(inst, lamp, 0), '0', reason: 'consumed');
+    }, skip: pressReadSkip);
+
+    test('a read of a momentary $type clears its press', () {
+      final lamp = gateway.createObject(inst, type, args: 'momentary go');
+      gateway.sendInt(inst, lamp, 0, 0);
+      gateway.guiValue(inst, lamp);
+      expect(gateway.guiValue(inst, lamp), '0');
+      gateway.sendBang(inst, lamp, 0);
+      gateway.guiValueAt(inst, lamp, 0);
+      expect(gateway.guiValueAt(inst, lamp, 0), '0');
+    });
+  }
+
+  test('a .textedit starts with its text and takes a whole new one back', () {
+    final text = gateway.createObject(inst, Obj.gTextedit, args: 'hello world');
+    expect(gateway.guiValue(inst, text), 'hello world');
+    expect(gateway.restoreGuiValue(inst, text, 'foo bar'), isTrue);
+    expect(gateway.guiValue(inst, text), 'foo bar');
+  });
+
+  // ─── the selection controls (issue #471) ─────────────────────────────
+
+  for (final type in [Obj.gUmenu, Obj.gRadiogroup, Obj.gTab]) {
+    test('a single-select $type holds one index, picked by number or name', () {
+      final menu = gateway.createObject(inst, type, args: 'sine square saw');
+      expect(gateway.guiValueCount(inst, menu), 1);
+      expect(gateway.guiValue(inst, menu), '0');
+      expect(gateway.guiValueIsSettable(inst, menu), isTrue);
+
+      gateway.sendInt(inst, menu, 0, 2);
+      expect(gateway.guiValue(inst, menu), '2');
+      gateway.sendFloat(inst, menu, 0, 1);
+      expect(gateway.guiValue(inst, menu), '1');
+      gateway.sendList(inst, menu, 0, 'saw');
+      expect(gateway.guiValue(inst, menu), '2');
+      gateway.sendInt(inst, menu, 0, 7);
+      expect(gateway.guiValue(inst, menu), '2', reason: 'no item 7');
+      gateway.sendList(inst, menu, 0, 'triangle');
+      expect(gateway.guiValue(inst, menu), '2', reason: 'no such name');
+      expect(gateway.setGuiValueAt(inst, menu, 0, '0'), isTrue);
+      expect(gateway.guiValueAt(inst, menu, 0), '0');
+    });
+  }
+
+  for (final type in [Obj.gUmenu, Obj.gRadiogroup, Obj.gTab]) {
+    test('a multi $type has a flag per item, and a number toggles one', () {
+      final group = gateway.createObject(inst, type, args: 'multi 4');
+      expect(gateway.guiValueCount(inst, group), 4);
+      expect(gateway.guiValue(inst, group), '0 0 0 0');
+
+      gateway.sendInt(inst, group, 0, 1);
+      gateway.sendInt(inst, group, 0, 3);
+      expect(gateway.guiValue(inst, group), '0 1 0 1');
+      gateway.sendInt(inst, group, 0, 1);
+      expect(gateway.guiValue(inst, group), '0 0 0 1', reason: 'toggled off');
+      expect(gateway.guiValueAt(inst, group, 3), '1');
+
+      expect(gateway.restoreGuiValue(inst, group, '1 1 0 0'), isTrue);
+      expect(gateway.guiValue(inst, group), '1 1 0 0');
+      expect(gateway.setGuiValueAt(inst, group, 3, '1'), isTrue);
+      expect(gateway.guiValue(inst, group), '1 1 0 1');
+    });
+  }
+
+  test('an item list sends the item number down outlet 0', () {
+    final menu = gateway.createObject(inst, Obj.gUmenu, args: 'a b c');
+    final number = gateway.createObject(inst, Obj.gInt);
+    gateway.connect(
+      inst,
+      fromHandleId: menu,
+      outlet: 0,
+      toHandleId: number,
+      inlet: 0,
+    );
+    gateway.sendInt(inst, menu, 0, 2);
+    expect(gateway.guiValue(inst, number), '2');
+    gateway.sendList(inst, menu, 0, 'b');
+    expect(gateway.guiValue(inst, number), '1');
+  });
+
+  test('new items rebuild an item list at item 0', () {
+    final tabs = gateway.createObject(inst, Obj.gTab, args: 'a b c');
+    gateway.sendInt(inst, tabs, 0, 2);
+    gateway.setParams(inst, tabs, 'multi w x y z');
+    expect(gateway.guiValueCount(inst, tabs), 4);
+    expect(gateway.guiValue(inst, tabs), '0 0 0 0');
+    gateway.setParams(inst, tabs, '');
+    expect(gateway.guiValueCount(inst, tabs), 1);
+    expect(gateway.guiValue(inst, tabs), '0');
+  });
+
+  // ─── the multi-value sliders (issue #472) ─────────────────────────────
+
+  /// Wire [from]'s [outlet] into a fresh object of [type]'s inlet 0.
+  int listen(int from, int outlet, String type) {
+    final to = gateway.createObject(inst, type);
+    gateway.connect(
+      inst,
+      fromHandleId: from,
+      outlet: outlet,
+      toHandleId: to,
+      inlet: 0,
+    );
+    return to;
+  }
+
+  test('an .rslider bounds its ends and reports them low first', () {
+    final range = gateway.createObject(inst, Obj.gRslider, args: '20 20000');
+    expect(numbers(cellsOf(range)), [20, 20], reason: 'bounded on the way out');
+
+    gateway.sendFloat(inst, range, 0, 500);
+    expect(numbers(cellsOf(range)), [20, 500]);
+    gateway.sendFloat(inst, range, 1, 100);
+    expect(numbers(cellsOf(range)), [100, 500]);
+    gateway.sendFloat(inst, range, 0, 50);
+    expect(numbers(cellsOf(range)), [50, 100], reason: 'the ends swap');
+    gateway.sendList(inst, range, 0, '30000 10');
+    expect(numbers(cellsOf(range)), [20, 20000], reason: 'both clamped');
+    expect(gateway.setGuiValueAt(inst, range, 0, '64'), isTrue);
+    expect(numbers(cellsOf(range)), [64, 20000]);
+  });
+
+  test('an .rslider sends low, high and the pair from its hot inlet only', () {
+    final range = gateway.createObject(inst, Obj.gRslider);
+    final low = listen(range, 0, Obj.gFloat);
+    final high = listen(range, 1, Obj.gFloat);
+    final pair = listen(range, 2, Obj.gList);
+
+    gateway.sendList(inst, range, 0, '96 32');
+    expect(num.parse(gateway.guiValue(inst, low)), 32);
+    expect(num.parse(gateway.guiValue(inst, high)), 96);
+    expect(numbers(gateway.guiValue(inst, pair).split(' ')), [32, 96]);
+
+    gateway.sendFloat(inst, range, 1, 8);
+    expect(
+      num.parse(gateway.guiValue(inst, low)),
+      32,
+      reason: 'inlet 1 is cold',
+    );
+    // Inlet 1 wrote the other end, the one 32 came from, so 96 is still high.
+    gateway.sendBang(inst, range, 0);
+    expect(num.parse(gateway.guiValue(inst, low)), 8);
+    expect(num.parse(gateway.guiValue(inst, high)), 96);
+  });
+
+  test('an .xyslider bounds x and y on their own axes', () {
+    final pad = gateway.createObject(inst, Obj.gXyslider, args: '0 1 -1 1');
+    expect(gateway.guiValueCount(inst, pad), 2);
+    expect(gateway.guiValueIsSettable(inst, pad), isTrue);
+
+    gateway.sendList(inst, pad, 0, '0.5 -0.25');
+    expect(numbers(cellsOf(pad)), [0.5, -0.25]);
+    gateway.sendList(inst, pad, 0, '2 -5');
+    expect(numbers(cellsOf(pad)), [1, -1]);
+    expect(gateway.setGuiValueAt(inst, pad, 1, '0.5'), isTrue);
+    expect(numbers(cellsOf(pad)), [1, 0.5]);
+    gateway.sendFloat(inst, pad, 1, 0.75);
+    expect(numbers(cellsOf(pad)), [1, 0.75]);
+  });
+
+  test('an .xyslider sends x, y and the pair', () {
+    final pad = gateway.createObject(inst, Obj.gXyslider);
+    final x = listen(pad, 0, Obj.gFloat);
+    final y = listen(pad, 1, Obj.gFloat);
+    final pair = listen(pad, 2, Obj.gList);
+
+    gateway.sendList(inst, pad, 0, '12 100');
+    expect(num.parse(gateway.guiValue(inst, x)), 12);
+    expect(num.parse(gateway.guiValue(inst, y)), 100);
+    expect(numbers(gateway.guiValue(inst, pair).split(' ')), [12, 100]);
+  });
+
+  test('a .multislider bounds its cells and a number sets every one', () {
+    final bank = gateway.createObject(inst, Obj.gMultislider, args: '4 2 10');
+    expect(numbers(cellsOf(bank)), [2, 2, 2, 2], reason: 'bounded');
+
+    gateway.sendFloat(inst, bank, 0, 3);
+    expect(numbers(cellsOf(bank)), [3, 3, 3, 3]);
+    expect(gateway.setGuiValueAt(inst, bank, 2, '12'), isTrue);
+    expect(numbers(cellsOf(bank)), [3, 3, 10, 3]);
+    expect(gateway.setGuiValueAt(inst, bank, 4, '5'), isFalse);
+  });
+
+  test('a .multislider sends its bank, and a fetched cell on outlet 1', () {
+    final bank = gateway.createObject(inst, Obj.gMultislider, args: '3');
+    final whole = listen(bank, 0, Obj.gList);
+    final cell = listen(bank, 1, Obj.gFloat);
+
+    gateway.sendList(inst, bank, 0, '1 2 3');
+    expect(numbers(gateway.guiValue(inst, whole).split(' ')), [1, 2, 3]);
+    expect(gateway.setGuiValueAt(inst, bank, 1, '64'), isTrue);
+    expect(numbers(gateway.guiValue(inst, whole).split(' ')), [1, 64, 3]);
+
+    gateway.sendMessage(inst, bank, 0, 'fetch 1');
+    expect(num.parse(gateway.guiValue(inst, cell)), 64);
+  });
+
+  test('a .multislider keeps the cells a shorter list hid', () {
+    final bank = gateway.createObject(inst, Obj.gMultislider, args: '4');
+    gateway.sendList(inst, bank, 0, '1 2 3 4');
+    gateway.sendList(inst, bank, 0, '5 6');
+    expect(numbers(cellsOf(bank)), [5, 6]);
+    gateway.sendList(inst, bank, 0, '7 8 9');
+    expect(numbers(cellsOf(bank)), [7, 8, 9]);
+  });
+
+  // ─── the keyboard and the staff (issue #473) ─────────────────────────
+
+  test('a .kslider plays a bare pitch at its stored velocity', () {
+    final keys = gateway.createObject(inst, Obj.gKslider, args: '90');
+    final pitch = listen(keys, 0, Obj.gInt);
+    final velocity = listen(keys, 1, Obj.gInt);
+
+    gateway.sendInt(inst, keys, 0, 60);
+    expect(gateway.guiValueAt(inst, keys, 60), '90');
+    expect(gateway.guiValue(inst, pitch), '60');
+    expect(gateway.guiValue(inst, velocity), '90');
+
+    // Inlet 1 stores a velocity for later pitches and sends nothing.
+    gateway.sendInt(inst, keys, 1, 30);
+    expect(gateway.guiValue(inst, pitch), '60');
+    gateway.sendFloat(inst, keys, 0, 64.7);
+    expect(gateway.guiValueAt(inst, keys, 64), '30', reason: 'truncated');
+    expect(gateway.guiValue(inst, pitch), '64');
+    expect(gateway.guiValue(inst, velocity), '30');
+
+    // Velocity 0 releases.
+    gateway.sendList(inst, keys, 0, '60 0');
+    expect(gateway.guiValueAt(inst, keys, 60), '0');
+    expect(gateway.guiValue(inst, velocity), '0');
+  });
+
+  test('a .kslider cell write plays that key and sends it', () {
+    final keys = gateway.createObject(inst, Obj.gKslider);
+    final pitch = listen(keys, 0, Obj.gInt);
+    final velocity = listen(keys, 1, Obj.gInt);
+
+    expect(gateway.setGuiValueAt(inst, keys, 72, '200'), isTrue);
+    expect(gateway.guiValueAt(inst, keys, 72), '127', reason: 'clamped');
+    expect(gateway.guiValue(inst, pitch), '72');
+    expect(gateway.guiValue(inst, velocity), '127');
+
+    // A `set` leaves the stored velocity alone: a bare pitch still plays 100.
+    gateway.sendInt(inst, keys, 0, 48);
+    expect(gateway.guiValueAt(inst, keys, 48), '100');
+
+    expect(gateway.setGuiValueAt(inst, keys, 72, '0'), isTrue);
+    expect(gateway.guiValueAt(inst, keys, 72), '0');
+    expect(gateway.guiValue(inst, pitch), '72');
+    expect(gateway.guiValue(inst, velocity), '0');
+  });
+
+  test('a .kslider holds several keys, and clear releases them all', () {
+    final keys = gateway.createObject(inst, Obj.gKslider);
+    final velocity = listen(keys, 1, Obj.gInt);
+    gateway.sendList(inst, keys, 0, '60 80');
+    gateway.sendList(inst, keys, 0, '64 90');
+    gateway.sendInt(inst, keys, 0, 200);
+    expect(gateway.guiValueCount(inst, keys), 128);
+    final held = {
+      for (final (i, c) in cellsOf(keys).indexed)
+        if (c != '0') i: c,
+    };
+    expect(held, {60: '80', 64: '90'}, reason: 'off the keyboard: dropped');
+
+    gateway.sendMessage(inst, keys, 0, 'clear');
+    expect(cellsOf(keys).every((c) => c == '0'), isTrue);
+    expect(gateway.guiValue(inst, velocity), '0');
+  });
+
+  test('a .nslider stores a pitch and spells it', () {
+    final staff = gateway.createObject(inst, Obj.gNslider, args: '36 96 -1');
+    final pitch = listen(staff, 0, Obj.gInt);
+    final accidental = listen(staff, 1, Obj.gInt);
+    expect(gateway.guiValueCount(inst, staff), 2);
+    expect(gateway.guiValueIsSettable(inst, staff), isTrue);
+    expect(numbers(cellsOf(staff)), [36, 0], reason: 'the bottom of its range');
+
+    gateway.sendInt(inst, staff, 0, 61);
+    expect(numbers(cellsOf(staff)), [61, -1], reason: 'spelled flat');
+    expect(gateway.guiValue(inst, pitch), '61');
+    expect(gateway.guiValue(inst, accidental), '-1');
+
+    gateway.sendList(inst, staff, 0, '61 1');
+    expect(numbers(cellsOf(staff)), [61, 1]);
+    expect(gateway.guiValue(inst, accidental), '1');
+
+    gateway.sendInt(inst, staff, 0, 63);
+    expect(numbers(cellsOf(staff)), [63, -1], reason: 'the key is unchanged');
+
+    gateway.sendInt(inst, staff, 0, 10);
+    expect(numbers(cellsOf(staff)), [36, 0], reason: 'clamped');
+    expect(gateway.guiValue(inst, pitch), '36');
+
+    expect(gateway.setGuiValueAt(inst, staff, 0, '66'), isTrue);
+    expect(numbers(cellsOf(staff)), [66, -1]);
+    expect(gateway.setGuiValueAt(inst, staff, 1, '1'), isTrue);
+    expect(numbers(cellsOf(staff)), [66, 1]);
+    expect(gateway.guiValue(inst, pitch), '66', reason: 'a set sends too');
+    // A live re-range is deferred to the audio thread in the engine (the
+    // scalar plan), so it is not pinned here.
+  });
+
+  test('an unknown handle answers the empty protocol', () {
+    expect(gateway.guiValueCount(inst, 999), 0);
+    expect(gateway.guiValueAt(inst, 999, 0), '');
+    expect(gateway.guiValueIsSettable(inst, 999), isFalse);
+    expect(gateway.restoreGuiValue(inst, 999, '1'), isFalse);
+    expect(gateway.setGuiValueAt(inst, 999, 0, '1'), isFalse);
+    gateway.sendList(inst, 999, 0, '1 2');
+    gateway.sendMessage(inst, 999, 0, 'clear');
+  });
+}

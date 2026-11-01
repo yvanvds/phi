@@ -31,6 +31,10 @@ class PhiSelect<T> extends StatefulWidget {
     required this.onChanged,
     this.placeholder = 'select…',
     this.enabled = true,
+    this.dense = false,
+    this.isSelected,
+    this.keepOpenOnSelect = false,
+    this.displayLabel,
     super.key,
   });
 
@@ -42,6 +46,10 @@ class PhiSelect<T> extends StatefulWidget {
     required this.onChanged,
     this.placeholder = 'select…',
     this.enabled = true,
+    this.dense = false,
+    this.isSelected,
+    this.keepOpenOnSelect = false,
+    this.displayLabel,
     super.key,
   }) : groups = [PhiSelectGroup<T>(options: options)];
 
@@ -59,6 +67,23 @@ class PhiSelect<T> extends StatefulWidget {
 
   /// Whether the control accepts input. Combined with [onChanged] being set.
   final bool enabled;
+
+  /// The compact patcher-canvas form (issue #471): the closed control fills
+  /// the height it is given instead of a form row's 34px, square-cornered, in
+  /// the small mono an object box uses; the list's rows shrink to match.
+  final bool dense;
+
+  /// Which options carry a checkmark — several at once for a multi-select
+  /// consumer (a `.umenu multi`). Null marks the one matching [value].
+  final bool Function(T value)? isSelected;
+
+  /// Whether picking an option leaves the list open — what a multi-select
+  /// consumer wants, so several items can be toggled in one visit.
+  final bool keepOpenOnSelect;
+
+  /// Text for the closed control in place of the selected option's label — a
+  /// multi-select summary, say. Null shows the label (or [placeholder]).
+  final String? displayLabel;
 
   @override
   State<PhiSelect<T>> createState() => _PhiSelectState<T>();
@@ -89,6 +114,7 @@ class _PhiSelectState<T> extends State<PhiSelect<T>> {
   }
 
   String? get _selectedLabel {
+    if (widget.displayLabel case final label?) return label;
     final i = _indexOfValue(widget.value);
     return i < 0 ? null : _flatOptions[i].label;
   }
@@ -120,7 +146,7 @@ class _PhiSelectState<T> extends State<PhiSelect<T>> {
 
   void _select(T value) {
     widget.onChanged?.call(value);
-    _closeMenu();
+    if (!widget.keepOpenOnSelect) _closeMenu();
   }
 
   void _moveHighlight(int delta) {
@@ -221,6 +247,7 @@ class _PhiSelectState<T> extends State<PhiSelect<T>> {
     }
 
     final label = _selectedLabel;
+    final dense = widget.dense;
     final Color textColor;
     if (!_interactive) {
       textColor = PhiColors.fg3;
@@ -233,11 +260,13 @@ class _PhiSelectState<T> extends State<PhiSelect<T>> {
     return AnimatedContainer(
       duration: PhiMotion.dur1,
       curve: PhiMotion.easeOut,
-      height: 34,
-      padding: const EdgeInsets.symmetric(horizontal: PhiSpacing.s3),
+      height: dense ? null : 34,
+      padding: EdgeInsets.symmetric(
+        horizontal: dense ? PhiSpacing.s2 : PhiSpacing.s3,
+      ),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: PhiRadii.all2,
+        borderRadius: dense ? null : PhiRadii.all2,
         border: Border.all(color: border),
         boxShadow: _open
             ? const [BoxShadow(color: PhiColors.voice1Soft, blurRadius: 10)]
@@ -249,17 +278,19 @@ class _PhiSelectState<T> extends State<PhiSelect<T>> {
             child: Text(
               label ?? widget.placeholder,
               overflow: TextOverflow.ellipsis,
-              style: PhiType.body().copyWith(fontSize: 14, color: textColor),
+              maxLines: 1,
+              softWrap: false,
+              style: _textStyle().copyWith(color: textColor),
             ),
           ),
-          const SizedBox(width: PhiSpacing.s2),
+          SizedBox(width: dense ? PhiSpacing.s1 : PhiSpacing.s2),
           AnimatedRotation(
             turns: _open ? 0.5 : 0,
             duration: PhiMotion.dur2,
             curve: PhiMotion.easeOut,
             child: Icon(
               Icons.keyboard_arrow_down,
-              size: 18,
+              size: dense ? 14 : 18,
               color: _interactive ? PhiColors.fg2 : PhiColors.fg3,
             ),
           ),
@@ -267,6 +298,11 @@ class _PhiSelectState<T> extends State<PhiSelect<T>> {
       ),
     );
   }
+
+  /// The control's and the rows' text: the form body, or in [PhiSelect.dense]
+  /// the small mono an object box prints in.
+  TextStyle _textStyle() =>
+      widget.dense ? PhiType.monoS() : PhiType.body().copyWith(fontSize: 14);
 
   Widget _buildOverlay(BuildContext context) {
     final width = _link.leaderSize?.width ?? 0;
@@ -354,7 +390,9 @@ class _PhiSelectState<T> extends State<PhiSelect<T>> {
 
   Widget _optionRow(PhiSelectOption<T> option, int index) {
     final highlighted = index == _highlighted;
-    final selected = option.value == widget.value;
+    final selected =
+        widget.isSelected?.call(option.value) ?? option.value == widget.value;
+    final dense = widget.dense;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _highlighted = index),
@@ -362,8 +400,10 @@ class _PhiSelectState<T> extends State<PhiSelect<T>> {
         behavior: HitTestBehavior.opaque,
         onTap: () => _select(option.value),
         child: Container(
-          height: 32,
-          padding: const EdgeInsets.symmetric(horizontal: PhiSpacing.s3),
+          height: dense ? 24 : 32,
+          padding: EdgeInsets.symmetric(
+            horizontal: dense ? PhiSpacing.s2 : PhiSpacing.s3,
+          ),
           color: highlighted ? PhiColors.bg3 : Colors.transparent,
           alignment: Alignment.centerLeft,
           child: Row(
@@ -372,14 +412,17 @@ class _PhiSelectState<T> extends State<PhiSelect<T>> {
                 child: Text(
                   option.label,
                   overflow: TextOverflow.ellipsis,
-                  style: PhiType.body().copyWith(
-                    fontSize: 14,
+                  style: _textStyle().copyWith(
                     color: selected ? PhiColors.voice1 : PhiColors.fg1,
                   ),
                 ),
               ),
               if (selected)
-                const Icon(Icons.check, size: 16, color: PhiColors.voice1),
+                Icon(
+                  Icons.check,
+                  size: dense ? 14 : 16,
+                  color: PhiColors.voice1,
+                ),
             ],
           ),
         ),

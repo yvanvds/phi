@@ -252,6 +252,52 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
       _inst(instanceId).handles[handleId]?.guiValue ?? '';
 
   @override
+  void sendList(int instanceId, int handleId, int inlet, String list) {
+    _inst(instanceId).handles[handleId]?.sendList(inlet, list);
+  }
+
+  @override
+  void sendMessage(int instanceId, int handleId, int inlet, String message) {
+    // yse has no separate selector call: a list whose first token is a symbol
+    // is dispatched by that selector (the wrapper's own `setGuiValueAt` sends
+    // `set <i> <v>` exactly this way).
+    _inst(instanceId).handles[handleId]?.sendList(inlet, message);
+  }
+
+  @override
+  int guiValueCount(int instanceId, int handleId) =>
+      _inst(instanceId).handles[handleId]?.guiValueCount ?? 0;
+
+  @override
+  String guiValueAt(int instanceId, int handleId, int index) {
+    if (index < 0) return '';
+    return _inst(instanceId).handles[handleId]?.guiValueAt(index) ?? '';
+  }
+
+  @override
+  bool guiValueIsSettable(int instanceId, int handleId) =>
+      _inst(instanceId).handles[handleId]?.guiValueIsSettable ?? false;
+
+  @override
+  bool restoreGuiValue(int instanceId, int handleId, String state) {
+    final h = _inst(instanceId).handles[handleId];
+    // The wrapper throws on an unsettable object; the gateway answers false
+    // instead, so a body never has to guard an engine exception.
+    if (h == null || !h.guiValueIsSettable) return false;
+    h.restoreGuiValue(state);
+    return true;
+  }
+
+  @override
+  bool setGuiValueAt(int instanceId, int handleId, int index, String value) {
+    final h = _inst(instanceId).handles[handleId];
+    if (h == null || !h.guiValueIsSettable) return false;
+    if (index < 0 || index >= h.guiValueCount) return false;
+    h.setGuiValueAt(index, value);
+    return true;
+  }
+
+  @override
   void setParams(int instanceId, int handleId, String args) {
     _inst(instanceId).handles[handleId]?.setParams(args);
   }

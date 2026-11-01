@@ -1,16 +1,20 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/widgets.dart';
 
 import '../../design/widgets/patcher/patch_canvas_constants.dart';
 import '../../design/widgets/patcher/patch_note_box.dart';
 import '../../design/widgets/patcher/patch_note_metrics.dart';
 import '../../design/widgets/patcher/patch_object_box_metrics.dart';
+import '../../domain/midi/midi_pitch.dart';
+import '../../domain/patcher/keyboard_layout.dart';
 import '../../domain/patcher/patch_cable.dart';
 import '../../domain/patcher/patch_graph.dart';
 import '../../domain/patcher/patch_gui_property.dart';
 import '../../domain/patcher/patch_node.dart';
 import '../../domain/patcher/patch_node_id.dart';
+import '../../domain/patcher/patch_object_types.dart';
 import '../../domain/patcher/patch_port.dart';
 import '../../domain/patcher/patch_port_id.dart';
 import '../../domain/patcher/patch_port_kind.dart';
@@ -20,6 +24,7 @@ import '../bridge/patch_object_descriptor.dart';
 import '../bridge/patch_pin_compatibility.dart';
 import '../bridge/patcher_gateway.dart';
 import '../bridge/patcher_node_snapshot.dart';
+import 'gui_value_read.dart';
 import 'node_type_registry.dart';
 import 'patch_clipboard.dart';
 import 'patch_clipboard_cable.dart';
@@ -34,6 +39,7 @@ import 'patcher_commands/move_patch_nodes_command.dart';
 import 'patcher_commands/paste_patch_clipboard_command.dart';
 import 'patcher_commands/reroute_cable_command.dart';
 import 'patcher_commands/retype_patch_object_command.dart';
+import 'patcher_commands/set_patch_gui_properties_command.dart';
 import 'patcher_commands/set_patch_gui_property_command.dart';
 import 'patcher_commands/set_patch_params_command.dart';
 
@@ -128,11 +134,33 @@ class PatcherController {
   /// so a delete's undo (and a duplicate) recreate the object identically.
   final Map<PatchNodeId, String> _argsByNode = {};
 
-  /// Logical node id → the `guiValue` [refreshGuiValues] last read for it, so
-  /// the poll wakes a node only when the engine reports something *new*. A node
-  /// absent from the map counts as the empty display a fresh object has, so a
-  /// value that arrived before the first poll still registers as a change.
+  /// Logical node id → the `guiValue` last read for a [GuiValueRead.whole]
+  /// node, so the poll wakes a node only when the engine reports something
+  /// *new*. A node absent from the map counts as the empty display a fresh
+  /// object has, so a value that arrived before the first poll still registers
+  /// as a change.
+  ///
+  /// It is also what [guiValueOf] answers from (issue #514): the body a poll
+  /// wakes must see the value that woke it, not read the engine a second time
+  /// in the same frame — a momentary `.led` / `.textbutton` reports a press
+  /// once and clears it, so that second read would always say idle.
   final Map<PatchNodeId, String> _guiValueByNode = {};
+
+  /// Logical node id → the cells [refreshGuiValues] last read for a
+  /// [GuiValueRead.cells] node (issue #469): the poll's own read, which the
+  /// cell accessors answer from so a body never reads the engine a second time
+  /// in the same frame. Cells outside the node's window keep their last value.
+  final Map<PatchNodeId, List<String>> _guiCellsByNode = {};
+
+  /// Logical node id → the `[start, end)` cell window a large control repaints
+  /// ([setGuiCellWindow]); a node without one is read in full.
+  final Map<PatchNodeId, (int, int)> _guiCellWindowByNode = {};
+
+  /// Nodes whose cached GUI state (whole value or cells) a write through this
+  /// controller has outdated — the next accessor re-reads them rather than
+  /// answering the pre-write state (the next poll then settles them without a
+  /// second wake-up).
+  final Set<PatchNodeId> _guiValueStale = {};
 
   /// Logical node id → its **decoration** GUI properties ([PatchGuiProperty]:
   /// a note's width today), mirrored here so a spec can carry them through
@@ -186,7 +214,7 @@ class PatcherController {
       args: desc.defaultArgs,
       voice: voice,
       position: position,
-      size: desc.defaultSize,
+      size: desc.sizeForArgs?.call(desc.defaultArgs) ?? desc.defaultSize,
     );
   }
 
@@ -395,7 +423,12 @@ class PatcherController {
   }) {
     // A note wraps (issue #488): its box is its text laid out at its width.
     if (PatchTypeName.isNote(type)) return _noteSize(args, gui);
-    final tuned = declared ?? NodeTypeRegistry.instance.find(type)?.defaultSize;
+    final registered = NodeTypeRegistry.instance.find(type);
+    final tuned =
+        declared ??
+        registered?.sizeForGui?.call(gui) ??
+        registered?.sizeForArgs?.call(args) ??
+        registered?.defaultSize;
     if (tuned != null) {
       final floor = PatchCanvasConstants.minWidthForPorts(
         math.max(inputs, outputs),
@@ -443,6 +476,9 @@ class PatcherController {
     _nativeByNode.clear();
     _argsByNode.clear();
     _guiValueByNode.clear();
+    _guiCellsByNode.clear();
+    _guiCellWindowByNode.clear();
+    _guiValueStale.clear();
     _guiByNode.clear();
 
     final snapshot = _gateway.enumerate(instanceId);
@@ -582,6 +618,7 @@ class PatcherController {
     final native = _nativeByNode[id];
     if (native == null) return;
     _gateway.sendFloat(instanceId, native, inlet, value);
+    _guiValueStale.add(id);
   }
 
   /// Drop an **integer** control value into a node's inlet — used by the
@@ -592,6 +629,7 @@ class PatcherController {
     final native = _nativeByNode[id];
     if (native == null) return;
     _gateway.sendInt(instanceId, native, inlet, value);
+    _guiValueStale.add(id);
   }
 
   /// Bang a node's inlet — used by trigger-style control bodies (`.b`,
@@ -601,15 +639,149 @@ class PatcherController {
     final native = _nativeByNode[id];
     if (native == null) return;
     _gateway.sendBang(instanceId, native, inlet);
+    _guiValueStale.add(id);
+  }
+
+  /// Send a list (`0.2 0.8`) into a node's inlet — the multi-value controls'
+  /// push (`.rslider`, `.multislider`) and a `.l`'s stored list (issue #469).
+  void setControlList(
+    PatchNodeId id, {
+    required int inlet,
+    required String list,
+  }) {
+    final native = _nativeByNode[id];
+    if (native == null) return;
+    _gateway.sendList(instanceId, native, inlet, list);
+    _guiValueStale.add(id);
+  }
+
+  /// Send a selector message (`inc`, `store 3`, `clear`) into a node's inlet
+  /// (issue #469).
+  void sendControlMessage(
+    PatchNodeId id, {
+    required int inlet,
+    required String message,
+  }) {
+    final native = _nativeByNode[id];
+    if (native == null) return;
+    _gateway.sendMessage(instanceId, native, inlet, message);
+    _guiValueStale.add(id);
   }
 
   /// The live GUI display value of a node (`guiValue`) — what a control body
   /// (`.slider`, `.f`, `.i`, `.t`) shows. Empty for a node with no native
   /// handle or no display value.
+  ///
+  /// Answered from the last read — [refreshGuiValues]'s, normally — and read
+  /// now (and remembered) only when there is none yet or a write through this
+  /// controller has outdated it, so a woken body never reads the engine a
+  /// second time in the same frame (issue #514): some reads are destructive.
+  /// For a [GuiValueRead.cells] node it is the cells joined by spaces (the
+  /// spelling `guiValue` itself uses), from the per-cell read rather than a
+  /// whole-state one — the engine's one-read-form rule.
   String guiValueOf(PatchNodeId id) {
     final native = _nativeByNode[id];
     if (native == null) return '';
-    return _gateway.guiValue(instanceId, native);
+    if (_guiValueReadOf(id) == GuiValueRead.cells) {
+      return guiValueCellsOf(id).join(' ');
+    }
+    final cached = _guiValueByNode[id];
+    if (cached != null && !_guiValueStale.contains(id)) return cached;
+    _guiValueStale.remove(id);
+    return _guiValueByNode[id] = _gateway.guiValue(instanceId, native);
+  }
+
+  // ─── GUI value protocol, per cell (issue #469) ──────────────────────
+
+  /// The cells of a [GuiValueRead.cells] node's GUI state, as the last poll
+  /// read them — read now (and remembered) if no poll has yet. Empty for a
+  /// node with no native handle. Cells outside the node's [setGuiCellWindow]
+  /// hold the last value read for them (`''` if never read).
+  List<String> guiValueCellsOf(PatchNodeId id) {
+    final cached = _guiCellsByNode[id];
+    if (cached != null && !_guiValueStale.contains(id)) return cached;
+    final native = _nativeByNode[id];
+    if (native == null) return const [];
+    _guiValueStale.remove(id);
+    return _guiCellsByNode[id] = List.unmodifiable(
+      _readCells(id, native, cached ?? const []),
+    );
+  }
+
+  /// How many cells [id]'s GUI state has (1 for a scalar control) — from the
+  /// same read as [guiValueCellsOf].
+  int guiValueCountOf(PatchNodeId id) => guiValueCellsOf(id).length;
+
+  /// Cell [index] of [id]'s GUI state, or `''` past the end — from the same
+  /// read as [guiValueCellsOf].
+  String guiValueCellOf(PatchNodeId id, int index) {
+    final cells = guiValueCellsOf(id);
+    return index >= 0 && index < cells.length ? cells[index] : '';
+  }
+
+  /// Limit the per-cell poll of [id] to cells `[start, end)` — the ones a large
+  /// control (`.kslider`, `.multislider`) actually repaints. `null` for both
+  /// reads every cell again. The window is clamped to the live count at each
+  /// read, so it may run past a bank that has since shrunk.
+  void setGuiCellWindow(PatchNodeId id, {int? start, int? end}) {
+    if (start == null && end == null) {
+      _guiCellWindowByNode.remove(id);
+      return;
+    }
+    _guiCellWindowByNode[id] = (math.max(0, start ?? 0), end ?? 1 << 30);
+  }
+
+  /// Whether [id]'s object takes its own GUI state back, so [restoreGuiValueOf]
+  /// and [setGuiValueCell] can reach it.
+  bool guiValueIsSettableOf(PatchNodeId id) {
+    final native = _nativeByNode[id];
+    if (native == null) return false;
+    return _gateway.guiValueIsSettable(instanceId, native);
+  }
+
+  /// Put a whole GUI state (as `guiValue` spells it) back into [id]'s object —
+  /// sent as a list on inlet 0, so it passes the object's clamps and may emit.
+  /// Returns whether it was sent (false for an unsettable or unbound node).
+  bool restoreGuiValueOf(PatchNodeId id, String state) {
+    final native = _nativeByNode[id];
+    if (native == null) return false;
+    final sent = _gateway.restoreGuiValue(instanceId, native, state);
+    if (sent) _guiValueStale.add(id);
+    return sent;
+  }
+
+  /// Write cell [index] of [id]'s GUI state (`set <index> <value>`). Returns
+  /// whether it was sent (false for an unsettable or unbound node, or an index
+  /// outside the live count).
+  bool setGuiValueCell(PatchNodeId id, int index, String value) {
+    final native = _nativeByNode[id];
+    if (native == null) return false;
+    final sent = _gateway.setGuiValueAt(instanceId, native, index, value);
+    if (sent) _guiValueStale.add(id);
+    return sent;
+  }
+
+  /// Read [id]'s cell count, then the cells in its window, carrying
+  /// [previous] values over for the cells outside it.
+  List<String> _readCells(PatchNodeId id, int native, List<String> previous) {
+    final count = _gateway.guiValueCount(instanceId, native);
+    final (start, end) = _guiCellWindowByNode[id] ?? (0, count);
+    final from = math.min(start, count);
+    final to = math.min(end, count);
+    return [
+      for (var i = 0; i < count; i++)
+        if (i >= from && i < to)
+          _gateway.guiValueAt(instanceId, native, i)
+        else
+          i < previous.length ? previous[i] : '',
+    ];
+  }
+
+  GuiValueRead _guiValueReadOf(PatchNodeId id) {
+    final node = graph.nodeById(id);
+    if (node == null) return GuiValueRead.whole;
+    return NodeTypeRegistry.instance.find(node.type)?.guiValueRead ??
+        GuiValueRead.whole;
   }
 
   /// The creation-argument string a node was last made / reconfigured with —
@@ -646,6 +818,69 @@ class PatcherController {
         key: PatchGuiProperty.background,
         value: name,
         label: name.isEmpty ? 'clear note colour' : 'colour note',
+      ),
+    );
+  }
+
+  // ─── keyboard range and velocity (issue #515) ────────────────────────
+
+  /// The keys the `.kslider` at [id] shows — its [PatchGuiProperty.keyLow] /
+  /// [PatchGuiProperty.keyHigh] decoration, or the default range.
+  KeyboardLayout keyboardLayoutOf(PatchNodeId id) => KeyboardLayout.fromGui(
+    guiPropertyOf(id, PatchGuiProperty.keyLow),
+    guiPropertyOf(id, PatchGuiProperty.keyHigh),
+  );
+
+  /// The fixed velocity (1–127) every press on the `.kslider` at [id] plays
+  /// at, or null when a press plays by its depth down the key.
+  int? keyboardVelocityOf(PatchNodeId id) {
+    final stored = int.tryParse(
+      guiPropertyOf(id, PatchGuiProperty.keyVelocity).trim(),
+    );
+    if (stored == null || stored < 1) return null;
+    return math.min(stored, MidiPitch.maxVelocity);
+  }
+
+  bool _isKeyboard(PatchNodeId id) =>
+      graph.nodeById(id)?.type == PatchObjectTypes.gKslider;
+
+  /// Show [range] on the `.kslider` at [id], as one journaled, undoable step
+  /// that moves both ends together. The default range is stored as no range
+  /// at all, so a keyboard put back to it saves exactly as a fresh one. A
+  /// no-op for anything else, and for the range it already shows.
+  void setKeyboardRange(PatchNodeId id, KeyboardLayout range) {
+    if (!_isKeyboard(id)) return;
+    final now = keyboardLayoutOf(id);
+    if (now.low == range.low && now.high == range.high) return;
+    undoScope.run(
+      SetPatchGuiPropertiesCommand(
+        this,
+        id,
+        values: {
+          PatchGuiProperty.keyLow: range.isDefault ? '' : '${range.low}',
+          PatchGuiProperty.keyHigh: range.isDefault ? '' : '${range.high}',
+        },
+        label: 'keyboard range',
+      ),
+    );
+  }
+
+  /// Make every press on the `.kslider` at [id] play at [velocity] (held to
+  /// 1–127), or by its depth down the key for null — one journaled step. A
+  /// no-op for anything else, and for the velocity it already plays.
+  void setKeyboardVelocity(PatchNodeId id, int? velocity) {
+    if (!_isKeyboard(id)) return;
+    final fixed = velocity?.clamp(1, MidiPitch.maxVelocity);
+    if (keyboardVelocityOf(id) == fixed) return;
+    undoScope.run(
+      SetPatchGuiPropertyCommand(
+        this,
+        id,
+        key: PatchGuiProperty.keyVelocity,
+        value: fixed == null ? '' : '$fixed',
+        label: fixed == null
+            ? 'keyboard velocity by depth'
+            : 'keyboard velocity',
       ),
     );
   }
@@ -725,9 +960,13 @@ class PatcherController {
   /// nothing at all while it is not.
   ///
   /// Two economies keep an idle patch free: only [_readsGuiValue] nodes are
-  /// read, and only a value different from the last one seen raises
+  /// read, and only a value different from the last one seen — or the first
+  /// read after a write through this controller — raises
   /// [PatchNode.markGuiValueChanged]. A patch nobody is driving therefore
   /// repaints nothing, however long the poll runs.
+  ///
+  /// This read is the frame's only one for a [GuiValueRead.whole] node: the
+  /// body it wakes answers from it through [guiValueOf] (issue #514).
   ///
   /// If the gateway ever grows a cheaper change signal (a per-object dirty flag
   /// from `dart-yse`), it swaps in behind this one method — the surface, the
@@ -736,14 +975,42 @@ class PatcherController {
     var woken = 0;
     for (final node in graph.nodes) {
       if (!_readsGuiValue(node)) continue;
-      final value = guiValueOf(node.id);
+      if (_guiValueReadOf(node.id) == GuiValueRead.cells) {
+        if (_refreshCells(node)) woken++;
+        continue;
+      }
+      final native = _nativeByNode[node.id];
+      if (native == null) continue;
+      final value = _gateway.guiValue(instanceId, native);
       final previous = _guiValueByNode[node.id] ?? '';
       _guiValueByNode[node.id] = value;
-      if (previous == value) continue;
+      // A write nobody has read back since leaves the body showing its own
+      // optimistic guess, which the engine may have overruled — so the read
+      // after it wakes the node even when it matches the last one.
+      final written = _guiValueStale.remove(node.id);
+      if (previous == value && !written) continue;
       node.markGuiValueChanged();
       woken++;
     }
     return woken;
+  }
+
+  /// The per-cell poll of one [GuiValueRead.cells] node: re-read its count and
+  /// windowed cells, and wake it if any of them (or the count) moved. Returns
+  /// whether it was woken. A node never read before compares against an empty
+  /// state, like the whole-value path.
+  bool _refreshCells(PatchNode node) {
+    final native = _nativeByNode[node.id];
+    if (native == null) return false;
+    final previous = _guiCellsByNode[node.id] ?? const <String>[];
+    final cells = List<String>.unmodifiable(
+      _readCells(node.id, native, previous),
+    );
+    _guiCellsByNode[node.id] = cells;
+    _guiValueStale.remove(node.id);
+    if (listEquals(previous, cells)) return false;
+    node.markGuiValueChanged();
+    return true;
   }
 
   /// Whether [node]'s registered body displays a `guiValue`. An object box
@@ -1213,6 +1480,9 @@ class PatcherController {
     if (native == null) return const [];
     _gateway.setParams(instanceId, native, args);
     _argsByNode[id] = args;
+    // New arguments can mean a new state (a `.textedit`'s text, a label
+    // switch's mode), so the remembered read no longer stands.
+    _guiValueStale.add(id);
     final dropped = _resyncShape(id, native);
     graph.nodeById(id)?.markParamsChanged();
     return dropped;
@@ -1282,7 +1552,10 @@ class PatcherController {
   /// back is as correct as growing. A **GUI object** keeps its tuned size and
   /// only ever grows, and only in **width**, when a new port count needs more
   /// than the current box seats — the axis ports spread along since #377 — so a
-  /// hand-authored body never jumps around as ports come and go.
+  /// hand-authored body never jumps around as ports come and go. The exception
+  /// is a control that declares `sizeForArgs` (issue #471) or `sizeForGui`
+  /// (#515): its box *is* its arguments or decoration, so it is re-measured
+  /// from them.
   Size _sizeSeating(PatchNode node, int inputs, int outputs) {
     if (PatchTypeName.isNote(node.type)) {
       return _noteSize(argsOf(node.id), _guiByNode[node.id] ?? const {});
@@ -1297,6 +1570,16 @@ class PatcherController {
     final needed = PatchCanvasConstants.minWidthForPorts(
       math.max(inputs, outputs),
     );
+    // A control sized by its arguments (issue #471) or its decoration (#515)
+    // is re-measured outright, shrinking as well as growing: fewer items, or
+    // fewer keys, is a smaller control.
+    final registered = NodeTypeRegistry.instance.find(node.type);
+    final measured =
+        registered?.sizeForGui?.call(_guiByNode[node.id] ?? const {}) ??
+        registered?.sizeForArgs?.call(argsOf(node.id));
+    if (measured != null) {
+      return Size(math.max(measured.width, needed), measured.height);
+    }
     return node.size.width >= needed
         ? node.size
         : Size(needed, node.size.height);
@@ -1372,6 +1655,9 @@ class PatcherController {
     _nativeByNode.remove(id);
     _argsByNode.remove(id);
     _guiValueByNode.remove(id);
+    _guiCellsByNode.remove(id);
+    _guiCellWindowByNode.remove(id);
+    _guiValueStale.remove(id);
     _guiByNode.remove(id);
   }
 
@@ -1428,6 +1714,7 @@ class PatcherController {
     // The new object has a display value of its own (or none at all); the one
     // the poll last read belonged to the object that just went.
     _guiValueByNode.remove(id);
+    _guiCellsByNode.remove(id);
     _gateway.setNodePosition(instanceId, native, node.position);
     // Decoration is the canvas's, not the object's: it is carried to the
     // replacement like the position, so a retype's undo finds it intact.

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/tokens/phi_colors.dart';
 import 'package:phi/design/tokens/phi_note_swatch.dart';
+import 'package:phi/domain/patcher/keyboard_layout.dart';
 import 'package:phi/engine/bridge/patch_object_descriptor.dart';
+import 'package:phi/surfaces/patcher/reference/patch_keyboard_settings.dart';
 import 'package:phi/surfaces/patcher/reference/patch_reference_panel.dart';
 
 void main() {
@@ -324,6 +326,104 @@ void main() {
 
       await pumpPanel(tester, note);
       expect(find.text('COLOUR'), findsNothing);
+    });
+  });
+
+  group('keyboard range and velocity (issue #515)', () {
+    const kslider = PatchObjectDescriptor(
+      type: '.kslider',
+      description: 'piano keyboard',
+      category: PatchObjectCategory.gui,
+      isDsp: false,
+      inlets: [],
+      outlets: [],
+      params: [],
+    );
+
+    final ranges = <KeyboardLayout>[];
+    final velocities = <int?>[];
+
+    Future<void> pumpKeyboard(
+      WidgetTester tester,
+      PatchObjectDescriptor desc, {
+      KeyboardLayout? range,
+      int? velocity,
+    }) async {
+      ranges.clear();
+      velocities.clear();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PatchReferencePanel(
+              descriptor: desc,
+              args: '',
+              keyboardRange:
+                  range ??
+                  KeyboardLayout(
+                    KeyboardLayout.defaultLow,
+                    KeyboardLayout.defaultHigh,
+                  ),
+              keyboardVelocity: velocity,
+              onKeyboardRange: ranges.add,
+              onKeyboardVelocity: velocities.add,
+            ),
+          ),
+        ),
+      );
+    }
+
+    Finder step(String name) => find.byKey(PatchKeyboardSettings.stepKey(name));
+
+    testWidgets('a selected keyboard shows its range and steps it an octave '
+        'at a time', (tester) async {
+      await pumpKeyboard(tester, kslider);
+      expect(find.text('KEYBOARD'), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.byKey(PatchKeyboardSettings.rangeKey)).data,
+        'C3 – C6',
+      );
+
+      await tester.tap(step('shift.up'));
+      await tester.tap(step('low.down'));
+      await tester.tap(step('high.down'));
+      expect(
+        [for (final r in ranges) (r.low, r.high)],
+        [(60, 96), (36, 84), (48, 72)],
+      );
+    });
+
+    testWidgets('a step off MIDI or below an octave does nothing', (
+      tester,
+    ) async {
+      await pumpKeyboard(tester, kslider, range: KeyboardLayout(0, 11));
+      await tester.tap(step('shift.down'));
+      await tester.tap(step('low.down'));
+      await tester.tap(step('low.up'));
+      await tester.tap(step('high.down'));
+      expect(ranges, isEmpty);
+      await tester.tap(step('high.up'));
+      expect(ranges.single.high, 23);
+    });
+
+    testWidgets('velocity switches between depth and a fixed value', (
+      tester,
+    ) async {
+      await pumpKeyboard(tester, kslider);
+      expect(find.byKey(PatchKeyboardSettings.velocityKey), findsNothing);
+      await tester.tap(step('velocity.fixed'));
+      expect(velocities, [PatchKeyboardSettings.initialVelocity]);
+
+      await pumpKeyboard(tester, kslider, velocity: 120);
+      expect(find.text('120'), findsOneWidget);
+      await tester.tap(step('velocity.+10'));
+      await tester.tap(step('velocity.-1'));
+      await tester.tap(step('velocity.depth'));
+      expect(velocities, [127, 119, null]);
+    });
+
+    testWidgets('anything but a keyboard has no keyboard rows', (tester) async {
+      await pumpKeyboard(tester, sine);
+      expect(find.text('KEYBOARD'), findsNothing);
     });
   });
 }
