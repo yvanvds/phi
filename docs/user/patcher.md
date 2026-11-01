@@ -177,6 +177,9 @@ for:
   (`umenu`, `radiogroup` and `tab`, which share one tutorial), the range
   slider (`rslider`), the XY pad (`xyslider`) and the slider bank
   (`multislider`).
+- **Structured controls:** the grid (`matrixctrl`), the breakpoint editor
+  (`function`), the interpolation field (`nodes`), the preset bank
+  (`preset`), the keyboard (`kslider`) and the staff (`nslider`).
 - **Time:** `metro`.
 
 Each tutorial is a small working patch, with numbered notes that walk you

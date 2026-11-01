@@ -1,0 +1,921 @@
+{
+  "title": "matrixctrl — a grid of switches",
+  "covers": [
+    ".matrixctrl"
+  ],
+  "summary": "Play a 16-by-4 step pattern with metro, counter and getcolumn, route numbers through a router patchbay, and read the <column> <row> <value> output.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# matrixctrl — a grid of switches\nA matrixctrl is a grid of cells, columns by rows: a step pattern, or a patchbay. Its arguments are the columns, the rows, and the lowest and highest value a cell holds (0 and 1 by default). Click a cell to switch it. Every change leaves the left outlet as <column> <row> <value>.\nMax's matrixctrl sets its size with attributes and can save its cells with the patch. Here the size is in the arguments, and the cells are not saved: the grid starts empty each time the patch opens.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "330.0",
+          "y": "140.0"
+        },
+        "parms": "2 2",
+        "type": ".matrixctrl",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 2
+          },
+          "output 1": {
+            "Count": 0
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "190.0",
+          "y": "140.0"
+        },
+        "parms": "clear",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "190.0"
+        },
+        "parms": "150",
+        "type": ".metro",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "240.0"
+        },
+        "parms": "-1",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "290.0"
+        },
+        "parms": "16",
+        "type": ".%",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "190.0",
+          "y": "290.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "60.0",
+          "y": "340.0"
+        },
+        "parms": "getcolumn",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "60.0",
+          "y": "420.0"
+        },
+        "parms": "16 4",
+        "type": ".matrixctrl",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "60.0",
+          "y": "500.0"
+        },
+        "parms": "",
+        "type": ".l",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "200.0",
+          "y": "500.0"
+        },
+        "parms": "",
+        "type": ".l",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "60.0",
+          "y": "560.0"
+        },
+        "parms": "0 0 0 0",
+        "type": ".unpack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 25
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 30
+            },
+            "Count": 1
+          },
+          "output 3": {
+            "0": {
+              "Inlet": 0,
+              "Object": 35
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "420.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".l",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "60.0",
+          "y": "620.0"
+        },
+        "parms": "1",
+        "type": ".sel",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 21
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "Count": 0
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "60.0",
+          "y": "670.0"
+        },
+        "parms": "1 0 0 150",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "60.0",
+          "y": "720.0"
+        },
+        "parms": "0.",
+        "type": ".line",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 24
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "Count": 0
+          }
+        }
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "60.0",
+          "y": "780.0"
+        },
+        "parms": "660",
+        "type": "~sine",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 24
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "60.0",
+          "y": "840.0"
+        },
+        "parms": "",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 40
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "190.0",
+          "y": "620.0"
+        },
+        "parms": "1",
+        "type": ".sel",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 26
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "Count": 0
+          }
+        }
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "190.0",
+          "y": "670.0"
+        },
+        "parms": "1 0 0 150",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 27
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 27": {
+        "ID": 27,
+        "gui": {
+          "x": "190.0",
+          "y": "720.0"
+        },
+        "parms": "0.",
+        "type": ".line",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 29
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "Count": 0
+          }
+        }
+      },
+      "object 28": {
+        "ID": 28,
+        "gui": {
+          "x": "190.0",
+          "y": "780.0"
+        },
+        "parms": "440",
+        "type": "~sine",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 29
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 29": {
+        "ID": 29,
+        "gui": {
+          "x": "190.0",
+          "y": "840.0"
+        },
+        "parms": "",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 40
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "330.0",
+          "y": "200.0"
+        },
+        "parms": "0 0 0",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 30": {
+        "ID": 30,
+        "gui": {
+          "x": "320.0",
+          "y": "620.0"
+        },
+        "parms": "1",
+        "type": ".sel",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 31
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "Count": 0
+          }
+        }
+      },
+      "object 31": {
+        "ID": 31,
+        "gui": {
+          "x": "320.0",
+          "y": "670.0"
+        },
+        "parms": "1 0 0 150",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 32
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 32": {
+        "ID": 32,
+        "gui": {
+          "x": "320.0",
+          "y": "720.0"
+        },
+        "parms": "0.",
+        "type": ".line",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 34
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "Count": 0
+          }
+        }
+      },
+      "object 33": {
+        "ID": 33,
+        "gui": {
+          "x": "320.0",
+          "y": "780.0"
+        },
+        "parms": "110",
+        "type": "~saw",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 34
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 34": {
+        "ID": 34,
+        "gui": {
+          "x": "320.0",
+          "y": "840.0"
+        },
+        "parms": "",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 41
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 35": {
+        "ID": 35,
+        "gui": {
+          "x": "450.0",
+          "y": "620.0"
+        },
+        "parms": "1",
+        "type": ".sel",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 36
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "Count": 0
+          }
+        }
+      },
+      "object 36": {
+        "ID": 36,
+        "gui": {
+          "x": "450.0",
+          "y": "670.0"
+        },
+        "parms": "1 0 0 150",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 37
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 37": {
+        "ID": 37,
+        "gui": {
+          "x": "450.0",
+          "y": "720.0"
+        },
+        "parms": "0.",
+        "type": ".line",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 39
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "Count": 0
+          }
+        }
+      },
+      "object 38": {
+        "ID": 38,
+        "gui": {
+          "x": "450.0",
+          "y": "780.0"
+        },
+        "parms": "",
+        "type": "~noise",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 39
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 39": {
+        "ID": 39,
+        "gui": {
+          "x": "450.0",
+          "y": "840.0"
+        },
+        "parms": "",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 42
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "450.0",
+          "y": "200.0"
+        },
+        "parms": "100",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 40": {
+        "ID": 40,
+        "gui": {
+          "x": "60.0",
+          "y": "900.0"
+        },
+        "parms": "",
+        "type": "~+",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 41
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 41": {
+        "ID": 41,
+        "gui": {
+          "x": "60.0",
+          "y": "960.0"
+        },
+        "parms": "",
+        "type": "~+",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 42
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 42": {
+        "ID": 42,
+        "gui": {
+          "x": "60.0",
+          "y": "1020.0"
+        },
+        "parms": "",
+        "type": "~+",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 43
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 43": {
+        "ID": 43,
+        "gui": {
+          "x": "60.0",
+          "y": "1080.0"
+        },
+        "parms": "0.15",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 44
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 44
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 44": {
+        "ID": 44,
+        "gui": {
+          "x": "60.0",
+          "y": "1140.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 45": {
+        "ID": 45,
+        "gui": {
+          "x": "640.0",
+          "y": "150.0",
+          "w": "300"
+        },
+        "parms": "1. A patchbay into router. Each column is one of router's inputs and each row one of its outputs. Click the bottom left cell, column 0 and row 1, then click 100: it reaches the right box. The list box shows the click as <column> <row> <value>, the message router reads.",
+        "type": ".text"
+      },
+      "object 46": {
+        "ID": 46,
+        "gui": {
+          "x": "640.0",
+          "y": "270.0",
+          "w": "300"
+        },
+        "parms": "2. One input can reach both outputs, and both inputs can share one. On the engine Phi ships, a cell's value comes out as a decimal, 1., and router only takes whole numbers, so pack 0 0 0 rounds the list first (#522).",
+        "type": ".text"
+      },
+      "object 47": {
+        "ID": 47,
+        "gui": {
+          "x": "640.0",
+          "y": "420.0",
+          "w": "300"
+        },
+        "parms": "3. A 16-step pattern on four rows: each column is a step, each row a sound. Click cells to place hits, then turn on the toggle to play the pattern on the master bus.",
+        "type": ".text"
+      },
+      "object 48": {
+        "ID": 48,
+        "gui": {
+          "x": "640.0",
+          "y": "520.0",
+          "w": "300"
+        },
+        "parms": "4. metro steps counter and % 16 through the columns, and prepend getcolumn asks the grid for one column at a time. The answer, one value per row, leaves the right outlet: the second list box shows it. getrow asks for a row.",
+        "type": ".text"
+      },
+      "object 49": {
+        "ID": 49,
+        "gui": {
+          "x": "640.0",
+          "y": "650.0",
+          "w": "300"
+        },
+        "parms": "5. unpack spreads the column over four voices, the top row on the left. sel 1 bangs for a cell that is on, pack 1 0 0 150 sends line a short envelope, and ~* plays it on the voice.",
+        "type": ".text"
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "450.0",
+          "y": "250.0"
+        },
+        "parms": "200",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 2,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 50": {
+        "ID": 50,
+        "gui": {
+          "x": "640.0",
+          "y": "770.0",
+          "w": "300"
+        },
+        "parms": "6. clear switches every cell off. A list of all 64 values sets the whole grid, column by column, and set <index> <value> sets one cell by index, column × 4 + row. A bang sends every cell from the left outlet.",
+        "type": ".text"
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "330.0",
+          "y": "300.0"
+        },
+        "parms": "2 2",
+        "type": ".router",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "Count": 0
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "330.0",
+          "y": "360.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "420.0",
+          "y": "360.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

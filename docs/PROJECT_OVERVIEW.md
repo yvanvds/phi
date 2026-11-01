@@ -2984,8 +2984,10 @@ main + app          (orchestration)
   `number-boxes` for `.i` + `.f`, `m`, `text`) and the single-value controls
   (#491: `dial`, `incdec`, `led`, `textbutton`, `textedit`, `l`) and the
   selection and slider controls (#492: `menus` for `.umenu` + `.radiogroup` +
-  `.tab`, `rslider`, `xyslider`, `multislider`). Covered by domain unit
-  tests, a `patch_library_tutorial_test`, a real-engine
+  `.tab`, `rslider`, `xyslider`, `multislider`) and the structured controls
+  (#493: `matrixctrl`, `function`, `nodes`, `preset`, `kslider`, `nslider`;
+  `function` and `preset` ship their points and slots as saved object state
+  in the dump). Covered by domain unit tests, a `patch_library_tutorial_test`, a real-engine
   `patcher_tutorial_assets_engine_test` (every index entry has a file, every
   type exists in the engine, every payload parses, a report of uncovered
   types), surface/reference-panel widget tests, and an end-to-end
@@ -2994,7 +2996,8 @@ main + app          (orchestration)
   replay what each tutorial's notes promise on the real engine (objects found
   by type + canvas position), plus an end-to-end run per batch
   (`patcher_gui_basics_tutorials`, `patcher_single_value_controls_tutorials`,
-  `patcher_selection_slider_controls_tutorials`: each opens its tutorials
+  `patcher_selection_slider_controls_tutorials`,
+  `patcher_structured_controls_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
   that no note or object overlaps another).
 - Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan

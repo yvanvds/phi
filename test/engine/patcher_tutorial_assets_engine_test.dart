@@ -589,6 +589,217 @@ void main() {
     });
   });
 
+  test('every structured control has a tutorial (#493)', () {
+    for (final type in [
+      '.matrixctrl',
+      '.function',
+      '.nodes',
+      '.preset',
+      '.kslider',
+      '.nslider',
+    ]) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+  });
+
+  group('structured control tutorials (#493) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    void open(String slug) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+    }
+
+    tearDown(() => gateway.disposeInstance(inst));
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    String value(int id) => gateway.guiValue(inst, id);
+    double number(int id) => double.parse(value(id));
+    List<double> numbers(int id) => [
+      for (final t in value(id).split(' '))
+        if (t.isNotEmpty) double.parse(t),
+    ];
+
+    test('matrixctrl: a patchbay into router, a stepped column, clear', () {
+      open('matrixctrl');
+      // The patchbay: column 0 row 1 sends the first input to the second
+      // output, through pack 0 0 0 (#522).
+      final bay = at('.matrixctrl', 330, 140);
+      final left = at('.i', 330, 360);
+      final right = at('.i', 420, 360);
+      gateway.sendList(inst, bay, 0, '0 1 1');
+      expect(numbers(at('.l', 420, 140)), [0, 1, 1], reason: 'the cell form');
+      click(at('.m', 450, 200)); // 100
+      expect((value(left), value(right)), ('0', '100'));
+      gateway.sendList(inst, bay, 0, '1 0 1');
+      click(at('.m', 450, 250)); // 200
+      expect((value(left), value(right)), ('200', '100'));
+      gateway.sendList(inst, bay, 0, '0 0 1');
+      click(at('.m', 450, 200));
+      expect(value(left), '100', reason: 'both inputs share an output');
+
+      // The sequencer: hits on step 3, rows 0 and 2.
+      final grid = at('.matrixctrl', 60, 420);
+      final column = at('.l', 200, 500);
+      expect(gateway.guiValueCount(inst, grid), 64, reason: '16 by 4');
+      gateway.sendList(inst, grid, 0, '3 0 1');
+      gateway.sendList(inst, grid, 0, '3 2 1');
+      expect(numbers(at('.l', 60, 500)), [3, 2, 1]);
+      final counter = at('.counter', 60, 240);
+      for (var i = 0; i < 4; i++) {
+        click(counter);
+      }
+      expect(value(at('.i', 190, 290)), '3');
+      expect(numbers(column), [1, 0, 1, 0], reason: 'getcolumn 3');
+      click(at('.m', 190, 140)); // clear
+      for (var i = 0; i < 16; i++) {
+        click(counter);
+      }
+      expect(numbers(column), [0, 0, 0, 0]);
+      expect(graph.objects.map((o) => o.type), contains('~dac'));
+    });
+
+    test('function: saved points, the ramp, y for x, a curve, dump', () {
+      open('function');
+      final fn = at('.function', 60, 200);
+      expect(
+        [
+          for (var i = 0; i < gateway.guiValueCount(inst, fn); i++)
+            gateway.guiValueAt(inst, fn, i),
+        ],
+        ['0. 0. 0.', '30. 1. 0.', '120. 0.5 0.', '600. 0. 0.'],
+        reason: 'the points come back with the patch',
+      );
+      final ramp = at('.l', 150, 340);
+      click(at('.b', 60, 140));
+      expect(numbers(ramp), [0, 0, 1, 30, 0.5, 90, 0, 480]);
+      final y = at('.f', 60, 340);
+      click(at('.m', 150, 140)); // 15
+      expect(number(y), closeTo(0.5, 1e-6));
+      click(at('.m', 260, 140)); // 300
+      expect(number(y), closeTo(0.3125, 1e-6));
+      click(at('.m', 370, 200)); // 0.5 -> setcurve 3 0.5
+      click(at('.m', 260, 140));
+      expect(number(y), closeTo(0.5 - 0.5 * 0.375 * 0.375 * 0.375, 1e-4));
+      click(at('.b', 60, 140));
+      expect(numbers(ramp), [
+        0,
+        0,
+        1,
+        30,
+        0.5,
+        90,
+        0,
+        480,
+      ], reason: 'the ramp ignores curves');
+      click(at('.m', 370, 140)); // dump
+      expect(numbers(at('.l', 300, 340)), [3, 600, 0, 0.5]);
+      expect(graph.objects.map((o) => o.type), contains('~dac'));
+    });
+
+    test('nodes: a layout on load, weights sum to 1 inside, 0 outside', () {
+      open('nodes');
+      final field = at('.nodes', 60, 250);
+      expect(numbers(field), [
+        0.25, 0.25, 0.3, 0.75, 0.25, 0.3, //
+        0.25, 0.75, 0.3, 0.75, 0.75, 0.3,
+      ], reason: 'loadmess');
+      final weights = at('.l', 60, 440);
+      click(at('.b', 260, 250)); // 0.5 0.25
+      expect(numbers(weights), [0.5, 0.5, 0, 0]);
+      click(at('.b', 400, 250)); // the middle
+      expect(numbers(weights), [0, 0, 0, 0], reason: 'inside no node');
+      gateway.sendList(inst, field, 0, '0.48 0.25');
+      final w = numbers(weights);
+      expect(w[0], greaterThan(w[1]), reason: 'nearer the first node');
+      expect(w[1], greaterThan(0));
+      expect(w.reduce((a, b) => a + b), closeTo(1, 1e-5));
+      expect(numbers(at('.l', 260, 440)), hasLength(4), reason: 'distances');
+      expect(graph.objects.map((o) => o.type), contains('~dac'));
+    });
+
+    test('preset: shipped slots recall, empty sends nothing, store', () {
+      open('preset');
+      final bank = at('.preset', 60, 680);
+      final note = at('.i', 250, 140);
+      final recalled = at('.i', 60, 740);
+      click(at('.m', 170, 560)); // 1
+      expect(value(note), '57');
+      expect(value(at('.t', 60, 140)), 'on');
+      expect(number(at('.slider', 440, 140)), closeTo(0.6, 1e-6));
+      expect(number(at('.f', 340, 200)), closeTo(220, 0.01), reason: 'sent on');
+      expect(value(recalled), '1');
+      click(at('.m', 280, 560)); // 2
+      expect((value(note), value(recalled)), ('52', '2'));
+      click(at('.m', 390, 560)); // 5: empty
+      expect((value(note), value(recalled)), ('52', '2'));
+      gateway.sendInt(inst, note, 0, 64);
+      click(at('.m', 500, 560)); // 3 -> store 3
+      expect(value(at('.i', 190, 740)), '3');
+      click(at('.m', 60, 560)); // 0
+      expect(value(note), '45');
+      gateway.sendInt(inst, bank, 0, 3);
+      expect(value(note), '64');
+      final slots = gateway.objectState(inst, bank)!['slots']! as List;
+      expect([for (final s in slots) (s as Map)['slot']], [0, 1, 2, 3]);
+    });
+
+    test('kslider: a cable note lights its key, release, stored velocity', () {
+      open('kslider');
+      final keys = at('.kslider', 60, 250);
+      final pitch = at('.i', 60, 350);
+      final velocity = at('.i', 260, 350);
+      click(at('.m', 60, 140)); // 60
+      expect((value(pitch), value(velocity)), ('60', '100'));
+      expect(gateway.guiValueAt(inst, keys, 60), '100', reason: 'key down');
+      click(at('.b', 170, 140)); // pack 60 0
+      expect((value(pitch), value(velocity)), ('60', '0'));
+      expect(gateway.guiValueAt(inst, keys, 60), '0', reason: 'released');
+      click(at('.m', 260, 140)); // 40 -> velocity inlet
+      expect(value(velocity), '0', reason: 'the right inlet is silent');
+      click(at('.m', 370, 140)); // 64
+      expect((value(pitch), value(velocity)), ('64', '40'));
+      click(at('.b', 480, 140)); // pack 67 110
+      expect((value(pitch), value(velocity)), ('67', '110'));
+      gateway.sendInt(inst, keys, 0, 72);
+      expect(value(velocity), '110', reason: 'the list set the velocity');
+      click(at('.b', 170, 140)); // pack 60 0
+      click(at('.m', 60, 140)); // 60 now plays at 0: a release
+      expect((value(pitch), value(velocity)), ('60', '0'));
+      expect(graph.objects.map((o) => o.type), contains('~dac'));
+    });
+
+    test('nslider: sharps against flats, a chosen spelling, the range', () {
+      open('nslider');
+      final sharpPitch = at('.i', 60, 420);
+      final sharpSign = at('.i', 140, 420);
+      final flatPitch = at('.i', 240, 420);
+      final flatSign = at('.i', 320, 420);
+      click(at('.m', 60, 140)); // 61
+      expect((value(sharpPitch), value(sharpSign)), ('61', '1'));
+      expect((value(flatPitch), value(flatSign)), ('61', '-1'));
+      click(at('.b', 170, 140)); // pack 61 -1
+      expect((value(sharpPitch), value(sharpSign)), ('61', '-1'));
+      click(at('.m', 390, 140)); // 1 -> set 1 1
+      expect(value(sharpSign), '1', reason: 'respelled in place');
+      click(at('.m', 280, 140)); // 90
+      expect(value(sharpPitch), '90');
+      expect(value(flatPitch), '72', reason: 'the staff covers 48 to 72');
+      gateway.sendInt(inst, at('.nslider', 60, 250), 0, 60);
+      click(at('.m', 390, 140));
+      expect(value(sharpSign), '0', reason: 'a white key is natural');
+      expect(graph.objects.map((o) => o.type), contains('~dac'));
+    });
+  });
+
   test('report: object types with no tutorial yet', () {
     final missing = [
       for (final t in engineTypes.toList()..sort())

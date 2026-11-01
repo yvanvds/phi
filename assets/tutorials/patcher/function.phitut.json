@@ -1,0 +1,369 @@
+{
+  "title": "function — draw a shape, play it back",
+  "covers": [
+    ".function"
+  ],
+  "summary": "Draw an envelope and play it through line into ~* as a saw's level, ask the y for an x, bend a segment with a curve, and dump the points.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# function — draw a shape, play it back\nA function holds breakpoints, each an x, a y and a curve, sorted by x: an envelope, a tempo curve, any shape over time. Its arguments are how many points it can hold, then the lowest and highest y (0 and 1 by default). Its points are saved with the patch.\nMax's function sends its shape to line~, or with its curves to curve~. Here a bang sends <y> <time> pairs for line or bline, which ramp in straight lines: the curves shape the drawing and the y the function answers, not the ramp.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "300.0",
+          "y": "340.0"
+        },
+        "parms": "",
+        "type": ".l",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "400.0"
+        },
+        "parms": "0.",
+        "type": ".line",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 13
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "Count": 0
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "200.0",
+          "y": "400.0"
+        },
+        "parms": "220",
+        "type": "~saw",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "200.0",
+          "y": "460.0"
+        },
+        "parms": "",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "200.0",
+          "y": "520.0"
+        },
+        "parms": "0.2",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 15
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "200.0",
+          "y": "580.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "560.0",
+          "y": "130.0",
+          "w": "300"
+        },
+        "parms": "1. Click the button. The shape leaves the middle outlet as <y> <time> pairs, line ramps through them, and ~* uses the ramp as the saw's level on the master bus. The middle list box shows the pairs: the first time is 0, each later one the distance in x from the point before.",
+        "type": ".text"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "560.0",
+          "y": "280.0",
+          "w": "300"
+        },
+        "parms": "2. Draw your own: click empty space to add a point, drag a point to move it, or select one and press Delete. x counts milliseconds here, so the last point sets how long the sound lasts.",
+        "type": ".text"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "560.0",
+          "y": "390.0",
+          "w": "300"
+        },
+        "parms": "3. A number is an x, and the function answers its y from the left outlet. Click 15, halfway up the attack: 0.5. Then click 300. A list <x> <y> adds a point, and edits send nothing.",
+        "type": ".text"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "560.0",
+          "y": "500.0",
+          "w": "300"
+        },
+        "parms": "4. Curves. Alt-drag a segment up or down to bend it. A curve belongs to the point its segment arrives at: click 0.5, which prepend turns into setcurve 3 0.5, and click 300 again. The y changes; the ramp the button sends does not.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "150.0",
+          "y": "140.0"
+        },
+        "parms": "15",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "560.0",
+          "y": "630.0",
+          "w": "300"
+        },
+        "parms": "5. dump sends every point from the right outlet, one list each in x order: <index> <x> <y> <curve>. The list box keeps the last one.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "260.0",
+          "y": "140.0"
+        },
+        "parms": "300",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "370.0",
+          "y": "140.0"
+        },
+        "parms": "dump",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "200.0"
+        },
+        "parms": "",
+        "type": ".function",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 2
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        },
+        "state": {
+          "points": [
+            {
+              "curve": 0.0,
+              "x": 0.0,
+              "y": 0.0
+            },
+            {
+              "curve": 0.0,
+              "x": 30.0,
+              "y": 1.0
+            },
+            {
+              "curve": 0.0,
+              "x": 120.0,
+              "y": 0.5
+            },
+            {
+              "curve": 0.0,
+              "x": 600.0,
+              "y": 0.0
+            }
+          ]
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "370.0",
+          "y": "200.0"
+        },
+        "parms": "0.5",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "370.0",
+          "y": "250.0"
+        },
+        "parms": "setcurve 3",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "340.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "150.0",
+          "y": "340.0"
+        },
+        "parms": "",
+        "type": ".l",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      }
+    }
+  }
+}
