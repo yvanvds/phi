@@ -25,4 +25,12 @@ void main() {
     expect(MidiPitch.staffStep(70), 40, reason: 'A sharp by default');
     expect(MidiPitch.staffStep(70, accidental: -1), 41, reason: 'B flat');
   });
+
+  test('a pitch is named with its octave, middle C as C4 (issue #515)', () {
+    expect(MidiPitch.name(60), 'C4');
+    expect(MidiPitch.name(48), 'C3');
+    expect(MidiPitch.name(61), 'C#4');
+    expect(MidiPitch.name(0), 'C-1');
+    expect(MidiPitch.name(127), 'G9');
+  });
 }

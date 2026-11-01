@@ -43,6 +43,10 @@ class KeyboardLayout {
   static const int defaultLow = 48;
   static const int defaultHigh = 84;
 
+  /// The narrowest span [movedLow] / [movedHigh] leave, in semitones: an
+  /// octave's twelve keys, C up to B.
+  static const int minSpan = 11;
+
   /// A black key's width, as a fraction of a white key's.
   static const double blackWidth = 0.6;
 
@@ -63,6 +67,28 @@ class KeyboardLayout {
     for (var p = low; p <= high; p++) {
       yield p;
     }
+  }
+
+  /// Whether this is the range a keyboard shows when nothing names one.
+  bool get isDefault => low == defaultLow && high == defaultHigh;
+
+  /// This keyboard moved [octaves] up (or down, negative) whole, or null when
+  /// that would run off MIDI's 0–127 (issue #515). Whole octaves keep both ends
+  /// on white keys.
+  KeyboardLayout? shifted(int octaves) =>
+      _within(low + 12 * octaves, high + 12 * octaves);
+
+  /// This keyboard with its bottom end moved [octaves] (down widens it, up
+  /// narrows it), or null off MIDI or narrower than [minSpan].
+  KeyboardLayout? movedLow(int octaves) => _within(low + 12 * octaves, high);
+
+  /// This keyboard with its top end moved [octaves] (up widens it, down
+  /// narrows it), or null off MIDI or narrower than [minSpan].
+  KeyboardLayout? movedHigh(int octaves) => _within(low, high + 12 * octaves);
+
+  static KeyboardLayout? _within(int low, int high) {
+    if (low < 0 || high > MidiPitch.max || high - low < minSpan) return null;
+    return KeyboardLayout(low, high);
   }
 
   /// Whether [pitch] is on this keyboard.

@@ -54,4 +54,37 @@ void main() {
       reason: 'the bottom of a black key is its loudest',
     );
   });
+
+  group('editing the range (issue #515)', () {
+    final standard = KeyboardLayout(
+      KeyboardLayout.defaultLow,
+      KeyboardLayout.defaultHigh,
+    );
+
+    test('the default range knows it is the default', () {
+      expect(standard.isDefault, isTrue);
+      expect(KeyboardLayout(36, 84).isDefault, isFalse);
+    });
+
+    test('a shift moves both ends by whole octaves, inside MIDI', () {
+      final up = standard.shifted(1)!;
+      expect((up.low, up.high), (60, 96));
+      final down = standard.shifted(-2)!;
+      expect((down.low, down.high), (24, 60));
+      expect(KeyboardLayout(0, 36).shifted(-1), isNull);
+      expect(KeyboardLayout(96, 127).shifted(1), isNull);
+    });
+
+    test('moving one end widens or narrows, never below an octave', () {
+      final wider = standard.movedLow(-1)!;
+      expect((wider.low, wider.high), (36, 84));
+      final narrower = standard.movedHigh(-2)!;
+      expect((narrower.low, narrower.high), (48, 60));
+      expect(narrower.movedHigh(-1), isNull, reason: 'one octave is the floor');
+      expect(narrower.movedLow(1), isNull);
+      expect(KeyboardLayout(60, 71).movedLow(1), isNull);
+      expect(KeyboardLayout(0, 48).movedLow(-1), isNull, reason: 'off MIDI');
+      expect(KeyboardLayout(48, 120).movedHigh(1), isNull, reason: 'off MIDI');
+    });
+  });
 }

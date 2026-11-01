@@ -7,11 +7,14 @@ import '../../design/widgets/patcher/patch_canvas_constants.dart';
 import '../../design/widgets/patcher/patch_note_box.dart';
 import '../../design/widgets/patcher/patch_note_metrics.dart';
 import '../../design/widgets/patcher/patch_object_box_metrics.dart';
+import '../../domain/midi/midi_pitch.dart';
+import '../../domain/patcher/keyboard_layout.dart';
 import '../../domain/patcher/patch_cable.dart';
 import '../../domain/patcher/patch_graph.dart';
 import '../../domain/patcher/patch_gui_property.dart';
 import '../../domain/patcher/patch_node.dart';
 import '../../domain/patcher/patch_node_id.dart';
+import '../../domain/patcher/patch_object_types.dart';
 import '../../domain/patcher/patch_port.dart';
 import '../../domain/patcher/patch_port_id.dart';
 import '../../domain/patcher/patch_port_kind.dart';
@@ -36,6 +39,7 @@ import 'patcher_commands/move_patch_nodes_command.dart';
 import 'patcher_commands/paste_patch_clipboard_command.dart';
 import 'patcher_commands/reroute_cable_command.dart';
 import 'patcher_commands/retype_patch_object_command.dart';
+import 'patcher_commands/set_patch_gui_properties_command.dart';
 import 'patcher_commands/set_patch_gui_property_command.dart';
 import 'patcher_commands/set_patch_params_command.dart';
 
@@ -422,6 +426,7 @@ class PatcherController {
     final registered = NodeTypeRegistry.instance.find(type);
     final tuned =
         declared ??
+        registered?.sizeForGui?.call(gui) ??
         registered?.sizeForArgs?.call(args) ??
         registered?.defaultSize;
     if (tuned != null) {
@@ -813,6 +818,69 @@ class PatcherController {
         key: PatchGuiProperty.background,
         value: name,
         label: name.isEmpty ? 'clear note colour' : 'colour note',
+      ),
+    );
+  }
+
+  // ─── keyboard range and velocity (issue #515) ────────────────────────
+
+  /// The keys the `.kslider` at [id] shows — its [PatchGuiProperty.keyLow] /
+  /// [PatchGuiProperty.keyHigh] decoration, or the default range.
+  KeyboardLayout keyboardLayoutOf(PatchNodeId id) => KeyboardLayout.fromGui(
+    guiPropertyOf(id, PatchGuiProperty.keyLow),
+    guiPropertyOf(id, PatchGuiProperty.keyHigh),
+  );
+
+  /// The fixed velocity (1–127) every press on the `.kslider` at [id] plays
+  /// at, or null when a press plays by its depth down the key.
+  int? keyboardVelocityOf(PatchNodeId id) {
+    final stored = int.tryParse(
+      guiPropertyOf(id, PatchGuiProperty.keyVelocity).trim(),
+    );
+    if (stored == null || stored < 1) return null;
+    return math.min(stored, MidiPitch.maxVelocity);
+  }
+
+  bool _isKeyboard(PatchNodeId id) =>
+      graph.nodeById(id)?.type == PatchObjectTypes.gKslider;
+
+  /// Show [range] on the `.kslider` at [id], as one journaled, undoable step
+  /// that moves both ends together. The default range is stored as no range
+  /// at all, so a keyboard put back to it saves exactly as a fresh one. A
+  /// no-op for anything else, and for the range it already shows.
+  void setKeyboardRange(PatchNodeId id, KeyboardLayout range) {
+    if (!_isKeyboard(id)) return;
+    final now = keyboardLayoutOf(id);
+    if (now.low == range.low && now.high == range.high) return;
+    undoScope.run(
+      SetPatchGuiPropertiesCommand(
+        this,
+        id,
+        values: {
+          PatchGuiProperty.keyLow: range.isDefault ? '' : '${range.low}',
+          PatchGuiProperty.keyHigh: range.isDefault ? '' : '${range.high}',
+        },
+        label: 'keyboard range',
+      ),
+    );
+  }
+
+  /// Make every press on the `.kslider` at [id] play at [velocity] (held to
+  /// 1–127), or by its depth down the key for null — one journaled step. A
+  /// no-op for anything else, and for the velocity it already plays.
+  void setKeyboardVelocity(PatchNodeId id, int? velocity) {
+    if (!_isKeyboard(id)) return;
+    final fixed = velocity?.clamp(1, MidiPitch.maxVelocity);
+    if (keyboardVelocityOf(id) == fixed) return;
+    undoScope.run(
+      SetPatchGuiPropertyCommand(
+        this,
+        id,
+        key: PatchGuiProperty.keyVelocity,
+        value: fixed == null ? '' : '$fixed',
+        label: fixed == null
+            ? 'keyboard velocity by depth'
+            : 'keyboard velocity',
       ),
     );
   }
@@ -1485,8 +1553,9 @@ class PatcherController {
   /// only ever grows, and only in **width**, when a new port count needs more
   /// than the current box seats — the axis ports spread along since #377 — so a
   /// hand-authored body never jumps around as ports come and go. The exception
-  /// is a control that declares `sizeForArgs` (issue #471): its box *is* its
-  /// arguments, so it is re-measured from them.
+  /// is a control that declares `sizeForArgs` (issue #471) or `sizeForGui`
+  /// (#515): its box *is* its arguments or decoration, so it is re-measured
+  /// from them.
   Size _sizeSeating(PatchNode node, int inputs, int outputs) {
     if (PatchTypeName.isNote(node.type)) {
       return _noteSize(argsOf(node.id), _guiByNode[node.id] ?? const {});
@@ -1501,12 +1570,13 @@ class PatcherController {
     final needed = PatchCanvasConstants.minWidthForPorts(
       math.max(inputs, outputs),
     );
-    // A control sized by its arguments (issue #471) is re-measured outright,
-    // shrinking as well as growing: fewer items is a smaller control.
-    final measured = NodeTypeRegistry.instance
-        .find(node.type)
-        ?.sizeForArgs
-        ?.call(argsOf(node.id));
+    // A control sized by its arguments (issue #471) or its decoration (#515)
+    // is re-measured outright, shrinking as well as growing: fewer items, or
+    // fewer keys, is a smaller control.
+    final registered = NodeTypeRegistry.instance.find(node.type);
+    final measured =
+        registered?.sizeForGui?.call(_guiByNode[node.id] ?? const {}) ??
+        registered?.sizeForArgs?.call(argsOf(node.id));
     if (measured != null) {
       return Size(math.max(measured.width, needed), measured.height);
     }

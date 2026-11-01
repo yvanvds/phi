@@ -5,7 +5,9 @@ import 'package:flutter/widgets.dart';
 import '../../design/widgets/patcher/patch_canvas_constants.dart';
 import '../../design/widgets/patcher/patch_object_box_metrics.dart';
 import '../../domain/patcher/item_list_args.dart';
+import '../../domain/patcher/keyboard_layout.dart';
 import '../../domain/patcher/multislider_args.dart';
+import '../../domain/patcher/patch_gui_property.dart';
 import '../../domain/patcher/patch_object_types.dart';
 import '../../domain/patcher/patch_port_kind.dart';
 import '../../engine/state/gui_value_read.dart';
@@ -414,8 +416,10 @@ void registerBuiltInPatcherNodes() {
   registry.register(
     NodeDescriptor(
       type: PatchObjectTypes.gKslider,
-      // Three octaves of white keys at a playable width, C3 to C6.
+      // Three octaves of white keys at a playable width, C3 to C6 — and as
+      // wide as the keys it shows once its range is edited (issue #515).
       defaultSize: const Size(_keyboardWidth, _keyboardHeight),
+      sizeForGui: _keyboardSize,
       defaultArgs: '',
       inputs: const [
         PortSpec(kind: PatchPortKind.control),
@@ -454,8 +458,21 @@ void registerBuiltInPatcherNodes() {
   );
 }
 
+/// Width of one `.kslider` white key (issue #473).
+const double _whiteKeyWidth = 12;
+
 /// A `.kslider` at creation: 22 white keys (C3–C6) at 12 px (issue #473).
-const double _keyboardWidth = 264;
+const double _keyboardWidth = 22 * _whiteKeyWidth;
+
+/// A `.kslider` sized to the range its [gui] decoration shows (issue #515),
+/// white keys keeping their width — the default range gives the creation size.
+Size _keyboardSize(Map<String, String> gui) {
+  final layout = KeyboardLayout.fromGui(
+    gui[PatchGuiProperty.keyLow] ?? '',
+    gui[PatchGuiProperty.keyHigh] ?? '',
+  );
+  return Size(layout.whiteCount * _whiteKeyWidth, _keyboardHeight);
+}
 
 /// Height of a `.kslider` — long enough to play by depth.
 const double _keyboardHeight = 60;

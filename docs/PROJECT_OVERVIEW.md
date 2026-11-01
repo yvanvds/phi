@@ -2830,6 +2830,21 @@ main + app          (orchestration)
   `patcher_node_gui` integration case (a key pressed in run mode sends pitch
   and velocity into two `.i`; inert in edit mode; a staff drag reaches a `.i`;
   cable-driven notes show on both).
+- **Keyboard range and velocity editing** (issue #515) — a selected `.kslider`
+  gets a KEYBOARD section in the reference panel (`PatchKeyboardSettings`,
+  `lib/surfaces/patcher/reference/`): the range shown as `C3 – C6`
+  (`MidiPitch.name`), shifted, or its low / high end moved, an octave at a
+  time (`KeyboardLayout.shifted` / `movedLow` / `movedHigh`, held inside MIDI
+  and to at least an octave), and a depth / fixed velocity switch with ±1 / ±10
+  steps. The controller journals them (`setKeyboardRange` through the new
+  multi-key `SetPatchGuiPropertiesCommand`, so a shift is one undo;
+  `setKeyboardVelocity`); the default range is stored as none. Focus goes back
+  to the canvas after each step. **`NodeDescriptor.sizeForGui`** sizes a GUI
+  control from its decoration ahead of `sizeForArgs`, on reload and on every
+  decoration change: a keyboard stays 12 px per white key. Covered by domain
+  unit tests, `patcher_controller_keyboard_test.dart`, reference-panel widget
+  tests, and a `patcher_node_gui` integration case (select, shift and widen,
+  the box follows, undo / redo, a fixed velocity played in run mode).
 - Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
   switched off for now, issue #447)
 

@@ -47,6 +47,7 @@ class NodeDescriptor {
     required this.outputs,
     this.defaultSize,
     this.sizeForArgs,
+    this.sizeForGui,
     this.buildBody,
     this.readsGuiValue = false,
     this.guiValueRead = GuiValueRead.whole,
@@ -65,6 +66,13 @@ class NodeDescriptor {
   /// sizes itself from this instead of [defaultSize], at creation and again on
   /// every `setParams`. Null for a control of fixed size.
   final Size Function(String args)? sizeForArgs;
+
+  /// A GUI control whose box follows its **decoration** (`PatchGuiProperty`) —
+  /// a `.kslider` as wide as the keys it shows (issue #515) — sizes itself
+  /// from this, ahead of [sizeForArgs], on a reload and again on every
+  /// decoration change. [gui] is the node's key → value map, empty when it
+  /// carries none. Null for a control whose decoration never moves its box.
+  final Size Function(Map<String, String> gui)? sizeForGui;
 
   /// Creation argument string passed to `Patcher.createObject`.
   final String defaultArgs;

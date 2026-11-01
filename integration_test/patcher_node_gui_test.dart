@@ -18,12 +18,14 @@ import 'package:phi/design/widgets/patcher/patch_tab_strip.dart';
 import 'package:phi/design/widgets/patcher/patch_text_button.dart';
 import 'package:phi/design/widgets/patcher/patch_text_edit_box.dart';
 import 'package:phi/design/widgets/patcher/patch_xy_pad.dart';
+import 'package:phi/domain/patcher/keyboard_layout.dart';
 import 'package:phi/domain/patcher/patch_node.dart';
 import 'package:phi/domain/patcher/patch_port.dart';
 import 'package:phi/domain/patcher/patch_port_id.dart';
 import 'package:phi/domain/patcher/patch_port_kind.dart';
 import 'package:phi/domain/patcher/staff_note.dart';
 import 'package:phi/domain/session/session_state.dart';
+import 'package:phi/engine/bridge/patch_object_descriptor.dart';
 import 'package:phi/engine/bridge/patcher_node_snapshot.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/engine/state/node_type_registry.dart';
@@ -35,6 +37,7 @@ import 'package:phi/surfaces/patcher/nodes/number_node_body.dart';
 import 'package:phi/surfaces/patcher/patch_canvas_mode.dart';
 import 'package:phi/surfaces/patcher/patcher_canvas.dart';
 import 'package:phi/surfaces/patcher/placement/patch_placement_bar.dart';
+import 'package:phi/surfaces/patcher/reference/patch_keyboard_settings.dart';
 import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
@@ -848,6 +851,141 @@ void main() {
     await tester.pumpAndSettle();
     expect(staffNote(), StaffNote.of(70, -1), reason: 'B flat');
     expect(tester.takeException(), isNull);
+
+    session.dispose();
+    await engine.dispose();
+  });
+
+  testWidgets('a selected .kslider takes its range and a fixed velocity from '
+      'the reference panel, each one undo step (issue #515)', (tester) async {
+    final patcherGateway = FakePatcherGateway()
+      // The reference panel documents only what the engine catalogues.
+      ..objectTypesCatalogue = [
+        ...FakePatcherGateway.defaultCatalogue,
+        const PatchObjectDescriptor(
+          type: Obj.gKslider,
+          description: 'piano keyboard',
+          category: PatchObjectCategory.gui,
+          isDsp: false,
+          inlets: [],
+          outlets: [],
+          params: [],
+        ),
+      ];
+    final engine = PhiEngine(
+      FakeYseGateway(),
+      patcherGateway: patcherGateway,
+      telemetryInterval: const Duration(milliseconds: 20),
+    );
+    final session = SessionState();
+
+    await tester.pumpWidget(PhiApp(engine: engine, session: session));
+    await tester.pumpAndSettle();
+    await tester.tap(railFor(SurfaceId.patcher));
+    await tester.pumpAndSettle();
+
+    final patcher = engine.patcher;
+    for (final id in patcher.graph.nodes.map((n) => n.id).toList()) {
+      patcher.removeNode(id);
+    }
+    await tester.pumpAndSettle();
+    patcher.undoScope.clear();
+
+    final keys = patcher.addNode(
+      desc: NodeTypeRegistry.instance.find(Obj.gKslider)!,
+      position: const Offset(30, 30),
+    );
+    await tester.pumpAndSettle();
+
+    PatchKeyboard keyboard() =>
+        tester.widget<PatchKeyboard>(find.byType(PatchKeyboard));
+    double keyboardWidth() => tester.getSize(find.byType(PatchKeyboard)).width;
+    String? rangeShown() =>
+        tester.widget<Text>(find.byKey(PatchKeyboardSettings.rangeKey)).data;
+    Future<void> step(String name) async {
+      await tester.tap(find.byKey(PatchKeyboardSettings.stepKey(name)));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> chord(LogicalKeyboardKey mod, LogicalKeyboardKey key) async {
+      await tester.sendKeyDownEvent(mod);
+      await tester.sendKeyEvent(key);
+      await tester.sendKeyUpEvent(mod);
+      await tester.pumpAndSettle();
+    }
+
+    final standardWidth = keyboardWidth();
+    expect(keyboard().layout.low, KeyboardLayout.defaultLow);
+
+    // ─── select it: the panel shows its keyboard rows ─────────────────────
+    await tester.tapAt(tester.getCenter(find.byType(PatchKeyboard)));
+    await tester.pumpAndSettle();
+    expect(find.text('KEYBOARD'), findsOneWidget);
+    expect(rangeShown(), 'C3 – C6');
+
+    // ─── shift up an octave, then widen down two ──────────────────────────
+    await step('shift.up');
+    expect((keyboard().layout.low, keyboard().layout.high), (60, 96));
+    expect(rangeShown(), 'C4 – C7');
+    expect(keyboardWidth(), standardWidth, reason: 'as many keys as before');
+
+    await step('low.down');
+    await step('low.down');
+    expect(keyboard().layout.low, 36);
+    expect(rangeShown(), 'C2 – C7');
+    expect(
+      keyboardWidth(),
+      closeTo(standardWidth * 36 / 22, 0.01),
+      reason: 'the box follows the range',
+    );
+    expect(tester.takeException(), isNull, reason: 'nothing overflows');
+
+    // ─── each step is one undo: the keyboard walks back ───────────────────
+    await chord(LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.keyZ);
+    expect(keyboard().layout.low, 48);
+    await chord(LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.keyZ);
+    await chord(LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.keyZ);
+    expect(keyboard().layout.low, KeyboardLayout.defaultLow);
+    expect(keyboard().layout.high, KeyboardLayout.defaultHigh);
+    expect(keyboardWidth(), standardWidth);
+    expect(rangeShown(), 'C3 – C6');
+    await chord(LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.keyY);
+    expect(keyboard().layout.low, 60);
+
+    // ─── a fixed velocity: every press in run mode plays at it ────────────
+    await step('velocity.fixed');
+    await step('velocity.+10');
+    expect(
+      tester.widget<Text>(find.byKey(PatchKeyboardSettings.velocityKey)).data,
+      '110',
+    );
+    expect(patcher.keyboardVelocityOf(keys.id), 110);
+
+    await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+    await tester.pumpAndSettle();
+    Offset keyAt(int pitch, double y) {
+      final box = tester.getRect(find.byType(PatchKeyboard));
+      final b = keyboard().layout.boundsOf(pitch);
+      return box.topLeft +
+          Offset(box.width * (b.left + b.right) / 2, box.height * y);
+    }
+
+    patcherGateway.calls.clear();
+    await tester.tapAt(keyAt(64, 0.05));
+    await tester.pumpAndSettle();
+    final sends = [
+      for (final c in patcherGateway.calls)
+        if (c.startsWith('sendList:${keys.id.value}:0:')) c.split(':').last,
+    ];
+    expect(sends, ['set 64 110', 'set 64 0'], reason: 'not by depth');
+
+    // ─── and back to depth, undoably ──────────────────────────────────────
+    await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+    await tester.pumpAndSettle();
+    await step('velocity.depth');
+    expect(patcher.keyboardVelocityOf(keys.id), isNull);
+    await chord(LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.keyZ);
+    expect(patcher.keyboardVelocityOf(keys.id), 110);
 
     session.dispose();
     await engine.dispose();

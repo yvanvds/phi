@@ -27,6 +27,29 @@ abstract final class MidiPitch {
   /// Whether [pitch] is a black key.
   static bool isBlack(int pitch) => _black.contains(pitchClass(pitch));
 
+  /// Pitch-class names, sharps for the black keys.
+  static const List<String> _names = [
+    'C',
+    'C#',
+    'D',
+    'D#',
+    'E',
+    'F',
+    'F#',
+    'G',
+    'G#',
+    'A',
+    'A#',
+    'B',
+  ];
+
+  /// [pitch]'s name with its octave, middle C being `C4` — so MIDI 0 is `C-1`
+  /// and 127 is `G9` (issue #515).
+  static String name(int pitch) {
+    final pc = pitchClass(pitch);
+    return '${_names[pc]}${(pitch - pc) ~/ 12 - 1}';
+  }
+
   /// The letter index (C = 0 … B = 6) of each white pitch class.
   static const Map<int, int> _letterOfWhite = {
     0: 0,

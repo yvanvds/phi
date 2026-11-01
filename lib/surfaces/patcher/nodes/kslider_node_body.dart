@@ -1,7 +1,6 @@
 import 'package:flutter/widgets.dart';
 
 import '../../../design/widgets/patcher/patch_keyboard.dart';
-import '../../../domain/midi/midi_pitch.dart';
 import '../../../domain/patcher/keyboard_gesture.dart';
 import '../../../domain/patcher/keyboard_layout.dart';
 import '../../../domain/patcher/patch_gui_property.dart';
@@ -82,10 +81,8 @@ class _KsliderNodeBodyState extends State<KsliderNodeBody> {
     super.dispose();
   }
 
-  KeyboardLayout _layoutFromGui() => KeyboardLayout.fromGui(
-    widget.controller.guiPropertyOf(widget.node.id, PatchGuiProperty.keyLow),
-    widget.controller.guiPropertyOf(widget.node.id, PatchGuiProperty.keyHigh),
-  );
+  KeyboardLayout _layoutFromGui() =>
+      widget.controller.keyboardLayoutOf(widget.node.id);
 
   /// Poll only the keys on show.
   void _window() => widget.controller.setGuiCellWindow(
@@ -104,16 +101,8 @@ class _KsliderNodeBodyState extends State<KsliderNodeBody> {
   }
 
   /// The fixed press velocity stored on the node, or null to play by depth.
-  int? get _fixedVelocity {
-    final stored = int.tryParse(
-      widget.controller.guiPropertyOf(
-        widget.node.id,
-        PatchGuiProperty.keyVelocity,
-      ),
-    );
-    if (stored == null || stored < 1) return null;
-    return stored > MidiPitch.maxVelocity ? MidiPitch.maxVelocity : stored;
-  }
+  int? get _fixedVelocity =>
+      widget.controller.keyboardVelocityOf(widget.node.id);
 
   void _send(List<({int pitch, int velocity})> notes) {
     for (final note in notes) {

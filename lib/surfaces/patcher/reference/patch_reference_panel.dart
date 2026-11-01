@@ -7,9 +7,12 @@ import '../../../design/tokens/phi_radii.dart';
 import '../../../design/tokens/phi_spacing.dart';
 import '../../../design/tokens/phi_type.dart';
 import '../../../design/widgets/patcher/patch_type_style.dart';
+import '../../../domain/patcher/keyboard_layout.dart';
 import '../../../domain/patcher/patch_args.dart';
+import '../../../domain/patcher/patch_object_types.dart';
 import '../../../domain/patcher/patch_type_name.dart';
 import '../../../engine/bridge/patch_object_descriptor.dart';
+import 'patch_keyboard_settings.dart';
 
 /// The patcher's **reference panel** (design `docs/design/patcher.md` §5): the
 /// engine's own documentation for the selected object type (from the palette or
@@ -27,12 +30,20 @@ import '../../../engine/bridge/patch_object_descriptor.dart';
 /// every [PhiNoteSwatch], the current one ringed. A tap reports the chosen
 /// token name through [onNoteColor] (`''` for plain), which the surface
 /// journals — so the panel itself never edits anything.
+///
+/// A selected **`.kslider`** gets keyboard rows the same way (issue #515):
+/// its [keyboardRange] and [keyboardVelocity], edited through
+/// [onKeyboardRange] / [onKeyboardVelocity] ([PatchKeyboardSettings]).
 class PatchReferencePanel extends StatelessWidget {
   const PatchReferencePanel({
     required this.descriptor,
     this.args,
     this.noteColor,
     this.onNoteColor,
+    this.keyboardRange,
+    this.keyboardVelocity,
+    this.onKeyboardRange,
+    this.onKeyboardVelocity,
     super.key,
   });
 
@@ -51,6 +62,19 @@ class PatchReferencePanel extends StatelessWidget {
   /// Called with the swatch token name a tap picked (`''` for plain). Null
   /// hides the colour row — a palette tap, or a node that is not a note.
   final ValueChanged<String>? onNoteColor;
+
+  /// The selected `.kslider`'s visible range. The keyboard rows show only
+  /// while it and both keyboard callbacks are set.
+  final KeyboardLayout? keyboardRange;
+
+  /// The selected `.kslider`'s fixed press velocity, null for depth.
+  final int? keyboardVelocity;
+
+  /// Called with the range a keyboard step picked.
+  final ValueChanged<KeyboardLayout>? onKeyboardRange;
+
+  /// Called with the fixed velocity a keyboard step picked (null for depth).
+  final ValueChanged<int?>? onKeyboardVelocity;
 
   /// Fixed pane width — the right column of the patcher layout.
   static const double width = 260;
@@ -82,6 +106,21 @@ class PatchReferencePanel extends StatelessWidget {
               args: args,
               noteColor: noteColor ?? '',
               onNoteColor: PatchTypeName.isNote(d.type) ? onNoteColor : null,
+              keyboard: switch ((
+                keyboardRange,
+                onKeyboardRange,
+                onKeyboardVelocity,
+              )) {
+                (final range?, final onRange?, final onVelocity?)
+                    when d.type == PatchObjectTypes.gKslider =>
+                  PatchKeyboardSettings(
+                    range: range,
+                    velocity: keyboardVelocity,
+                    onRange: onRange,
+                    onVelocity: onVelocity,
+                  ),
+                _ => null,
+              },
             ),
     );
   }
@@ -109,12 +148,14 @@ class _Reference extends StatelessWidget {
     required this.noteColor,
     this.args,
     this.onNoteColor,
+    this.keyboard,
   });
 
   final PatchObjectDescriptor descriptor;
   final String? args;
   final String noteColor;
   final ValueChanged<String>? onNoteColor;
+  final Widget? keyboard;
 
   @override
   Widget build(BuildContext context) {
@@ -226,6 +267,8 @@ class _Reference extends StatelessWidget {
             title: 'colour',
             children: [_NoteColorRow(current: noteColor, onPick: pick)],
           ),
+        if (keyboard case final rows?)
+          _Section(title: 'keyboard', children: [rows]),
       ],
     );
   }
