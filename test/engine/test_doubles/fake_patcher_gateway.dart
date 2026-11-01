@@ -294,6 +294,7 @@ class FakePatcherGateway implements PatcherGateway {
     if (node.type == Obj.gToggle) return;
     node.lastValueByInlet[inlet] = value;
     if (inlet == 0 && node.receiveSwitchNumber(value)) return;
+    if (inlet == 0 && node.receiveButtonPress()) return;
     // A `.dial` stores its position clamped to 0–1, as `gDial::Store` does.
     if (node.type == Obj.gDial && inlet == 0) {
       node.guiValue = _formatGui(value.clamp(0.0, 1.0));
@@ -335,6 +336,7 @@ class FakePatcherGateway implements PatcherGateway {
     }
     if (inlet != 0) return;
     if (node.receiveSwitchNumber(value.toDouble())) return;
+    if (node.receiveButtonPress()) return;
     // The engine's `gToggle` displays its state as `on`/`off`, not as a
     // number (issue #439) — the fake reports the same strings so a body that
     // only parses digits fails here the way it fails against libyse.
@@ -379,12 +381,15 @@ class FakePatcherGateway implements PatcherGateway {
     if (inlet == 0 && node.isLabelSwitch) {
       node.guiValue = node.isMomentary || node.guiValue != '1' ? '1' : '0';
     }
+    // A `.b` lights until the host next reads it (`gButton`).
+    if (inlet == 0) node.receiveButtonPress();
   }
 
   /// A momentary `.led` / `.textbutton`'s read is **destructive**, as libYSE's
   /// is (`gLabelSwitchBase`'s `GUI_VALUE`): it reports a pending press as `1`
   /// and clears it in the same call, so a second read in the same frame says
-  /// `0` (issue #514). Reading [FakeNode.guiValue] directly in a test is a
+  /// `0` (issue #514). A `.b`'s is too, spelt `on` / `off` (`gButton`,
+  /// issue #519). Reading [FakeNode.guiValue] directly in a test is a
   /// look, not a consume.
   @override
   String guiValue(int instanceId, int handleId) {
@@ -1350,6 +1355,16 @@ class FakeNode {
   /// every read of its GUI state. A no-op for anything else.
   void consumePress() {
     if (isMomentary) guiCells = ['0'];
+    if (type == Obj.gButton) guiCells = ['off'];
+  }
+
+  /// Model a bang or number landing on a `.b`'s inlet: like `gButton`, it
+  /// lights (`on`) until the next read clears it. Returns whether the node was
+  /// a `.b` (and so handled it).
+  bool receiveButtonPress() {
+    if (type != Obj.gButton) return false;
+    guiValue = 'on';
+    return true;
   }
 
   /// Every list (and selector message) sent to the object, in order, keyed by
@@ -2276,6 +2291,9 @@ class FakeNode {
       // A fresh `.function` holds no points, so it has no cells.
       case Obj.gFunction:
         return const [];
+      // An idle `.b` reads `off`; a press reads `on` once (`gButton`).
+      case Obj.gButton:
+        return ['off'];
     }
     return [''];
   }

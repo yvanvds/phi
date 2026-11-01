@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
 import 'package:phi/design/widgets/fader/phi_fader.dart';
+import 'package:phi/design/widgets/patcher/patch_bang_square.dart';
 import 'package:phi/design/widgets/patcher/patch_dial_knob.dart';
 import 'package:phi/design/widgets/patcher/patch_function_graph.dart';
 import 'package:phi/design/widgets/patcher/patch_incdec_stepper.dart';
@@ -342,6 +343,58 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
     expect(pressed(), isFalse);
+
+    session.dispose();
+    await engine.dispose();
+  });
+
+  testWidgets('a .b flashes on each bang that arrives over a cable in run '
+      'mode (issue #519)', (tester) async {
+    final patcherGateway = FakePatcherGateway();
+    final engine = PhiEngine(
+      FakeYseGateway(),
+      patcherGateway: patcherGateway,
+      telemetryInterval: const Duration(milliseconds: 20),
+    );
+    final session = SessionState();
+
+    await tester.pumpWidget(PhiApp(engine: engine, session: session));
+    await tester.pumpAndSettle();
+    await tester.tap(railFor(SurfaceId.patcher));
+    await tester.pumpAndSettle();
+
+    final patcher = engine.patcher;
+    final d = NodeTypeRegistry.instance.find(Obj.gButton)!;
+    final bang = patcher.addNode(desc: d, position: const Offset(60, 60));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<PatcherCanvas>(find.byType(PatcherCanvas)).mode,
+      PatchCanvasMode.run,
+    );
+
+    bool lit() =>
+        tester.widget<PatchBangSquare>(find.byType(PatchBangSquare)).flash;
+    expect(lit(), isFalse);
+
+    // Two ticks, the way a `.metro` delivers them: each bang lands on the
+    // native object with nothing said to the canvas, and the live poller must
+    // light the button for each one.
+    for (var tick = 0; tick < 2; tick++) {
+      patcherGateway.sendBang(patcher.instanceId, bang.id.value, 0);
+      var flashed = false;
+      for (var i = 0; i < 50 && !flashed; i++) {
+        await tester.pump(const Duration(milliseconds: 10));
+        flashed = lit();
+      }
+      expect(flashed, isTrue, reason: 'tick $tick lit the button');
+
+      // ...briefly: the read consumed the press, so it goes dark again.
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      expect(lit(), isFalse, reason: 'tick $tick went dark');
+    }
 
     session.dispose();
     await engine.dispose();

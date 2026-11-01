@@ -107,11 +107,11 @@ void main() {
   });
 
   test('a body that displays no guiValue is never read', () {
-    // `.b` bangs and `.m` renders its creation args — neither has a display
-    // value that can change from underneath, so polling them would be waste.
-    NodeTypeRegistry.instance.register(desc(Obj.gButton));
+    // `.m` renders its creation args — it has no display value that can
+    // change from underneath, so polling it would be waste.
+    NodeTypeRegistry.instance.register(desc(Obj.gMessage));
     final node = controller.addNode(
-      desc: desc(Obj.gButton),
+      desc: desc(Obj.gMessage),
       position: Offset.zero,
     );
     var notified = 0;
@@ -122,6 +122,32 @@ void main() {
     expect(controller.hasGuiValueNodes, isFalse);
     expect(controller.refreshGuiValues(), 0);
     expect(notified, 0);
+  });
+
+  test('a .b reports each press over a cable to exactly one poll (issue '
+      '#519)', () {
+    final node = addPollable(Obj.gButton);
+    final values = <String>[];
+    node.addListener(() => values.add(controller.guiValueOf(node.id)));
+
+    // An idle button reads `off`, as the engine's does.
+    expect(controller.refreshGuiValues(), 1, reason: 'first read: off');
+    values.clear();
+
+    // A bang down a cable — a `.metro` tick — with nothing told to Dart.
+    gateway.sendBang(controller.instanceId, node.id.value, 0);
+    expect(controller.refreshGuiValues(), 1);
+    expect(values, ['on'], reason: 'the woken body sees the press');
+
+    // The read consumed it: the next poll reports idle, then nothing more.
+    expect(controller.refreshGuiValues(), 1);
+    expect(controller.refreshGuiValues(), 0);
+    expect(values, ['on', 'off']);
+
+    // The next tick is a new press.
+    gateway.sendBang(controller.instanceId, node.id.value, 0);
+    expect(controller.refreshGuiValues(), 1);
+    expect(values.last, 'on');
   });
 
   test('an unregistered type is never read', () {

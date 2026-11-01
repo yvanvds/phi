@@ -2331,8 +2331,10 @@ main + app          (orchestration)
   `NodeDescriptor.readsGuiValue` marks the pollable set (`.slider` · `.t` ·
   `.i`/`.f` · `~sine`); it is deliberately narrower than "the body is a live
   control", whose set only overlaps — `~sine` displays a value but takes no
-  gesture, `.b` and `.m` are operable but display nothing that can change from
-  underneath. (The companion `interactiveBody` flag it was contrasted with is
+  gesture, `.m` is operable but displays nothing that can change from
+  underneath. (`.b` joined the set in #519: its destructive `on`/`off` read is
+  how a cabled bang, e.g. a `.metro` tick, flashes it; on the real engine that
+  awaits yvanvds/dart-yse#106, whose double read turns a press into `of`.) (The companion `interactiveBody` flag it was contrasted with is
   gone since #378 — press ownership is the canvas's mode now.) A new
   `PatchGuiPoller` (`lib/surfaces/patcher/`) wraps the canvas and runs the ask at
   30 Hz behind three gates: the surface is the **visible tab** (the shell now

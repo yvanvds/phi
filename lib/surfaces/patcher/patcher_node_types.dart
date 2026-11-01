@@ -125,6 +125,9 @@ void registerBuiltInPatcherNodes() {
       outputs: const [PortSpec(kind: PatchPortKind.control)],
       buildBody: (ctx, node, controller) =>
           ButtonNodeBody(node: node, controller: controller),
+      // Polled so a press arriving over a cable (a `.metro` tick) flashes it
+      // (issue #519): the engine reports a pending press as `on`, once.
+      readsGuiValue: true,
     ),
   );
 

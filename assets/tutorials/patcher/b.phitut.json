@@ -157,7 +157,7 @@
           "y": "270.0",
           "w": "300"
         },
-        "parms": "3. Click the toggle to start the metro. Every tick presses the button, so the counter climbs four times a second. Click the toggle again to stop it.",
+        "parms": "3. Click the toggle to start the metro. Every tick presses the button: it flashes, and the counter climbs four times a second. Click the toggle again to stop it.",
         "type": ".text"
       }
     }
