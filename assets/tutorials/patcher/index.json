@@ -8,9 +8,15 @@
   ".led": "led",
   ".m": "m",
   ".metro": "metro",
+  ".multislider": "multislider",
+  ".radiogroup": "menus",
+  ".rslider": "rslider",
   ".slider": "slider",
   ".t": "t",
+  ".tab": "menus",
   ".text": "text",
   ".textbutton": "textbutton",
-  ".textedit": "textedit"
+  ".textedit": "textedit",
+  ".umenu": "menus",
+  ".xyslider": "xyslider"
 }

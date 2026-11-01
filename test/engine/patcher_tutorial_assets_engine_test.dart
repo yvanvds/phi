@@ -428,6 +428,156 @@ void main() {
     });
   });
 
+  test('every selection and slider control has a tutorial (#492)', () {
+    for (final type in [
+      '.umenu',
+      '.radiogroup',
+      '.tab',
+      '.rslider',
+      '.xyslider',
+      '.multislider',
+    ]) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+    expect(index.tutorialFor('.umenu'), 'menus');
+    expect(index.tutorialFor('.radiogroup'), 'menus');
+    expect(index.tutorialFor('.tab'), 'menus');
+  });
+
+  group('selection and slider control tutorials (#492) do what their notes '
+      'say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    void open(String slug) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+    }
+
+    tearDown(() => gateway.disposeInstance(inst));
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    String value(int id) => gateway.guiValue(inst, id);
+    double number(int id) => double.parse(value(id));
+    // A multi-value control's state, or a list of numbers, as numbers.
+    List<double> numbers(int id) => [
+      for (final t in value(id).split(' ')) double.parse(t),
+    ];
+
+    test('menus: one protocol in three drawings, three outlets, multi', () {
+      open('menus');
+      final menu = at('.umenu', 60, 200);
+      final radio = at('.radiogroup', 220, 200);
+      final tabs = at('.tab', 360, 200);
+      final index = at('.i', 60, 310);
+      final name = at('.l', 150, 310);
+      final state = at('.l', 270, 310);
+      click(at('.m', 60, 140)); // 2
+      expect([value(menu), value(radio), value(tabs)], ['2', '2', '2']);
+      expect((value(index), value(name), value(state)), ('2', 'noise', '2'));
+      click(at('.m', 170, 140)); // saw
+      expect([value(menu), value(radio), value(tabs)], ['1', '1', '1']);
+      expect((value(index), value(name), value(state)), ('1', 'saw', '1'));
+      gateway.sendInt(inst, menu, 0, 7);
+      gateway.sendList(inst, menu, 0, 'square');
+      expect(value(menu), '1', reason: 'out of range and unknown: ignored');
+      gateway.sendInt(inst, menu, 0, 0);
+      expect((value(index), value(name)), ('0', 'sine'));
+      expect(value(radio), '1', reason: 'separate objects');
+
+      final multi = at('.radiogroup', 60, 460);
+      final changed = at('.i', 200, 570);
+      final flags = at('.l', 300, 570);
+      click(at('.m', 60, 400)); // 1 toggles saw on
+      expect((value(flags), value(changed)), ('0 1 0', '1'));
+      click(at('.m', 60, 400));
+      expect(value(flags), '0 0 0', reason: 'toggled off again');
+      click(at('.b', 220, 380)); // pack 1 0 1
+      expect((value(flags), value(changed)), ('1 0 1', '0'));
+      expect(value(multi), '1 0 1');
+      expect(graph.objects.map((o) => o.type), contains('~dac'));
+    });
+
+    test('rslider: a silent end, sorted ends, set, and a random range', () {
+      open('rslider');
+      final low = at('.f', 60, 380);
+      final high = at('.f', 150, 380);
+      final both = at('.l', 240, 380);
+      click(at('.m', 60, 140)); // 48 -> right inlet
+      expect(value(both), '', reason: 'the right inlet is silent');
+      click(at('.m', 170, 140)); // 84 -> left inlet
+      expect((number(low), number(high)), (48.0, 84.0));
+      click(at('.b', 280, 140)); // pack 90 40
+      expect((number(low), number(high)), (40.0, 90.0), reason: 'sorted');
+      expect(numbers(both), [40, 90]);
+      click(at('.m', 390, 140)); // 60 -> prepend set 0
+      expect((number(low), number(high)), (60.0, 90.0));
+      gateway.sendList(inst, at('.rslider', 60, 200), 0, '10 120');
+      expect((number(low), number(high)), (36.0, 96.0), reason: 'clamped');
+      gateway.sendList(inst, at('.rslider', 60, 200), 0, '70 72');
+      final out = at('.f', 60, 650);
+      for (var i = 0; i < 40; i++) {
+        click(at('.b', 60, 470));
+        expect(number(out), inInclusiveRange(70, 72));
+      }
+    });
+
+    test('xyslider: x sends, y is silent, set per axis, the pair', () {
+      open('xyslider');
+      final pad = at('.xyslider', 60, 200);
+      final x = at('.f', 60, 360);
+      final y = at('.f', 150, 360);
+      final pair = at('.l', 240, 360);
+      click(at('.m', 60, 140)); // 300
+      expect(number(x), 300.0);
+      click(at('.m', 170, 140)); // 2000 -> right inlet
+      expect(number(y), isNot(2000.0), reason: 'the right inlet is silent');
+      click(at('.b', 280, 140));
+      expect((number(x), number(y)), (300.0, 2000.0));
+      expect(numbers(pair), [300, 2000]);
+      click(at('.m', 330, 140)); // 4000 -> prepend set 1
+      expect((number(x), number(y)), (300.0, 4000.0));
+      gateway.sendFloat(inst, pad, 0, 5000);
+      expect(number(x), 1000.0, reason: 'clamped to its own range');
+      expect(graph.objects.map((o) => o.type), contains('~dac'));
+    });
+
+    test('multislider: loads a pattern, fetches steps, resizes, fills', () {
+      open('multislider');
+      final bank = at('.multislider', 60, 260);
+      final note = at('.f', 170, 470);
+      final count = at('.counter', 280, 380);
+      expect(numbers(bank), [0, 3, 7, 10, 12, 10, 7, 3], reason: 'loadmess');
+      final heard = <double>[];
+      for (var i = 0; i < 8; i++) {
+        click(count);
+        heard.add(number(note));
+      }
+      expect(heard, [48, 51, 55, 58, 60, 58, 55, 51]);
+      expect(value(at('.i', 400, 440)), '7');
+      click(at('.m', 200, 140)); // 12
+      expect(numbers(bank), [12, 12, 12, 12, 12, 12, 12, 12]);
+      click(at('.b', 330, 140)); // pack 0 4 7 12
+      expect(numbers(bank), [0, 4, 7, 12], reason: 'resized');
+      heard.clear();
+      for (var i = 0; i < 8; i++) {
+        click(count);
+        heard.add(number(note));
+      }
+      expect(heard, [48, 52, 55, 60, 60, 60, 60, 60]);
+      click(at('.b', 60, 140)); // loadmess again
+      expect(numbers(bank), [0, 3, 7, 10, 12, 10, 7, 3]);
+      expect(graph.objects.map((o) => o.type), contains('~dac'));
+    });
+  });
+
   test('report: object types with no tutorial yet', () {
     final missing = [
       for (final t in engineTypes.toList()..sort())

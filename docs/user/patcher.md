@@ -173,6 +173,10 @@ for:
 - **Single-value controls:** the dial (`dial`), the stepper (`incdec`), the
   lamp (`led`), the labelled button (`textbutton`), the text field
   (`textedit`) and the list box (`l`).
+- **Selection and slider controls:** the menu, radio buttons and tabs
+  (`umenu`, `radiogroup` and `tab`, which share one tutorial), the range
+  slider (`rslider`), the XY pad (`xyslider`) and the slider bank
+  (`multislider`).
 - **Time:** `metro`.
 
 Each tutorial is a small working patch, with numbered notes that walk you
