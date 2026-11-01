@@ -5,6 +5,7 @@ import '../../design/tokens/phi_colors.dart';
 import '../../design/tokens/phi_radii.dart';
 import '../../design/tokens/phi_spacing.dart';
 import '../../design/tokens/phi_type.dart';
+import '../shortcuts/shortcut_chip.dart';
 import 'command_match.dart';
 import 'command_registry.dart';
 import 'command_search.dart';
@@ -281,7 +282,7 @@ class _CommandRow extends StatelessWidget {
               ),
               if (command.shortcut != null) ...[
                 const SizedBox(width: PhiSpacing.s3),
-                _ShortcutChip(label: command.shortcut!.label),
+                ShortcutChip(label: command.shortcut!.label),
               ],
             ],
           ),
@@ -323,28 +324,6 @@ class _CommandRow extends StatelessWidget {
       ),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-    );
-  }
-}
-
-class _ShortcutChip extends StatelessWidget {
-  const _ShortcutChip({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: PhiSpacing.s2,
-        vertical: PhiSpacing.s0,
-      ),
-      decoration: BoxDecoration(
-        color: PhiColors.bg0,
-        borderRadius: PhiRadii.all2,
-        border: Border.all(color: PhiColors.line1),
-      ),
-      child: Text(label, style: PhiType.monoS().copyWith(color: PhiColors.fg2)),
     );
   }
 }

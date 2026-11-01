@@ -63,6 +63,8 @@ import 'project/project_actions.dart';
 import 'right_inspector/right_inspector.dart';
 import 'settings/settings_dialog.dart';
 import 'settings/settings_section.dart';
+import 'shortcuts/keyboard_shortcuts_overlay.dart';
+import 'shortcuts/shortcut_catalog.dart';
 import 'top_toolbar/top_toolbar.dart';
 
 /// Phi workstation chrome — composes the four fixed regions (top toolbar,
@@ -444,6 +446,7 @@ class _WorkstationState extends State<Workstation> {
         onCycleTabForward: () => _layout.cycleTabInActivePane(),
         onCycleTabBackward: () => _layout.cycleTabInActivePane(forward: false),
         onOpenCommandPalette: _openCommandPalette,
+        onOpenKeyboardShortcuts: _openKeyboardShortcuts,
         // Panic routes through the shell handler (issue #264) — the same action
         // the status-bar button fires.
         onPanic: _onPanic,
@@ -513,6 +516,28 @@ class _WorkstationState extends State<Workstation> {
   /// Opens the command palette overlay (design §4) on Ctrl+Shift+P / F1.
   void _openCommandPalette() =>
       unawaited(CommandPalette.show(context, registry: _commands));
+
+  /// Opens the keyboard shortcuts overlay (issue #487) on Ctrl+/: the focused
+  /// surface's local table first, then the registry's live global chords, then
+  /// the other surfaces' tables.
+  void _openKeyboardShortcuts() => unawaited(
+    KeyboardShortcutsOverlay.show(
+      context,
+      sections: ShortcutCatalog.sections(
+        commands: _commands.commands,
+        focused: _focusedSurfaceId,
+      ),
+    ),
+  );
+
+  /// The chord each rail surface's summon command is bound to (`Ctrl+2` for
+  /// the patcher), for the rail tooltips (issue #487) — read off the registry
+  /// so a rebinding shows up there too.
+  Map<SurfaceId, String> get _railShortcutLabels => {
+    for (final id in SurfaceId.values)
+      if (_commands.byId('surface.${id.name}')?.shortcut case final shortcut?)
+        id: shortcut.label,
+  };
 
   /// Copies the diagnostics bundle to the clipboard (issue #272, design §6) and
   /// confirms through the notice channel (toast + log). The palette command
@@ -901,6 +926,7 @@ class _WorkstationState extends State<Workstation> {
                     onOpenSettings: widget.projectController != null
                         ? _openSettings
                         : null,
+                    onOpenKeyboardShortcuts: _openKeyboardShortcuts,
                     metronome: widget.engine.metronomeOrNull,
                     countIn: widget.engine.midiOrNull?.countIn,
                   ),
@@ -910,6 +936,7 @@ class _WorkstationState extends State<Workstation> {
                         LeftRail(
                           selected: _focusedSurfaceId,
                           onSelect: _onSelect,
+                          shortcutLabels: _railShortcutLabels,
                         ),
                         Expanded(child: _buildCentre()),
                         RightInspector(session: widget.session),

@@ -14,6 +14,7 @@ class RailButton extends StatefulWidget {
     required this.selected,
     required this.enabled,
     required this.onPressed,
+    this.shortcut,
     super.key,
   });
 
@@ -22,6 +23,13 @@ class RailButton extends StatefulWidget {
   final bool selected;
   final bool enabled;
   final VoidCallback onPressed;
+
+  /// The chord that summons this surface, e.g. `Ctrl+2` — appended to the
+  /// tooltip as `Patcher (Ctrl+2)` (issue #487). Null shows the bare label.
+  final String? shortcut;
+
+  /// The tooltip text: the label, plus the chord when there is one.
+  String get tooltip => shortcut == null ? label : '$label ($shortcut)';
 
   @override
   State<RailButton> createState() => _RailButtonState();
@@ -37,7 +45,7 @@ class _RailButtonState extends State<RailButton> {
         ? PhiColors.bg2
         : (_hovered ? PhiColors.bg2 : PhiColors.bg1);
     return Tooltip(
-      message: widget.label,
+      message: widget.tooltip,
       child: MouseRegion(
         cursor: widget.enabled
             ? SystemMouseCursors.click

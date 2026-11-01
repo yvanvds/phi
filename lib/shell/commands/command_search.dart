@@ -82,6 +82,14 @@ abstract final class CommandSearch {
     return null;
   }
 
+  /// The fuzzy score of [query] against a single [text] — the same
+  /// case-insensitive subsequence match the palette ranks titles with — or
+  /// `null` when [query] is not a subsequence of [text]. Public so other
+  /// filters (the keyboard shortcuts overlay, issue #487) match the way the
+  /// palette does.
+  static double? score(String query, String text) =>
+      _fuzzy(query.trim(), text)?.score;
+
   /// Case-insensitive subsequence match of [query] in [text]. Returns `null` when
   /// [query] is not a subsequence; otherwise a score that rewards contiguous runs
   /// and word-boundary hits, plus the matched indices.

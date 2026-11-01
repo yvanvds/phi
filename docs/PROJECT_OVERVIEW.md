@@ -129,6 +129,21 @@ main + app          (orchestration)
   Enter/tap invoke · recents float · shortcut render), and an end-to-end
   `command_palette` integration test (Ctrl+Shift+P → filter → Enter summons MIDI;
   play then reopen shows the now-enabled Stop; F1 opens).
+  Issue #487 adds the **keyboard shortcuts overlay** (`lib/shell/shortcuts/`):
+  `KeyboardShortcutsOverlay` (Ctrl+/, alias Ctrl+numpad-/, the
+  `view.keyboardShortcuts` command and the File menu's "Keyboard Shortcuts"
+  item) lists `ShortcutHintSection`s — the focused surface's table first, then
+  Global (read live off the registry, aliases included), the other surfaces and
+  "Lists & dialogs" — with a filter reusing `CommandSearch.score`
+  (`ShortcutFilter`). `ShortcutHint` / `ShortcutHintSection` are pure data in
+  `lib/domain/shortcuts/`; each surface declares its local table next to its key
+  handler (`surfaces/patcher/patcher_shortcut_hints.dart`,
+  `surfaces/midi/piano_roll_shortcut_hints.dart`,
+  `surfaces/code/code_shortcut_hints.dart`), and `ShortcutCatalog` is the one
+  place that gathers them all — the source the user docs' shortcut page (#486)
+  is checked against. Rail tooltips read `Patcher (Ctrl+2)` off the registry;
+  panic shows `F12`; an empty patch in edit mode shows "double-click or N to
+  add an object".
 - Settings dialog (`lib/shell/settings/`, design `settings-and-devices.md`
   §6, issues #154 + #151): a modal overlay (no rail button, no OS window) opened
   from the File menu's `Settings…` item, with a left section list (AUDIO · MIDI ·

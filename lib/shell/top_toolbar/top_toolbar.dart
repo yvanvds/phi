@@ -30,6 +30,7 @@ class TopToolbar extends StatelessWidget {
     this.projectController,
     this.directoryPicker,
     this.onOpenSettings,
+    this.onOpenKeyboardShortcuts,
     this.metronome,
     this.countIn,
     super.key,
@@ -62,6 +63,10 @@ class TopToolbar extends StatelessWidget {
   /// `settings-and-devices.md` §6). `null` omits the "Settings…" item.
   final VoidCallback? onOpenSettings;
 
+  /// Opens the keyboard shortcuts overlay from the project menu (issue #487).
+  /// `null` omits the "Keyboard Shortcuts" item.
+  final VoidCallback? onOpenKeyboardShortcuts;
+
   /// Keys so tests can target the toolbar transport unambiguously. Since the
   /// MIDI surface renders its own `play`/`stop` tooltips (per-clip transport in
   /// `ClipTransportRow`, per-row previews in the library panel), a bare
@@ -91,6 +96,7 @@ class TopToolbar extends StatelessWidget {
               controller: controller,
               picker: picker,
               onOpenSettings: onOpenSettings,
+              onOpenKeyboardShortcuts: onOpenKeyboardShortcuts,
             ),
             const SizedBox(width: PhiSpacing.s2),
             DirtyIndicator(isDirty: controller.isDirty),

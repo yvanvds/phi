@@ -12,10 +12,19 @@ import 'surface_id.dart';
 /// focused surface — null when the focused pane is empty, so nothing lights.
 /// Only the surfaces that ship with a working stub are enabled.
 class LeftRail extends StatelessWidget {
-  const LeftRail({required this.selected, required this.onSelect, super.key});
+  const LeftRail({
+    required this.selected,
+    required this.onSelect,
+    this.shortcutLabels = const {},
+    super.key,
+  });
 
   final SurfaceId? selected;
   final ValueChanged<SurfaceId> onSelect;
+
+  /// The summon chord per surface (`Ctrl+2`), shown in each button's tooltip
+  /// (issue #487). A surface with no entry shows its bare label.
+  final Map<SurfaceId, String> shortcutLabels;
 
   static const Map<SurfaceId, String> _glyphs = {
     SurfaceId.scene: '◌',
@@ -55,6 +64,7 @@ class LeftRail extends StatelessWidget {
               child: RailButton(
                 glyph: _glyphs[id] ?? '·',
                 label: id.label,
+                shortcut: shortcutLabels[id],
                 selected: id == selected,
                 enabled: _enabled.contains(id),
                 onPressed: () => onSelect(id),
