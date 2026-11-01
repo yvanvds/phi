@@ -6,23 +6,30 @@ import '../../design/widgets/patcher/patch_canvas_constants.dart';
 import '../../design/widgets/patcher/patch_object_box_metrics.dart';
 import '../../domain/patcher/item_list_args.dart';
 import '../../domain/patcher/keyboard_layout.dart';
+import '../../domain/patcher/matrixctrl_args.dart';
 import '../../domain/patcher/multislider_args.dart';
 import '../../domain/patcher/patch_gui_property.dart';
 import '../../domain/patcher/patch_object_types.dart';
 import '../../domain/patcher/patch_port_kind.dart';
+import '../../domain/patcher/preset_args.dart';
+import '../../domain/patcher/preset_grid.dart';
 import '../../engine/state/gui_value_read.dart';
 import '../../engine/state/node_type_registry.dart';
 import 'nodes/button_node_body.dart';
 import 'nodes/dial_node_body.dart';
+import 'nodes/function_node_body.dart';
 import 'nodes/incdec_node_body.dart';
 import 'nodes/item_list_node_body.dart';
 import 'nodes/kslider_node_body.dart';
 import 'nodes/label_switch_node_body.dart';
 import 'nodes/list_node_body.dart';
+import 'nodes/matrixctrl_node_body.dart';
 import 'nodes/message_node_body.dart';
 import 'nodes/multislider_node_body.dart';
+import 'nodes/nodes_node_body.dart';
 import 'nodes/nslider_node_body.dart';
 import 'nodes/number_node_body.dart';
+import 'nodes/preset_node_body.dart';
 import 'nodes/range_slider_node_body.dart';
 import 'nodes/slider_node_body.dart';
 import 'nodes/textedit_node_body.dart';
@@ -456,7 +463,137 @@ void registerBuiltInPatcherNodes() {
       guiValueRead: GuiValueRead.cells,
     ),
   );
+
+  // ─── libYSE 3.0 grid (issue #474) ──────────────────────────────────────
+  // A `.matrixctrl`'s GUI value is one cell per grid cell — 65 536 of them
+  // at 256 × 256 — so it is polled per cell, never as one string. Its box is
+  // its `columns rows` arguments, a cell's side each, inside a ceiling.
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gMatrixctrl,
+      sizeForArgs: (args) {
+        final grid = MatrixctrlArgs.parse(args);
+        return Size(
+          (grid.columns * _gridCellSide).clamp(
+            PatchCanvasConstants.minWidthForPorts(2),
+            _gridMaxSide,
+          ),
+          (grid.rows * _gridCellSide).clamp(square, _gridMaxSide),
+        );
+      },
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [
+        PortSpec(kind: PatchPortKind.control, label: 'cell'),
+        PortSpec(kind: PatchPortKind.control, label: 'line'),
+      ],
+      buildBody: (ctx, node, controller) =>
+          MatrixctrlNodeBody(node: node, controller: controller),
+      readsGuiValue: true,
+      guiValueRead: GuiValueRead.cells,
+    ),
+  );
+
+  // ─── libYSE 3.0 breakpoint function (issue #475) ───────────────────────
+  // A `.function`'s GUI value is one `<x> <y> <curve>` cell per point, up to
+  // 1024 of them, so it is polled per cell. Its points are saved with the
+  // patch by the object itself.
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gFunction,
+      defaultSize: _functionSize,
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [
+        PortSpec(kind: PatchPortKind.control, label: 'y'),
+        PortSpec(kind: PatchPortKind.control, label: 'ramp'),
+        PortSpec(kind: PatchPortKind.control, label: 'dump'),
+      ],
+      buildBody: (ctx, node, controller) =>
+          FunctionNodeBody(node: node, controller: controller),
+      readsGuiValue: true,
+      guiValueRead: GuiValueRead.cells,
+    ),
+  );
+
+  // ─── libYSE 3.0 interpolation field (issue #476) ───────────────────────
+  // A `.nodes` field's GUI value is one `<x> <y> <radius>` cell per node, up
+  // to 64 of them, so it is polled per cell. The object saves only its
+  // `count`; the live layout is control state, which `.preset` keeps.
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gNodes,
+      defaultSize: _nodesSize,
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [
+        PortSpec(kind: PatchPortKind.control, label: 'weights'),
+        PortSpec(kind: PatchPortKind.control, label: 'distances'),
+      ],
+      buildBody: (ctx, node, controller) =>
+          NodesNodeBody(node: node, controller: controller),
+      readsGuiValue: true,
+      guiValueRead: GuiValueRead.cells,
+    ),
+  );
+
+  // ─── libYSE 3.0 preset bank (issue #477) ───────────────────────────────
+  // A `.preset`'s GUI value is the active slot alone, read whole. Which slots
+  // are stored comes from its saved state, asked for on demand by the body;
+  // the slots are saved with the patch by the object itself.
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gPreset,
+      defaultSize: _presetSize(PresetArgs.defaultSlots),
+      sizeForArgs: (args) => _presetSize(PresetArgs.parse(args).slots),
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [
+        PortSpec(kind: PatchPortKind.control, label: 'recalled'),
+        PortSpec(kind: PatchPortKind.control, label: 'stored'),
+      ],
+      buildBody: (ctx, node, controller) =>
+          PresetNodeBody(node: node, controller: controller),
+      readsGuiValue: true,
+    ),
+  );
 }
+
+/// A `.preset` slot's side at creation (issue #477): room for its number.
+const double _presetSlotSide = 20;
+
+/// The widest and tallest a `.preset` opens at, however many slots it has.
+const double _presetMaxSide = 384;
+
+/// A `.preset` of [slots] at creation: [PresetGrid]'s rows and columns of
+/// [_presetSlotSide] slots, within the canvas's bounds.
+Size _presetSize(int slots) => Size(
+  (PresetGrid.columnsFor(slots) * _presetSlotSide).clamp(
+    PatchCanvasConstants.minWidthForPorts(2),
+    _presetMaxSide,
+  ),
+  (PresetGrid.rowsFor(slots) * _presetSlotSide).clamp(
+    _presetSlotSide,
+    _presetMaxSide,
+  ),
+);
+
+/// A `.function` editor's size at creation (issue #475): wide enough to draw
+/// an envelope into, a Max-ish 200 by 100.
+const Size _functionSize = Size(200, 100);
+
+/// A `.nodes` field's size at creation (issue #476): square, as the field is.
+const Size _nodesSize = Size(160, 160);
+
+/// A `.matrixctrl` cell's side at creation (issue #474).
+const double _gridCellSide = 14;
+
+/// The widest and tallest a `.matrixctrl` opens at, however many cells it has.
+const double _gridMaxSide = 384;
 
 /// Width of one `.kslider` white key (issue #473).
 const double _whiteKeyWidth = 12;

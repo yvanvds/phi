@@ -2090,9 +2090,25 @@ main + app          (orchestration)
   setter a definition edit uses, but **unjournaled** and leaving the handle's
   authored `definition` untouched, so an unrelated re-sync keeps the live value
   while a journaled edit of the effect re-applies over it (performance, not
-  authorship, like `applyLiveBusLevel`). Still silent in production until the tap C
-  API lands (the default `NoOpBusTap` yields no frames, mirroring #229's
-  present-but-silent seam), but live the moment a frame arrives. The dispatcher is
+  authorship, like `applyLiveBusLevel`). **Live in production since #480**: the
+  engine's tap defaults to the gateway's session-bound `YseGateway.busTap` —
+  `RealBusTap` (`lib/engine/bridge/real_bus_tap.dart`) over dart-yse 0.2.0's
+  `Bus.tap`, whose native callback is a `NativeCallable.isolateLocal` fired on the
+  control (main) isolate, inline for a control-thread publish or during
+  `System.update()` otherwise — never the audio thread, nothing polled. The adapter
+  attaches the native tap only on listen and only inside a session (the #421
+  session flag), filters the byte-wise native prefix down to `BusTap`'s
+  segment-aware one, drops valueless bangs, and lets `System.close()` end the
+  stream; the dispatcher is rebuilt on every `start` and after an audio-session
+  restart (#448), so it re-taps each new session. `FakeYseGateway.busTap` is a
+  session-bound `FakeBusTap` with the same lifecycle; an injected `FakeBusTap` /
+  `NoOpBusTap` still overrides it for tests. Covered by
+  `test/engine/bridge/real_bus_tap_engine_test.dart` (real engine, offline session:
+  every value type, segment filtering, cancel, the closed-engine gate, re-tap after
+  close/init) and `integration_test/control_plane_real_bus_tap_test.dart` (a
+  `RealYseGateway` engine with no injected tap: `Bus.publish` on `phi.ctl.*` moves
+  the live state, a runtime variable and a live fx param, again after stop →
+  start). The dispatcher is
   torn down first on `stop`, cancelling its subscription before the controllers it
   routes to. Covered by unit tests for each adapter (`lib/engine/state/*_control_port`)
   and an end-to-end `control_plane_activation_test.dart` that drives a fake tap
@@ -2830,6 +2846,83 @@ main + app          (orchestration)
   `patcher_node_gui` integration case (a key pressed in run mode sends pitch
   and velocity into two `.i`; inert in edit mode; a staff drag reaches a `.i`;
   cable-driven notes show on both).
+- **Grid body** (issue #474) — `.matrixctrl` (`MatrixctrlNodeBody` over
+  `PatchMatrixGrid`, columns by rows of cells filled to their level). Sized
+  from its `columns rows` args (`sizeForArgs`, 14 px a cell, capped at 384 px)
+  and polled **per cell** — up to 65 536 of them, never as one string. The
+  flat index is column-major, `column * rows + row` (`MatrixctrlArgs`). A click
+  toggles a cell between minimum and maximum, a drag paints that value across
+  the cells it crosses, and with a maximum above 1 a vertical drag steps one
+  cell in whole units (`MatrixGesture`, pure Dart). Each write is
+  `set <index> <value>`, answered by `<column> <row> <value>` on outlet 0.
+  `FakePatcherGateway` models the object (bounds, triples, `set`, whole-grid
+  lists, `clear`, bang, `getrow` / `getcolumn` on outlet 1), pinned to the
+  engine by the shared contract. Covered by domain unit tests,
+  `matrixctrl_node_body_test.dart`, and a `patcher_node_gui` integration case
+  (a cell clicked in run mode reaches a `.l` as `2 1 1`; inert in edit mode; a
+  painted row; a cable-driven change repaints).
+- **Breakpoint editor** (issue #475) — `.function` (`FunctionNodeBody` over
+  `PatchFunctionGraph`, the points joined by their curved segments). 200 by 100
+  at creation, polled **per cell**, one `<x> <y> <curve>` cell per point in x
+  order. The y axis is the `points minimum maximum` args' range
+  (`FunctionArgs`), the x axis the domain the points span (0 to the last x,
+  1000 while none lies past 0), and values snap to a power-of-ten step no finer
+  than a pixel (`FunctionView`). In run mode a press on empty space adds a
+  point (`<x> <y>`) and drags it on, a drag moves a point between its
+  neighbours (`set <i> <x> <y>`, curve kept), an Alt-drag bends a segment
+  (`setcurve <i> <c>`), and a double-click or Delete removes the taken point
+  (`clear <i>`) — `FunctionGesture`, pure Dart. Edits are silent and not
+  journaled (run-mode performance values); the object saves its points under
+  its dump's `state`. `FakePatcherGateway` models the store (sorted, bounded,
+  capacity, `set` / `setcurve` / `nth` / `clear` / `dump`, the x query on
+  outlet 0, the ramp on outlet 1, `state` in the dump), pinned to the engine by
+  the shared contract. Covered by domain unit tests,
+  `function_node_body_test.dart`, and a `patcher_node_gui` integration case (a
+  three-point envelope drawn, moved, bent and edited in run mode bangs
+  `0 0 0.5 250 1 750` into a `.line`; inert in edit mode; Delete reaches the
+  body through the canvas; the points survive a flush and reload).
+- **Interpolation field** (issue #476) — `.nodes` (`NodesNodeBody` over
+  `PatchNodesField`, numbered translucent circles in a square field, each
+  filled by its weight, plus the cursor). 160 by 160 at creation, polled **per
+  cell**, one `<x> <y> <radius>` cell per node; the node count follows the live
+  cell count, not the `count` arg (`NodesArgs`). The field is the unit square,
+  y up, fitted and snapped by `NodesView`. In run mode a press or drag sends
+  the cursor (`<x> <y>`), answered by distances on outlet 1 and weights on
+  outlet 0; an Alt-drag on a node moves it (`set <i> <x> <y>`, radius kept)
+  and on its rim resizes it (`set <i> <x> <y> <radius>`) — `NodesGesture`,
+  pure Dart. The body keeps only the cursor (no read reports it) and shades
+  each node by `NodesField.weights`, the engine's sum. Writes are not
+  journaled; the object saves only its `count` (no `DumpState`), the live
+  layout being control state for `.preset`. `FakePatcherGateway` models the
+  bank (64 slots, count bound, cursor vs. whole field vs. `set`, the send after
+  every list / bang but no number, distances before weights), pinned to the
+  engine by the shared contract. Covered by domain unit tests,
+  `nodes_node_body_test.dart`, and a `patcher_node_gui` integration case (a
+  cable-driven layout redraws; inert in edit mode; a node moved and widened
+  with Alt-drags; the cursor dragged into it sends `0 1` into a `.l`).
+- **Preset bank** (issue #477) — `.preset` (`PresetNodeBody` over
+  `PatchPresetGrid`, one button per slot, row by row from slot 0: empty dim,
+  stored ringed in the voice glow, active solid). Sized by its `slots` arg
+  (`PresetArgs`, 1–1024, default 32) through `PresetGrid` — one row up to 8,
+  eight wide, then square (32 is 8 × 4, 1024 is 32 × 32), 20 px slots capped at
+  384. In run mode a click recalls (`recall <n>`), Shift+click stores
+  (`store <n>`) and Alt+click clears (`clear <n>`) — `PresetAction`, also the
+  grid's tooltip. The GUI value is only the **active** slot (read whole); which
+  slots are **stored** comes from the object's saved `state`, read through the
+  new `PatcherGateway.objectState` / `PatcherController.objectStateOf` (a
+  whole-patch dump, so asked on build, after a click and when the active slot
+  moves — never per poll) and parsed by `PresetSlots`. A recall writes the
+  other controls through their own inlets and the ordinary poll repaints them.
+  The engine captures every `GuiValueIsSettable` object with a non-empty value
+  (not `.b`, `.l`, `.m` or another `.preset`) and saves the slots, the active
+  marker and each entry by object rank; loading recalls nothing. Clicks are not
+  journaled; the slots reach disk with the patch dump on save.
+  `FakePatcherGateway` models the bank (capture rule, recall order and outlets,
+  every spelling, out-of-range and empty slots, clears, `setParams` emptying it,
+  the rank-based dump round trip), pinned to the engine by the shared contract.
+  Covered by domain unit tests, `preset_node_body_test.dart`, and two
+  `patcher_node_gui` integration cases (a slider stored into slot 1, moved,
+  recalled back; a project opened with stored slots shows them and recalls).
 - **Keyboard range and velocity editing** (issue #515) — a selected `.kslider`
   gets a KEYBOARD section in the reference panel (`PatchKeyboardSettings`,
   `lib/surfaces/patcher/reference/`): the range shown as `C3 – C6`

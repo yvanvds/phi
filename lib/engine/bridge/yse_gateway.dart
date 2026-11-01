@@ -2,6 +2,7 @@ import '../../domain/project/app_settings/speaker_layout.dart';
 import 'audio_device_descriptor.dart';
 import 'audio_device_exception.dart';
 import 'audio_device_state.dart';
+import 'bus_tap.dart' show BusTap;
 
 /// Abstract port over the `package:yse` library.
 ///
@@ -60,6 +61,14 @@ abstract interface class YseGateway {
 
   /// Shut the engine down.
   void close();
+
+  /// The engine's host bus tap, bound to this gateway's session (issue #480):
+  /// a subscription attaches a native tap only while a session is running
+  /// (between [initOffline] and [close]), and [close] ends every stream it
+  /// handed out — the engine releases every tap with its session, so a tap
+  /// never outlives one. Subscribe again after the next [initOffline]. The
+  /// same object for the gateway's whole lifetime.
+  BusTap get busTap;
 
   /// The libYSE library version string (e.g. `2.0.1`) — a read-only
   /// diagnostics fact (design §6). Available without a device open.

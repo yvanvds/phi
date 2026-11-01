@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ui';
 
 import 'package:yse/yse.dart';
@@ -336,6 +337,20 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
 
   @override
   String dumpJson(int instanceId) => _inst(instanceId).patcher.dumpJson();
+
+  @override
+  Map<String, Object?>? objectState(int instanceId, int handleId) {
+    // libYSE's dump is one record per object, `"object <n>": {"ID": ...}`,
+    // with its saved contents nested under `state` when it has any.
+    final dump = jsonDecode(dumpJson(instanceId));
+    if (dump is! Map) return null;
+    for (final record in dump.values) {
+      if (record is! Map || record['ID'] != handleId) continue;
+      final state = record['state'];
+      return state is Map ? state.cast<String, Object?>() : null;
+    }
+    return null;
+  }
 
   @override
   void parseJson(int instanceId, String content) {

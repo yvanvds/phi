@@ -84,6 +84,22 @@ abstract final class PatchObjectTypes {
   /// (issue #473).
   static const String gNslider = '.nslider';
 
+  /// `Obj.gMatrixctrl` — a grid of cells, columns by rows, each addressed as
+  /// `<column> <row> <value>` (issue #474).
+  static const String gMatrixctrl = '.matrixctrl';
+
+  /// `Obj.gFunction` — a breakpoint function: sorted `<x> <y> <curve>`
+  /// points, answered by x and banged out as a ramp (issue #475).
+  static const String gFunction = '.function';
+
+  /// `Obj.gNodes` — an interpolation field: circular `<x> <y> <radius>` nodes
+  /// a cursor is weighed against, one weight per node out (issue #476).
+  static const String gNodes = '.nodes';
+
+  /// `Obj.gPreset` — a bank of numbered slots, each a snapshot of every
+  /// settable control in the patch, stored and recalled (issue #477).
+  static const String gPreset = '.preset';
+
   /// Every id above, for the drift guard.
   static const List<String> all = [
     dSine,
@@ -108,5 +124,9 @@ abstract final class PatchObjectTypes {
     gMultislider,
     gKslider,
     gNslider,
+    gMatrixctrl,
+    gFunction,
+    gNodes,
+    gPreset,
   ];
 }

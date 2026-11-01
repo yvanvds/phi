@@ -31,7 +31,8 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 
 /// The state-graph epic's end-to-end walk (issue #246): a two-state
 /// performance through the real [PhiApp], with every cross-epic seam faked —
-/// the engine bus tap (the C API is a pending engine dependency), the script
+/// the engine bus tap (a `FakeBusTap`; the real one is walked by
+/// `control_plane_real_bus_tap_test.dart`, issue #480), the script
 /// evaluator, and the control plane's clip/voice/var/tempo controllers.
 ///
 /// The walk: shape the intro performance and **capture** its mix + variable

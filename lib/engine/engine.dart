@@ -107,11 +107,12 @@ class PhiEngine {
     this._synthGateway,
     this._fxGateway,
     RegistryMirror registryMirror = const NoOpRegistryMirror(),
-    this._busTap = const NoOpBusTap(),
+    BusTap? busTap,
     this._engineLogSource = const NoOpEngineLogSource(),
     this._telemetryInterval = const Duration(milliseconds: 50),
     this._audioRecoverySchedule = AudioDeviceRecovery.defaultSchedule,
-  }) : _mirrorBinder = RegistryMirrorBinder(registryMirror) {
+  }) : _busTap = busTap ?? _gateway.busTap,
+       _mirrorBinder = RegistryMirrorBinder(registryMirror) {
     // The registry is the source of truth for the channel set (design §8): the
     // engine materialises its `MixerChannel`s from `mix.` entities and re-syncs
     // whenever the tree changes. Until [bindProject] points it at the project's
@@ -188,6 +189,11 @@ class PhiEngine {
   final MidiGateway? _midiGateway;
   final SynthGateway? _synthGateway;
   final FxGateway? _fxGateway;
+
+  /// The host bus tap the control plane listens on — the gateway's
+  /// session-bound tap ([YseGateway.busTap]: the real `Bus.tap` in production,
+  /// issue #480) unless a test injects one (a `FakeBusTap`, or a [NoOpBusTap]
+  /// to keep the plane silent).
   final BusTap _busTap;
   final EngineLogSource _engineLogSource;
   final Duration _telemetryInterval;
@@ -215,10 +221,10 @@ class PhiEngine {
   /// The live-coding **control plane** (issue #334): decodes `phi.ctl.*` frames
   /// off the injected [BusTap] and routes each to its owning controller —
   /// the production activation of the dispatcher issue #233 built. Constructed
-  /// on [start] once every owning controller exists and disposed on [stop].
-  /// Silent in production until the tap C API lands (the default [NoOpBusTap]
-  /// yields no frames), but wired and live so a real frame routes the moment it
-  /// arrives.
+  /// on [start] once every owning controller exists and disposed on [stop] —
+  /// and rebuilt around an audio-session restart, because a tap belongs to one
+  /// engine session (issue #480). In production the frames arrive through
+  /// yse's `Bus.tap`, on the main isolate.
   ControlPlaneDispatcher? _controlPlane;
 
   /// The engine's log lines (design `docs/design/diagnostics.md` §2) — yse's
@@ -1112,8 +1118,8 @@ class PhiEngine {
     // open yet), voice notes through the racks audition path, and fx param sets
     // onto the live insert-effect handles, unjournaled (issue #348). Every
     // degradation is a
-    // notice, never a crash. Silent in production until the tap C API lands
-    // (the default [NoOpBusTap] yields no frames).
+    // notice, never a crash. In production the frames come through the
+    // gateway's real `Bus.tap` (issue #480).
     _controlPlane = _buildControlPlane();
     // The rack materialiser (issue #208) reconciles synths per internal voice
     // and insert chains per bus, then hands the live voice table + synth map to

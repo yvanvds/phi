@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/domain/patcher/patch_port_kind.dart';
 import 'package:phi/engine/bridge/patcher_gateway.dart';
 import 'package:yse/yse.dart';
 
@@ -482,6 +483,545 @@ void guiValueProtocolContract(
     expect(gateway.guiValue(inst, pitch), '66', reason: 'a set sends too');
     // A live re-range is deferred to the audio thread in the engine (the
     // scalar plan), so it is not pinned here.
+  });
+
+  // ─── the grid (issue #474) ────────────────────────────────────────────
+
+  test('a .matrixctrl holds a cell per grid cell, column-major', () {
+    final grid = gateway.createObject(inst, Obj.gMatrixctrl, args: '3 2 0 4');
+    final cell = listen(grid, 0, Obj.gList);
+    expect(gateway.guiValueCount(inst, grid), 6);
+    expect(gateway.guiValueIsSettable(inst, grid), isTrue);
+    expect(numbers(cellsOf(grid)), [0, 0, 0, 0, 0, 0]);
+
+    // Column 2, row 1 is index 2 * 2 + 1.
+    gateway.sendList(inst, grid, 0, '2 1 3');
+    expect(numbers(cellsOf(grid)), [0, 0, 0, 0, 0, 3]);
+    expect(numbers(gateway.guiValue(inst, cell).split(' ')), [2, 1, 3]);
+
+    // A cell write is `set <index> <value>`, bounded, and sent as a triple.
+    expect(gateway.setGuiValueAt(inst, grid, 1, '9'), isTrue);
+    expect(numbers(cellsOf(grid)), [0, 4, 0, 0, 0, 3], reason: 'clamped');
+    expect(numbers(gateway.guiValue(inst, cell).split(' ')), [0, 1, 4]);
+    expect(gateway.setGuiValueAt(inst, grid, 6, '1'), isFalse);
+
+    // A cell off the grid is dropped.
+    gateway.sendList(inst, grid, 0, '3 0 1');
+    expect(numbers(cellsOf(grid)), [0, 4, 0, 0, 0, 3]);
+  });
+
+  test('a .matrixctrl defaults to 8 x 8 on and off, and starts at its '
+      'minimum', () {
+    final grid = gateway.createObject(inst, Obj.gMatrixctrl);
+    expect(gateway.guiValueCount(inst, grid), 64);
+    gateway.sendList(inst, grid, 0, '7 7 5');
+    expect(num.parse(gateway.guiValueAt(inst, grid, 63)), 1);
+
+    final raised = gateway.createObject(inst, Obj.gMatrixctrl, args: '2 2 1 3');
+    expect(numbers(cellsOf(raised)), [1, 1, 1, 1]);
+  });
+
+  test('a .matrixctrl takes a whole grid, clears, and answers a row or '
+      'column on outlet 1', () {
+    final grid = gateway.createObject(inst, Obj.gMatrixctrl, args: '2 3 0 9');
+    final cell = listen(grid, 0, Obj.gList);
+    final line = listen(grid, 1, Obj.gList);
+
+    expect(gateway.restoreGuiValue(inst, grid, '1 2 3 4 5 6'), isTrue);
+    expect(numbers(cellsOf(grid)), [1, 2, 3, 4, 5, 6]);
+    // Every cell is sent, the last one last.
+    expect(numbers(gateway.guiValue(inst, cell).split(' ')), [1, 2, 6]);
+
+    gateway.sendMessage(inst, grid, 0, 'getrow 1');
+    expect(numbers(gateway.guiValue(inst, line).split(' ')), [2, 5]);
+    gateway.sendMessage(inst, grid, 0, 'getcolumn 0');
+    expect(numbers(gateway.guiValue(inst, line).split(' ')), [1, 2, 3]);
+
+    gateway.sendList(inst, grid, 0, '0 2 7');
+    gateway.sendBang(inst, grid, 0);
+    expect(numbers(gateway.guiValue(inst, cell).split(' ')), [1, 2, 6]);
+
+    gateway.sendMessage(inst, grid, 0, 'clear');
+    expect(numbers(cellsOf(grid)), [0, 0, 0, 0, 0, 0]);
+    expect(numbers(gateway.guiValue(inst, cell).split(' ')), [1, 2, 0]);
+  });
+
+  // ─── the breakpoint function (issue #475) ─────────────────────────────
+
+  List<List<num?>> pointsOf(int handle) => [
+    for (final cell in cellsOf(handle)) numbers(cell.split(' ')),
+  ];
+
+  test('a .function holds a sorted <x> <y> <curve> cell per point', () {
+    final fn = gateway.createObject(inst, Obj.gFunction, args: '8 0 2');
+    expect(gateway.guiValueCount(inst, fn), 0, reason: 'starts empty');
+    expect(gateway.guiValue(inst, fn), 'clear');
+    expect(gateway.guiValueIsSettable(inst, fn), isTrue);
+
+    // Two numbers add a point, in x order, y bounded, curve 0.
+    gateway.sendList(inst, fn, 0, '500 1.5');
+    gateway.sendList(inst, fn, 0, '0 0.25');
+    gateway.sendList(inst, fn, 0, '250 9');
+    expect(pointsOf(fn), [
+      [0, 0.25, 0],
+      [250, 2, 0],
+      [500, 1.5, 0],
+    ]);
+
+    // The cell write is `set <i> <x> <y>`, keeping the curve; a point at an
+    // existing x replaces it.
+    gateway.sendMessage(inst, fn, 0, 'setcurve 2 0.5');
+    expect(gateway.setGuiValueAt(inst, fn, 2, '750 1'), isTrue);
+    expect(pointsOf(fn).last, [750, 1, 0.5]);
+    expect(gateway.setGuiValueAt(inst, fn, 3, '1 1'), isFalse);
+    gateway.sendList(inst, fn, 0, '250 0.5');
+    expect(pointsOf(fn)[1], [250, 0.5, 0]);
+
+    // `clear <i>` removes one point, `clear` all of them.
+    gateway.sendMessage(inst, fn, 0, 'clear 1');
+    expect(pointsOf(fn), [
+      [0, 0.25, 0],
+      [750, 1, 0.5],
+    ]);
+    gateway.sendMessage(inst, fn, 0, 'clear');
+    expect(gateway.guiValueCount(inst, fn), 0);
+  });
+
+  test('a .function takes its whole state back and refuses a point past its '
+      'capacity', () {
+    final fn = gateway.createObject(inst, Obj.gFunction, args: '2');
+    expect(gateway.restoreGuiValue(inst, fn, '100 0.5 -0.5 0 0.25 0'), isTrue);
+    expect(pointsOf(fn), [
+      [0, 0.25, 0],
+      [100, 0.5, -0.5],
+    ]);
+    gateway.sendList(inst, fn, 0, '50 1');
+    expect(gateway.guiValueCount(inst, fn), 2, reason: 'the store is full');
+
+    final saved = gateway.guiValue(inst, fn);
+    gateway.sendMessage(inst, fn, 0, 'clear');
+    gateway.restoreGuiValue(inst, fn, saved);
+    expect(pointsOf(fn), [
+      [0, 0.25, 0],
+      [100, 0.5, -0.5],
+    ]);
+  });
+
+  test('a .function answers an x on outlet 0, a bang with its ramp on outlet '
+      '1, and dump on outlet 2', () {
+    final fn = gateway.createObject(inst, Obj.gFunction);
+    final y = listen(fn, 0, Obj.gFloat);
+    final ramp = listen(fn, 1, Obj.gList);
+    final dump = listen(fn, 2, Obj.gList);
+    gateway.restoreGuiValue(inst, fn, '0 0 0 100 1 0 300 0.5 0');
+
+    gateway.sendFloat(inst, fn, 0, 50);
+    expect(num.parse(gateway.guiValue(inst, y)), 0.5);
+    gateway.sendInt(inst, fn, 0, 200);
+    expect(num.parse(gateway.guiValue(inst, y)), 0.75);
+    gateway.sendFloat(inst, fn, 0, 1000);
+    expect(num.parse(gateway.guiValue(inst, y)), 0.5, reason: 'past the end');
+    gateway.sendMessage(inst, fn, 0, 'nth 1');
+    expect(num.parse(gateway.guiValue(inst, y)), 1);
+
+    // A curve bends the query, not the ramp.
+    gateway.sendMessage(inst, fn, 0, 'setcurve 1 0.5');
+    gateway.sendFloat(inst, fn, 0, 50);
+    expect(num.parse(gateway.guiValue(inst, y)), closeTo(0.125, 1e-4));
+
+    gateway.sendBang(inst, fn, 0);
+    expect(numbers(gateway.guiValue(inst, ramp).split(' ')), [
+      0,
+      0,
+      1,
+      100,
+      0.5,
+      200,
+    ]);
+
+    gateway.sendMessage(inst, fn, 0, 'dump');
+    expect(numbers(gateway.guiValue(inst, dump).split(' ')), [2, 300, 0.5, 0]);
+  });
+
+  test('a .function sends nothing on an edit', () {
+    final fn = gateway.createObject(inst, Obj.gFunction);
+    final y = listen(fn, 0, Obj.gFloat);
+    final ramp = listen(fn, 1, Obj.gList);
+    gateway.sendList(inst, fn, 0, '0 1');
+    gateway.sendList(inst, fn, 0, '10 0');
+    gateway.setGuiValueAt(inst, fn, 1, '20 0.5');
+    gateway.sendMessage(inst, fn, 0, 'setcurve 1 0.5');
+    expect(num.tryParse(gateway.guiValue(inst, y)) ?? 0, 0);
+    expect(gateway.guiValue(inst, ramp), isEmpty);
+  });
+
+  test('a .function keeps its points through a dump and a reload', () {
+    final fn = gateway.createObject(inst, Obj.gFunction, args: '16 0 10');
+    gateway.restoreGuiValue(inst, fn, '0 2 0 40 8 0.5 100 0 -0.25');
+    final dump = gateway.dumpJson(inst);
+
+    final copy = gateway.createInstance();
+    gateway.parseJson(copy, dump);
+    final reloaded = gateway
+        .enumerate(copy)
+        .objects
+        .firstWhere((o) => o.type == Obj.gFunction)
+        .handleId;
+    expect(
+      [
+        for (var i = 0; i < gateway.guiValueCount(copy, reloaded); i++)
+          numbers(gateway.guiValueAt(copy, reloaded, i).split(' ')),
+      ],
+      [
+        [0, 2, 0],
+        [40, 8, 0.5],
+        [100, 0, -0.25],
+      ],
+    );
+  });
+
+  // ─── the interpolation field (issue #476) ─────────────────────────────
+
+  List<List<num?>> fieldOf(int handle) => [
+    for (final cell in cellsOf(handle)) numbers(cell.split(' ')),
+  ];
+
+  List<double> listOf(int handle) => [
+    for (final n in gateway.guiValue(inst, handle).trim().split(' '))
+      double.parse(n),
+  ];
+
+  test('a .nodes holds an <x> <y> <radius> cell per node, unit nodes at the '
+      'origin to start', () {
+    final field = gateway.createObject(inst, Obj.gNodes);
+    expect(fieldOf(field), List.filled(4, [0, 0, 1]));
+    expect(gateway.guiValueIsSettable(inst, field), isTrue);
+    expect(numbers(gateway.guiValue(inst, field).split(' ')), [
+      for (var i = 0; i < 4; i++) ...[0, 0, 1],
+    ]);
+
+    expect(
+      fieldOf(gateway.createObject(inst, Obj.gNodes, args: '2')),
+      List.filled(2, [0, 0, 1]),
+    );
+    expect(
+      gateway.guiValueCount(
+        inst,
+        gateway.createObject(inst, Obj.gNodes, args: '99'),
+      ),
+      64,
+      reason: 'the count is clamped to 64',
+    );
+    expect(
+      gateway.guiValueCount(
+        inst,
+        gateway.createObject(inst, Obj.gNodes, args: '0'),
+      ),
+      1,
+      reason: 'and to at least 1',
+    );
+  });
+
+  test('a .nodes takes a whole field back, resizing to its triples, and moves '
+      'one node with the cell write', () {
+    final field = gateway.createObject(inst, Obj.gNodes);
+    // A trailing partial triple is ignored.
+    expect(
+      gateway.restoreGuiValue(
+        inst,
+        field,
+        '0.25 0.25 0.5 0.75 0.75 0.25 0.5 0.5',
+      ),
+      isTrue,
+    );
+    expect(fieldOf(field), [
+      [0.25, 0.25, 0.5],
+      [0.75, 0.75, 0.25],
+    ]);
+
+    // `set <i> <x> <y>` keeps the radius; a fourth number replaces it.
+    expect(gateway.setGuiValueAt(inst, field, 1, '0.5 0.5'), isTrue);
+    expect(fieldOf(field)[1], [0.5, 0.5, 0.25]);
+    expect(gateway.setGuiValueAt(inst, field, 0, '0 1 0.125'), isTrue);
+    expect(fieldOf(field)[0], [0, 1, 0.125]);
+    expect(gateway.setGuiValueAt(inst, field, 2, '0.5 0.5'), isFalse);
+    expect(fieldOf(field), hasLength(2));
+
+    // A longer field grows the count past the creation argument.
+    final small = gateway.createObject(inst, Obj.gNodes, args: '2');
+    gateway.sendList(inst, small, 0, '0 0 0.5 0.5 0 0.5 1 0 0.5');
+    expect(fieldOf(small), hasLength(3));
+
+    final saved = gateway.guiValue(inst, field);
+    gateway.restoreGuiValue(inst, field, '0 0 1');
+    expect(fieldOf(field), hasLength(1));
+    gateway.restoreGuiValue(inst, field, saved);
+    expect(fieldOf(field), [
+      [0, 1, 0.125],
+      [0.5, 0.5, 0.25],
+    ]);
+  });
+
+  test('a .nodes weighs the cursor: weights on outlet 0 summing to 1 inside '
+      'a node, all 0 outside, distances on outlet 1', () {
+    final field = gateway.createObject(inst, Obj.gNodes, args: '2');
+    final weights = listen(field, 0, Obj.gList);
+    final distances = listen(field, 1, Obj.gList);
+    gateway.restoreGuiValue(inst, field, '0 0 1 1 0 1');
+
+    gateway.sendList(inst, field, 0, '0.25 0');
+    expect(listOf(weights), [closeTo(0.75, 1e-6), closeTo(0.25, 1e-6)]);
+    expect(listOf(distances), [closeTo(0.25, 1e-6), closeTo(0.75, 1e-6)]);
+
+    // Inside only the first node.
+    gateway.restoreGuiValue(inst, field, '0.25 0.25 0.2 0.75 0.75 0.2');
+    gateway.sendList(inst, field, 0, '0.25 0.25');
+    expect(listOf(weights), [1, 0]);
+    expect(listOf(distances), [0, closeTo(0.7071068, 1e-5)]);
+
+    // Outside every node.
+    gateway.sendList(inst, field, 0, '0.5 0.5');
+    expect(listOf(weights), [0, 0]);
+
+    // A muted node (radius 0) covers nothing.
+    gateway.restoreGuiValue(inst, field, '0.5 0.5 0 0.5 0.5 1');
+    gateway.sendList(inst, field, 0, '0.5 0.5');
+    expect(listOf(weights), [0, 1]);
+  });
+
+  test('a .nodes sends the distances first and the weights last, after every '
+      'list, set and bang, but not on a bare number', () {
+    final field = gateway.createObject(inst, Obj.gNodes, args: '2');
+    final last = listen(field, 0, Obj.gList);
+    gateway.connect(
+      inst,
+      fromHandleId: field,
+      outlet: 1,
+      toHandleId: last,
+      inlet: 0,
+    );
+    gateway.restoreGuiValue(inst, field, '0.25 0.25 0.2 0.75 0.75 0.2');
+    gateway.sendList(inst, field, 0, '0.75 0.75');
+    expect(listOf(last), [0, 1], reason: 'the weights arrive last');
+
+    gateway.sendList(inst, last, 0, '9');
+    gateway.sendFloat(inst, field, 0, 0.3);
+    gateway.sendInt(inst, field, 0, 1);
+    expect(listOf(last), [9], reason: 'no number handler');
+
+    gateway.sendBang(inst, field, 0);
+    expect(listOf(last), [0, 1], reason: 'a bang re-sends');
+
+    gateway.sendList(inst, last, 0, '9');
+    gateway.setGuiValueAt(inst, field, 0, '0.75 0.75');
+    expect(listOf(last), [0.5, 0.5], reason: 'a node move sends');
+
+    gateway.sendList(inst, last, 0, '9');
+    gateway.sendMessage(inst, field, 0, 'set 1 0 0 0.1');
+    expect(listOf(last), [1, 0], reason: 'so does a set message');
+  });
+
+  // TODO(yvanvds/yse-soundengine#1228): .nodes has no DumpState yet; flip this
+  // to expect the layout back once the engine saves it under `state`.
+  test('a .nodes saves only its count: a reload is that many fresh nodes', () {
+    final field = gateway.createObject(inst, Obj.gNodes, args: '3');
+    gateway.restoreGuiValue(inst, field, '0.25 0.25 0.5 0.75 0.75 0.25');
+    final dump = gateway.dumpJson(inst);
+
+    final copy = gateway.createInstance();
+    gateway.parseJson(copy, dump);
+    final reloaded = gateway
+        .enumerate(copy)
+        .objects
+        .firstWhere((o) => o.type == Obj.gNodes)
+        .handleId;
+    expect([
+      for (var i = 0; i < gateway.guiValueCount(copy, reloaded); i++)
+        numbers(gateway.guiValueAt(copy, reloaded, i).split(' ')),
+    ], List.filled(3, [0, 0, 1]));
+  });
+
+  // ─── the preset bank (issue #477) ──────────────────────────────────────
+
+  test('a .preset is one inlet, two outlets, and a read-only active slot', () {
+    final bank = gateway.createObject(inst, Obj.gPreset);
+    final ports = gateway.inspect(inst, bank);
+    expect(ports.inputs, 1);
+    expect(ports.outputs, 2);
+    expect(ports.outputKinds, everyElement(PatchPortKind.control));
+    expect(gateway.guiValue(inst, bank), '-1', reason: 'no slot active');
+    expect(cellsOf(bank), ['-1']);
+    expect(gateway.guiValueIsSettable(inst, bank), isFalse);
+    expect(gateway.objectState(inst, bank), isNull, reason: 'saves nothing');
+  });
+
+  test('a .preset stores the settable controls and recalls them, announcing '
+      'the slot stored on outlet 1 and the slot recalled on outlet 0', () {
+    final slider = gateway.createObject(inst, Obj.gSlider);
+    final number = gateway.createObject(inst, Obj.gInt);
+    final bank = gateway.createObject(inst, Obj.gPreset, args: '8');
+    final recalled = listen(bank, 0, Obj.gInt);
+    final stored = listen(bank, 1, Obj.gInt);
+    gateway
+      ..sendInt(inst, recalled, 0, 99)
+      ..sendInt(inst, stored, 0, 99)
+      ..sendFloat(inst, slider, 0, 0.3)
+      ..sendInt(inst, number, 0, 7)
+      ..sendMessage(inst, bank, 0, 'store 2');
+
+    expect(gateway.guiValue(inst, bank), '2', reason: 'the store is active');
+    expect(gateway.guiValue(inst, stored), '2');
+    expect(gateway.guiValue(inst, recalled), '99', reason: 'nothing recalled');
+
+    gateway
+      ..sendFloat(inst, slider, 0, 0.9)
+      ..sendInt(inst, number, 0, 1)
+      ..sendInt(inst, stored, 0, 99)
+      ..sendInt(inst, bank, 0, 2);
+    expect(num.parse(gateway.guiValue(inst, slider)), closeTo(0.3, 1e-6));
+    expect(gateway.guiValue(inst, number), '7');
+    expect(gateway.guiValue(inst, recalled), '2');
+    expect(gateway.guiValue(inst, stored), '99', reason: 'nothing stored');
+  });
+
+  test('a .preset recalls through every spelling, and an empty or '
+      'out-of-range slot does nothing', () {
+    final slider = gateway.createObject(inst, Obj.gSlider);
+    final bank = gateway.createObject(inst, Obj.gPreset, args: '8');
+    final recalled = listen(bank, 0, Obj.gInt);
+    gateway
+      ..sendFloat(inst, slider, 0, 0.25)
+      ..sendMessage(inst, bank, 0, 'store 1')
+      ..sendFloat(inst, slider, 0, 0.75)
+      ..sendMessage(inst, bank, 0, 'store 3');
+
+    double slid() => num.parse(gateway.guiValue(inst, slider)).toDouble();
+
+    gateway.sendList(inst, bank, 0, 'recall 1');
+    expect(slid(), closeTo(0.25, 1e-6));
+    gateway.sendFloat(inst, bank, 0, 3.9);
+    expect(slid(), closeTo(0.75, 1e-6), reason: 'a float is truncated');
+    gateway.sendList(inst, bank, 0, '1');
+    expect(slid(), closeTo(0.25, 1e-6), reason: 'a bare number recalls');
+    gateway.sendFloat(inst, slider, 0, 0.5);
+    gateway.sendBang(inst, bank, 0);
+    expect(slid(), closeTo(0.25, 1e-6), reason: 'a bang recalls the active');
+
+    gateway
+      ..sendInt(inst, recalled, 0, 99)
+      ..sendFloat(inst, slider, 0, 0.5);
+    for (final miss in ['recall 5', 'recall 8', 'recall -1', 'recall']) {
+      gateway.sendMessage(inst, bank, 0, miss);
+    }
+    gateway.sendInt(inst, bank, 0, 20);
+    expect(slid(), closeTo(0.5, 1e-6));
+    expect(gateway.guiValue(inst, recalled), '99', reason: 'announces nothing');
+    expect(gateway.guiValue(inst, bank), '1', reason: 'the marker stays');
+
+    gateway.sendMessage(inst, bank, 0, 'store 8');
+    expect(gateway.guiValue(inst, bank), '1', reason: 'past the bank');
+  });
+
+  test('a .preset clears one slot, the active one, or all of them', () {
+    gateway.sendFloat(inst, gateway.createObject(inst, Obj.gSlider), 0, 0.5);
+    final bank = gateway.createObject(inst, Obj.gPreset);
+    Set<int> slots() => {
+      for (final s
+          in (gateway.objectState(inst, bank)?['slots'] as List?) ?? const [])
+        ((s as Map)['slot'] as num).toInt(),
+    };
+    for (final n in [0, 4, 6]) {
+      gateway.sendMessage(inst, bank, 0, 'store $n');
+    }
+    expect(slots(), {0, 4, 6});
+    expect(gateway.objectState(inst, bank)?['active'], 6);
+
+    gateway.sendMessage(inst, bank, 0, 'clear 4');
+    expect(slots(), {0, 6});
+    expect(gateway.guiValue(inst, bank), '6', reason: 'another slot cleared');
+    gateway.sendMessage(inst, bank, 0, 'clear');
+    expect(slots(), {0});
+    expect(gateway.guiValue(inst, bank), '-1', reason: 'the active cleared');
+    gateway.sendMessage(inst, bank, 0, 'recall 0');
+    gateway.sendMessage(inst, bank, 0, 'clearall');
+    expect(slots(), isEmpty);
+    expect(gateway.guiValue(inst, bank), '-1');
+    expect(gateway.objectState(inst, bank), isNull);
+  });
+
+  test('a .preset captures neither a .b, a .l nor itself, and a store with '
+      'nothing to capture only moves the marker', () {
+    final bank = gateway.createObject(inst, Obj.gPreset);
+    gateway.sendMessage(inst, bank, 0, 'store 3');
+    expect(gateway.guiValue(inst, bank), '3');
+    expect(gateway.objectState(inst, bank), {'active': 3});
+
+    gateway.createObject(inst, Obj.gButton);
+    gateway.sendList(inst, gateway.createObject(inst, Obj.gList), 0, '1 2');
+    gateway.createObject(inst, Obj.gPreset);
+    gateway.sendMessage(inst, bank, 0, 'store 3');
+    expect(gateway.objectState(inst, bank), {'active': 3});
+
+    final slider = gateway.createObject(inst, Obj.gSlider);
+    gateway
+      ..sendFloat(inst, slider, 0, 0.5)
+      ..sendMessage(inst, bank, 0, 'store 3');
+    final objects =
+        ((gateway.objectState(inst, bank)!['slots'] as List).single
+                as Map)['objects']
+            as List;
+    expect([for (final o in objects) (o as Map)['type']], [Obj.gSlider]);
+  });
+
+  test('a .preset re-ranged by setParams starts with empty slots', () {
+    gateway.sendFloat(inst, gateway.createObject(inst, Obj.gSlider), 0, 0.5);
+    final bank = gateway.createObject(inst, Obj.gPreset);
+    gateway.sendMessage(inst, bank, 0, 'store 2');
+    gateway.setParams(inst, bank, '4');
+    expect(gateway.guiValue(inst, bank), '-1');
+    expect(gateway.objectState(inst, bank), isNull);
+    gateway.sendMessage(inst, bank, 0, 'store 5');
+    expect(gateway.guiValue(inst, bank), '-1', reason: 'only 4 slots now');
+  });
+
+  test('a .preset keeps its slots through a dump and a reload, by object '
+      'rank, dropping a deleted object', () {
+    final gone = gateway.createObject(inst, Obj.gInt);
+    final slider = gateway.createObject(inst, Obj.gSlider);
+    final bank = gateway.createObject(inst, Obj.gPreset);
+    gateway
+      ..sendInt(inst, gone, 0, 3)
+      ..sendFloat(inst, slider, 0, 0.25)
+      ..sendMessage(inst, bank, 0, 'store 1')
+      ..sendMessage(inst, bank, 0, 'store 2')
+      ..sendMessage(inst, bank, 0, 'recall 1');
+    gateway.deleteObject(inst, gone);
+    final dump = gateway.dumpJson(inst);
+
+    final copy = gateway.createInstance();
+    gateway.parseJson(copy, dump);
+    final objects = gateway.enumerate(copy).objects;
+    final reloaded = objects.firstWhere((o) => o.type == Obj.gPreset).handleId;
+    final copied = objects.firstWhere((o) => o.type == Obj.gSlider).handleId;
+
+    final state = gateway.objectState(copy, reloaded)!;
+    expect(state['active'], 1, reason: 'loading recalls nothing');
+    expect(gateway.guiValue(copy, reloaded), '1');
+    final slots = state['slots'] as List;
+    expect([for (final s in slots) (s as Map)['slot']], [1, 2]);
+    expect(
+      [
+        for (final o in (slots.first as Map)['objects'] as List)
+          (o as Map)['type'],
+      ],
+      [Obj.gSlider],
+      reason: 'the deleted .i is dropped',
+    );
+
+    gateway.sendFloat(inst, copied, 0, 0.9);
+    gateway.sendFloat(copy, copied, 0, 0.9);
+    gateway.sendInt(copy, reloaded, 0, 2);
+    expect(num.parse(gateway.guiValue(copy, copied)), closeTo(0.25, 1e-6));
   });
 
   test('an unknown handle answers the empty protocol', () {

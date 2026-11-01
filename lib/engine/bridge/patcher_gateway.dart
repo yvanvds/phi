@@ -229,6 +229,13 @@ abstract interface class PatcherGateway {
   String dumpJson(int instanceId);
   void parseJson(int instanceId, String content);
 
+  /// What [handleId]'s object saves beyond its arguments — the `state` its
+  /// record in [dumpJson] carries (libYSE's `DumpState`), decoded — or null
+  /// when it saves nothing. Not a GUI value: it is read from a whole-patch
+  /// dump, so a caller asks on demand (a `.preset`'s stored slots, issue #477),
+  /// never once a frame.
+  Map<String, Object?>? objectState(int instanceId, int handleId);
+
   // ─── metadata passthrough (process-wide registry) ────────────────────
 
   /// The engine's full object catalogue as FFI-free descriptors — the

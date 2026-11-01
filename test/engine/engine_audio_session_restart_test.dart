@@ -9,6 +9,7 @@ import 'package:phi/domain/synth/sine_synth.dart';
 import 'package:phi/domain/voice/voice_definition.dart';
 import 'package:phi/engine/bridge/audio_device_descriptor.dart';
 import 'package:phi/engine/bridge/audio_device_notice.dart';
+import 'package:phi/engine/bridge/bus_tap.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/engine/state/metronome_controller.dart';
 
@@ -210,6 +211,25 @@ void main() {
 
     expect(yse.appliedMasterVolume, closeTo(0.3, 1e-9));
     expect(yse.audioTestOn, isTrue);
+  });
+
+  test('the control plane re-taps the new session — close() ended the old '
+      'tap (#480)', () async {
+    engine.runtimeVariables.define(
+      name: 'section',
+      values: ['a', 'b', 'c'],
+      current: 'a',
+    );
+    yse.busTap.publish('phi.ctl.var.section', const BusString('b'));
+    await pumpEventQueue();
+    expect(engine.runtimeVariables.byName('section')!.current, 'b');
+
+    engine.switchAudioDevice(picked96k);
+    expect(yse.calls, containsAllInOrder(<String>['close', 'initOffline']));
+
+    yse.busTap.publish('phi.ctl.var.section', const BusString('c'));
+    await pumpEventQueue();
+    expect(engine.runtimeVariables.byName('section')!.current, 'c');
   });
 
   test('a device that cannot run the session rate restarts it at one it '

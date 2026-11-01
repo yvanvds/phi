@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import 'no_op_bus_tap.dart';
+import 'real_bus_tap.dart';
+import 'yse_gateway.dart';
+
 /// Port for the engine's **host bus tap** — the outbound channel that delivers
 /// script-bus publishes back to the host (design `docs/design/live-coding.md`
 /// §4, §9).
@@ -10,15 +14,13 @@ import 'dart:async';
 /// voices, the state machine, variables, the tempo stack). This is the seam
 /// that carries those frames.
 ///
-/// **The real implementation is an engine dependency that has not landed yet.**
-/// The C API — subscribe the host to a bus-address prefix, delivering values on
-/// the main thread during `update()`, mirroring the `yse_set_script_error_callback`
-/// pattern — is filed on `yvanvds/yse-soundengine` (#389, blocking) and wrapped
-/// in `dart-yse` (#43). Until those land, production wires a [NoOpBusTap] and
-/// tests drive a fake publish through a `FakeBusTap`, so the whole control plane
-/// downstream is testable now (design §9 step 1).
+/// **Production** is [RealBusTap] over dart-yse's `Bus.tap` (libYSE's host bus
+/// tap C API, `yvanvds/yse-soundengine#389`; issue #480), handed out by the
+/// gateway as [YseGateway.busTap] and bound to its engine session. Tests drive
+/// a `FakeBusTap` instead (standalone, or the fake gateway's session-bound
+/// one), and [NoOpBusTap] keeps the plane silent where a test wants that.
 ///
-/// Frame delivery is prefix-scoped, exactly as the C API will be: a subscriber
+/// Frame delivery is prefix-scoped and segment-aware: a subscriber
 /// for `phi.ctl` receives `phi.ctl` and any `phi.ctl.<...>` publish, and nothing
 /// else.
 abstract interface class BusTap {
