@@ -3012,7 +3012,12 @@ main + app          (orchestration)
   `patcher_audio_basics_tutorials`,
   `patcher_control_math_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
-  that no note or object overlaps another). The audio cases mount the
+  that no note or object overlaps another). Every one of them opens a
+  tutorial through the shared `openTutorialBySearch(tester, type)` helper in
+  `test/surfaces/patcher/test_support/open_tutorial_by_search.dart` (#527),
+  which types into the browser's search field only while the window is
+  active, re-asks for the keyboard and checks the field got the text; new
+  tutorial tests use it too. The audio cases mount the
   tutorial on master and read the offline session's master meter
   (`renderOffline` + `Channel.master.peakLinearPost`) to check what is
   heard.

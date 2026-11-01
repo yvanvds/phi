@@ -24,7 +24,6 @@ import 'package:phi/surfaces/patcher/palette/patcher_palette.dart';
 import 'package:phi/surfaces/patcher/palette/patcher_palette_tab.dart';
 import 'package:phi/surfaces/patcher/patcher_node_view.dart';
 import 'package:phi/surfaces/patcher/tutorial/patch_tutorial_bar.dart';
-import 'package:phi/surfaces/patcher/tutorial/patch_tutorial_browser.dart';
 import 'package:yse/yse.dart';
 
 import '../test/domain/project/test_doubles/fake_app_settings_store.dart';
@@ -33,6 +32,7 @@ import '../test/domain/project/test_doubles/fake_project_directory_picker.dart';
 import '../test/domain/project/test_doubles/fake_project_store.dart';
 import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/open_tutorial_by_search.dart';
 
 /// End-to-end proof of the **control math tutorials** (issue #495) through
 /// the real [PhiApp]: real rail navigation, fonts and layout, the real asset
@@ -130,25 +130,8 @@ void main() {
       required int notes,
       required String heading,
     }) async {
-      // Search for the type, the way a user finds it: the browser builds only
-      // the entries near its viewport (#524). Now and then the typed text
-      // never reaches the field (the text input connection is not attached
-      // yet, #527), so type again until the field holds it.
-      final search = find.byKey(PatchTutorialBrowser.searchKey);
-      String typed() => tester.widget<TextField>(search).controller!.text;
-      for (var attempt = 0; attempt < 3 && typed() != type; attempt++) {
-        await tester.tap(search);
-        await tester.pumpAndSettle();
-        await tester.enterText(search, type);
-        await tester.pumpAndSettle();
-      }
-      expect(typed(), type, reason: 'the search field holds the type');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-      final entry = find.byKey(PatchTutorialBrowser.entryKey(type));
-      await tester.ensureVisible(entry);
-      await tester.tap(entry);
-      await tester.pumpAndSettle();
+      // Search for the type, the way a user finds it (#524, #527).
+      await openTutorialBySearch(tester, type);
       final tutorial = library.tutorial;
       expect(tutorial, isNotNull, reason: type);
       expect(tutorial!.slug, slug);
