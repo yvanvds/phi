@@ -3015,6 +3015,12 @@ main + app          (orchestration)
   tutorial by exporting a patch ("Export Patch as Tutorial…"), dropping the
   file here and adding its types to the index;
   `test/engine/patcher_tutorial_assets_engine_test.dart` checks it parses.
+- **User documentation:** `docs/user/` (issue #486) — Markdown for
+  performers: `README.md` (index + notation), `getting-started.md`,
+  `workstation.md`, `surfaces.md`, `patcher.md`, `keyboard-shortcuts.md`. The
+  shortcut page's tables are the `ShortcutCatalog` rendered as Markdown;
+  `test/shell/shortcuts/keyboard_shortcuts_doc_drift_test.dart` fails (and
+  prints the replacement table) when the code and the page disagree.
 - **Design previews:** `design system/preview/*.html` and
   `design system/ui_kits/phi-workstation/*.jsx` — open these when sketching
   new surfaces in Flutter.

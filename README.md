@@ -4,6 +4,10 @@ A flexible workstation for live electronic music performance. Personal,
 single-developer, years-long project — not a product. Public so others can
 read along.
 
+**Using Phi?** The user guide is in **[docs/user/](docs/user/README.md)**:
+getting started, the workstation, the surfaces, the patcher and a full
+[keyboard shortcut reference](docs/user/keyboard-shortcuts.md).
+
 The vision: polytemporal, spatially-aware electronic music shaped in real time,
 on a substrate where no layer is master. See **[docs/phi-vision.md](docs/phi-vision.md)**
 for the full design intent, and **[docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md)**

@@ -21,6 +21,11 @@ start. Pair with [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md).
    `docs/PROJECT_OVERVIEW.md` after structural changes.
 5. **Design tokens come from `design system/colors_and_type.css`.** Dart
    tokens under `lib/design/tokens/` are derivations — keep them in sync.
+6. **User docs follow behaviour.** A change users can see updates the
+   matching page under `docs/user/` in the same PR. Shortcuts are declared in
+   the command registry or a surface's `*_shortcut_hints.dart` table;
+   `keyboard_shortcuts_doc_drift_test.dart` fails until
+   `docs/user/keyboard-shortcuts.md` matches them.
 
 ## Label taxonomy
 

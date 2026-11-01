@@ -8,5 +8,10 @@
 <!-- Concrete steps a reviewer can run. `flutter analyze`, `flutter test`,
      manual UI steps, integration test name, etc. -->
 
+## Docs updated?
+<!-- Does this change what a user sees or does? Then update the page under
+     docs/user/ that describes it (keyboard-shortcuts.md is drift-tested).
+     Otherwise write "n/a". -->
+
 ## Notes
 <!-- Any surprises, follow-ups, deferred items, or risks worth flagging. -->
