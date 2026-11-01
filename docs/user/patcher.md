@@ -194,6 +194,12 @@ for:
   one tutorial), signal arithmetic (`~+`, `~-`, `~*`, `~/` and `~clip`, which
   share one tutorial), the lowpass and highpass (`~lp` and `~hp`) and the
   bandpass and resonant filter (`~bp` and `~vcf`).
+- **Control math:** arithmetic (`+`, `-`, `*`, `/`, `%`, `!-` and `!/`),
+  comparisons (`==`, `!=`, `<`, `<=`, `>` and `>=`), logic and bits (`&&`,
+  `||`, `&`, `|`, `<<` and `>>`), ranges (`abs`, `round`, `clip`, `scale` and
+  `zmap`), math functions (`sin` to `atanh`, `atan2`, `pow` and `sqrt`),
+  expressions (`expr` and `vexpr`) and pitch and level conversions (`mtof`,
+  `ftom`, `dbtoa` and `atodb`). Each group shares one tutorial.
 - **Time:** `metro`.
 
 Each tutorial is a small working patch, with numbered notes that walk you

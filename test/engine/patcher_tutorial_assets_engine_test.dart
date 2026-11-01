@@ -1073,6 +1073,352 @@ void main() {
     });
   });
 
+  test('every control math type has a tutorial (#495)', () {
+    for (final type in [
+      '.+', '.-', '.*', './', '.%', '.!-', '.!/', //
+      '.==', '.!=', '.<', '.<=', '.>', '.>=', //
+      '.&&', '.||', '.&', '.|', '.<<', '.>>', //
+      '.abs', '.round', '.clip', '.scale', '.zmap', //
+      '.sin', '.cos', '.tan', '.asin', '.acos', '.atan', '.atan2', //
+      '.sinh', '.cosh', '.tanh', '.asinh', '.acosh', '.atanh', //
+      '.pow', '.sqrt', '.expr', '.vexpr', //
+      '.mtof', '.ftom', '.atodb', '.dbtoa',
+    ]) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+  });
+
+  group('control math tutorials (#495) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    double loudness([int blocks = 200]) {
+      var peak = 0.0;
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+        final p = Channel.master.peakLinearPost();
+        if (p > peak) peak = p;
+      }
+      return peak;
+    }
+
+    void open(String slug, {bool mount = false}) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+      if (!mount) return;
+      gateway.mountAsSource(inst);
+      // Wait for the sound to join the mix before measuring (#525).
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        loudness(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: '$slug mounted');
+      loudness(20);
+    }
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      loudness(20);
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    // A message box by its text: each tutorial's are unique.
+    int msg(String text) => graph.objects
+        .singleWhere((o) => o.type == '.m' && o.args == text)
+        .handleId;
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    String value(int id) => gateway.guiValue(inst, id);
+    double number(int id) => double.parse(value(id));
+    List<double> numbers(int id) => [
+      for (final t in value(id).split(' '))
+        if (t.isNotEmpty) double.parse(t),
+    ];
+    List<double> row(String type, double y, List<double> xs) => [
+      for (final x in xs) number(at(type, x, y)),
+    ];
+    const six = [60.0, 150.0, 240.0, 330.0, 420.0, 510.0];
+
+    test('arithmetic: hot and cold, trigger b f, swapped, by zero', () {
+      open('arithmetic');
+      final sum = at('.f', 60, 270);
+      click(msg('3'));
+      expect(number(sum), 13, reason: 'the argument is the right operand');
+      click(msg('100'));
+      expect(number(sum), 13, reason: 'cold');
+      gateway.sendBang(inst, at('.+', 60, 220), 0);
+      expect(number(sum), 13, reason: 'a bang on the left sends nothing');
+      click(msg('7'));
+      expect(number(sum), 107);
+      click(msg('2'));
+      click(msg('5'));
+      expect(number(at('.f', 60, 550)), 7);
+      click(msg('8'));
+      expect(number(at('.f', 60, 550)), 10, reason: 'both inlets hot');
+      click(msg('10'));
+      final r = row('.f', 790, six);
+      expect(r.sublist(0, 5), [6, 40, 2.5, 2, -6]);
+      expect(r[5], closeTo(0.4, 1e-6));
+      click(msg('-7'));
+      expect(number(at('.f', 330, 790)), -3, reason: 'the sign of the left');
+      expect(value(at('.f', 330, 790)), isNot(contains('.5')));
+      click(msg('0'));
+      click(msg('10'));
+      expect(row('.f', 790, six), [10, 0, 0, 0, -10, 0]);
+      gateway.sendInt(inst, at('.!/', 510, 740), 1, 4);
+      gateway.sendInt(inst, at('.!/', 510, 740), 0, 0);
+      expect(number(at('.f', 510, 790)), 0, reason: '!/ by a left 0');
+    });
+
+    test('comparison: 0 or 1, a threshold crossing once, a gate', () {
+      open('comparison');
+      click(msg('3'));
+      expect(row('.i', 330, six), [0, 1, 1, 1, 0, 0]);
+      click(msg('5'));
+      expect(row('.i', 330, six), [1, 0, 0, 1, 0, 1]);
+      click(msg('5.5'));
+      expect(row('.i', 330, six), [0, 1, 0, 0, 1, 1], reason: 'not truncated');
+      click(msg('8'));
+      expect(row('.i', 330, six), [0, 1, 0, 0, 1, 1]);
+      final slider = at('.slider', 60, 410);
+      final passed = at('.i', 330, 750);
+      click(msg('42'));
+      expect(value(passed), '0', reason: 'closed');
+      // >= answers on every move; change lets each crossing through once.
+      // Count what reaches the two buttons.
+      final sel = at('.sel', 60, 750);
+      int counter(int outlet) {
+        final c = gateway.createObject(inst, '.counter');
+        gateway.connect(
+          inst,
+          fromHandleId: sel,
+          outlet: outlet,
+          toHandleId: c,
+          inlet: 0,
+        );
+        final shown = gateway.createObject(inst, '.i');
+        gateway.connect(
+          inst,
+          fromHandleId: c,
+          outlet: 0,
+          toHandleId: shown,
+          inlet: 0,
+        );
+        return shown;
+      }
+
+      final rises = counter(0);
+      final falls = counter(1);
+      final answers = <String>[];
+      for (final v in [0.2, 0.6, 0.7, 0.9, 0.4, 0.3, 0.8]) {
+        gateway.sendFloat(inst, slider, 0, v);
+        answers.add(value(at('.i', 60, 630)));
+      }
+      expect(answers, ['0', '1', '1', '1', '0', '0', '1']);
+      expect((value(rises), value(falls)), ('2', '1'), reason: 'crossings');
+      click(msg('42'));
+      expect(value(passed), '42', reason: 'opened by the comparison');
+    });
+
+    test('logic: toggles, bits, shifts, packing and unpacking', () {
+      open('logic');
+      final and = at('.i', 60, 320);
+      final or = at('.i', 170, 320);
+      gateway.sendInt(inst, at('.t', 60, 160), 0, 1);
+      expect((value(and), value(or)), ('0', '1'));
+      gateway.sendInt(inst, at('.t', 200, 160), 0, 1);
+      expect((value(and), value(or)), ('1', '1'), reason: 'both answer');
+      gateway.sendInt(inst, at('.i', 60, 210), 0, 7);
+      expect(value(and), '1', reason: 'any non-zero number is true');
+      gateway.sendInt(inst, at('.t', 200, 160), 0, 0);
+      expect(value(and), '0');
+      gateway.sendBang(inst, at('.&&', 60, 270), 0);
+      expect(value(and), '0', reason: 'a bang works nothing out');
+      click(msg('12'));
+      expect(
+        (value(at('.i', 60, 500)), value(at('.i', 170, 500))),
+        ('8', '14'),
+      );
+      click(msg('6'));
+      expect(
+        (value(at('.i', 300, 500)), value(at('.i', 410, 500))),
+        ('12', '3'),
+      );
+      click(msg('-8'));
+      expect(
+        (value(at('.i', 300, 500)), value(at('.i', 410, 500))),
+        ('-16', '-4'),
+      );
+      click(msg('2'));
+      click(msg('5'));
+      expect(value(at('.i', 60, 790)), '37');
+      expect((value(at('.i', 60, 900)), value(at('.i', 200, 900))), ('2', '5'));
+      click(msg('9'));
+      click(msg('15'));
+      expect(value(at('.i', 60, 790)), '159');
+      expect(
+        (value(at('.i', 60, 900)), value(at('.i', 200, 900))),
+        ('9', '15'),
+      );
+    });
+
+    test('range: abs, a grid, limits, scale past the range, zmap, a curve', () {
+      open('range');
+      const xs = [60.0, 170.0, 300.0];
+      click(msg('-3.5'));
+      expect(row('.f', 330, xs), [3.5, -3.5, 0]);
+      click(msg('0.37'));
+      expect(row('.f', 330, xs)[1], 0.25);
+      click(msg('150'));
+      expect(row('.f', 330, xs), [150, 150, 100]);
+      click(msg('0.5'));
+      click(msg('0.37'));
+      expect(number(at('.f', 170, 330)), 0.5, reason: 'a grid of halves');
+      gateway.sendFloat(inst, at('.clip', 300, 280), 2, 0.2);
+      click(msg('0.37'));
+      expect(number(at('.f', 300, 330)), closeTo(0.2, 1e-6), reason: 'high');
+      click(msg('64'));
+      expect(number(at('.f', 60, 570)), closeTo(0.5, 0.01));
+      click(msg('160'));
+      expect(number(at('.f', 60, 570)), closeTo(1.26, 0.005));
+      expect(number(at('.f', 300, 570)), 1);
+      final slider = at('.slider', 60, 650);
+      gateway.sendFloat(inst, slider, 0, 0.5);
+      expect(number(at('.f', 140, 700)), closeTo(1650, 1e-3));
+      expect(number(at('.f', 140, 810)), closeTo(875, 1e-3));
+    });
+
+    test('math functions: twelve answers, finite, the LFO, pow, atan2', () {
+      open('math-functions', mount: true);
+      click(msg('0.5'));
+      final top = row('.f', 330, six);
+      final bottom = row('.f', 440, six);
+      final want = [
+        math.sin(0.5), math.cos(0.5), math.tan(0.5), //
+        math.asin(0.5), math.acos(0.5), math.atan(0.5),
+      ];
+      for (var i = 0; i < 6; i++) {
+        expect(top[i], closeTo(want[i], 1e-5), reason: 'row 1 #$i');
+      }
+      expect(bottom[2], closeTo(0.462117, 1e-5), reason: 'tanh');
+      expect(bottom[4], 0, reason: 'acosh below 1');
+      click(msg('2.'));
+      expect([row('.f', 330, six)[3], row('.f', 330, six)[4]], [0, 0]);
+      expect(row('.f', 440, six)[5], 0, reason: 'atanh outside -1 to 1');
+      expect(row('.f', 440, six)[4], closeTo(1.316958, 1e-5), reason: 'acosh');
+      click(msg('-3'));
+      expect(row('.f', 440, six)[4], 0);
+      expect(row('.f', 440, six)[2], closeTo(-0.995055, 1e-5));
+      // The LFO, stepped by hand: 10 steps is a quarter circle, the top.
+      expect(loudness(), lessThan(1e-4), reason: 'silent until switched on');
+      final counter = at('.counter', 60, 620);
+      for (var i = 0; i < 10; i++) {
+        click(counter);
+      }
+      expect(number(at('.f', 200, 780)), closeTo(1, 1e-4), reason: 'sin');
+      expect(number(at('.f', 60, 890)), closeTo(600, 0.01), reason: 'Hz');
+      for (var i = 0; i < 30; i++) {
+        click(counter);
+      }
+      expect(number(at('.f', 60, 890)), closeTo(450, 0.01), reason: 'wrapped');
+      gateway.sendInt(inst, at('.t', 60, 520), 0, 1);
+      expect(loudness(), greaterThan(0.05), reason: 'the sine on master');
+      gateway.sendInt(inst, at('.t', 60, 520), 0, 0);
+      gateway.sendFloat(inst, at('.slider', 330, 520), 0, 0.5);
+      expect(number(at('.f', 420, 570)), 0.125);
+      expect(number(at('.f', 520, 570)), closeTo(0.707107, 1e-5));
+      click(msg('1.'));
+      expect(number(at('.f', 330, 940)), closeTo(math.pi / 2, 1e-5));
+      expect(number(at('.f', 330, 1050)), closeTo(90, 1e-3));
+      click(msg('-1.'));
+      expect(number(at('.f', 330, 1050)), closeTo(135, 1e-3));
+    });
+
+    test('expr: two inlets, int and float, a list, vexpr item by item', () {
+      open('expr');
+      final out = at('.f', 60, 270);
+      click(msg('1'));
+      expect(number(out), 0, reason: 'only stored');
+      click(msg('3'));
+      expect(number(out), 7);
+      gateway.sendInt(inst, at('.expr', 60, 220), 1, 4);
+      gateway.sendBang(inst, at('.expr', 60, 220), 0);
+      expect(number(out), 10, reason: 'a bang works it out again');
+      click(msg('7'));
+      expect((number(at('.f', 60, 450)), number(at('.f', 250, 450))), (3, 3.5));
+      click(at('.b', 60, 520));
+      expect(number(at('.f', 60, 680)), 5);
+      final list = at('.l', 60, 920);
+      click(at('.b', 300, 760));
+      click(at('.b', 60, 760));
+      expect(numbers(list), [10, 40, 90]);
+      click(msg('2'));
+      click(at('.b', 60, 760));
+      expect(numbers(list), [2, 4, 6]);
+      // What the title note promises about expressions the engine can't read.
+      final probe = gateway.createObject(
+        inst,
+        '.expr',
+        args: r'$f1 > 2 ? 10 : 20',
+      );
+      final seen = gateway.createObject(inst, '.f', args: '5');
+      gateway.connect(
+        inst,
+        fromHandleId: probe,
+        outlet: 0,
+        toHandleId: seen,
+        inlet: 0,
+      );
+      gateway.sendInt(inst, probe, 0, 4);
+      expect(number(seen), 0, reason: '?: sends 0 on libYSE 3.1.0');
+    });
+
+    test('conversions: keys to Hz, a decibel fader, back again', () {
+      open('conversions', mount: true);
+      expect(loudness(), lessThan(1e-4), reason: 'the fader starts down');
+      final keys = at('.kslider', 60, 160);
+      final hz = at('.f', 60, 310);
+      gateway.sendInt(inst, keys, 0, 69);
+      expect(number(hz), closeTo(440, 1e-3));
+      gateway.sendInt(inst, keys, 0, 81);
+      expect(number(hz), closeTo(880, 1e-3));
+      final fader = at('.slider', 400, 160);
+      gateway.sendFloat(inst, fader, 0, 1);
+      expect(number(at('.f', 400, 380)), closeTo(100, 1e-4));
+      expect(number(at('.f', 400, 480)), closeTo(1, 1e-4));
+      final full = loudness();
+      expect(full, greaterThan(0.1));
+      gateway.sendFloat(inst, fader, 0, 0.5);
+      expect(number(at('.f', 400, 480)), closeTo(0.1, 1e-4), reason: '80 dB');
+      expect(loudness(), closeTo(0.1 * full, 0.02 * full));
+      gateway.sendFloat(inst, fader, 0, 0);
+      expect(number(at('.f', 400, 480)), closeTo(0.01, 1e-5), reason: '-40');
+      click(msg('440.'));
+      expect(number(at('.f', 60, 750)), closeTo(69, 1e-4));
+      click(msg('452.89'));
+      expect(number(at('.f', 60, 750)), closeTo(69.5, 1e-3));
+      click(msg('0.'));
+      expect(number(at('.f', 60, 750)), -1500);
+      final db = at('.f', 60, 940);
+      final dbfs = at('.f', 60, 1050);
+      click(msg('1'));
+      expect((number(db), number(dbfs)), (100, 0));
+      click(msg('0.5'));
+      expect(number(dbfs), closeTo(-6.02, 0.01));
+      click(msg('0.01'));
+      expect(number(dbfs), closeTo(-40, 1e-3));
+      gateway.sendInt(inst, at('.atodb', 60, 890), 0, 0);
+      expect(number(db), 0, reason: 'finite: 0 dB, not minus infinity');
+    });
+  });
+
   test('report: object types with no tutorial yet', () {
     final missing = [
       for (final t in engineTypes.toList()..sort())

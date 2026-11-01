@@ -2996,7 +2996,9 @@ main + app          (orchestration)
   `function` and `preset` ship their points and slots as saved object state
   in the dump) and the audio basics (#494: `sine`, `saw`, `noise`, `sig-line`,
   `adc-dac` for `~adc` + `~dac`, `signal-math` for `~+ ~- ~* ~/ ~clip`,
-  `lp-hp`, `bp-vcf`). Covered by domain unit tests, a `patch_library_tutorial_test`, a real-engine
+  `lp-hp`, `bp-vcf`) and control math (#495: `arithmetic`, `comparison`,
+  `logic`, `range`, `math-functions`, `expr`, `conversions`, each shared by
+  its group of types). Covered by domain unit tests, a `patch_library_tutorial_test`, a real-engine
   `patcher_tutorial_assets_engine_test` (every index entry has a file, every
   type exists in the engine, every payload parses, a report of uncovered
   types), surface/reference-panel widget tests, and an end-to-end
@@ -3007,7 +3009,8 @@ main + app          (orchestration)
   (`patcher_gui_basics_tutorials`, `patcher_single_value_controls_tutorials`,
   `patcher_selection_slider_controls_tutorials`,
   `patcher_structured_controls_tutorials`,
-  `patcher_audio_basics_tutorials`: each opens its tutorials
+  `patcher_audio_basics_tutorials`,
+  `patcher_control_math_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
   that no note or object overlaps another). The audio cases mount the
   tutorial on master and read the offline session's master meter
