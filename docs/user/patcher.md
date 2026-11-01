@@ -215,8 +215,10 @@ the tutorial says so.
 
 A tutorial opens read-only, in run mode. A banner reads
 `TUTORIAL — READ-ONLY · <title>` instead of the placement bar, and `Ctrl+E`
-does nothing. If the tutorial contains an audio output, you hear it on the
-master bus. Use `COPY TO PROJECT` to get an editable copy under
+does nothing. A tutorial runs while it is open, so its ramps (`line`) and
+delays (`delay`, `pipe`) move without you pressing `START`. If it contains an
+audio output, you hear it on the master bus. Your own patch is left as it was:
+opening a tutorial does not start it. Use `COPY TO PROJECT` to get an editable copy under
 `patch.tutorials`. Use `CLOSE` to go back to your own patch. Opening a
 project patch also closes it. A tutorial is never saved with the project
 unless you copy it.

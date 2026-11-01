@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import '../../../domain/patcher/patch_object_types.dart';
 import '../../../domain/patcher/tutorial/patch_tutorial.dart';
 import '../../bridge/patcher_gateway.dart';
 import '../patch_clipboard.dart';
@@ -12,9 +11,18 @@ import '../patcher_controller.dart';
 /// It materialises the bundled [tutorial]'s dump as its own native patcher —
 /// never touching the project, so opening, playing and closing it never
 /// dirties or saves anything — binds a [PatcherController] editor to it so the
-/// canvas renders it like any patch, and, when the patch makes sound (it holds
-/// a `~dac`), mounts it on master while open. [dispose] unmounts and frees the
-/// native patcher.
+/// canvas renders it like any patch, and mounts it on master while open.
+/// [dispose] unmounts and frees the native patcher.
+///
+/// **Every tutorial is mounted (issue #528)**, not only one with a `~dac`: on
+/// libYSE 3.1.0 several control objects run on the audio clock and advance
+/// only in a mounted, rendered patcher — `.line` ramps, `.delay`, `.pipe`,
+/// `.thresh`, `.quickthresh`, `.qlim` and `.makenote`'s note-off. (`.metro`,
+/// `.clocker` and `.timer` run on wall-clock time.) A mounted patch without a
+/// `~dac` is silent, and only one tutorial is open at a time.
+///
+/// The tutorial is its own session: mounting it never mounts, starts or
+/// places the user's own patch (#523).
 ///
 /// Read-only is the surface's job (it forces run mode and offers no edit
 /// gesture); the session only owns the native lifetime.
@@ -25,7 +33,6 @@ class PatchTutorialSession {
     required this.slug,
     required this.instanceId,
     required this.editor,
-    required this.mounted,
   });
 
   /// Materialise [tutorial] (stored under [slug]) as a fresh native patcher on
@@ -46,19 +53,16 @@ class PatchTutorialSession {
       instanceId: instanceId,
       clipboard: clipboard,
     )..rebuildFromInstance();
-    // Mounting reads `~dac` on every audio callback, so only a patch that has
-    // one is mounted (a control-only tutorial stays silent and unmounted).
-    final audible = editor.graph.nodes.any(
-      (n) => n.type == PatchObjectTypes.dDac,
-    );
-    if (audible) gateway.mountAsSource(instanceId);
+    // Always mounted: audio-clocked control objects (`.line`, `.delay`, …)
+    // only run in a mounted, rendered patcher (#528). Without a `~dac` it is
+    // silent.
+    gateway.mountAsSource(instanceId);
     return PatchTutorialSession._(
       gateway,
       tutorial: tutorial,
       slug: slug,
       instanceId: instanceId,
       editor: editor,
-      mounted: audible,
     );
   }
 
@@ -76,16 +80,13 @@ class PatchTutorialSession {
   /// The editor the canvas binds to while the tutorial is open.
   final PatcherController editor;
 
-  /// Whether the patcher is mounted on master (it holds a `~dac`).
-  final bool mounted;
-
   bool _disposed = false;
 
   /// Unmount, drop the editor and free the native patcher. Idempotent.
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    if (mounted) _gateway.unmountSource(instanceId);
+    _gateway.unmountSource(instanceId);
     editor.dispose();
     _gateway.disposeInstance(instanceId);
   }

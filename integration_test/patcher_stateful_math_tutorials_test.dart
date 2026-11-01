@@ -160,29 +160,28 @@ void main() {
                   '${boxes[j].$1.type} ${boxes[j].$2}',
       ];
       expect(overlaps, isEmpty, reason: '$slug: overlapping nodes');
-      if (tutorial.mounted) {
-        // libyse sets the new sound up on a worker thread, in wall-clock
-        // time, while an offline render runs far ahead of real time. Render
-        // with real pauses until the sound is in the mix, so that nothing
-        // below measures blocks rendered before it joined (#525).
-        for (var i = 0; i < 5000; i++) {
-          if (gateway.isSourceReady(tutorial.instanceId)) break;
-          System.instance
-            ..renderOffline(1)
-            ..update();
-          await Future<void>.delayed(const Duration(milliseconds: 1));
-        }
-        expect(
-          gateway.isSourceReady(tutorial.instanceId),
-          isTrue,
-          reason: '$slug joined the mix',
-        );
-        // And let whatever the last tutorial left ringing drain away.
-        for (var i = 0; i < 20; i++) {
-          System.instance
-            ..renderOffline(1)
-            ..update();
-        }
+      // Every tutorial is mounted while open, a silent one too (#528).
+      // libyse sets the new sound up on a worker thread, in wall-clock
+      // time, while an offline render runs far ahead of real time. Render
+      // with real pauses until the sound is in the mix, so that nothing
+      // below measures blocks rendered before it joined (#525).
+      for (var i = 0; i < 5000; i++) {
+        if (gateway.isSourceReady(tutorial.instanceId)) break;
+        System.instance
+          ..renderOffline(1)
+          ..update();
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      expect(
+        gateway.isSourceReady(tutorial.instanceId),
+        isTrue,
+        reason: '$slug joined the mix',
+      );
+      // And let whatever the last tutorial left ringing drain away.
+      for (var i = 0; i < 20; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
       }
       final graph = gateway.enumerate(tutorial.instanceId);
       return (String t, double x, double y) => graph.objects
@@ -303,7 +302,6 @@ void main() {
       notes: 6,
       heading: counterHeading,
     );
-    expect(library.tutorial!.mounted, isTrue, reason: 'the sequencer plays');
     expect(loudness(), lessThan(1e-4), reason: 'silent until switched on');
     final count = at('.i', 60, 270);
     for (final want in ['1', '2', '3']) {
@@ -360,7 +358,7 @@ void main() {
     // ── accum: add, multiply, replace, reset, a running sum, a fade ─────────
     const accumHeading = 'accum stores one number';
     at = await open('.accum', slug: 'accum', notes: 5, heading: accumHeading);
-    expect(library.tutorial!.mounted, isFalse, reason: 'nothing to hear');
+    expect(loudness(), lessThan(1e-4), reason: 'mounted (#528), but silent');
     final stored = at('.f', 60, 330);
     await tap(buttonAt(60, 220));
     expect(read(stored), 10, reason: 'the argument');
@@ -547,7 +545,6 @@ void main() {
     for (final v in [...raw, ...calm]) {
       expect(v, inInclusiveRange(0, 99));
     }
-    expect(library.tutorial!.mounted, isTrue, reason: 'line drives a sine');
     expect(loudness(), lessThan(1e-4), reason: 'silent until switched on');
     await slide(60, 650, 1);
     final top = read(at('.f', 140, 760));

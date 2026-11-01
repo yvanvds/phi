@@ -157,29 +157,28 @@ void main() {
                   '${boxes[j].$1.type} ${boxes[j].$2}',
       ];
       expect(overlaps, isEmpty, reason: '$slug: overlapping nodes');
-      if (tutorial.mounted) {
-        // libyse sets the new sound up on a worker thread, in wall-clock
-        // time, while an offline render runs far ahead of real time. Render
-        // with real pauses until the sound is in the mix, so that nothing
-        // below measures blocks rendered before it joined (#525).
-        for (var i = 0; i < 5000; i++) {
-          if (gateway.isSourceReady(tutorial.instanceId)) break;
-          System.instance
-            ..renderOffline(1)
-            ..update();
-          await Future<void>.delayed(const Duration(milliseconds: 1));
-        }
-        expect(
-          gateway.isSourceReady(tutorial.instanceId),
-          isTrue,
-          reason: '$slug joined the mix',
-        );
-        // And let whatever the last tutorial left ringing drain away.
-        for (var i = 0; i < 20; i++) {
-          System.instance
-            ..renderOffline(1)
-            ..update();
-        }
+      // Every tutorial is mounted while open, a silent one too (#528).
+      // libyse sets the new sound up on a worker thread, in wall-clock
+      // time, while an offline render runs far ahead of real time. Render
+      // with real pauses until the sound is in the mix, so that nothing
+      // below measures blocks rendered before it joined (#525).
+      for (var i = 0; i < 5000; i++) {
+        if (gateway.isSourceReady(tutorial.instanceId)) break;
+        System.instance
+          ..renderOffline(1)
+          ..update();
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      expect(
+        gateway.isSourceReady(tutorial.instanceId),
+        isTrue,
+        reason: '$slug joined the mix',
+      );
+      // And let whatever the last tutorial left ringing drain away.
+      for (var i = 0; i < 20; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
       }
       final graph = gateway.enumerate(tutorial.instanceId);
       return (String t, double x, double y) => graph.objects
@@ -278,7 +277,6 @@ void main() {
       notes: 5,
       heading: 'A ~sine is an oscillator',
     );
-    expect(library.tutorial!.mounted, isTrue, reason: 'audible on master');
     expect(loudness(), lessThan(1e-4), reason: 'silent until switched on');
     await tap(toggleAt(170, 260));
     final sine = loudness();

@@ -2976,7 +2976,8 @@ main + app          (orchestration)
   `PhiEngine(patchTutorialSource:)`); `PatchLibraryController` loads the index
   on start and opens a tutorial as a `PatchTutorialSession` — a **transient
   native patcher that is not a registry entity** (never journaled or saved),
-  mounted on master only when it holds a `~dac`, whose editor `openEditor`
+  mounted on master while open (every tutorial, a silent one too: #528),
+  whose editor `openEditor`
   answers while it is open; opening a project patch, a rebind, a session
   restart and dispose close it. UI (`lib/surfaces/patcher/tutorial/`): the
   reference panel's **Open tutorial** button (only when the type has one), a
@@ -3000,14 +3001,18 @@ main + app          (orchestration)
   `logic`, `range`, `math-functions`, `expr`, `conversions`, each shared by
   its group of types) and stateful math (#496: `counter`, `accum`,
   `change-togedge`, `extremes`, `statistics`, `slide-linedrive`,
-  `div-swap-pong`, `cartopol-poltocar`). Only a tutorial with a `~dac` is mounted, and on
-  libYSE 3.1.0 a `.line` ramps only in a mounted patch (#528), so a tutorial
-  that ramps drives a sound. Covered by domain unit tests, a `patch_library_tutorial_test`, a real-engine
+  `div-swap-pong`, `cartopol-poltocar`). On libYSE 3.1.0 `.line`, `.delay`,
+  `.pipe`, `.thresh`, `.quickthresh`, `.qlim` and `.makenote`'s note-off run
+  on the audio clock, only in a mounted, rendered patch (`.metro`, `.clocker`
+  and `.timer` run on wall-clock time), which is why every tutorial is mounted
+  (#528); the tutorial is its own session and never mounts the user's patch
+  (#523). Covered by domain unit tests, a `patch_library_tutorial_test`, a real-engine
   `patcher_tutorial_assets_engine_test` (every index entry has a file, every
   type exists in the engine, every payload parses, a report of uncovered
   types), surface/reference-panel widget tests, and an end-to-end
   `patcher_tutorial` integration test on the real patcher engine and asset
-  bundle. Content issues add per-tutorial cases to the asset test that
+  bundle; `patcher_control_ramp_tutorial` proves a control-only tutorial's
+  `.line` glides on the canvas (#528). Content issues add per-tutorial cases to the asset test that
   replay what each tutorial's notes promise on the real engine (objects found
   by type + canvas position), plus an end-to-end run per batch
   (`patcher_gui_basics_tutorials`, `patcher_single_value_controls_tutorials`,

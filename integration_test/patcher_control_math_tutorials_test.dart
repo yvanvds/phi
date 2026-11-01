@@ -159,29 +159,28 @@ void main() {
                   '${boxes[j].$1.type} ${boxes[j].$2}',
       ];
       expect(overlaps, isEmpty, reason: '$slug: overlapping nodes');
-      if (tutorial.mounted) {
-        // libyse sets the new sound up on a worker thread, in wall-clock
-        // time, while an offline render runs far ahead of real time. Render
-        // with real pauses until the sound is in the mix, so that nothing
-        // below measures blocks rendered before it joined (#525).
-        for (var i = 0; i < 5000; i++) {
-          if (gateway.isSourceReady(tutorial.instanceId)) break;
-          System.instance
-            ..renderOffline(1)
-            ..update();
-          await Future<void>.delayed(const Duration(milliseconds: 1));
-        }
-        expect(
-          gateway.isSourceReady(tutorial.instanceId),
-          isTrue,
-          reason: '$slug joined the mix',
-        );
-        // And let whatever the last tutorial left ringing drain away.
-        for (var i = 0; i < 20; i++) {
-          System.instance
-            ..renderOffline(1)
-            ..update();
-        }
+      // Every tutorial is mounted while open, a silent one too (#528).
+      // libyse sets the new sound up on a worker thread, in wall-clock
+      // time, while an offline render runs far ahead of real time. Render
+      // with real pauses until the sound is in the mix, so that nothing
+      // below measures blocks rendered before it joined (#525).
+      for (var i = 0; i < 5000; i++) {
+        if (gateway.isSourceReady(tutorial.instanceId)) break;
+        System.instance
+          ..renderOffline(1)
+          ..update();
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      expect(
+        gateway.isSourceReady(tutorial.instanceId),
+        isTrue,
+        reason: '$slug joined the mix',
+      );
+      // And let whatever the last tutorial left ringing drain away.
+      for (var i = 0; i < 20; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
       }
       final graph = gateway.enumerate(tutorial.instanceId);
       return (String t, double x, double y) => graph.objects
@@ -299,7 +298,7 @@ void main() {
       notes: 5,
       heading: 'Each takes two numbers. The left inlet is hot',
     );
-    expect(library.tutorial!.mounted, isFalse, reason: 'nothing to hear');
+    expect(loudness(), lessThan(1e-4), reason: 'mounted (#528), but silent');
     await tap(message('3'));
     expect(read(at('.f', 60, 270)), 13, reason: '3 + the argument 10');
     await tap(message('100'));
@@ -446,7 +445,6 @@ void main() {
       notes: 6,
       heading: 'sin, cos and tan take an angle in radians',
     );
-    expect(library.tutorial!.mounted, isTrue, reason: 'the LFO is audible');
     expect(loudness(), lessThan(1e-4), reason: 'silent until switched on');
     await tap(message('0.5'));
     expect(read(at('.f', 60, 330)), closeTo(0.479426, 1e-5), reason: 'sin');
@@ -549,7 +547,6 @@ void main() {
       notes: 5,
       heading: 'mtof turns a MIDI note number into a frequency',
     );
-    expect(library.tutorial!.mounted, isTrue);
     expect(loudness(), lessThan(1e-4), reason: 'the fader starts down');
     await slide(400, 160, 1);
     expect(read(at('.f', 400, 380)), closeTo(100, 1), reason: 'dB');

@@ -187,7 +187,15 @@ void main() {
       notes: 5,
       heading: 'A slider holds a position from 0',
     );
-    expect(library.tutorial!.mounted, isTrue, reason: 'audible on master');
+    // Mounted on master while open, like every tutorial (#528). libyse sets
+    // the sound up on a worker thread, so render with real pauses until it is.
+    for (var i = 0; i < 5000 && !gateway.isSourceReady(instanceOf()); i++) {
+      System.instance
+        ..renderOffline(1)
+        ..update();
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    expect(gateway.isSourceReady(instanceOf()), isTrue, reason: 'on master');
     expect(double.parse(value(at('.f', 60, 360))), 0.5);
     expect(double.parse(value(at('.f', 170, 420))), 1100.0);
     await tap(message('2'));
