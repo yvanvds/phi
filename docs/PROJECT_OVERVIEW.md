@@ -2884,6 +2884,29 @@ main + app          (orchestration)
   `nodes_node_body_test.dart`, and a `patcher_node_gui` integration case (a
   cable-driven layout redraws; inert in edit mode; a node moved and widened
   with Alt-drags; the cursor dragged into it sends `0 1` into a `.l`).
+- **Preset bank** (issue #477) — `.preset` (`PresetNodeBody` over
+  `PatchPresetGrid`, one button per slot, row by row from slot 0: empty dim,
+  stored ringed in the voice glow, active solid). Sized by its `slots` arg
+  (`PresetArgs`, 1–1024, default 32) through `PresetGrid` — one row up to 8,
+  eight wide, then square (32 is 8 × 4, 1024 is 32 × 32), 20 px slots capped at
+  384. In run mode a click recalls (`recall <n>`), Shift+click stores
+  (`store <n>`) and Alt+click clears (`clear <n>`) — `PresetAction`, also the
+  grid's tooltip. The GUI value is only the **active** slot (read whole); which
+  slots are **stored** comes from the object's saved `state`, read through the
+  new `PatcherGateway.objectState` / `PatcherController.objectStateOf` (a
+  whole-patch dump, so asked on build, after a click and when the active slot
+  moves — never per poll) and parsed by `PresetSlots`. A recall writes the
+  other controls through their own inlets and the ordinary poll repaints them.
+  The engine captures every `GuiValueIsSettable` object with a non-empty value
+  (not `.b`, `.l`, `.m` or another `.preset`) and saves the slots, the active
+  marker and each entry by object rank; loading recalls nothing. Clicks are not
+  journaled; the slots reach disk with the patch dump on save.
+  `FakePatcherGateway` models the bank (capture rule, recall order and outlets,
+  every spelling, out-of-range and empty slots, clears, `setParams` emptying it,
+  the rank-based dump round trip), pinned to the engine by the shared contract.
+  Covered by domain unit tests, `preset_node_body_test.dart`, and two
+  `patcher_node_gui` integration cases (a slider stored into slot 1, moved,
+  recalled back; a project opened with stored slots shows them and recalls).
 - **Keyboard range and velocity editing** (issue #515) — a selected `.kslider`
   gets a KEYBOARD section in the reference panel (`PatchKeyboardSettings`,
   `lib/surfaces/patcher/reference/`): the range shown as `C3 – C6`

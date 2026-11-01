@@ -13,6 +13,7 @@ import 'package:phi/design/widgets/patcher/patch_list_box.dart';
 import 'package:phi/design/widgets/patcher/patch_matrix_grid.dart';
 import 'package:phi/design/widgets/patcher/patch_menu_box.dart';
 import 'package:phi/design/widgets/patcher/patch_nodes_field.dart';
+import 'package:phi/design/widgets/patcher/patch_preset_grid.dart';
 import 'package:phi/design/widgets/patcher/patch_radio_group.dart';
 import 'package:phi/design/widgets/patcher/patch_range_bar.dart';
 import 'package:phi/design/widgets/patcher/patch_slider_bank.dart';
@@ -25,10 +26,19 @@ import 'package:phi/domain/patcher/field_node.dart';
 import 'package:phi/domain/patcher/keyboard_layout.dart';
 import 'package:phi/domain/patcher/nodes_view.dart';
 import 'package:phi/domain/patcher/patch_node.dart';
+import 'package:phi/domain/patcher/patch_payload.dart';
 import 'package:phi/domain/patcher/patch_port.dart';
 import 'package:phi/domain/patcher/patch_port_id.dart';
 import 'package:phi/domain/patcher/patch_port_kind.dart';
+import 'package:phi/domain/patcher/preset_grid.dart';
 import 'package:phi/domain/patcher/staff_note.dart';
+import 'package:phi/domain/project/app_settings/app_settings_controller.dart';
+import 'package:phi/domain/project/entity_address.dart';
+import 'package:phi/domain/project/lifecycle/project_controller.dart';
+import 'package:phi/domain/project/project_registry.dart';
+import 'package:phi/domain/project/registry_kinds.dart';
+import 'package:phi/domain/project/registry_seed.dart';
+import 'package:phi/domain/project/store/registry_codecs.dart';
 import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/bridge/patch_object_descriptor.dart';
 import 'package:phi/engine/bridge/patcher_node_snapshot.dart';
@@ -46,6 +56,11 @@ import 'package:phi/surfaces/patcher/placement/patch_placement_bar.dart';
 import 'package:phi/surfaces/patcher/reference/patch_keyboard_settings.dart';
 import 'package:yse/yse.dart';
 
+import '../test/domain/project/test_doubles/fake_app_settings_store.dart';
+import '../test/domain/project/test_doubles/fake_journal_store.dart';
+import '../test/domain/project/test_doubles/fake_project_directory_picker.dart';
+import '../test/domain/project/test_doubles/fake_project_store.dart';
+import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
 
@@ -1482,5 +1497,238 @@ void main() {
 
     session.dispose();
     await engine.dispose();
+  });
+
+  // ─── the preset bank (issue #477) ─────────────────────────────────────────
+
+  /// The centre of [slot]'s button in the one [PatchPresetGrid] on screen.
+  Offset presetSlot(WidgetTester tester, int slot, {int slots = 32}) {
+    final box = tester.getRect(find.byType(PatchPresetGrid));
+    final grid = PresetGrid(slots: slots, width: box.width, height: box.height);
+    final (x, y) = grid.originOf(slot);
+    return box.topLeft +
+        Offset(x + grid.cellWidth / 2, y + grid.cellHeight / 2);
+  }
+
+  /// Click [slot], holding [modifier] if given, and let the poll run.
+  Future<void> clickSlot(
+    WidgetTester tester,
+    int slot, {
+    LogicalKeyboardKey? modifier,
+  }) async {
+    if (modifier != null) await tester.sendKeyDownEvent(modifier);
+    await tester.tapAt(presetSlot(tester, slot));
+    if (modifier != null) await tester.sendKeyUpEvent(modifier);
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('a .preset stores a slider, and recalling the slot puts the '
+      'slider back where it was (issue #477)', (tester) async {
+    final patcherGateway = FakePatcherGateway();
+    final engine = PhiEngine(
+      FakeYseGateway(),
+      patcherGateway: patcherGateway,
+      telemetryInterval: const Duration(milliseconds: 20),
+    );
+    final session = SessionState();
+
+    await tester.pumpWidget(PhiApp(engine: engine, session: session));
+    await tester.pumpAndSettle();
+    await tester.tap(railFor(SurfaceId.patcher));
+    await tester.pumpAndSettle();
+
+    // An empty canvas: the demo seed would sit over the controls under test.
+    final patcher = engine.patcher;
+    for (final id in patcher.graph.nodes.map((n) => n.id).toList()) {
+      patcher.removeNode(id);
+    }
+    await tester.pumpAndSettle();
+
+    PatchNode gui(String type, Offset position) {
+      final d = NodeTypeRegistry.instance.find(type)!;
+      return patcher.addNode(
+        desc: NodeDescriptor(
+          type: d.type,
+          defaultSize: d.defaultSize,
+          sizeForArgs: d.sizeForArgs,
+          defaultArgs: '',
+          inputs: d.inputs,
+          outputs: d.outputs,
+          buildBody: d.buildBody,
+          readsGuiValue: d.readsGuiValue,
+          guiValueRead: d.guiValueRead,
+        ),
+        position: position,
+      );
+    }
+
+    gui(Obj.gSlider, const Offset(40, 40));
+    final bankNode = gui(Obj.gPreset, const Offset(160, 40));
+    await tester.pumpAndSettle();
+
+    // ─── it renders as its slot grid, four rows of eight, all empty ────────
+    PatchPresetGrid grid() =>
+        tester.widget<PatchPresetGrid>(find.byType(PatchPresetGrid));
+    PhiFader fader() => tester.widget<PhiFader>(find.byType(PhiFader));
+    expect(find.byType(PatchPresetGrid), findsOneWidget);
+    expect(grid().slots, 32);
+    expect(grid().stored, isEmpty);
+    expect(grid().active, -1);
+    expect(tester.getSize(find.byType(PatchPresetGrid)).aspectRatio, 2);
+    expect(tester.takeException(), isNull, reason: 'nothing overflows');
+
+    final bank = patcherGateway.nodes.entries
+        .firstWhere((e) => e.value.type == Obj.gPreset)
+        .key;
+    List<String> sentTo() => [
+      for (final c in patcherGateway.calls)
+        if (c.startsWith('sendMessage:$bank:0:'))
+          c.substring('sendMessage:$bank:0:'.length),
+    ];
+
+    // ─── edit mode: a click on a slot moves the box and sends nothing ──────
+    patcherGateway.calls.clear();
+    final before = bankNode.position;
+    await tester.dragFrom(presetSlot(tester, 1), const Offset(24, 24));
+    await tester.pumpAndSettle();
+    expect(bankNode.position, isNot(before), reason: 'the drag moved the box');
+    expect(sentTo(), isEmpty);
+
+    // ─── run mode ──────────────────────────────────────────────────────────
+    await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<PatcherCanvas>(find.byType(PatcherCanvas)).mode,
+      PatchCanvasMode.run,
+    );
+
+    // A whole fader gesture: a body ignores the poll until the drag ends.
+    Future<void> slide(double to) async {
+      fader()
+        ..onChanged(to)
+        ..onChangeEnd?.call();
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pumpAndSettle();
+    }
+
+    // Move the slider, then Shift+click slot 1 to store it.
+    await slide(0.3);
+    patcherGateway.calls.clear();
+    await clickSlot(tester, 1, modifier: LogicalKeyboardKey.shiftLeft);
+    expect(sentTo(), ['store 1']);
+    expect(grid().stored, {1});
+    expect(grid().active, 1);
+
+    // Move it again, then click slot 1: the slider shows the stored value.
+    await slide(0.8);
+    expect(fader().value, closeTo(0.8, 1e-9));
+    await clickSlot(tester, 1);
+    expect(sentTo().last, 'recall 1');
+    expect(fader().value, closeTo(0.3, 1e-9), reason: 'recalled');
+    expect(grid().active, 1);
+
+    // Alt+click clears the slot, and with it the active marker.
+    await clickSlot(tester, 1, modifier: LogicalKeyboardKey.altLeft);
+    expect(sentTo().last, 'clear 1');
+    expect(grid().stored, isEmpty);
+    expect(grid().active, -1);
+    expect(tester.takeException(), isNull);
+
+    session.dispose();
+    await engine.dispose();
+  });
+
+  testWidgets('a .preset opened from a saved project shows its stored slots, '
+      'and recalling one moves the slider (issue #477)', (tester) async {
+    final patchAddress = EntityAddress(
+      kind: RegistryKinds.patch,
+      segments: const ['presets'],
+    );
+    // A saved patch: a slider and a bank whose slot 2 holds it at 0.6, in
+    // the dump's own spelling (each entry names its object by rank).
+    void seed(ProjectRegistry registry) {
+      seedDefaultProject(registry);
+      registry.createEntity(
+        patchAddress,
+        payload: const PatchPayload(
+          dump: {
+            'objects': [
+              {'id': 0, 'type': Obj.gSlider, 'args': '', 'x': 40.0, 'y': 40.0},
+              {
+                'id': 1,
+                'type': Obj.gPreset,
+                'args': '',
+                'x': 160.0,
+                'y': 40.0,
+                'state': {
+                  'slots': [
+                    {
+                      'slot': 2,
+                      'objects': [
+                        {'object': 0, 'type': Obj.gSlider, 'value': '0.6'},
+                      ],
+                    },
+                  ],
+                },
+              },
+            ],
+            'cables': <Object?>[],
+          },
+        ).toJson(),
+      );
+    }
+
+    final yse = FakeYseGateway();
+    final engine = PhiEngine(
+      yse,
+      patcherGateway: FakePatcherGateway(),
+      midiGateway: FakeMidiGateway(),
+      telemetryInterval: const Duration(milliseconds: 20),
+    );
+    final session = SessionState();
+    final appSettings = AppSettingsController(FakeAppSettingsStore());
+    final project = ProjectController(
+      session: session,
+      settings: appSettings,
+      storeFactory: (_) => FakeProjectStore(codecs: defaultEntityCodecs()),
+      journalStoreFactory: (_) => FakeJournalStore(),
+      seedRegistry: seed,
+      autosaveIntervalOverride: const Duration(hours: 1),
+    );
+
+    await tester.pumpWidget(
+      PhiApp(
+        engine: engine,
+        session: session,
+        projectController: project,
+        directoryPicker: FakeProjectDirectoryPicker(),
+        autoStartProject: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(engine.patchLibrary.openAddress, patchAddress);
+    await tester.tap(railFor(SurfaceId.patcher));
+    await tester.pumpAndSettle();
+
+    PatchPresetGrid grid() =>
+        tester.widget<PatchPresetGrid>(find.byType(PatchPresetGrid));
+    PhiFader fader() => tester.widget<PhiFader>(find.byType(PhiFader));
+    expect(grid().stored, {2}, reason: 'the slots came back with the patch');
+    expect(grid().active, -1, reason: 'loading recalls nothing');
+    expect(fader().value, isNot(closeTo(0.6, 1e-9)));
+
+    await tester.tap(find.byKey(PatchPlacementBar.modeKey));
+    await tester.pumpAndSettle();
+    await clickSlot(tester, 2);
+    expect(fader().value, closeTo(0.6, 1e-9));
+    expect(grid().active, 2);
+    expect(tester.takeException(), isNull);
+
+    await engine.dispose();
+    await yse.dispose();
+    project.dispose();
+    appSettings.dispose();
+    session.dispose();
   });
 }

@@ -691,6 +691,17 @@ class PatcherController {
     return _guiValueByNode[id] = _gateway.guiValue(instanceId, native);
   }
 
+  /// What [id]'s object saves beyond its arguments — its patch-dump `state`
+  /// ([PatcherGateway.objectState]) — or null when it saves nothing or the
+  /// node has no native handle. A whole-patch dump, so a body asks on demand
+  /// (a `.preset` grid after a gesture or a change of its active slot,
+  /// issue #477), never on every poll.
+  Map<String, Object?>? objectStateOf(PatchNodeId id) {
+    final native = _nativeByNode[id];
+    if (native == null) return null;
+    return _gateway.objectState(instanceId, native);
+  }
+
   // ─── GUI value protocol, per cell (issue #469) ──────────────────────
 
   /// The cells of a [GuiValueRead.cells] node's GUI state, as the last poll

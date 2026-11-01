@@ -10,6 +10,7 @@ import 'package:phi/domain/patcher/multislider_args.dart';
 import 'package:phi/domain/patcher/nodes_args.dart';
 import 'package:phi/domain/patcher/nodes_field.dart';
 import 'package:phi/domain/patcher/patch_port_kind.dart';
+import 'package:phi/domain/patcher/preset_args.dart';
 import 'package:phi/domain/patcher/slider_range.dart';
 import 'package:phi/engine/bridge/patch_object_descriptor.dart';
 import 'package:phi/engine/bridge/patcher_gateway.dart';
@@ -273,6 +274,13 @@ class FakePatcherGateway implements PatcherGateway {
     if (node.isGrid) return;
     // So does `gNodes`: a single number is not a position (issue #476).
     if (node.isNodes) return;
+    // A `.preset` recalls the slot a number names, truncated (issue #477).
+    if (node.isPreset) {
+      if (inlet == 0 && !value.isNaN) {
+        _presetRun(instanceId, handleId, 'recall', _truncate(value));
+      }
+      return;
+    }
     // A `.function` reads a number as an x and answers its y (issue #475).
     if (node.isFunction) {
       if (inlet == 0) node.queryFunction(value);
@@ -316,6 +324,10 @@ class FakePatcherGateway implements PatcherGateway {
       return;
     }
     if (node.isGrid || node.isNodes) return;
+    if (node.isPreset) {
+      if (inlet == 0) _presetRun(instanceId, handleId, 'recall', value);
+      return;
+    }
     if (node.isFunction) {
       if (inlet == 0) node.queryFunction(value.toDouble());
       _emitFunction(instanceId, handleId);
@@ -337,6 +349,13 @@ class FakePatcherGateway implements PatcherGateway {
     final node = _inst(instanceId).nodes[handleId];
     if (node == null) return;
     node.bangedInlets.add(inlet);
+    // A `.preset` recalls its active slot again.
+    if (node.isPreset) {
+      if (inlet == 0) {
+        _presetRun(instanceId, handleId, 'recall', node.presetActive);
+      }
+      return;
+    }
     // An item list re-sends on a bang (`gItemListBase`).
     if (inlet == 0 && node.isItemList) _emitItemList(instanceId, handleId);
     // So does a multi-value slider (`gRSlider` / `gXYSlider` /
@@ -381,6 +400,9 @@ class FakePatcherGateway implements PatcherGateway {
     calls.add('sendList:$handleId:$inlet:$list');
     final node = _inst(instanceId).nodes[handleId];
     node?.receiveList(inlet, list);
+    if (inlet == 0 && (node?.isPreset ?? false)) {
+      _presetList(instanceId, handleId, list);
+    }
     if (inlet == 0 && (node?.isItemList ?? false)) {
       _emitItemList(instanceId, handleId);
     }
@@ -401,6 +423,9 @@ class FakePatcherGateway implements PatcherGateway {
     // Same native call as a list, exactly as the real gateway sends it.
     final node = _inst(instanceId).nodes[handleId];
     node?.receiveList(inlet, message);
+    if (inlet == 0 && (node?.isPreset ?? false)) {
+      _presetList(instanceId, handleId, message);
+    }
     if (inlet == 0 && (node?.isItemList ?? false)) {
       _emitItemList(instanceId, handleId);
     }
@@ -556,6 +581,139 @@ class FakePatcherGateway implements PatcherGateway {
     }
   }
 
+  /// What [handleId]'s object saves (`DumpState`), as the dump nests it
+  /// under `state`: a `.function`'s points, or a `.preset`'s active marker and
+  /// slots — each entry naming its object by **rank** among the live ids, the
+  /// numbering a load hands out, and an entry whose object is gone (or now of
+  /// another type) dropped (issue #477).
+  Map<String, Object?>? _stateOf(FakeInstance inst, int handleId) {
+    final node = inst.nodes[handleId];
+    if (node == null) return null;
+    if (!node.isPreset) return node.dumpState();
+    final slots = [
+      for (final MapEntry(key: slot, value: entries)
+          in (node.presetSlots.entries.toList()
+            ..sort((a, b) => a.key.compareTo(b.key))))
+        if ([
+              for (final (id, type, value) in entries)
+                if (inst.nodes[id]?.type == type)
+                  {
+                    'object': inst.nodes.keys.where((k) => k < id).length,
+                    'type': type,
+                    'value': value,
+                  },
+            ]
+            case final objects when objects.isNotEmpty)
+          {'slot': slot, 'objects': objects},
+    ];
+    if (node.presetActive < 0 && slots.isEmpty) return null;
+    return {
+      if (node.presetActive >= 0) 'active': node.presetActive,
+      if (slots.isNotEmpty) 'slots': slots,
+    };
+  }
+
+  @override
+  Map<String, Object?>? objectState(int instanceId, int handleId) {
+    final state = _stateOf(_inst(instanceId), handleId);
+    // Through JSON, as the real gateway reads it out of the dump.
+    return state == null
+        ? null
+        : (jsonDecode(jsonEncode(state)) as Map).cast<String, Object?>();
+  }
+
+  /// `ExprToInt`: truncate, and a value it cannot hold becomes 0.
+  static int _truncate(double v) =>
+      v.isFinite && v.abs() < 2147483648 ? v.truncate() : 0;
+
+  /// A list (or message) on a `.preset`'s inlet 0 (`gPreset::ListIn`):
+  /// `store <n>`, `recall <n>`, `clear [<n>]`, `clearall`, or a bare number,
+  /// which recalls. A negative or missing slot number does nothing.
+  void _presetList(int instanceId, int handleId, String list) {
+    final tokens = list.trim().split(RegExp(r'\s+'));
+    final word = tokens.first;
+    if (word.isEmpty) return;
+    final number = tokens.length > 1 ? double.tryParse(tokens[1]) : null;
+    final slot = number == null || !(number >= 0) ? null : _truncate(number);
+    switch (word) {
+      case 'store' || 'recall':
+        if (slot != null) _presetRun(instanceId, handleId, word, slot);
+      case 'clearall':
+        _presetRun(instanceId, handleId, word, 0);
+      case 'clear':
+        if (number == null) {
+          final node = _inst(instanceId).nodes[handleId]!;
+          _presetRun(instanceId, handleId, word, node.presetActive);
+        } else if (slot != null) {
+          _presetRun(instanceId, handleId, word, slot);
+        }
+      default:
+        final bare = double.tryParse(word);
+        if (bare != null && bare >= 0) {
+          _presetRun(instanceId, handleId, 'recall', _truncate(bare));
+        }
+    }
+  }
+
+  /// Model a `.preset` operation (`gPreset::Store` / `Recall` / `ClearSlot` /
+  /// `ClearAll`) on [slot], out-of-range slots doing nothing:
+  ///
+  /// - **store** captures every settable object in the instance whose value is
+  ///   not empty (so never a `.b`, a `.l` or a `.preset`), marks the slot
+  ///   active even when it captured nothing, and sends the slot on outlet 1;
+  /// - **recall** of a stored slot marks it active, pushes each captured value
+  ///   back as a list on its object's inlet 0 — skipping an object that is
+  ///   gone or now of another type — and only then sends the slot on outlet 0;
+  ///   an empty slot does nothing and sends nothing;
+  /// - **clear** empties the slot, and the active marker with it.
+  void _presetRun(int instanceId, int handleId, String op, int slot) {
+    final inst = _inst(instanceId);
+    final node = inst.nodes[handleId];
+    if (node == null || !node.isPreset) return;
+    if (op == 'clearall') {
+      node.presetSlots.clear();
+      node.presetActive = -1;
+      return;
+    }
+    if (slot < 0 || slot >= node.presetCapacity) return;
+    void announce(int outlet) {
+      for (final c in [...inst.cables]) {
+        if (c.fromHandleId == handleId && c.outlet == outlet) {
+          sendInt(instanceId, c.toHandleId, c.inlet, slot);
+        }
+      }
+    }
+
+    switch (op) {
+      case 'store':
+        final captured = [
+          for (final MapEntry(key: id, value: other) in inst.nodes.entries)
+            if (other.guiSettable && other.guiValue.isNotEmpty)
+              (id, other.type, other.guiValue),
+        ];
+        captured.isEmpty
+            ? node.presetSlots.remove(slot)
+            : node.presetSlots[slot] = captured;
+        node.presetActive = slot;
+        announce(1);
+      case 'recall':
+        final stored = node.presetSlots[slot];
+        if (stored == null) return;
+        node.presetActive = slot;
+        for (final (id, type, value) in stored) {
+          final target = inst.nodes[id];
+          if (target == null || target.type != type || !target.guiSettable) {
+            continue;
+          }
+          sendList(instanceId, id, 0, value);
+        }
+        announce(0);
+      case 'clear':
+        node.presetSlots.remove(slot);
+        if (node.presetActive == slot) node.presetActive = -1;
+    }
+  }
+
   /// Model a multi-value slider's send (`CALC`), right to left as the engine
   /// fires it, each delivered down every cable from that outlet:
   ///
@@ -656,6 +814,8 @@ class FakePatcherGateway implements PatcherGateway {
     // A `.function` is rebuilt from its new arguments with an empty store
     // (`gFunction::ShapeStore`).
     if (node.isFunction) node.reshapeFunction();
+    // A `.preset` is replaced, its slots empty (`gPreset::ShapeStore`).
+    if (node.isPreset) node.reshapePreset();
   }
 
   /// A whole value renders without a trailing `.0` (`3` not `3.0`), matching
@@ -725,7 +885,7 @@ class FakePatcherGateway implements PatcherGateway {
             if (entry.value.gui.isNotEmpty) 'gui': entry.value.gui,
             // What the object holds beyond its arguments, under `state` as
             // libYSE nests it (`DumpState`): a `.function`'s points.
-            'state': ?entry.value.dumpState(),
+            'state': ?_stateOf(inst, entry.key),
           },
       ],
       'cables': [
@@ -756,6 +916,9 @@ class FakePatcherGateway implements PatcherGateway {
     inst.nodes.clear();
     inst.cables.clear();
     inst.receivers.clear();
+    // A `.preset` names its objects by dump rank, which only resolves to an
+    // id once every object is back.
+    final presets = <(FakeNode, Map<Object?, Object?>)>[];
     for (final raw in objects) {
       if (raw is! Map) continue;
       final id = (raw['id'] as num).toInt();
@@ -774,11 +937,17 @@ class FakePatcherGateway implements PatcherGateway {
         });
       }
       final state = raw['state'];
-      if (state is Map) node.restoreState(state);
+      if (state is Map) {
+        node.isPreset ? presets.add((node, state)) : node.restoreState(state);
+      }
       inst.nodes[id] = node;
       if (type == Obj.gReceive && args.isNotEmpty) inst.receivers.add(args);
       // Keep freshly-minted ids clear of the reconstructed ones.
       if (id >= _nextObjectId) _nextObjectId = id + 1;
+    }
+    final ids = [...inst.nodes.keys]..sort();
+    for (final (node, state) in presets) {
+      node.restorePreset(state, (rank) => rank < ids.length ? ids[rank] : -1);
     }
     final cables = decoded['cables'];
     if (cables is List) {
@@ -861,6 +1030,14 @@ class FakePatcherGateway implements PatcherGateway {
           ],
         );
       // The field in; the weights and the distances out (issue #476).
+      // Slot numbers in; the slot recalled and the slot stored out (#477).
+      case Obj.gPreset:
+        return const PatcherNodeSnapshot(
+          inputs: 1,
+          outputs: 2,
+          inputKinds: [PatchPortKind.control],
+          outputKinds: [PatchPortKind.control, PatchPortKind.control],
+        );
       case Obj.gNodes:
         return const PatcherNodeSnapshot(
           inputs: 1,
@@ -1030,6 +1207,7 @@ class FakeNode {
     if (isKeyboard || isStaff) reconfigureMusical();
     if (isGrid) reshapeGrid();
     if (isNodes) _shapeNodes();
+    if (isPreset) reshapePreset();
   }
   final String type;
 
@@ -1932,6 +2110,60 @@ class FakeNode {
     _publishFunction();
   }
 
+  // ─── the preset bank (issue #477) ───────────────────────────────────
+
+  /// Whether this is a `.preset`: its GUI value is the active slot.
+  bool get isPreset => type == Obj.gPreset;
+
+  /// How many slots the bank holds, from its `slots` argument.
+  int presetCapacity = PresetArgs.defaultSlots;
+
+  /// The stored slots: each a list of `(id, type, value)` captures, in the
+  /// order they were taken. An empty slot is absent.
+  final Map<int, List<(int, String, String)>> presetSlots = {};
+
+  /// The active slot — the one last stored or recalled — or -1. Its GUI
+  /// value.
+  int get presetActive => int.tryParse(guiValue) ?? -1;
+  set presetActive(int slot) => guiValue = '$slot';
+
+  /// Rebuild the bank for the current arguments: every slot empty, none
+  /// active.
+  void reshapePreset() {
+    presetCapacity = PresetArgs.parse(args).slots;
+    presetSlots.clear();
+    presetActive = -1;
+  }
+
+  /// `RestoreState`: the active marker (dropped when outside the bank) and
+  /// each slot, its entries' dump ranks resolved to ids through [idOfRank].
+  void restorePreset(Map<Object?, Object?> state, int Function(int) idOfRank) {
+    presetSlots.clear();
+    final active = (state['active'] as num?)?.toInt() ?? -1;
+    presetActive = active < -1 || active >= presetCapacity ? -1 : active;
+    final slots = state['slots'];
+    if (slots is! List) return;
+    for (final raw in slots) {
+      if (raw is! Map) continue;
+      final slot = (raw['slot'] as num?)?.toInt() ?? -1;
+      final objects = raw['objects'];
+      if (slot < 0 || slot >= presetCapacity || objects is! List) continue;
+      final entries = [
+        for (final o in objects)
+          if (o is Map &&
+              o['object'] is num &&
+              o['type'] is String &&
+              o['value'] is String)
+            (
+              idOfRank((o['object'] as num).toInt()),
+              o['type'] as String,
+              o['value'] as String,
+            ),
+      ];
+      if (entries.isNotEmpty) presetSlots[slot] = entries;
+    }
+  }
+
   // ─── the interpolation field (issue #476) ────────────────────────────
 
   /// Whether this is a `.nodes`: one `<x> <y> <radius>` cell per node.
@@ -2007,7 +2239,14 @@ class FakeNode {
   }
 
   /// Objects whose GUI value the engine does not accept back.
-  static const Set<String> _unsettable = {Obj.gButton, Obj.gMessage, Obj.gList};
+  // A `.preset` is read-only, which is also what keeps it out of its own
+  // snapshots (issue #477).
+  static const Set<String> _unsettable = {
+    Obj.gButton,
+    Obj.gMessage,
+    Obj.gList,
+    Obj.gPreset,
+  };
 
   /// The cell layout a fresh object reports, mirroring the engine's.
   static List<String> _initialCells(String type, String args) {

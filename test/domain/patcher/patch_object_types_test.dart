@@ -38,6 +38,7 @@ void main() {
     expect(PatchObjectTypes.gMatrixctrl, Obj.gMatrixctrl);
     expect(PatchObjectTypes.gFunction, Obj.gFunction);
     expect(PatchObjectTypes.gNodes, Obj.gNodes);
+    expect(PatchObjectTypes.gPreset, Obj.gPreset);
   });
 
   test('the list holds each id exactly once', () {

@@ -11,6 +11,8 @@ import '../../domain/patcher/multislider_args.dart';
 import '../../domain/patcher/patch_gui_property.dart';
 import '../../domain/patcher/patch_object_types.dart';
 import '../../domain/patcher/patch_port_kind.dart';
+import '../../domain/patcher/preset_args.dart';
+import '../../domain/patcher/preset_grid.dart';
 import '../../engine/state/gui_value_read.dart';
 import '../../engine/state/node_type_registry.dart';
 import 'nodes/button_node_body.dart';
@@ -27,6 +29,7 @@ import 'nodes/multislider_node_body.dart';
 import 'nodes/nodes_node_body.dart';
 import 'nodes/nslider_node_body.dart';
 import 'nodes/number_node_body.dart';
+import 'nodes/preset_node_body.dart';
 import 'nodes/range_slider_node_body.dart';
 import 'nodes/slider_node_body.dart';
 import 'nodes/textedit_node_body.dart';
@@ -536,7 +539,48 @@ void registerBuiltInPatcherNodes() {
       guiValueRead: GuiValueRead.cells,
     ),
   );
+
+  // ─── libYSE 3.0 preset bank (issue #477) ───────────────────────────────
+  // A `.preset`'s GUI value is the active slot alone, read whole. Which slots
+  // are stored comes from its saved state, asked for on demand by the body;
+  // the slots are saved with the patch by the object itself.
+
+  registry.register(
+    NodeDescriptor(
+      type: PatchObjectTypes.gPreset,
+      defaultSize: _presetSize(PresetArgs.defaultSlots),
+      sizeForArgs: (args) => _presetSize(PresetArgs.parse(args).slots),
+      defaultArgs: '',
+      inputs: const [PortSpec(kind: PatchPortKind.control)],
+      outputs: const [
+        PortSpec(kind: PatchPortKind.control, label: 'recalled'),
+        PortSpec(kind: PatchPortKind.control, label: 'stored'),
+      ],
+      buildBody: (ctx, node, controller) =>
+          PresetNodeBody(node: node, controller: controller),
+      readsGuiValue: true,
+    ),
+  );
 }
+
+/// A `.preset` slot's side at creation (issue #477): room for its number.
+const double _presetSlotSide = 20;
+
+/// The widest and tallest a `.preset` opens at, however many slots it has.
+const double _presetMaxSide = 384;
+
+/// A `.preset` of [slots] at creation: [PresetGrid]'s rows and columns of
+/// [_presetSlotSide] slots, within the canvas's bounds.
+Size _presetSize(int slots) => Size(
+  (PresetGrid.columnsFor(slots) * _presetSlotSide).clamp(
+    PatchCanvasConstants.minWidthForPorts(2),
+    _presetMaxSide,
+  ),
+  (PresetGrid.rowsFor(slots) * _presetSlotSide).clamp(
+    _presetSlotSide,
+    _presetMaxSide,
+  ),
+);
 
 /// A `.function` editor's size at creation (issue #475): wide enough to draw
 /// an envelope into, a Max-ish 200 by 100.

@@ -96,6 +96,10 @@ abstract final class PatchObjectTypes {
   /// a cursor is weighed against, one weight per node out (issue #476).
   static const String gNodes = '.nodes';
 
+  /// `Obj.gPreset` — a bank of numbered slots, each a snapshot of every
+  /// settable control in the patch, stored and recalled (issue #477).
+  static const String gPreset = '.preset';
+
   /// Every id above, for the drift guard.
   static const List<String> all = [
     dSine,
@@ -123,5 +127,6 @@ abstract final class PatchObjectTypes {
     gMatrixctrl,
     gFunction,
     gNodes,
+    gPreset,
   ];
 }

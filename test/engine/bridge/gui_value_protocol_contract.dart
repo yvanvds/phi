@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/domain/patcher/patch_port_kind.dart';
 import 'package:phi/engine/bridge/patcher_gateway.dart';
 import 'package:yse/yse.dart';
 
@@ -838,6 +839,189 @@ void guiValueProtocolContract(
       for (var i = 0; i < gateway.guiValueCount(copy, reloaded); i++)
         numbers(gateway.guiValueAt(copy, reloaded, i).split(' ')),
     ], List.filled(3, [0, 0, 1]));
+  });
+
+  // ─── the preset bank (issue #477) ──────────────────────────────────────
+
+  test('a .preset is one inlet, two outlets, and a read-only active slot', () {
+    final bank = gateway.createObject(inst, Obj.gPreset);
+    final ports = gateway.inspect(inst, bank);
+    expect(ports.inputs, 1);
+    expect(ports.outputs, 2);
+    expect(ports.outputKinds, everyElement(PatchPortKind.control));
+    expect(gateway.guiValue(inst, bank), '-1', reason: 'no slot active');
+    expect(cellsOf(bank), ['-1']);
+    expect(gateway.guiValueIsSettable(inst, bank), isFalse);
+    expect(gateway.objectState(inst, bank), isNull, reason: 'saves nothing');
+  });
+
+  test('a .preset stores the settable controls and recalls them, announcing '
+      'the slot stored on outlet 1 and the slot recalled on outlet 0', () {
+    final slider = gateway.createObject(inst, Obj.gSlider);
+    final number = gateway.createObject(inst, Obj.gInt);
+    final bank = gateway.createObject(inst, Obj.gPreset, args: '8');
+    final recalled = listen(bank, 0, Obj.gInt);
+    final stored = listen(bank, 1, Obj.gInt);
+    gateway
+      ..sendInt(inst, recalled, 0, 99)
+      ..sendInt(inst, stored, 0, 99)
+      ..sendFloat(inst, slider, 0, 0.3)
+      ..sendInt(inst, number, 0, 7)
+      ..sendMessage(inst, bank, 0, 'store 2');
+
+    expect(gateway.guiValue(inst, bank), '2', reason: 'the store is active');
+    expect(gateway.guiValue(inst, stored), '2');
+    expect(gateway.guiValue(inst, recalled), '99', reason: 'nothing recalled');
+
+    gateway
+      ..sendFloat(inst, slider, 0, 0.9)
+      ..sendInt(inst, number, 0, 1)
+      ..sendInt(inst, stored, 0, 99)
+      ..sendInt(inst, bank, 0, 2);
+    expect(num.parse(gateway.guiValue(inst, slider)), closeTo(0.3, 1e-6));
+    expect(gateway.guiValue(inst, number), '7');
+    expect(gateway.guiValue(inst, recalled), '2');
+    expect(gateway.guiValue(inst, stored), '99', reason: 'nothing stored');
+  });
+
+  test('a .preset recalls through every spelling, and an empty or '
+      'out-of-range slot does nothing', () {
+    final slider = gateway.createObject(inst, Obj.gSlider);
+    final bank = gateway.createObject(inst, Obj.gPreset, args: '8');
+    final recalled = listen(bank, 0, Obj.gInt);
+    gateway
+      ..sendFloat(inst, slider, 0, 0.25)
+      ..sendMessage(inst, bank, 0, 'store 1')
+      ..sendFloat(inst, slider, 0, 0.75)
+      ..sendMessage(inst, bank, 0, 'store 3');
+
+    double slid() => num.parse(gateway.guiValue(inst, slider)).toDouble();
+
+    gateway.sendList(inst, bank, 0, 'recall 1');
+    expect(slid(), closeTo(0.25, 1e-6));
+    gateway.sendFloat(inst, bank, 0, 3.9);
+    expect(slid(), closeTo(0.75, 1e-6), reason: 'a float is truncated');
+    gateway.sendList(inst, bank, 0, '1');
+    expect(slid(), closeTo(0.25, 1e-6), reason: 'a bare number recalls');
+    gateway.sendFloat(inst, slider, 0, 0.5);
+    gateway.sendBang(inst, bank, 0);
+    expect(slid(), closeTo(0.25, 1e-6), reason: 'a bang recalls the active');
+
+    gateway
+      ..sendInt(inst, recalled, 0, 99)
+      ..sendFloat(inst, slider, 0, 0.5);
+    for (final miss in ['recall 5', 'recall 8', 'recall -1', 'recall']) {
+      gateway.sendMessage(inst, bank, 0, miss);
+    }
+    gateway.sendInt(inst, bank, 0, 20);
+    expect(slid(), closeTo(0.5, 1e-6));
+    expect(gateway.guiValue(inst, recalled), '99', reason: 'announces nothing');
+    expect(gateway.guiValue(inst, bank), '1', reason: 'the marker stays');
+
+    gateway.sendMessage(inst, bank, 0, 'store 8');
+    expect(gateway.guiValue(inst, bank), '1', reason: 'past the bank');
+  });
+
+  test('a .preset clears one slot, the active one, or all of them', () {
+    gateway.sendFloat(inst, gateway.createObject(inst, Obj.gSlider), 0, 0.5);
+    final bank = gateway.createObject(inst, Obj.gPreset);
+    Set<int> slots() => {
+      for (final s
+          in (gateway.objectState(inst, bank)?['slots'] as List?) ?? const [])
+        ((s as Map)['slot'] as num).toInt(),
+    };
+    for (final n in [0, 4, 6]) {
+      gateway.sendMessage(inst, bank, 0, 'store $n');
+    }
+    expect(slots(), {0, 4, 6});
+    expect(gateway.objectState(inst, bank)?['active'], 6);
+
+    gateway.sendMessage(inst, bank, 0, 'clear 4');
+    expect(slots(), {0, 6});
+    expect(gateway.guiValue(inst, bank), '6', reason: 'another slot cleared');
+    gateway.sendMessage(inst, bank, 0, 'clear');
+    expect(slots(), {0});
+    expect(gateway.guiValue(inst, bank), '-1', reason: 'the active cleared');
+    gateway.sendMessage(inst, bank, 0, 'recall 0');
+    gateway.sendMessage(inst, bank, 0, 'clearall');
+    expect(slots(), isEmpty);
+    expect(gateway.guiValue(inst, bank), '-1');
+    expect(gateway.objectState(inst, bank), isNull);
+  });
+
+  test('a .preset captures neither a .b, a .l nor itself, and a store with '
+      'nothing to capture only moves the marker', () {
+    final bank = gateway.createObject(inst, Obj.gPreset);
+    gateway.sendMessage(inst, bank, 0, 'store 3');
+    expect(gateway.guiValue(inst, bank), '3');
+    expect(gateway.objectState(inst, bank), {'active': 3});
+
+    gateway.createObject(inst, Obj.gButton);
+    gateway.sendList(inst, gateway.createObject(inst, Obj.gList), 0, '1 2');
+    gateway.createObject(inst, Obj.gPreset);
+    gateway.sendMessage(inst, bank, 0, 'store 3');
+    expect(gateway.objectState(inst, bank), {'active': 3});
+
+    final slider = gateway.createObject(inst, Obj.gSlider);
+    gateway
+      ..sendFloat(inst, slider, 0, 0.5)
+      ..sendMessage(inst, bank, 0, 'store 3');
+    final objects =
+        ((gateway.objectState(inst, bank)!['slots'] as List).single
+                as Map)['objects']
+            as List;
+    expect([for (final o in objects) (o as Map)['type']], [Obj.gSlider]);
+  });
+
+  test('a .preset re-ranged by setParams starts with empty slots', () {
+    gateway.sendFloat(inst, gateway.createObject(inst, Obj.gSlider), 0, 0.5);
+    final bank = gateway.createObject(inst, Obj.gPreset);
+    gateway.sendMessage(inst, bank, 0, 'store 2');
+    gateway.setParams(inst, bank, '4');
+    expect(gateway.guiValue(inst, bank), '-1');
+    expect(gateway.objectState(inst, bank), isNull);
+    gateway.sendMessage(inst, bank, 0, 'store 5');
+    expect(gateway.guiValue(inst, bank), '-1', reason: 'only 4 slots now');
+  });
+
+  test('a .preset keeps its slots through a dump and a reload, by object '
+      'rank, dropping a deleted object', () {
+    final gone = gateway.createObject(inst, Obj.gInt);
+    final slider = gateway.createObject(inst, Obj.gSlider);
+    final bank = gateway.createObject(inst, Obj.gPreset);
+    gateway
+      ..sendInt(inst, gone, 0, 3)
+      ..sendFloat(inst, slider, 0, 0.25)
+      ..sendMessage(inst, bank, 0, 'store 1')
+      ..sendMessage(inst, bank, 0, 'store 2')
+      ..sendMessage(inst, bank, 0, 'recall 1');
+    gateway.deleteObject(inst, gone);
+    final dump = gateway.dumpJson(inst);
+
+    final copy = gateway.createInstance();
+    gateway.parseJson(copy, dump);
+    final objects = gateway.enumerate(copy).objects;
+    final reloaded = objects.firstWhere((o) => o.type == Obj.gPreset).handleId;
+    final copied = objects.firstWhere((o) => o.type == Obj.gSlider).handleId;
+
+    final state = gateway.objectState(copy, reloaded)!;
+    expect(state['active'], 1, reason: 'loading recalls nothing');
+    expect(gateway.guiValue(copy, reloaded), '1');
+    final slots = state['slots'] as List;
+    expect([for (final s in slots) (s as Map)['slot']], [1, 2]);
+    expect(
+      [
+        for (final o in (slots.first as Map)['objects'] as List)
+          (o as Map)['type'],
+      ],
+      [Obj.gSlider],
+      reason: 'the deleted .i is dropped',
+    );
+
+    gateway.sendFloat(inst, copied, 0, 0.9);
+    gateway.sendFloat(copy, copied, 0, 0.9);
+    gateway.sendInt(copy, reloaded, 0, 2);
+    expect(num.parse(gateway.guiValue(copy, copied)), closeTo(0.25, 1e-6));
   });
 
   test('an unknown handle answers the empty protocol', () {
