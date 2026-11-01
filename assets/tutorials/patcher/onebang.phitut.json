@@ -1,0 +1,222 @@
+{
+  "title": "onebang — once, until armed again",
+  "covers": [
+    ".onebang"
+  ],
+  "summary": "Let one bang through, send the rest out of the other outlet, arm the gate again, and close it with stop.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# onebang — once, until armed again\nonebang lets one message through as a bang from its left outlet, then sends every further message out of its right outlet until anything at its right inlet arms it again. An argument of 1 starts it armed.\nAs in Max, the right outlet reports what was held back, and the word stop on the left closes the gate without a bang.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. onebang 1 starts armed. Click the left button: the bang goes through, and the left count goes up. Click it again, and again: now the right count goes up instead. The gate closed when the first one passed.",
+        "type": ".text"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "640.0",
+          "y": "310.0",
+          "w": "300"
+        },
+        "parms": "2. Click the button on the right to arm it again: the next click passes, once. Arming twice still lets only one through.",
+        "type": ".text"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "640.0",
+          "y": "400.0",
+          "w": "300"
+        },
+        "parms": "3. Everything on the left counts as a bang, 0 too: click 0. Only stop is different. It closes the gate without a bang on either side, so an armed onebang can be called off.",
+        "type": ".text"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "640.0",
+          "y": "530.0",
+          "w": "300"
+        },
+        "parms": "4. Every message comes out on one side or the other. Leave the right outlet unconnected for a plain one-shot, or count it, as here, to see what was held back.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "120.0",
+          "y": "160.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "230.0",
+          "y": "160.0"
+        },
+        "parms": "stop",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "400.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "240.0"
+        },
+        "parms": "1",
+        "type": ".onebang",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "300.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "350.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "220.0",
+          "y": "300.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "220.0",
+          "y": "350.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      }
+    }
+  }
+}

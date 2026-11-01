@@ -1,0 +1,441 @@
+{
+  "title": "next and match — events and patterns",
+  "covers": [
+    ".next",
+    ".match"
+  ],
+  "summary": "Tell the first message of a burst from the rest, and catch a pattern of numbers with a wildcard.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# next and match — events and patterns\nnext tells the first message of an event from the rest: a bang from its left outlet when a message starts something new, from its right when it belongs to the same click, tick or message as the one before. match watches a stream of numbers for a pattern.\nMax's match also matches words. Here a word in the stream matches nothing, and nn is the wildcard for any number.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "200.0",
+          "y": "370.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "200.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "520.0"
+        },
+        "parms": "60",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "170.0",
+          "y": "520.0"
+        },
+        "parms": "64",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "280.0",
+          "y": "520.0"
+        },
+        "parms": "67",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "390.0",
+          "y": "520.0"
+        },
+        "parms": "62",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "500.0",
+          "y": "520.0"
+        },
+        "parms": "clear",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "60.0",
+          "y": "580.0"
+        },
+        "parms": "60 nn 67",
+        "type": ".match",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "60.0",
+          "y": "640.0"
+        },
+        "parms": "",
+        "type": ".l",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "240.0",
+          "y": "640.0"
+        },
+        "parms": "b",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "120.0",
+          "y": "160.0"
+        },
+        "parms": "42",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "240.0",
+          "y": "690.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 21
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "240.0",
+          "y": "740.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Click the left button: one click is one event, so next bangs its left outlet and the left count goes up. 42 is a click too.",
+        "type": ".text"
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "640.0",
+          "y": "270.0",
+          "w": "300"
+        },
+        "parms": "2. The button on the right makes uzi 3 send three bangs inside one click. next sends the first out of the left and the other two out of the right: left goes up by 1, right by 2. Use it to do something once per burst.",
+        "type": ".text"
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "640.0",
+          "y": "420.0",
+          "w": "300"
+        },
+        "parms": "3. match 60 nn 67 watches the numbers that arrive. nn matches any number, so 60, then any number, then 67 is a match. Click 60, 64 and 67: match sends 60 64 67, and the count goes up.",
+        "type": ".text"
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "640.0",
+          "y": "550.0",
+          "w": "300"
+        },
+        "parms": "4. Click 60, 62 and 67: a match too. 60, 67 is not: the 67 takes the nn place. A number that ends a failed try can start the next one. clear forgets the numbers so far.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "300.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "300.0",
+          "y": "210.0"
+        },
+        "parms": "3",
+        "type": ".uzi",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "Count": 0
+          },
+          "output 2": {
+            "Count": 0
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "270.0"
+        },
+        "parms": "",
+        "type": ".next",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "320.0"
+        },
+        "parms": "b",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "370.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "200.0",
+          "y": "320.0"
+        },
+        "parms": "b",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

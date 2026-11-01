@@ -1,0 +1,406 @@
+{
+  "title": "uzi — a loop in one message",
+  "covers": [
+    ".uzi"
+  ],
+  "summary": "Run a loop of bangs with their indices and a carry bang, set the count, and fill a table in one click.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# uzi — a loop in one message\nuzi sends a burst of bangs at once, each just after its index on the right outlet, then one bang from the middle outlet when the run is done. Its arguments are the count and the first index, 1 unless set.\nLike Max's uzi. The count is at most 4096, and a bang that arrives during a run is ignored, so a loop wired back into uzi always ends.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "430.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "480.0"
+        },
+        "parms": "8 0",
+        "type": ".uzi",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          },
+          "output 1": {
+            "Count": 0
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "540.0"
+        },
+        "parms": "i i",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "200.0",
+          "y": "590.0"
+        },
+        "parms": "12",
+        "type": ".*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "200.0",
+          "y": "650.0"
+        },
+        "parms": "sum",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "310.0",
+          "y": "650.0"
+        },
+        "parms": "clear",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "420.0",
+          "y": "650.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "60.0",
+          "y": "710.0"
+        },
+        "parms": "8",
+        "type": ".table",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "60.0",
+          "y": "770.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Click the button: uzi 4 runs four times at once. The left count goes up by 4, one for each bang, the middle one by 1 for the bang that ends the run, and the right box shows the last index, 4.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "120.0",
+          "y": "160.0"
+        },
+        "parms": "5",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "640.0",
+          "y": "290.0",
+          "w": "300"
+        },
+        "parms": "2. A number on the left sets the count and runs: click 5. A number on the right only sets it for next time: click 2, then the button, and the run is two bangs long.",
+        "type": ".text"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "640.0",
+          "y": "420.0",
+          "w": "300"
+        },
+        "parms": "3. Every index comes out just before its bang, so what the bang drives already has it. The whole run happens inside one click: nothing can come between two of its bangs.",
+        "type": ".text"
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "640.0",
+          "y": "550.0",
+          "w": "300"
+        },
+        "parms": "4. Filling a table in one click. uzi 8 0 counts 0 to 7. trigger i i sends each index times 12 to the table's right inlet first, then the index to its left inlet, which stores the waiting value there. Click the lower button.",
+        "type": ".text"
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "640.0",
+          "y": "700.0",
+          "w": "300"
+        },
+        "parms": "5. Type an address from 0 to 7 into the box on the right: the table sends what is stored there, 12 times the address. sum adds up all eight, 336. clear sets them back to 0.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "230.0",
+          "y": "160.0"
+        },
+        "parms": "2",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "4",
+        "type": ".uzi",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "280.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "330.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "200.0",
+          "y": "280.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "200.0",
+          "y": "330.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "340.0",
+          "y": "330.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      }
+    }
+  }
+}

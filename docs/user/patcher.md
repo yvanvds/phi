@@ -218,6 +218,11 @@ for:
   milliseconds, beats, ticks and Hz (`translate`). These clocks belong to the
   patch: `START` does not start them, and a patch cannot follow one of Phi's
   time domains yet.
+- **Control flow and ordering:** doing things right to left (`trigger` and
+  `bangbang`), a loop in one message (`uzi`), conditions (`if`), setting a
+  patch up as it opens (`loadbang` and `loadmess`), a one-shot (`onebang`),
+  values that belong together (`buddy` and `bondo`), and events and patterns
+  (`next` and `match`). Each pair shares one tutorial.
 
 Each tutorial is a small working patch, with numbered notes that walk you
 through it. Where Phi's object differs from the Max object of the same name,
