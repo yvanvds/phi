@@ -1,10 +1,16 @@
 {
   ".b": "b",
+  ".dial": "dial",
   ".f": "number-boxes",
   ".i": "number-boxes",
+  ".incdec": "incdec",
+  ".l": "l",
+  ".led": "led",
   ".m": "m",
   ".metro": "metro",
   ".slider": "slider",
   ".t": "t",
-  ".text": "text"
+  ".text": "text",
+  ".textbutton": "textbutton",
+  ".textedit": "textedit"
 }

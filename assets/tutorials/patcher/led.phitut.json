@@ -1,0 +1,326 @@
+{
+  "title": "led — a lamp with a label",
+  "covers": [
+    ".led"
+  ],
+  "summary": "Latch a lamp on and off, register presses with momentary, and tell several lamps apart by their labels.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# led — a lamp with a label\nA led is a lamp that is on (1) or off (0). Text after its name is its label: led red. With the word momentary first, it registers presses instead of holding a state.\nMax's led is a plain lamp. This one also sends its label from its right outlet, just before the state, so several lamps wired into one object can say which one fired.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "140.0"
+        },
+        "parms": "1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "590.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "680.0"
+        },
+        "parms": "red",
+        "type": ".led",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "170.0",
+          "y": "680.0"
+        },
+        "parms": "green",
+        "type": ".led",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "280.0",
+          "y": "680.0"
+        },
+        "parms": "blue",
+        "type": ".led",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "750.0"
+        },
+        "parms": "",
+        "type": ".textedit",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "430.0",
+          "y": "130.0",
+          "w": "300"
+        },
+        "parms": "1. Click the lamp to switch it on and off. The box below shows the state it sends: 1 or 0.",
+        "type": ".text"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "430.0",
+          "y": "200.0",
+          "w": "300"
+        },
+        "parms": "2. A number sets the state: click 1 or 0. Any number but 0 means on. A bang flips it: click the button.",
+        "type": ".text"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "430.0",
+          "y": "340.0",
+          "w": "300"
+        },
+        "parms": "3. led momentary press registers presses. Every number or bang is a press, even 0. Click the lamp, or the 0 above it, and the counter adds one. Reading the lamp clears the press, so it lights only for a moment.",
+        "type": ".text"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "430.0",
+          "y": "500.0",
+          "w": "300"
+        },
+        "parms": "4. Every message sends the label first, from the right outlet, then the state from the left. A lamp without a label sends an empty list.",
+        "type": ".text"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "430.0",
+          "y": "660.0",
+          "w": "300"
+        },
+        "parms": "5. These three lamps send their labels into one textedit. Click red, green and blue: the field shows the label of the lamp that fired last.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "140.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "200.0"
+        },
+        "parms": "lamp",
+        "type": ".led",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "Count": 0
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "270.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "350.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "410.0"
+        },
+        "parms": "momentary press",
+        "type": ".led",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "Count": 0
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "470.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "530.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

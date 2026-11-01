@@ -1,0 +1,287 @@
+{
+  "title": "dial — a knob with its own range",
+  "covers": [
+    ".dial"
+  ],
+  "summary": "Map a knob position onto a range, bend it with an exponent, and send whole numbers with intMode.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# dial — a knob with its own range\nA dial holds a position from 0 to 1, like a slider, and sends that position mapped onto a range. Its arguments are minimum, maximum, exponent and intMode, in that order. With none it sends 0 to 1, exactly like a slider.\nMax's dial sends 0 to 127 in whole numbers and sets its range with attributes. Here the range is plain arguments: dial 20 20000 3 is a knob from 20 to 20000 on a curve.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "140.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "170.0",
+          "y": "460.0"
+        },
+        "parms": "0 10",
+        "type": ".dial",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "550.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "170.0",
+          "y": "550.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "430.0",
+          "y": "130.0",
+          "w": "300"
+        },
+        "parms": "1. Drag either dial up and down. The left one, dial 0 1000 1, maps its position straight onto 0 to 1000. The number under each dial shows what it sends.",
+        "type": ".text"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "430.0",
+          "y": "220.0",
+          "w": "300"
+        },
+        "parms": "2. The right one, dial 0 1000 3, bends the same range with an exponent of 3: out = minimum + (maximum - minimum) × position³. Click 0.5: both knobs point to the middle, but the left sends 500 and the right 125. Click 0 and 1: at the ends they agree.",
+        "type": ".text"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "430.0",
+          "y": "350.0",
+          "w": "300"
+        },
+        "parms": "3. An exponent above 1 gives finer control at the bottom of the range, which suits a frequency or a gain. Below 1 does the opposite. A number outside 0 to 1 is clamped, and a bang sends the value again.",
+        "type": ".text"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "430.0",
+          "y": "460.0",
+          "w": "300"
+        },
+        "parms": "4. The fourth argument, intMode, rounds. Click 0.75: dial 0 10 1 1 sends the int 8 (a half rounds away from 0), while dial 0 10 sends 7.5.",
+        "type": ".text"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "430.0",
+          "y": "550.0",
+          "w": "300"
+        },
+        "parms": "5. A dial stores its position, not what it sends. A preset recalls the position, and the dial maps it again.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "140.0"
+        },
+        "parms": "0.5",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "140.0"
+        },
+        "parms": "1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "200.0"
+        },
+        "parms": "0 1000 1",
+        "type": ".dial",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "170.0",
+          "y": "200.0"
+        },
+        "parms": "0 1000 3",
+        "type": ".dial",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "290.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "170.0",
+          "y": "290.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "400.0"
+        },
+        "parms": "0.75",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "460.0"
+        },
+        "parms": "0 10 1 1",
+        "type": ".dial",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

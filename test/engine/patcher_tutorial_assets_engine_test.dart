@@ -266,6 +266,168 @@ void main() {
     });
   });
 
+  test('every single-value control has a tutorial (#491)', () {
+    for (final type in [
+      '.dial',
+      '.incdec',
+      '.led',
+      '.textbutton',
+      '.textedit',
+      '.l',
+    ]) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+  });
+
+  group('single-value control tutorials (#491) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    void open(String slug) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+    }
+
+    tearDown(() => gateway.disposeInstance(inst));
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    int msg(String text) => graph.objects
+        .firstWhere((o) => o.type == '.m' && o.args == text)
+        .handleId;
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    String value(int id) => gateway.guiValue(inst, id);
+    double number(int id) => double.parse(value(id));
+
+    test('dial: a range, an exponent of 1 against 3, and intMode', () {
+      open('dial');
+      final linear = at('.f', 60, 290);
+      final curved = at('.f', 170, 290);
+      click(msg('0.5'));
+      expect((number(linear), number(curved)), (500.0, 125.0));
+      expect(number(at('.dial', 170, 200)), 0.5, reason: 'stores position');
+      click(msg('1'));
+      expect((number(linear), number(curved)), (1000.0, 1000.0));
+      click(msg('0'));
+      expect((number(linear), number(curved)), (0.0, 0.0));
+      click(msg('0.75'));
+      expect(value(at('.i', 60, 550)), '8', reason: 'a half rounds up');
+      expect(number(at('.f', 170, 550)), 7.5);
+    });
+
+    test('incdec: inc/dec, nudge, step, silent set, clamp and wrap', () {
+      open('incdec');
+      final stepper = at('.incdec', 60, 270);
+      final out = at('.i', 60, 340);
+      // Two message boxes say inc: this one, and the wrap demo's below.
+      final inc = at('.m', 60, 140);
+      click(inc);
+      expect(value(out), '1');
+      click(msg('dec'));
+      click(msg('dec'));
+      expect(value(out), '0', reason: 'clamped at the minimum');
+      click(msg('3'));
+      expect(value(out), '3');
+      click(msg('-3'));
+      expect(value(out), '0');
+      click(msg('5'));
+      click(inc);
+      expect(value(out), '5', reason: 'step 5');
+      click(msg('1'));
+      click(msg('7'));
+      expect((value(stepper), value(out)), ('7', '5'), reason: 'silent set');
+      click(at('.b', 170, 200));
+      expect(value(out), '7', reason: 'a bang sends');
+      for (var i = 0; i < 30; i++) {
+        click(inc);
+      }
+      expect(value(out), '20', reason: 'clamped at the maximum');
+      final wrapInc = at('.m', 60, 450);
+      final clamped = at('.i', 60, 580);
+      final wrapped = at('.i', 200, 580);
+      for (var i = 0; i < 4; i++) {
+        click(wrapInc);
+      }
+      expect((value(clamped), value(wrapped)), ('3', '0'));
+    });
+
+    test('led: latching, momentary presses, and labels', () {
+      open('led');
+      final state = at('.i', 60, 270);
+      click(msg('1'));
+      expect(value(state), '1');
+      click(at('.b', 280, 140));
+      expect(value(state), '0', reason: 'a bang flips it');
+      gateway.sendInt(inst, at('.led', 60, 200), 0, 7);
+      expect(value(state), '1', reason: 'any number but 0 is on');
+      final presses = at('.i', 60, 590);
+      gateway.sendBang(inst, at('.led', 60, 410), 0);
+      click(at('.m', 60, 350));
+      expect(value(presses), '2', reason: 'even 0 is a press');
+      final field = at('.textedit', 60, 750);
+      gateway.sendBang(inst, at('.led', 170, 680), 0);
+      expect(value(field), 'green');
+      gateway.sendBang(inst, at('.led', 280, 680), 0);
+      expect(value(field), 'blue');
+    });
+
+    test('textbutton: latching mute, and a bank selecting through route', () {
+      open('textbutton');
+      final state = at('.i', 60, 270);
+      gateway.sendInt(inst, at('.textbutton', 60, 200), 0, 1);
+      expect(value(state), '1');
+      click(at('.b', 280, 140));
+      expect(value(state), '0');
+      final speed = at('.i', 60, 580);
+      gateway.sendInt(inst, at('.textbutton', 170, 370), 0, 1);
+      expect(value(speed), '250');
+      gateway.sendInt(inst, at('.textbutton', 280, 370), 0, 1);
+      expect(value(speed), '125');
+      gateway.sendInt(inst, at('.textbutton', 60, 370), 0, 1);
+      expect(value(speed), '500');
+    });
+
+    test('textedit: typed text as a list, sprintf, resend and clear', () {
+      open('textedit');
+      final field = at('.textedit', 60, 210);
+      final result = at('.l', 60, 350);
+      final sends = at('.i', 230, 470);
+      expect(value(field), 'world');
+      gateway.sendList(inst, field, 0, 'Bob');
+      expect(value(result), 'hello Bob');
+      expect(value(sends), '1');
+      click(msg('Ann'));
+      expect((value(field), value(result)), ('Ann', 'hello Ann'));
+      click(at('.b', 170, 140));
+      expect(value(sends), '3', reason: 'a bang resends');
+      click(at('.l', 220, 140));
+      expect(value(field), '', reason: 'an empty list clears it');
+    });
+
+    test('l: collects from pack silently, sends on demand', () {
+      open('l');
+      final box = at('.l', 60, 280);
+      final a = at('.i', 60, 420);
+      final b = at('.i', 170, 420);
+      click(msg('7'));
+      click(msg('60'));
+      expect(value(box), '60 7');
+      expect((value(a), value(b)), ('0', '0'), reason: 'stored silently');
+      click(box);
+      expect((value(a), value(b)), ('60', '7'));
+      click(msg('64'));
+      expect(value(box), '64 7');
+      expect(value(a), '60', reason: 'still silent');
+      click(at('.b', 200, 280));
+      expect((value(a), value(b)), ('64', '7'));
+    });
+  });
+
   test('report: object types with no tutorial yet', () {
     final missing = [
       for (final t in engineTypes.toList()..sort())

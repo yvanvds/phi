@@ -170,6 +170,9 @@ for:
 - **GUI basics:** the button (`b`), the toggle (`t`), the slider (`slider`),
   the number boxes (`i` and `f`, which share one tutorial), the message box
   (`m`) and notes (`text`).
+- **Single-value controls:** the dial (`dial`), the stepper (`incdec`), the
+  lamp (`led`), the labelled button (`textbutton`), the text field
+  (`textedit`) and the list box (`l`).
 - **Time:** `metro`.
 
 Each tutorial is a small working patch, with numbered notes that walk you
