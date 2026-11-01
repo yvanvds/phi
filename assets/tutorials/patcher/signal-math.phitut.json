@@ -1,0 +1,396 @@
+{
+  "title": "~+ ~- ~* ~/ ~clip — signal arithmetic",
+  "covers": [
+    "~+",
+    "~-",
+    "~*",
+    "~/",
+    "~clip"
+  ],
+  "summary": "Ring-modulate one sine with another, use ~* as a gain, see the default right operands, and limit a signal with ~clip.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# ~+ ~- ~* ~/ ~clip — signal arithmetic\nThese work sample by sample on a signal in the left inlet. The right operand is a second signal, or a number used while no signal is connected there: the argument, or an int or float sent in. ~+ and ~- default to 0 (since libYSE 3.0.1), ~* and ~/ to 1. ~clip keeps every sample between a low and a high, -1 and 1 by default.\nMax writes these +~, -~, *~ and /~, and adds up every cable that reaches a signal inlet. Here the ~ comes first, and a signal inlet takes one cable: mix with a chain of ~+.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "140.0"
+        },
+        "parms": "3.",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "380.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "440.0"
+        },
+        "parms": "",
+        "type": "~+",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "500.0"
+        },
+        "parms": "",
+        "type": "~-",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "250.0",
+          "y": "500.0"
+        },
+        "parms": "1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 2,
+              "Object": 16
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "360.0",
+          "y": "500.0"
+        },
+        "parms": "0.2",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 2,
+              "Object": 16
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "250.0",
+          "y": "560.0"
+        },
+        "parms": "-1",
+        "type": ".*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "60.0",
+          "y": "560.0"
+        },
+        "parms": "-1 1",
+        "type": "~clip",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "60.0",
+          "y": "620.0"
+        },
+        "parms": "8",
+        "type": "~/",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 18
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "60.0",
+          "y": "680.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "640.0",
+          "y": "150.0",
+          "w": "300"
+        },
+        "parms": "1. A signal times a signal is ring modulation. Turn on the toggle: ~* multiplies the 440 Hz sine by a second sine. At 3. the level throbs through silence and back. At 30. the throb turns rough. At 300. you hear two new tones, 140 and 740 Hz, and neither original.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "140.0"
+        },
+        "parms": "30.",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "640.0",
+          "y": "320.0",
+          "w": "300"
+        },
+        "parms": "2. A signal times a number is a gain. Drag the slider: the right ~* multiplies the same sine by a number from 0 to 1, a volume control.",
+        "type": ".text"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "640.0",
+          "y": "430.0",
+          "w": "300"
+        },
+        "parms": "3. ~+ mixes the two paths. A bare ~- subtracts 0, its default, and passes the signal on unchanged, as a bare ~* or ~/ does with 1. ~/ 8 is the master level here, the same as ~* 0.125. Dividing by 0 leaves the signal alone.",
+        "type": ".text"
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "640.0",
+          "y": "580.0",
+          "w": "300"
+        },
+        "parms": "4. ~clip is a hard limiter. With both paths up the sum swings to 2, and ~clip -1 1 flattens it at 1. Click 0.2: the limits close to -0.2 and 0.2, and the sine squares off and buzzes. Click 1 to open them again: the limit inlets take ints, as do the number inlets of ~+ ~- ~* ~/.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "140.0"
+        },
+        "parms": "300.",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "440.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".slider",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "200.0"
+        },
+        "parms": "3",
+        "type": "~sine",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "330.0",
+          "y": "200.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "200.0",
+          "y": "260.0"
+        },
+        "parms": "440",
+        "type": "~sine",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "320.0"
+        },
+        "parms": "",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "440.0",
+          "y": "320.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

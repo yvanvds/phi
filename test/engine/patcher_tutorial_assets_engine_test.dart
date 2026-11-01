@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/patcher/patch_type_name.dart';
@@ -797,6 +798,259 @@ void main() {
       click(at('.m', 390, 140));
       expect(value(sharpSign), '0', reason: 'a white key is natural');
       expect(graph.objects.map((o) => o.type), contains('~dac'));
+    });
+  });
+
+  test('every audio basics type has a tutorial (#494)', () {
+    for (final type in [
+      '~sine',
+      '~saw',
+      '~noise',
+      '~line',
+      '~adc',
+      '~dac',
+      '~+',
+      '~-',
+      '~*',
+      '~/',
+      '~clip',
+      '~lp',
+      '~hp',
+      '~bp',
+      '~vcf',
+    ]) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+  });
+
+  // The audio tutorials are played the way a tutorial plays in the app:
+  // mounted on master. The offline session renders a block at a time, and the
+  // master meter reports the peak of what reached it.
+  group('audio basics tutorials (#494) sound the way their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    // Renders [blocks] blocks and returns the loudest master peak among them.
+    double loudness([int blocks = 60]) {
+      var peak = 0.0;
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+        final p = Channel.master.peakLinearPost();
+        if (p > peak) peak = p;
+      }
+      return peak;
+    }
+
+    // The master peak of each of the next [blocks] blocks.
+    List<double> peaks(int blocks) => [
+      for (var i = 0; i < blocks; i++) loudness(1),
+    ];
+
+    void open(String slug) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+      gateway.mountAsSource(inst);
+      loudness(20); // the mount settles
+    }
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      loudness(20); // and drains
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    void toggle(int id, bool on) => gateway.sendInt(inst, id, 0, on ? 1 : 0);
+    double number(int id) => double.parse(gateway.guiValue(inst, id));
+
+    test('sine: silent until switched on, a set frequency, beating', () {
+      open('sine');
+      expect(loudness(), lessThan(1e-4), reason: 'both toggles start off');
+      final freq = at('.f', 60, 200);
+      toggle(at('.t', 170, 260), true);
+      final one = loudness();
+      click(at('.m', 170, 140)); // 440.
+      expect(number(freq), 440);
+      gateway.sendFloat(inst, at('.slider', 300, 140), 0, 0.5);
+      expect(number(freq), closeTo(495, 1e-3), reason: 'scale 0 1 110 880');
+      click(at('.m', 60, 140)); // 220.
+      toggle(at('.t', 410, 380), true);
+      // 220 against 222 Hz: the sum swells and fades twice a second.
+      final beat = peaks(400);
+      expect(beat.reduce(math.max), greaterThan(1.8 * one));
+      expect(beat.reduce(math.min), lessThan(0.3 * one));
+    });
+
+    test('saw: bipolar, brighter than the sine, the filter darkens it', () {
+      open('saw');
+      final cutoff = at('.f', 340, 360);
+      expect(number(cutoff), closeTo(4050, 1e-3), reason: 'loadmess 0.5');
+      toggle(at('.t', 60, 140), true);
+      final open8000 = (() {
+        gateway.sendFloat(inst, at('.slider', 340, 140), 0, 1);
+        return loudness(200);
+      })();
+      expect(open8000, greaterThan(0.1));
+      gateway.sendFloat(inst, cutoff, 0, 2);
+      // Centred on 0, a saw filtered at 2 Hz leaves almost nothing; a saw
+      // from 0 to 1 would leave half its level as an offset.
+      loudness(400);
+      expect(loudness(), lessThan(0.05 * open8000), reason: 'bipolar');
+      toggle(at('.t', 60, 140), false);
+      toggle(at('.t', 200, 140), true);
+      gateway.sendFloat(inst, cutoff, 0, 8000);
+      final sine8000 = loudness(200);
+      gateway.sendFloat(inst, cutoff, 0, 1000);
+      final sine1000 = loudness(200);
+      expect(sine1000, greaterThan(0.9 * sine8000), reason: 'barely changes');
+    });
+
+    test('noise: a level slider, raw against lowpass and bandpass', () {
+      open('noise');
+      expect(number(at('.slider', 480, 190)), closeTo(0.5, 1e-6));
+      expect(loudness(), lessThan(1e-4));
+      final raw = at('.t', 60, 140);
+      toggle(raw, true);
+      final full = loudness(100);
+      expect(full, greaterThan(0.01));
+      gateway.sendFloat(inst, at('.slider', 480, 190), 0, 0);
+      expect(loudness(), lessThan(1e-4), reason: 'level 0');
+      gateway.sendFloat(inst, at('.slider', 480, 190), 0, 0.5);
+      toggle(raw, false);
+      toggle(at('.t', 200, 140), true);
+      final low = loudness(100);
+      toggle(at('.t', 200, 140), false);
+      toggle(at('.t', 340, 140), true);
+      final band = loudness(100);
+      expect(low, inExclusiveRange(0, 0.5 * full), reason: 'lp 500');
+      expect(band, inExclusiveRange(0, 0.5 * full), reason: 'bp 1000 5');
+    });
+
+    test('line: fades, a held ramp, ints and lists ignored, unpack', () {
+      open('sig-line');
+      final line = at('~line', 60, 220);
+      expect(loudness(), lessThan(1e-4), reason: 'starts at 0');
+      click(at('.m', 60, 140)); // 1. over 2000 ms
+      final early = loudness(40);
+      expect(early, greaterThan(0));
+      final full = loudness(1200);
+      expect(early, lessThan(0.3 * full), reason: 'a ramp, not a jump');
+      click(at('.m', 170, 140)); // 0.
+      loudness(300);
+      click(at('.m', 280, 140)); // stop
+      final held = loudness(5);
+      expect(held, inExclusiveRange(0.1 * full, 0.95 * full));
+      expect(loudness(300), closeTo(held, 0.02 * full), reason: 'held');
+      gateway.sendInt(inst, line, 0, 1);
+      gateway.sendList(inst, line, 0, '1 10');
+      expect(loudness(300), closeTo(held, 0.02 * full), reason: 'ignored');
+      click(at('.m', 410, 250)); // 10.
+      click(at('.m', 170, 140)); // 0.
+      loudness(40);
+      expect(loudness(5), lessThan(0.01 * full), reason: 'a quick fade');
+      click(at('.b', 410, 320)); // pack 0.25 500 -> unpack 0. 0.
+      loudness(400);
+      expect(loudness(), closeTo(0.25 * full, 0.02 * full));
+    });
+
+    test(
+      'adc and dac: two dacs sum, unconnected noise and adc stay silent',
+      () {
+        open('adc-dac');
+        expect(
+          number(at('.slider', 180, 470)),
+          closeTo(1, 1e-6),
+          reason: 'loadmess',
+        );
+        expect(
+          loudness(),
+          lessThan(1e-4),
+          reason: 'the noise reaches no dac, and adc is silent as a source',
+        );
+        toggle(at('.t', 60, 140), true);
+        final one = loudness(400);
+        expect(one, greaterThan(0.05));
+        toggle(at('.t', 300, 140), true);
+        expect(loudness(400), greaterThan(1.5 * one), reason: 'the dacs sum');
+      },
+    );
+
+    test(
+      'signal math: gain, clip limits by float and int, ring modulation',
+      () {
+        open('signal-math');
+        expect(loudness(), lessThan(1e-4));
+        final slider = at('.slider', 440, 140);
+        gateway.sendFloat(inst, slider, 0, 1);
+        // A sine at full scale, through the bare ~- and ~clip -1 1, divided by
+        // 8.
+        final unit = loudness(200);
+        expect(unit, greaterThan(0.05));
+        click(at('.m', 360, 500)); // 0.2
+        expect(loudness(200), closeTo(0.2 * unit, 0.01 * unit));
+        click(at('.m', 250, 500)); // 1, an int
+        expect(loudness(200), closeTo(unit, 0.01 * unit));
+        gateway.sendFloat(inst, slider, 0, 0);
+        toggle(at('.t', 330, 200), true);
+        click(at('.m', 280, 140)); // 300.
+        final ring = loudness(400);
+        expect(ring, closeTo(unit, 0.05 * unit), reason: 'sine times sine');
+        gateway.sendFloat(inst, slider, 0, 1);
+        expect(loudness(400), lessThan(1.01 * unit), reason: 'clipped at 1');
+      },
+    );
+
+    test('lp and hp: the cutoff from the slider, the two halves', () {
+      open('lp-hp');
+      final cutoff = at('.f', 340, 360);
+      final slider = at('.slider', 340, 140);
+      expect(number(cutoff), closeTo(1000, 1e-3), reason: 'loadmess 0.2');
+      final low = at('.t', 60, 140);
+      final high = at('.t', 200, 140);
+      toggle(low, true);
+      final lp1000 = loudness(200);
+      gateway.sendFloat(inst, slider, 0, 1);
+      expect(number(cutoff), closeTo(5000, 1e-3));
+      final lp5000 = loudness(200);
+      expect(lp5000, greaterThan(lp1000), reason: 'more of the hiss');
+      toggle(low, false);
+      toggle(high, true);
+      gateway.sendFloat(inst, slider, 0, 0.02); // 100 Hz
+      final hp100 = loudness(200);
+      toggle(high, false);
+      toggle(low, true);
+      final lp100 = loudness(200);
+      expect(lp100, lessThan(0.5 * lp1000), reason: 'a rumble');
+      expect(hp100, greaterThan(3 * lp100), reason: 'hp keeps the rest');
+    });
+
+    test('bp and vcf: a band over noise, a resonant sweep over a saw', () {
+      open('bp-vcf');
+      expect(loudness(), lessThan(1e-4));
+      toggle(at('.t', 60, 140), true);
+      final wide = loudness(200);
+      expect(wide, greaterThan(0.01));
+      click(at('.m', 280, 140)); // Q 10.
+      final narrow = loudness(200);
+      expect(narrow, inExclusiveRange(0, wide), reason: 'a narrower band');
+      click(at('.m', 170, 140)); // Q 1.
+      toggle(at('.t', 60, 140), false);
+      toggle(at('.t', 60, 400), true);
+      final soft = loudness(400);
+      expect(soft, greaterThan(0.01), reason: 'the vcf sweeps');
+      click(at('.m', 280, 400)); // 20.
+      expect(loudness(400), inExclusiveRange(0, soft), reason: 'narrower');
+      // Sharpness 0 passes the saw through unfiltered, at full level.
+      gateway.sendFloat(inst, at('~vcf', 250, 580), 2, 0);
+      expect(loudness(400), greaterThan(soft));
     });
   });
 

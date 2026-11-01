@@ -1,0 +1,308 @@
+{
+  "title": "~sine — a pure tone",
+  "covers": [
+    "~sine"
+  ],
+  "summary": "Set a sine's frequency from a message box and a slider, hear it on master, and beat two sines 2 Hz apart.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# ~sine — a pure tone\nA ~sine is an oscillator that plays a sine wave, the purest tone: one frequency and nothing above it. Its argument is the frequency in Hz, 440 by default. A float on its inlet sets the frequency; a signal there modulates it (FM).\nMax's cycle~ also reads a wavetable and has a phase inlet; ~sine has neither. On the engine Phi ships its inlet takes floats only: an int, from a message box 440 or an i box, is ignored. Write 440. or use an f box.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "140.0"
+        },
+        "parms": "220.",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "410.0",
+          "y": "380.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "300.0",
+          "y": "440.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "500.0"
+        },
+        "parms": "",
+        "type": "~+",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "560.0"
+        },
+        "parms": "0.1",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 14
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "620.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "560.0",
+          "y": "150.0",
+          "w": "300"
+        },
+        "parms": "1. Turn on the left toggle: a 220 Hz sine on the master bus. Click 440. to jump an octave up, or drag the slider: scale turns it into 110 to 880 Hz. The f box shows the frequency the sine gets.",
+        "type": ".text"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "560.0",
+          "y": "280.0",
+          "w": "300"
+        },
+        "parms": "2. Only floats set the frequency. A message box 440, without the point, sends an int, and the sine ignores it.",
+        "type": ".text"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "560.0",
+          "y": "370.0",
+          "w": "300"
+        },
+        "parms": "3. Two sines beat. Set the left one back to 220., then turn on the right toggle: a second sine at 222 Hz. The two drift in and out of step, and the level swells twice a second, the difference between them. Drag the slider away and the beats speed up into roughness.",
+        "type": ".text"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "560.0",
+          "y": "540.0",
+          "w": "300"
+        },
+        "parms": "4. A signal inlet takes one cable: to mix, chain ~+. ~* 0.1 turns the sum down, and ~dac plays it on both channels. Each toggle sends 1 or 0 to a ~*, switching its sine on or off.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "140.0"
+        },
+        "parms": "440.",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "300.0",
+          "y": "140.0"
+        },
+        "parms": "",
+        "type": ".slider",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "200.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "380.0",
+          "y": "300.0"
+        },
+        "parms": "0 1 110 880",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "260.0"
+        },
+        "parms": "220",
+        "type": "~sine",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "170.0",
+          "y": "260.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "320.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "300.0",
+          "y": "380.0"
+        },
+        "parms": "222",
+        "type": "~sine",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

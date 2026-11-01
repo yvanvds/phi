@@ -180,6 +180,11 @@ for:
 - **Structured controls:** the grid (`matrixctrl`), the breakpoint editor
   (`function`), the interpolation field (`nodes`), the preset bank
   (`preset`), the keyboard (`kslider`) and the staff (`nslider`).
+- **Audio basics:** the oscillators (`~sine`, `~saw`, `~noise`), signal
+  ramps (`~line`), the audio input and output (`~adc` and `~dac`, which share
+  one tutorial), signal arithmetic (`~+`, `~-`, `~*`, `~/` and `~clip`, which
+  share one tutorial), the lowpass and highpass (`~lp` and `~hp`) and the
+  bandpass and resonant filter (`~bp` and `~vcf`).
 - **Time:** `metro`.
 
 Each tutorial is a small working patch, with numbered notes that walk you

@@ -24,5 +24,20 @@
   ".textbutton": "textbutton",
   ".textedit": "textedit",
   ".umenu": "menus",
-  ".xyslider": "xyslider"
+  ".xyslider": "xyslider",
+  "~*": "signal-math",
+  "~+": "signal-math",
+  "~-": "signal-math",
+  "~/": "signal-math",
+  "~adc": "adc-dac",
+  "~bp": "bp-vcf",
+  "~clip": "signal-math",
+  "~dac": "adc-dac",
+  "~hp": "lp-hp",
+  "~line": "sig-line",
+  "~lp": "lp-hp",
+  "~noise": "noise",
+  "~saw": "saw",
+  "~sine": "sine",
+  "~vcf": "bp-vcf"
 }

@@ -2987,7 +2987,9 @@ main + app          (orchestration)
   `.tab`, `rslider`, `xyslider`, `multislider`) and the structured controls
   (#493: `matrixctrl`, `function`, `nodes`, `preset`, `kslider`, `nslider`;
   `function` and `preset` ship their points and slots as saved object state
-  in the dump). Covered by domain unit tests, a `patch_library_tutorial_test`, a real-engine
+  in the dump) and the audio basics (#494: `sine`, `saw`, `noise`, `sig-line`,
+  `adc-dac` for `~adc` + `~dac`, `signal-math` for `~+ ~- ~* ~/ ~clip`,
+  `lp-hp`, `bp-vcf`). Covered by domain unit tests, a `patch_library_tutorial_test`, a real-engine
   `patcher_tutorial_assets_engine_test` (every index entry has a file, every
   type exists in the engine, every payload parses, a report of uncovered
   types), surface/reference-panel widget tests, and an end-to-end
@@ -2997,9 +2999,13 @@ main + app          (orchestration)
   by type + canvas position), plus an end-to-end run per batch
   (`patcher_gui_basics_tutorials`, `patcher_single_value_controls_tutorials`,
   `patcher_selection_slider_controls_tutorials`,
-  `patcher_structured_controls_tutorials`: each opens its tutorials
+  `patcher_structured_controls_tutorials`,
+  `patcher_audio_basics_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
-  that no note or object overlaps another).
+  that no note or object overlaps another). The audio cases mount the
+  tutorial on master and read the offline session's master meter
+  (`renderOffline` + `Channel.master.peakLinearPost`) to check what is
+  heard.
 - Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
   switched off for now, issue #447)
 
