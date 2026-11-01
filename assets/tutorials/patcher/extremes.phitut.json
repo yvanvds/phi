@@ -1,0 +1,589 @@
+{
+  "title": "past peak trough maximum minimum — thresholds and records",
+  "covers": [
+    ".past",
+    ".peak",
+    ".trough",
+    ".maximum",
+    ".minimum"
+  ],
+  "summary": "Bang once when a slider crosses a threshold, keep the highest and lowest number so far, and pick the larger or smaller of two numbers or the extremes of a list.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# past peak trough maximum minimum — thresholds and records\npast bangs when a number rises to its threshold, and not again until the number has dropped below it. peak and trough remember the highest and the lowest number so far and send one only when it sets a new record. maximum and minimum send the larger or the smaller of a number and a stored one, or the largest or smallest item of a list.\nMax's peak and trough keep to whole numbers; here all five take floats, and peak, trough, maximum and minimum send floats.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".slider",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "280.0",
+          "y": "420.0"
+        },
+        "parms": "9",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "390.0",
+          "y": "420.0"
+        },
+        "parms": "1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "500.0",
+          "y": "420.0"
+        },
+        "parms": "reset",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "480.0"
+        },
+        "parms": "",
+        "type": ".peak",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "Count": 0
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "300.0",
+          "y": "480.0"
+        },
+        "parms": "",
+        "type": ".trough",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "Count": 0
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "60.0",
+          "y": "540.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "150.0",
+          "y": "540.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "300.0",
+          "y": "540.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "390.0",
+          "y": "540.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "60.0",
+          "y": "630.0"
+        },
+        "parms": "4",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 24
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 25
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "140.0",
+          "y": "160.0"
+        },
+        "parms": "100",
+        "type": ".*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "170.0",
+          "y": "630.0"
+        },
+        "parms": "12",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 24
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 25
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "280.0",
+          "y": "630.0"
+        },
+        "parms": "20",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 24
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 25
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "390.0",
+          "y": "630.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 23
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "390.0",
+          "y": "690.0"
+        },
+        "parms": "4 17 8 2",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 24
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 25
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "60.0",
+          "y": "750.0"
+        },
+        "parms": "6",
+        "type": ".maximum",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 26
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "200.0",
+          "y": "750.0"
+        },
+        "parms": "6",
+        "type": ".minimum",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 27
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "60.0",
+          "y": "800.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 27": {
+        "ID": 27,
+        "gui": {
+          "x": "200.0",
+          "y": "800.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 28": {
+        "ID": 28,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Drag the slider up past halfway. * 100 makes it 0 to 100, and past 50 bangs once as it reaches 50: the count goes up by one. Moving about above 50 sends nothing more; drop below 50 and rise again for the next bang. clear lets the next number at or above 50 bang at once.",
+        "type": ".text"
+      },
+      "object 29": {
+        "ID": 29,
+        "gui": {
+          "x": "640.0",
+          "y": "330.0",
+          "w": "300"
+        },
+        "parms": "2. Click 5, 3, 9 and 1. peak sends a number only when it beats the highest so far: 5, then 9. trough does the same downwards: 5, 3, 1. The boxes beside them show 1 when the number set a record and 0 when it did not.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "260.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 30": {
+        "ID": 30,
+        "gui": {
+          "x": "640.0",
+          "y": "480.0",
+          "w": "300"
+        },
+        "parms": "3. trough starts at 128, so that the first ordinary number is below it, and peak at 0. reset puts both back there without sending.",
+        "type": ".text"
+      },
+      "object 31": {
+        "ID": 31,
+        "gui": {
+          "x": "640.0",
+          "y": "590.0",
+          "w": "300"
+        },
+        "parms": "4. maximum 6 and minimum 6 compare each number with 6, their argument. Click 4: 6 and 4. Click 12: 12 and 6. Click 20, which only stores 20 in both right inlets, then 12 again: 20 and 12.",
+        "type": ".text"
+      },
+      "object 32": {
+        "ID": 32,
+        "gui": {
+          "x": "640.0",
+          "y": "720.0",
+          "w": "300"
+        },
+        "parms": "5. A list sends its largest or smallest item: the button sends 4 17 8 2, giving 17 and 2. The list also leaves its second largest and second smallest, 8 and 4, as the numbers to compare with next.",
+        "type": ".text"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "140.0",
+          "y": "220.0"
+        },
+        "parms": "50",
+        "type": ".past",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "260.0",
+          "y": "220.0"
+        },
+        "parms": "clear",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "140.0",
+          "y": "280.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "140.0",
+          "y": "330.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "420.0"
+        },
+        "parms": "5",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "170.0",
+          "y": "420.0"
+        },
+        "parms": "3",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 2
+          }
+        }
+      }
+    }
+  }
+}

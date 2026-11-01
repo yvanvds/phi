@@ -64,13 +64,14 @@ import '../test/domain/project/test_doubles/fake_project_store.dart';
 import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/lay_demo_chain.dart';
 
 /// End-to-end proof of the live GUI bodies + argument editing (issue #223,
 /// retargeted by #382) through the real [PhiApp] — real rail navigation,
 /// layout, and fonts — backed by a [FakePatcherGateway] so no native
 /// `libyse.dll` is touched.
 ///
-/// Two user-visible flows: operating the seeded slider body writes through the
+/// Two user-visible flows: operating a laid slider body writes through the
 /// gateway (`sendFloat`), and double-clicking the non-GUI `~sine` node opens its
 /// object box for typing, whose Enter round-trips through `setParams` into the
 /// live patcher.
@@ -94,11 +95,14 @@ void main() {
     await tester.pumpWidget(PhiApp(engine: engine, session: session));
     await tester.pumpAndSettle();
 
-    // Summon the Patcher surface, which seeds slider → sine → dac.
+    // Summon the Patcher surface and lay slider → sine → dac into its empty
+    // patch.
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
+    layDemoChain(engine.patcher);
+    await tester.pumpAndSettle();
 
-    // 1) Operate the seeded slider (a live GUI body) — its value reaches the
+    // 1) Operate the laid slider (a live GUI body) — its value reaches the
     //    gateway as a sendFloat.
     tester.widget<PhiFader>(find.byType(PhiFader)).onChanged(0.3);
     await tester.pump();
@@ -422,11 +426,8 @@ void main() {
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
 
-    // An empty canvas: the demo seed would sit over the controls under test.
     final patcher = engine.patcher;
-    for (final id in patcher.graph.nodes.map((n) => n.id).toList()) {
-      patcher.removeNode(id);
-    }
+    expect(patcher.graph.nodes, isEmpty, reason: 'a new patch opens empty');
     await tester.pumpAndSettle();
 
     PatchNode gui(String type, Offset position, {String args = ''}) {
@@ -592,11 +593,8 @@ void main() {
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
 
-    // An empty canvas: the demo seed would sit over the controls under test.
     final patcher = engine.patcher;
-    for (final id in patcher.graph.nodes.map((n) => n.id).toList()) {
-      patcher.removeNode(id);
-    }
+    expect(patcher.graph.nodes, isEmpty, reason: 'a new patch opens empty');
     await tester.pumpAndSettle();
 
     PatchNode gui(String type, Offset position, {String args = ''}) {
@@ -783,11 +781,8 @@ void main() {
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
 
-    // An empty canvas: the demo seed would sit over the controls under test.
     final patcher = engine.patcher;
-    for (final id in patcher.graph.nodes.map((n) => n.id).toList()) {
-      patcher.removeNode(id);
-    }
+    expect(patcher.graph.nodes, isEmpty, reason: 'a new patch opens empty');
     await tester.pumpAndSettle();
 
     PatchNode gui(String type, Offset position, {String args = ''}) {
@@ -959,9 +954,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final patcher = engine.patcher;
-    for (final id in patcher.graph.nodes.map((n) => n.id).toList()) {
-      patcher.removeNode(id);
-    }
+    expect(patcher.graph.nodes, isEmpty, reason: 'a new patch opens empty');
     await tester.pumpAndSettle();
     patcher.undoScope.clear();
 
@@ -1089,11 +1082,8 @@ void main() {
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
 
-    // An empty canvas: the demo seed would sit over the control under test.
     final patcher = engine.patcher;
-    for (final id in patcher.graph.nodes.map((n) => n.id).toList()) {
-      patcher.removeNode(id);
-    }
+    expect(patcher.graph.nodes, isEmpty, reason: 'a new patch opens empty');
     await tester.pumpAndSettle();
 
     PatchNode gui(String type, Offset position, {String args = ''}) {
@@ -1233,11 +1223,8 @@ void main() {
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
 
-    // An empty canvas: the demo seed would sit over the control under test.
     final patcher = engine.patcher;
-    for (final id in patcher.graph.nodes.map((n) => n.id).toList()) {
-      patcher.removeNode(id);
-    }
+    expect(patcher.graph.nodes, isEmpty, reason: 'a new patch opens empty');
     await tester.pumpAndSettle();
 
     PatchNode gui(String type, Offset position) {
@@ -1410,11 +1397,8 @@ void main() {
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
 
-    // An empty canvas: the demo seed would sit over the control under test.
     final patcher = engine.patcher;
-    for (final id in patcher.graph.nodes.map((n) => n.id).toList()) {
-      patcher.removeNode(id);
-    }
+    expect(patcher.graph.nodes, isEmpty, reason: 'a new patch opens empty');
     await tester.pumpAndSettle();
 
     PatchNode gui(String type, Offset position, {String args = ''}) {
@@ -1591,11 +1575,8 @@ void main() {
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
 
-    // An empty canvas: the demo seed would sit over the controls under test.
     final patcher = engine.patcher;
-    for (final id in patcher.graph.nodes.map((n) => n.id).toList()) {
-      patcher.removeNode(id);
-    }
+    expect(patcher.graph.nodes, isEmpty, reason: 'a new patch opens empty');
     await tester.pumpAndSettle();
 
     PatchNode gui(String type, Offset position) {

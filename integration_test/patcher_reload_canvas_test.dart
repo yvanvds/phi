@@ -10,15 +10,15 @@ import 'package:phi/surfaces/patcher/patcher_node_view.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/lay_demo_chain.dart';
 
 /// End-to-end proof that the Patcher canvas is **rebuilt from a reloaded patch
 /// dump** (issue #308) through the real [PhiApp] — real rail navigation, layout
 /// and fonts — backed by a [FakePatcherGateway] so no native `libyse.dll` is
 /// touched.
 ///
-/// The surface only seeds its demo graph once (in the viewport's `initState`),
-/// so a patch opened *after* that first mount is never re-seeded. Duplicating
-/// the seeded patch therefore opens a copy whose native instance already holds
+/// The test lays a slider → sine → dac chain into the open patch and
+/// duplicates it. The copy's native instance already holds
 /// the graph (the reconciler parsed the duplicated dump) but whose editor mirror
 /// starts empty — exactly the reload / rename case. Before the fix that copy
 /// showed a blank canvas; now the editor rebuilds from the live instance, so the
@@ -43,9 +43,11 @@ void main() {
     await tester.pumpWidget(PhiApp(engine: engine, session: session));
     await tester.pumpAndSettle();
 
-    // Summon the Patcher surface — the engine seeded + opened a default patch,
-    // and the surface seeds the demo graph (slider → sine → dac) into it.
+    // Summon the Patcher surface — the engine seeded + opened a default patch —
+    // and lay a slider → sine → dac chain into it.
     await tester.tap(railFor(SurfaceId.patcher));
+    await tester.pumpAndSettle();
+    layDemoChain(engine.patcher);
     await tester.pumpAndSettle();
 
     final library = engine.patchLibrary;
@@ -60,8 +62,8 @@ void main() {
     await tester.tap(find.text('duplicate'));
     await tester.pumpAndSettle();
 
-    // The copy is now the open patch — a different address, never re-seeded by
-    // the surface — and its canvas shows the reconstructed three-node graph.
+    // The copy is now the open patch — a different address — and its canvas
+    // shows the reconstructed three-node graph.
     final copy = library.openAddress!;
     expect(copy, isNot(first));
     expect(copy.name, endsWith('_copy'));

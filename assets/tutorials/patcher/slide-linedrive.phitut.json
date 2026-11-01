@@ -1,0 +1,512 @@
+{
+  "title": "slide linedrive — smoothing and curves",
+  "covers": [
+    ".slide",
+    ".linedrive"
+  ],
+  "summary": "Smooth jumps and jitter with slide, rising and falling at different speeds, and map a fader onto an exponential curve that glides through line to a sine on master.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# slide linedrive — smoothing and curves\nslide moves its output part of the way towards each new number: with a slide of 3 it covers a third of the distance, so a jump arrives softened over several steps. Separate slides for rising and falling let it rise fast and fall slowly. linedrive maps a linear control onto an exponential curve, the way a fader should drive a frequency.\nMax's linedrive sends a target and a ramp time, ready for line. Here it sends the number alone: pack a time on behind it.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "100",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "510.0"
+        },
+        "parms": "10 10",
+        "type": ".slide",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "560.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "650.0"
+        },
+        "parms": "",
+        "type": ".slider",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "140.0",
+          "y": "650.0"
+        },
+        "parms": "127",
+        "type": ".*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "260.0",
+          "y": "650.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "140.0",
+          "y": "710.0"
+        },
+        "parms": "127 2000 1.06",
+        "type": ".linedrive",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "140.0",
+          "y": "760.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "140.0",
+          "y": "820.0"
+        },
+        "parms": "0. 300",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "300.0",
+          "y": "820.0"
+        },
+        "parms": "",
+        "type": ".l",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "140.0",
+          "y": "880.0"
+        },
+        "parms": "0.",
+        "type": ".line",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 2
+          },
+          "output 1": {
+            "Count": 0
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "160.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "140.0",
+          "y": "930.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "300.0",
+          "y": "880.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 23
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "140.0",
+          "y": "990.0"
+        },
+        "parms": "0.",
+        "type": "~sine",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 23
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "140.0",
+          "y": "1050.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 24
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "140.0",
+          "y": "1110.0"
+        },
+        "parms": "0.2",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 25
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 25
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "140.0",
+          "y": "1170.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. slide 3 12 smooths by 3 while rising and by 12 while falling. Click 100: 33.3, a third of the way. Click 100 again, or the button, which repeats the last number: 55.6, then 70.4, closing in. Click 0: it falls only a twelfth of the way each time.",
+        "type": ".text"
+      },
+      "object 27": {
+        "ID": 27,
+        "gui": {
+          "x": "640.0",
+          "y": "330.0",
+          "w": "300"
+        },
+        "parms": "2. Smoothing jitter. Turn on the toggle: twenty times a second random sends a number from 0 to 99, all over the place. slide 10 10 takes a tenth of each jump, so its output wanders slowly round the middle instead.",
+        "type": ".text"
+      },
+      "object 28": {
+        "ID": 28,
+        "gui": {
+          "x": "640.0",
+          "y": "480.0",
+          "w": "300"
+        },
+        "parms": "3. linedrive 127 2000 1.06 maps 0 to 127 onto a curve that ends at 2000: each step down divides by 1.06, so every 12 steps halve it, an octave. Drag the slider: the top gives 2000, halfway about 49.",
+        "type": ".text"
+      },
+      "object 29": {
+        "ID": 29,
+        "gui": {
+          "x": "640.0",
+          "y": "610.0",
+          "w": "300"
+        },
+        "parms": "4. pack 0. 300 puts a time of 300 ms behind each number, and line 0. glides there in floats: the target and time Max's linedrive would send. The number below line slides to each new value instead of jumping.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 30": {
+        "ID": 30,
+        "gui": {
+          "x": "640.0",
+          "y": "760.0",
+          "w": "300"
+        },
+        "parms": "5. Turn on the toggle beside line: it drives a sine on the master bus. Drag the slider and listen: equal moves sound like equal steps in pitch.",
+        "type": ".text"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "3 12",
+        "type": ".slide",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "270.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "350.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "400.0"
+        },
+        "parms": "50",
+        "type": ".metro",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "450.0"
+        },
+        "parms": "100",
+        "type": ".random",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "200.0",
+          "y": "450.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      }
+    }
+  }
+}

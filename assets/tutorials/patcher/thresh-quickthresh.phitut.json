@@ -1,0 +1,428 @@
+{
+  "title": "thresh quickthresh — notes into chords",
+  "covers": [
+    ".thresh",
+    ".quickthresh"
+  ],
+  "summary": "Group numbers that arrive close together into one list, with thresh waiting for a pause and quickthresh closing each group a fixed time after it starts.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# thresh quickthresh — notes into chords\nBoth collect numbers that arrive close together into one list. thresh sends it once nothing new has come for its argument, in milliseconds: each number starts the wait again. quickthresh sends it a fixed time after the first number, so a steady trickle never holds it up.\nThey work as Max's do. Here they keep time with the audio, so a group waits while the audio engine is stopped.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "60",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "180.0",
+          "y": "340.0"
+        },
+        "parms": "b",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "180.0",
+          "y": "390.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "180.0",
+          "y": "440.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "420.0",
+          "y": "340.0"
+        },
+        "parms": "b",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "420.0",
+          "y": "390.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "420.0",
+          "y": "440.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "60.0",
+          "y": "530.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "60.0",
+          "y": "580.0"
+        },
+        "parms": "150",
+        "type": ".metro",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "60.0",
+          "y": "640.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "2": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 3
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "170.0",
+          "y": "640.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "160.0"
+        },
+        "parms": "64",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Click the button on the right: trigger sends 60, 64 and 67 at once, and both list boxes show them as one chord, 60 64 67. The counts beside them say how many groups each has sent.",
+        "type": ".text"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "640.0",
+          "y": "290.0",
+          "w": "300"
+        },
+        "parms": "2. Play by hand: click 60, 64 and 67 one after another. thresh 300 waits until you pause for 300 ms, so however long you keep going it is one chord. quickthresh 300 sends 300 ms after the first click, and later clicks start a new group. A group of one number goes out as that number: the count goes up, but a list box shows only lists.",
+        "type": ".text"
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "640.0",
+          "y": "490.0",
+          "w": "300"
+        },
+        "parms": "3. Switch on the toggle: the counter counts up every 150 ms. The numbers never pause for 300 ms, so thresh holds on to them all, while quickthresh sends two or three at a time. Switch it off, and 300 ms later thresh sends every number since you switched on, as one long list.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "160.0"
+        },
+        "parms": "67",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "400.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "400.0",
+          "y": "210.0"
+        },
+        "parms": "67 64 60",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 2
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 2
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "280.0"
+        },
+        "parms": "300",
+        "type": ".thresh",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "300.0",
+          "y": "280.0"
+        },
+        "parms": "300",
+        "type": ".quickthresh",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "340.0"
+        },
+        "parms": "",
+        "type": ".l",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "300.0",
+          "y": "340.0"
+        },
+        "parms": "",
+        "type": ".l",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      }
+    }
+  }
+}

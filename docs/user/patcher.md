@@ -25,7 +25,8 @@ Every patch is a named project item. The patches strip lists them in a tree
 group. The `…` menu on a patch duplicates, renames or deletes it. Drag a patch
 to reorder it or move it between groups. Renaming refactors, and deleting
 warns you when an insert still uses the patch. A project that has no patch
-gets one to start with.
+gets an empty one to start with. It stays empty and silent until you add
+objects and press `START`.
 
 One patch is open on the canvas at a time. Click another patch to switch.
 
@@ -193,7 +194,30 @@ for:
   one tutorial), signal arithmetic (`~+`, `~-`, `~*`, `~/` and `~clip`, which
   share one tutorial), the lowpass and highpass (`~lp` and `~hp`) and the
   bandpass and resonant filter (`~bp` and `~vcf`).
-- **Time:** `metro`.
+- **Control math:** arithmetic (`+`, `-`, `*`, `/`, `%`, `!-` and `!/`),
+  comparisons (`==`, `!=`, `<`, `<=`, `>` and `>=`), logic and bits (`&&`,
+  `||`, `&`, `|`, `<<` and `>>`), ranges (`abs`, `round`, `clip`, `scale` and
+  `zmap`), math functions (`sin` to `atanh`, `atan2`, `pow` and `sqrt`),
+  expressions (`expr` and `vexpr`) and pitch and level conversions (`mtof`,
+  `ftom`, `dbtoa` and `atodb`). Each group shares one tutorial.
+- **Stateful math:** the counter (`counter`), the accumulator (`accum`),
+  change detection (`change` and `togedge`), thresholds and records (`past`,
+  `peak`, `trough`, `maximum` and `minimum`), running statistics (`mean`,
+  `histo` and `anal`), smoothing and curves (`slide` and `linedrive`), whole
+  division, swapping and folding (`div`, `swap` and `pong`) and polar
+  coordinates (`cartopol` and `poltocar`). Each group of two or more shares one
+  tutorial.
+- **Time:** the clock (`metro`), delays (`delay`, and `pipe` for numbers and
+  lists), control ramps (`line` and `bline`), rate limiting (`speedlim` and
+  `qlim`), measuring time (`timer` and `clocker`) and grouping notes into
+  chords (`thresh` and `quickthresh`). Each pair shares one tutorial.
+- **Transport, tempo and domain clocks:** starting, stopping and reading a
+  named clock (`transport`), counting notes on it (`tempo`), a bang at a beat
+  (`timepoint`), a clock for `metro` and `delay` to count beats on
+  (`setclock`), asking where a clock is (`when`) and converting between
+  milliseconds, beats, ticks and Hz (`translate`). These clocks belong to the
+  patch: `START` does not start them, and a patch cannot follow one of Phi's
+  time domains yet.
 
 Each tutorial is a small working patch, with numbered notes that walk you
 through it. Where Phi's object differs from the Max object of the same name,
@@ -201,8 +225,10 @@ the tutorial says so.
 
 A tutorial opens read-only, in run mode. A banner reads
 `TUTORIAL — READ-ONLY · <title>` instead of the placement bar, and `Ctrl+E`
-does nothing. If the tutorial contains an audio output, you hear it on the
-master bus. Use `COPY TO PROJECT` to get an editable copy under
+does nothing. A tutorial runs while it is open, so its ramps (`line`) and
+delays (`delay`, `pipe`) move without you pressing `START`. If it contains an
+audio output, you hear it on the master bus. Your own patch is left as it was:
+opening a tutorial does not start it. Use `COPY TO PROJECT` to get an editable copy under
 `patch.tutorials`. Use `CLOSE` to go back to your own patch. Opening a
 project patch also closes it. A tutorial is never saved with the project
 unless you copy it.

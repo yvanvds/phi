@@ -1,0 +1,484 @@
+{
+  "title": "div swap pong — whole parts, crossed pairs, folding",
+  "covers": [
+    ".div",
+    ".swap",
+    ".pong"
+  ],
+  "summary": "Divide into a whole part and a remainder, cross a pair of numbers with swap, and fold, wrap or clip a number into a range with pong.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# div swap pong — whole parts, crossed pairs, folding\ndiv divides and keeps the whole part, as an int, and % gives what is left over. swap sends a pair out crossed: the number from its left inlet leaves the right outlet, then the one from its right inlet leaves the left outlet. pong keeps a number between two limits by folding it back from them, wrapping it round, or clipping it.\nMax has no div: its / divides whole numbers this way. Here / always sends a float, so use div, which truncates toward zero.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "17",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "410.0"
+        },
+        "parms": "",
+        "type": ".swap",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 2
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 13
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "460.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "170.0",
+          "y": "460.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "520.0"
+        },
+        "parms": "0. 0.",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "570.0"
+        },
+        "parms": "",
+        "type": ".l",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "60.0",
+          "y": "650.0"
+        },
+        "parms": "13",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "170.0",
+          "y": "650.0"
+        },
+        "parms": "-3",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "280.0",
+          "y": "650.0"
+        },
+        "parms": "25",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "60.0",
+          "y": "700.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 21
+            },
+            "2": {
+              "Inlet": 0,
+              "Object": 23
+            },
+            "Count": 3
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "60.0",
+          "y": "760.0"
+        },
+        "parms": "0 10",
+        "type": ".pong",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "160.0"
+        },
+        "parms": "-17",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "60.0",
+          "y": "810.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "200.0",
+          "y": "760.0"
+        },
+        "parms": "0 10 2",
+        "type": ".pong",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "200.0",
+          "y": "810.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "340.0",
+          "y": "760.0"
+        },
+        "parms": "0 10 1",
+        "type": ".pong",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 24
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "340.0",
+          "y": "810.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Click 17: div 5 gives 3 and % 5 the remainder 2, as 17 = 3 × 5 + 2. Click -17: -3 and -2, both keeping the sign. Click 0, which sets div's divisor to 0, then 17 again: div sends 0.",
+        "type": ".text"
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "640.0",
+          "y": "290.0",
+          "w": "300"
+        },
+        "parms": "2. swap crosses a pair. Click 7, which is stored, then 3: 7 comes out on the left and 3 on the right. The right outlet sends first, so pack gets the pair in the order its hot left inlet needs, and sends the list 7 3.",
+        "type": ".text"
+      },
+      "object 27": {
+        "ID": 27,
+        "gui": {
+          "x": "640.0",
+          "y": "440.0",
+          "w": "300"
+        },
+        "parms": "3. pong 0 10 folds: 13 is 3 past the top, so it comes back to 7, like a ball off a wall. A third argument picks the mode: 2 wraps round, so 13 becomes 3, as on a clock; 1 clips, to 10. Click -3 and 25 too.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "160.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "5",
+        "type": ".div",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "170.0",
+          "y": "220.0"
+        },
+        "parms": "5",
+        "type": ".%",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "270.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "170.0",
+          "y": "270.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "350.0"
+        },
+        "parms": "3",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "170.0",
+          "y": "350.0"
+        },
+        "parms": "7",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

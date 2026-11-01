@@ -18,6 +18,7 @@ import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/lay_demo_chain.dart';
 
 /// End-to-end proof of **colour instead of glyphs** (issue #380, design §5 +
 /// §12.4) through the real [PhiApp] — real rail navigation, real palette, real
@@ -84,8 +85,11 @@ void main() {
     await tester.pumpWidget(PhiApp(engine: engine, session: session));
     await tester.pumpAndSettle();
 
-    // Summon the Patcher surface, which seeds slider → sine → dac.
+    // Summon the Patcher surface and lay slider → sine → dac into its empty
+    // patch.
     await tester.tap(railFor(SurfaceId.patcher));
+    await tester.pumpAndSettle();
+    layDemoChain(engine.patcher);
     await tester.pumpAndSettle();
 
     final patcher = engine.patcher;
@@ -176,14 +180,14 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    final seeded = patcher.graph.nodes.length;
+    final before = patcher.graph.nodes.length;
     await doubleClickAt(const Offset(220, 380));
     await type('*');
     await press(LogicalKeyboardKey.enter);
 
     // Nothing was created, and the list stayed up with both candidates in the
     // colours that separate them — the choice is visible rather than guessed.
-    expect(patcher.graph.nodes, hasLength(seeded));
+    expect(patcher.graph.nodes, hasLength(before));
     expect(find.byKey(PatchInlineObjectBox.rejectKey), findsOneWidget);
     expect(
       find.text('pick one · ${Obj.gMultiply} or ${Obj.dMultiply}'),
@@ -207,7 +211,7 @@ void main() {
     await press(LogicalKeyboardKey.arrowDown);
     await press(LogicalKeyboardKey.enter);
 
-    expect(patcher.graph.nodes, hasLength(seeded + 1));
+    expect(patcher.graph.nodes, hasLength(before + 1));
     final made = patcher.graph.nodes.last;
     expect(made.type, Obj.dMultiply);
     // …and the gateway was asked for the canonical id, not the bare name.
@@ -230,7 +234,7 @@ void main() {
     await type('sine 220');
     await press(LogicalKeyboardKey.enter);
 
-    expect(patcher.graph.nodes, hasLength(seeded + 2));
+    expect(patcher.graph.nodes, hasLength(before + 2));
     expect(patcher.graph.nodes.last.type, Obj.dSine);
     expect(onCanvas('sine 220'), findsOneWidget);
 

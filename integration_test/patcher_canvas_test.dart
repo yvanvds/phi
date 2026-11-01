@@ -13,6 +13,7 @@ import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/lay_demo_chain.dart';
 
 /// End-to-end proof of the reworked patcher canvas (issue #222) through the real
 /// [PhiApp] — real rail navigation, layout, fonts — backed by a
@@ -54,8 +55,10 @@ void main() {
 
       await tester.tap(railFor(SurfaceId.patcher));
       await tester.pumpAndSettle();
+      layDemoChain(engine.patcher);
+      await tester.pumpAndSettle();
 
-      // The seed lays down slider → sine → dac (3 nodes, 2 cables).
+      // The laid chain: slider → sine → dac (3 nodes, 2 cables).
       expect(find.byType(PatcherNodeView), findsNWidgets(3));
       final graph = engine.patcher.graph;
       expect(graph.cables, hasLength(2));

@@ -1,0 +1,344 @@
+{
+  "title": "tempo — counting notes on a domain clock",
+  "covers": [
+    ".tempo"
+  ],
+  "summary": "Count quarter notes, eighths and sixteenths on a domain clock, mark the bars, and change the tempo while it runs.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# tempo — counting notes on a domain clock\ntempo counts notes on the domain clock named by its first argument: tempo groove 120 1 4 sends 0 1 2 3 on every quarter note, round and round. Then come the tempo it writes onto the clock as it starts, a multiplier, and the division, which is the length of the cycle.\nMax's tempo keeps its own time, 5 to 300 BPM. Here it is the clock's, and not limited.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "360.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "200.0",
+          "y": "360.0"
+        },
+        "parms": "0",
+        "type": ".sel",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "Count": 0
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "200.0",
+          "y": "410.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "200.0",
+          "y": "460.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "340.0",
+          "y": "360.0"
+        },
+        "parms": "b",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "340.0",
+          "y": "410.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "340.0",
+          "y": "460.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Switch on the toggle: tempo writes 120 BPM onto the groove clock and counts quarter notes, 0 1 2 3 and round again, starting with 0 at once. Each time the count comes back to 0, sel 0 bangs and the middle count goes up: a bar of four. The right count adds up every step.",
+        "type": ".text"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "640.0",
+          "y": "330.0",
+          "w": "300"
+        },
+        "parms": "2. 60, 120 and 180 go to the second inlet: a new tempo, written to the clock at once, so the count slows down or speeds up without missing a step. It changes the tempo for everything on groove.",
+        "type": ".text"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "640.0",
+          "y": "460.0",
+          "w": "300"
+        },
+        "parms": "3. The last inlet sets the division, the note value as a fraction of a whole note: 4 counts quarter notes, 8 eighths and 16 sixteenths. It is the length of the cycle too, so 16 counts 0 to 15. The count keeps its place.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "120.0",
+          "y": "160.0"
+        },
+        "parms": "60",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "640.0",
+          "y": "610.0",
+          "w": "300"
+        },
+        "parms": "4. Switch the toggle off to stop counting: the clock runs on. tempo never makes a clock: setclock groove 120 makes this one, running from the start (see the setclock tutorial). Without it, the count would wait.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "230.0",
+          "y": "160.0"
+        },
+        "parms": "120",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "340.0",
+          "y": "160.0"
+        },
+        "parms": "180",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "120.0",
+          "y": "220.0"
+        },
+        "parms": "4",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 3,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "230.0",
+          "y": "220.0"
+        },
+        "parms": "8",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 3,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "340.0",
+          "y": "220.0"
+        },
+        "parms": "16",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 3,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "460.0",
+          "y": "160.0"
+        },
+        "parms": "groove 120",
+        "type": ".setclock",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "300.0"
+        },
+        "parms": "groove 120 1 4",
+        "type": ".tempo",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "2": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 3
+          }
+        }
+      }
+    }
+  }
+}

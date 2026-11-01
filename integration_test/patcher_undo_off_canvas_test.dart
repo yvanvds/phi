@@ -49,12 +49,10 @@ void main() {
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
 
-    // An empty canvas with one node of our own, near the origin so it is on
-    // screen whatever the side panels cost.
     final patcher = engine.patcher;
-    for (final id in patcher.graph.nodes.map((n) => n.id).toList()) {
-      patcher.removeNode(id);
-    }
+    expect(patcher.graph.nodes, isEmpty, reason: 'a new patch opens empty');
+    // One node of our own, near the origin so it is on screen whatever the
+    // side panels cost.
     const start = Offset(48, 40);
     final sine = patcher.addNode(
       desc: NodeTypeRegistry.instance.find(PatchObjectTypes.dSine)!,

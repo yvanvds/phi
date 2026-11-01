@@ -3,125 +3,125 @@
   "covers": [
     ".metro"
   ],
-  "summary": "Start and stop a metro from a toggle, set its interval from a number box, and count its ticks.",
+  "summary": "Start and stop a metro from a toggle, bang and stop, change its interval while it runs, and count its ticks.",
   "payload": {
     "dump": {
       "object 0": {
         "ID": 0,
         "gui": {
-          "w": "520",
           "x": "40.0",
-          "y": "20.0"
+          "y": "20.0",
+          "w": "640"
         },
-        "parms": "# metro\nA steady pulse: while it runs, metro sends a bang at a regular interval, starting with one the moment it starts.",
+        "parms": "# metro — a steady pulse of bangs\nA steady pulse: while it runs, metro sends a bang at a regular interval, starting with one the moment it starts. The argument is the interval in milliseconds, 1000 by default, and the right inlet changes it.\nMax's metro can count in note values on the transport. Here it counts milliseconds, or beats on a domain clock bound with clock <name>: see the setclock tutorial.",
         "type": ".text"
       },
       "object 1": {
         "ID": 1,
         "gui": {
           "x": "60.0",
-          "y": "130.0"
+          "y": "160.0"
         },
+        "parms": "",
+        "type": ".t",
         "outputs": {
           "output 0": {
             "0": {
               "Inlet": 0,
-              "Object": 4
+              "Object": 8
             },
             "Count": 1
           }
-        },
-        "parms": "",
-        "type": ".t"
+        }
       },
       "object 10": {
         "ID": 10,
         "gui": {
-          "w": "300",
-          "x": "340.0",
-          "y": "320.0"
+          "x": "60.0",
+          "y": "400.0"
         },
-        "parms": "3. Every tick adds one to the counter. The button beside it does not light on ticks yet (it lights when you click it); that needs an update to the engine wrapper (issue #519).",
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Click the toggle to start the metro: it sends 1, and any non-zero number starts it. The count below goes up at once, for the bang a metro sends as it starts, then every half second. Click again to send 0 and stop it.",
+        "type": ".text"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "640.0",
+          "y": "310.0",
+          "w": "300"
+        },
+        "parms": "2. The right inlet sets the interval in milliseconds. loadmess put 500 into the number box when this patch loaded. While the metro runs, click 125: it ticks four times as fast, without stopping. Click 1000 for one tick a second, or drag the number.",
+        "type": ".text"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "640.0",
+          "y": "480.0",
+          "w": "300"
+        },
+        "parms": "3. bang starts a stopped metro too, and restarts a running one from now, with a tick at once. stop stops it, as 0 does. The toggle shows only your own clicks on it, so it can read on while the metro is stopped.",
         "type": ".text"
       },
       "object 2": {
         "ID": 2,
         "gui": {
-          "x": "170.0",
-          "y": "120.0"
+          "x": "120.0",
+          "y": "160.0"
         },
+        "parms": "bang",
+        "type": ".m",
         "outputs": {
           "output 0": {
             "0": {
               "Inlet": 0,
-              "Object": 3
+              "Object": 8
             },
             "Count": 1
           }
-        },
-        "parms": "500",
-        "type": ".loadmess"
+        }
       },
       "object 3": {
         "ID": 3,
         "gui": {
-          "x": "170.0",
-          "y": "180.0"
+          "x": "230.0",
+          "y": "160.0"
         },
+        "parms": "stop",
+        "type": ".m",
         "outputs": {
           "output 0": {
             "0": {
-              "Inlet": 1,
-              "Object": 4
+              "Inlet": 0,
+              "Object": 8
             },
             "Count": 1
           }
-        },
-        "parms": "",
-        "type": ".i"
+        }
       },
       "object 4": {
         "ID": 4,
         "gui": {
-          "x": "60.0",
-          "y": "250.0"
+          "x": "360.0",
+          "y": "160.0"
         },
-        "outputs": {
-          "output 0": {
-            "0": {
-              "Inlet": 0,
-              "Object": 5
-            },
-            "1": {
-              "Inlet": 0,
-              "Object": 6
-            },
-            "Count": 2
-          }
-        },
-        "parms": "500",
-        "type": ".metro"
-      },
-      "object 5": {
-        "ID": 5,
-        "gui": {
-          "x": "60.0",
-          "y": "330.0"
-        },
-        "outputs": {
-          "output 0": {
-            "Count": 0
-          }
-        },
-        "parms": "",
-        "type": ".b"
-      },
-      "object 6": {
-        "ID": 6,
-        "gui": {
-          "x": "170.0",
-          "y": "330.0"
-        },
+        "parms": "125",
+        "type": ".m",
         "outputs": {
           "output 0": {
             "0": {
@@ -130,43 +130,97 @@
             },
             "Count": 1
           }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "470.0",
+          "y": "160.0"
         },
-        "parms": "",
-        "type": ".counter"
+        "parms": "1000",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "470.0",
+          "y": "230.0"
+        },
+        "parms": "500",
+        "type": ".loadmess",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
       },
       "object 7": {
         "ID": 7,
         "gui": {
-          "x": "170.0",
-          "y": "400.0"
-        },
-        "outputs": {
-          "output 0": {
-            "Count": 0
-          }
+          "x": "360.0",
+          "y": "230.0"
         },
         "parms": "",
-        "type": ".i"
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
       },
       "object 8": {
         "ID": 8,
         "gui": {
-          "w": "300",
-          "x": "340.0",
-          "y": "120.0"
+          "x": "60.0",
+          "y": "290.0"
         },
-        "parms": "1. Click the toggle to start the metro — any non-zero number starts it. Click again to send 0 and stop it.",
-        "type": ".text"
+        "parms": "500",
+        "type": ".metro",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
       },
       "object 9": {
         "ID": 9,
         "gui": {
-          "w": "300",
-          "x": "340.0",
-          "y": "200.0"
+          "x": "60.0",
+          "y": "350.0"
         },
-        "parms": "2. The right inlet sets the interval in milliseconds. loadmess put 500 into the number box when this patch loaded; drag the number to change the speed. A running metro keeps going at the new interval.",
-        "type": ".text"
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
       }
     }
   }

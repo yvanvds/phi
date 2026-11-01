@@ -2976,7 +2976,8 @@ main + app          (orchestration)
   `PhiEngine(patchTutorialSource:)`); `PatchLibraryController` loads the index
   on start and opens a tutorial as a `PatchTutorialSession` — a **transient
   native patcher that is not a registry entity** (never journaled or saved),
-  mounted on master only when it holds a `~dac`, whose editor `openEditor`
+  mounted on master while open (every tutorial, a silent one too: #528),
+  whose editor `openEditor`
   answers while it is open; opening a project patch, a rebind, a session
   restart and dispose close it. UI (`lib/surfaces/patcher/tutorial/`): the
   reference panel's **Open tutorial** button (only when the type has one), a
@@ -2996,20 +2997,47 @@ main + app          (orchestration)
   `function` and `preset` ship their points and slots as saved object state
   in the dump) and the audio basics (#494: `sine`, `saw`, `noise`, `sig-line`,
   `adc-dac` for `~adc` + `~dac`, `signal-math` for `~+ ~- ~* ~/ ~clip`,
-  `lp-hp`, `bp-vcf`). Covered by domain unit tests, a `patch_library_tutorial_test`, a real-engine
+  `lp-hp`, `bp-vcf`) and control math (#495: `arithmetic`, `comparison`,
+  `logic`, `range`, `math-functions`, `expr`, `conversions`, each shared by
+  its group of types), stateful math (#496: `counter`, `accum`,
+  `change-togedge`, `extremes`, `statistics`, `slide-linedrive`,
+  `div-swap-pong`, `cartopol-poltocar`), time (#497: `metro`, `delay`,
+  `pipe`, `line-bline`, `speedlim-qlim`, `timer-clocker`,
+  `thresh-quickthresh`) and domain clocks (#498: `transport`, `tempo`,
+  `timepoint`, `setclock`, `when`, `translate`). Those six reach a libYSE
+  domain clock by name; their clocks advance with the audio blocks whether or
+  not the patch is mounted, are never destroyed by a patch object, and are not
+  Phi's time domains (Phi mints its own `phi.midi.*` / `phi.metronome`
+  clocks; a patch following a `TimeDomain` is #529). On libYSE 3.1.0
+  `.line`, `.delay`, `.pipe`, `.thresh`, `.quickthresh`, `.speedlim`, `.qlim`
+  and `.makenote`'s note-off run
+  on the audio clock, only in a mounted, rendered patch (`.metro`, `.clocker`
+  and `.timer` run on wall-clock time), which is why every tutorial is mounted
+  (#528); the tutorial is its own session and never mounts the user's patch
+  (#523). Covered by domain unit tests, a `patch_library_tutorial_test`, a real-engine
   `patcher_tutorial_assets_engine_test` (every index entry has a file, every
   type exists in the engine, every payload parses, a report of uncovered
   types), surface/reference-panel widget tests, and an end-to-end
   `patcher_tutorial` integration test on the real patcher engine and asset
-  bundle. Content issues add per-tutorial cases to the asset test that
+  bundle; `patcher_control_ramp_tutorial` proves a control-only tutorial's
+  `.line` glides on the canvas (#528). Content issues add per-tutorial cases to the asset test that
   replay what each tutorial's notes promise on the real engine (objects found
   by type + canvas position), plus an end-to-end run per batch
   (`patcher_gui_basics_tutorials`, `patcher_single_value_controls_tutorials`,
   `patcher_selection_slider_controls_tutorials`,
   `patcher_structured_controls_tutorials`,
-  `patcher_audio_basics_tutorials`: each opens its tutorials
+  `patcher_audio_basics_tutorials`,
+  `patcher_control_math_tutorials`,
+  `patcher_stateful_math_tutorials`,
+  `patcher_time_tutorials`,
+  `patcher_clock_domain_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
-  that no note or object overlaps another). The audio cases mount the
+  that no note or object overlaps another). Every one of them opens a
+  tutorial through the shared `openTutorialBySearch(tester, type)` helper in
+  `test/surfaces/patcher/test_support/open_tutorial_by_search.dart` (#527),
+  which types into the browser's search field only while the window is
+  active, re-asks for the keyboard and checks the field got the text; new
+  tutorial tests use it too. The audio cases mount the
   tutorial on master and read the offline session's master meter
   (`renderOffline` + `Channel.master.peakLinearPost`) to check what is
   heard.

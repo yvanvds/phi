@@ -1,0 +1,364 @@
+{
+  "title": "timepoint — a bang at a beat",
+  "covers": [
+    ".timepoint"
+  ],
+  "summary": "Bang once when a domain clock reaches a beat, set the beat a few beats ahead of now, and disarm and re-arm the watch.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# timepoint — a bang at a beat\ntimepoint bangs once when the domain clock named by its first argument reaches a beat: its second argument, or a number sent to it, which arms it again. It only watches the clock, and never makes one.\nMax's timepoint takes bars, beats and units on the transport. Here the time is a beat, and a beat the clock has already passed never bangs.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "420.0",
+          "y": "160.0"
+        },
+        "parms": "score 60",
+        "type": ".setclock",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "360.0",
+          "y": "260.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "470.0",
+          "y": "260.0"
+        },
+        "parms": "1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "360.0",
+          "y": "320.0"
+        },
+        "parms": "active",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "220.0",
+          "y": "380.0"
+        },
+        "parms": "score 0",
+        "type": ".timepoint",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "220.0",
+          "y": "440.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "220.0",
+          "y": "490.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "360.0",
+          "y": "440.0"
+        },
+        "parms": "score",
+        "type": ".when",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "Count": 0
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "360.0",
+          "y": "490.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. setclock score 60 makes a clock that runs from the start at 60 BPM, a beat a second. Switch on the toggle: metro asks when for the beat four times a second, and the box shows it climbing.",
+        "type": ".text"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "640.0",
+          "y": "290.0",
+          "w": "300"
+        },
+        "parms": "2. Click the button: when reads the beat now, + 4. adds four, and the sum sets timepoint. Four seconds later it bangs: the count goes up, and the box beside it shows the beat it fired at.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "640.0",
+          "y": "420.0",
+          "w": "300"
+        },
+        "parms": "3. Or type a beat into the box above timepoint. A little ahead of the clock, it bangs when the clock gets there. A beat already passed never bangs: a domain clock has no rewind, so that moment will not come again.",
+        "type": ".text"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "640.0",
+          "y": "570.0",
+          "w": "300"
+        },
+        "parms": "4. 0 and 1 go through prepend as active 0 and active 1. active 0 stops timepoint watching, so a beat it was waiting for goes by. active 1 arms it again, and a beat still ahead bangs as usual.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "60.0",
+          "y": "210.0"
+        },
+        "parms": "250",
+        "type": ".metro",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "260.0"
+        },
+        "parms": "score",
+        "type": ".when",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "Count": 0
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "320.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "220.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "220.0",
+          "y": "210.0"
+        },
+        "parms": "score",
+        "type": ".when",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "Count": 0
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "220.0",
+          "y": "260.0"
+        },
+        "parms": "4.",
+        "type": ".+",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "220.0",
+          "y": "320.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

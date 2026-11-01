@@ -12,13 +12,14 @@ import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/lay_demo_chain.dart';
 
 /// End-to-end proof that the patcher's GUI bodies **follow the engine** — and
 /// that they stop doing so the moment nobody is looking (issue #357).
 ///
 /// A value arriving over a *cable* moves the native object and tells the Dart
 /// side nothing, so every live body used to show whatever it last pushed
-/// itself: the seeded `slider → ~sine` patch could be driven from a script or a
+/// itself: a laid `slider → ~sine` patch could be driven from a script or a
 /// second editor and the canvas would sit there lying about it. This drives the
 /// fake gateway's objects directly — the same thing a cable does, with nothing
 /// said to the mirror — through the real [PhiApp]: real rail navigation, real
@@ -34,7 +35,7 @@ void main() {
   Finder railFor(SurfaceId id) =>
       find.byWidgetPredicate((w) => w is RailButton && w.label == id.label);
 
-  /// The seeded `.slider`'s fader — scoped to its node body, because the Mix
+  /// The laid `.slider`'s fader — scoped to its node body, because the Mix
   /// surface this test parks the patcher behind is full of faders of its own,
   /// and reachable offstage, because half the point is what happens there.
   final sliderFader = find.descendant(
@@ -53,7 +54,7 @@ void main() {
     );
     final session = SessionState();
 
-    /// Land [value] on a seeded object the way the graph itself would — write
+    /// Land [value] on a laid object the way the graph itself would — write
     /// the native object, tell Dart nothing. A logical node id mirrors the
     /// native handle the gateway keys its objects by.
     void driveFromEngine(PatchNodeId id, String value) =>
@@ -71,8 +72,11 @@ void main() {
     await tester.pumpWidget(PhiApp(engine: engine, session: session));
     await tester.pumpAndSettle();
 
-    // Summon the Patcher surface, which seeds slider → sine → dac.
+    // Summon the Patcher surface and lay slider → sine → dac into its empty
+    // patch.
     await tester.tap(railFor(SurfaceId.patcher));
+    await tester.pumpAndSettle();
+    layDemoChain(engine.patcher);
     await tester.pumpAndSettle();
 
     final sine = engine.patcher.graph.nodes.firstWhere(

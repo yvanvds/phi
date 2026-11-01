@@ -21,7 +21,6 @@ import 'package:phi/surfaces/patcher/palette/patcher_palette.dart';
 import 'package:phi/surfaces/patcher/palette/patcher_palette_tab.dart';
 import 'package:phi/surfaces/patcher/patcher_node_view.dart';
 import 'package:phi/surfaces/patcher/tutorial/patch_tutorial_bar.dart';
-import 'package:phi/surfaces/patcher/tutorial/patch_tutorial_browser.dart';
 import 'package:yse/yse.dart';
 
 import '../test/domain/project/test_doubles/fake_app_settings_store.dart';
@@ -30,6 +29,7 @@ import '../test/domain/project/test_doubles/fake_project_directory_picker.dart';
 import '../test/domain/project/test_doubles/fake_project_store.dart';
 import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/open_tutorial_by_search.dart';
 
 /// End-to-end proof of the **audio basics tutorials** (issue #494)
 /// through the real [PhiApp]: real rail navigation, fonts and layout, the real
@@ -96,11 +96,20 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
-    // The surface's first visit seeds a demo sine into the empty project patch
-    // and mounts it on master (#523). Silence it so the meter hears only the
-    // tutorials.
-    engine.patcher.unmountAudio();
+    // The first visit leaves the new project's empty patch empty and stopped
+    // (#523): nothing is mounted, and master stays silent, so the meter below
+    // hears only the tutorials.
+    expect(engine.patcher.graph.nodes, isEmpty);
     expect(gateway.isSourceReady(engine.patcher.instanceId), isFalse);
+    var idle = 0.0;
+    for (var i = 0; i < 400; i++) {
+      System.instance
+        ..renderOffline(1)
+        ..update();
+      final p = Channel.master.peakLinearPost();
+      if (p > idle) idle = p;
+    }
+    expect(idle, 0, reason: 'nothing plays before a tutorial opens');
     await tester.tap(
       find.byKey(PatcherPalette.tabKey(PatcherPaletteTab.tutorials)),
     );
@@ -119,17 +128,8 @@ void main() {
       required int notes,
       required String heading,
     }) async {
-      // The DSP section sits far down the list: search for the type, the way
-      // a user finds it.
-      final search = find.byKey(PatchTutorialBrowser.searchKey);
-      await tester.tap(search);
-      await tester.pumpAndSettle();
-      await tester.enterText(search, type);
-      await tester.pumpAndSettle();
-      final entry = find.byKey(PatchTutorialBrowser.entryKey(type));
-      await tester.ensureVisible(entry);
-      await tester.tap(entry);
-      await tester.pumpAndSettle();
+      // Search for the type, the way a user finds it (#524, #527).
+      await openTutorialBySearch(tester, type);
       final tutorial = library.tutorial;
       expect(tutorial, isNotNull, reason: type);
       expect(tutorial!.slug, slug);
@@ -157,29 +157,28 @@ void main() {
                   '${boxes[j].$1.type} ${boxes[j].$2}',
       ];
       expect(overlaps, isEmpty, reason: '$slug: overlapping nodes');
-      if (tutorial.mounted) {
-        // libyse sets the new sound up on a worker thread, in wall-clock
-        // time, while an offline render runs far ahead of real time. Render
-        // with real pauses until the sound is in the mix, so that nothing
-        // below measures blocks rendered before it joined (#525).
-        for (var i = 0; i < 5000; i++) {
-          if (gateway.isSourceReady(tutorial.instanceId)) break;
-          System.instance
-            ..renderOffline(1)
-            ..update();
-          await Future<void>.delayed(const Duration(milliseconds: 1));
-        }
-        expect(
-          gateway.isSourceReady(tutorial.instanceId),
-          isTrue,
-          reason: '$slug joined the mix',
-        );
-        // And let whatever the last tutorial left ringing drain away.
-        for (var i = 0; i < 20; i++) {
-          System.instance
-            ..renderOffline(1)
-            ..update();
-        }
+      // Every tutorial is mounted while open, a silent one too (#528).
+      // libyse sets the new sound up on a worker thread, in wall-clock
+      // time, while an offline render runs far ahead of real time. Render
+      // with real pauses until the sound is in the mix, so that nothing
+      // below measures blocks rendered before it joined (#525).
+      for (var i = 0; i < 5000; i++) {
+        if (gateway.isSourceReady(tutorial.instanceId)) break;
+        System.instance
+          ..renderOffline(1)
+          ..update();
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      expect(
+        gateway.isSourceReady(tutorial.instanceId),
+        isTrue,
+        reason: '$slug joined the mix',
+      );
+      // And let whatever the last tutorial left ringing drain away.
+      for (var i = 0; i < 20; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
       }
       final graph = gateway.enumerate(tutorial.instanceId);
       return (String t, double x, double y) => graph.objects
@@ -195,11 +194,11 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    // Closes the tutorial. Back on the project patch, the demo seed plays
-    // again (#523): silence it too.
+    // Closes the tutorial. Back on the project patch, which is still empty
+    // and stopped (#523).
     Future<void> close() async {
       await tap(find.byKey(PatchTutorialBar.closeKey));
-      engine.patcher.unmountAudio();
+      expect(gateway.isSourceReady(engine.patcher.instanceId), isFalse);
     }
 
     double read(int id) => double.parse(value(id));
@@ -278,7 +277,6 @@ void main() {
       notes: 5,
       heading: 'A ~sine is an oscillator',
     );
-    expect(library.tutorial!.mounted, isTrue, reason: 'audible on master');
     expect(loudness(), lessThan(1e-4), reason: 'silent until switched on');
     await tap(toggleAt(170, 260));
     final sine = loudness();

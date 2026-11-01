@@ -1,0 +1,1069 @@
+{
+  "title": "sin cos tan pow sqrt … — math functions",
+  "covers": [
+    ".sin",
+    ".cos",
+    ".tan",
+    ".asin",
+    ".acos",
+    ".atan",
+    ".atan2",
+    ".sinh",
+    ".cosh",
+    ".tanh",
+    ".asinh",
+    ".acosh",
+    ".atanh",
+    ".pow",
+    ".sqrt"
+  ],
+  "summary": "Try the trigonometric and hyperbolic functions, build a slow LFO from counter and sin that sweeps a sine on master, bend a slider with pow and sqrt, and find an angle with atan2.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# sin cos tan pow sqrt … — math functions\nsin, cos and tan take an angle in radians; asin, acos, atan and atan2 give one back. The hyperbolic six, sinh to atanh, take any number. pow raises its left input to the power in its right inlet, and sqrt takes a square root. Each sends a float.\nMax sends nan or inf where a result has no finite value. Here such inputs send 0: sqrt of a negative number, asin or acos outside -1 to 1, acosh below 1.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "0.5",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "240.0",
+          "y": "330.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "330.0",
+          "y": "280.0"
+        },
+        "parms": "",
+        "type": ".asin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "330.0",
+          "y": "330.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "420.0",
+          "y": "280.0"
+        },
+        "parms": "",
+        "type": ".acos",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "420.0",
+          "y": "330.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "510.0",
+          "y": "280.0"
+        },
+        "parms": "",
+        "type": ".atan",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "510.0",
+          "y": "330.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "60.0",
+          "y": "390.0"
+        },
+        "parms": "",
+        "type": ".sinh",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "60.0",
+          "y": "440.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "150.0",
+          "y": "390.0"
+        },
+        "parms": "",
+        "type": ".cosh",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "160.0"
+        },
+        "parms": "2.",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "150.0",
+          "y": "440.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "240.0",
+          "y": "390.0"
+        },
+        "parms": "",
+        "type": ".tanh",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "240.0",
+          "y": "440.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "330.0",
+          "y": "390.0"
+        },
+        "parms": "",
+        "type": ".asinh",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 24
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "330.0",
+          "y": "440.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "420.0",
+          "y": "390.0"
+        },
+        "parms": "",
+        "type": ".acosh",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 26
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "420.0",
+          "y": "440.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 27": {
+        "ID": 27,
+        "gui": {
+          "x": "510.0",
+          "y": "390.0"
+        },
+        "parms": "",
+        "type": ".atanh",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 28
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 28": {
+        "ID": 28,
+        "gui": {
+          "x": "510.0",
+          "y": "440.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 29": {
+        "ID": 29,
+        "gui": {
+          "x": "60.0",
+          "y": "520.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 30
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 39
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "160.0"
+        },
+        "parms": "-3",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 30": {
+        "ID": 30,
+        "gui": {
+          "x": "60.0",
+          "y": "570.0"
+        },
+        "parms": "50",
+        "type": ".metro",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 31
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 31": {
+        "ID": 31,
+        "gui": {
+          "x": "60.0",
+          "y": "620.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 32
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 32": {
+        "ID": 32,
+        "gui": {
+          "x": "60.0",
+          "y": "670.0"
+        },
+        "parms": "40",
+        "type": ".%",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 33
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 33": {
+        "ID": 33,
+        "gui": {
+          "x": "60.0",
+          "y": "720.0"
+        },
+        "parms": "0.15708",
+        "type": ".*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 34
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 34": {
+        "ID": 34,
+        "gui": {
+          "x": "60.0",
+          "y": "780.0"
+        },
+        "parms": "",
+        "type": ".sin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 35
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 36
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 35": {
+        "ID": 35,
+        "gui": {
+          "x": "200.0",
+          "y": "780.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 36": {
+        "ID": 36,
+        "gui": {
+          "x": "60.0",
+          "y": "840.0"
+        },
+        "parms": "-1 1 300 600",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 37
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 37": {
+        "ID": 37,
+        "gui": {
+          "x": "60.0",
+          "y": "890.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 38
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 38": {
+        "ID": 38,
+        "gui": {
+          "x": "60.0",
+          "y": "950.0"
+        },
+        "parms": "450.",
+        "type": "~sine",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 39
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 39": {
+        "ID": 39,
+        "gui": {
+          "x": "60.0",
+          "y": "1010.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 40
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "2": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "3": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "4": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "5": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "6": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "7": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "8": {
+              "Inlet": 0,
+              "Object": 21
+            },
+            "9": {
+              "Inlet": 0,
+              "Object": 23
+            },
+            "10": {
+              "Inlet": 0,
+              "Object": 25
+            },
+            "11": {
+              "Inlet": 0,
+              "Object": 27
+            },
+            "Count": 12
+          }
+        }
+      },
+      "object 40": {
+        "ID": 40,
+        "gui": {
+          "x": "60.0",
+          "y": "1070.0"
+        },
+        "parms": "0.1",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 41
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 41
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 41": {
+        "ID": 41,
+        "gui": {
+          "x": "60.0",
+          "y": "1130.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 42": {
+        "ID": 42,
+        "gui": {
+          "x": "330.0",
+          "y": "520.0"
+        },
+        "parms": "",
+        "type": ".slider",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 43
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 44
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 43": {
+        "ID": 43,
+        "gui": {
+          "x": "420.0",
+          "y": "520.0"
+        },
+        "parms": "3",
+        "type": ".pow",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 45
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 44": {
+        "ID": 44,
+        "gui": {
+          "x": "520.0",
+          "y": "520.0"
+        },
+        "parms": "",
+        "type": ".sqrt",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 46
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 45": {
+        "ID": 45,
+        "gui": {
+          "x": "420.0",
+          "y": "570.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 46": {
+        "ID": 46,
+        "gui": {
+          "x": "520.0",
+          "y": "570.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 47": {
+        "ID": 47,
+        "gui": {
+          "x": "330.0",
+          "y": "720.0"
+        },
+        "parms": "1.",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 49
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 48": {
+        "ID": 48,
+        "gui": {
+          "x": "440.0",
+          "y": "720.0"
+        },
+        "parms": "-1.",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 50
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 49": {
+        "ID": 49,
+        "gui": {
+          "x": "330.0",
+          "y": "780.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 52
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "280.0"
+        },
+        "parms": "",
+        "type": ".sin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 50": {
+        "ID": 50,
+        "gui": {
+          "x": "440.0",
+          "y": "780.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 51
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 51": {
+        "ID": 51,
+        "gui": {
+          "x": "440.0",
+          "y": "830.0"
+        },
+        "parms": "b f",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 49
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 1,
+              "Object": 52
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 52": {
+        "ID": 52,
+        "gui": {
+          "x": "330.0",
+          "y": "890.0"
+        },
+        "parms": "",
+        "type": ".atan2",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 53
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 54
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 53": {
+        "ID": 53,
+        "gui": {
+          "x": "330.0",
+          "y": "940.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 54": {
+        "ID": 54,
+        "gui": {
+          "x": "330.0",
+          "y": "1000.0"
+        },
+        "parms": "57.2958",
+        "type": ".*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 55
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 55": {
+        "ID": 55,
+        "gui": {
+          "x": "330.0",
+          "y": "1050.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 56": {
+        "ID": 56,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Click 0.5, 2. and -3, and watch the twelve answers. 2. and -3 are outside -1 to 1, so asin, acos and atanh send 0, and acosh, which needs at least 1, sends 0 for -3. tanh never leaves -1 to 1: a soft limiter.",
+        "type": ".text"
+      },
+      "object 57": {
+        "ID": 57,
+        "gui": {
+          "x": "640.0",
+          "y": "310.0",
+          "w": "300"
+        },
+        "parms": "2. A slow LFO. Turn on the toggle: metro counts 20 steps a second, % 40 wraps the count, and * 0.15708 turns it into an angle, a full circle (2π) every 40 steps. sin swings from -1 to 1 every two seconds.",
+        "type": ".text"
+      },
+      "object 58": {
+        "ID": 58,
+        "gui": {
+          "x": "640.0",
+          "y": "460.0",
+          "w": "300"
+        },
+        "parms": "3. scale turns the swing into 300 to 600 Hz, a float, and the sine on the master bus glides up and down. The toggle also opens its level.",
+        "type": ".text"
+      },
+      "object 59": {
+        "ID": 59,
+        "gui": {
+          "x": "640.0",
+          "y": "570.0",
+          "w": "300"
+        },
+        "parms": "4. pow 3 cubes the slider, an exponential-looking curve that stays low and rises late: halfway gives 0.125. sqrt bends the other way: halfway gives 0.707.",
+        "type": ".text"
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "330.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 60": {
+        "ID": 60,
+        "gui": {
+          "x": "640.0",
+          "y": "680.0",
+          "w": "300"
+        },
+        "parms": "5. atan2 gives the angle of a point, y in the left inlet and x in the right, from -π to π. Click 1.: the point (0, 1) is straight up, 90 degrees after * 57.2958. Click -1. for x: 135.",
+        "type": ".text"
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "150.0",
+          "y": "280.0"
+        },
+        "parms": "",
+        "type": ".cos",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "150.0",
+          "y": "330.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "240.0",
+          "y": "280.0"
+        },
+        "parms": "",
+        "type": ".tan",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

@@ -14,6 +14,7 @@ import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/lay_demo_chain.dart';
 
 /// End-to-end proof of the Max speed path (issue #358): **double-click empty
 /// canvas → type a name and arguments → Enter → the object is there**, driven
@@ -33,7 +34,7 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 /// The legs, in one session: the box opens where the grid was double-clicked;
 /// completion narrows as the name is typed; Enter instantiates a `~sine` with
 /// the typed argument at that exact point; Ctrl+Z un-creates it; `dac` creates
-/// a `~dac` like any other type — the seeded one blocks nothing (issue #434);
+/// a `~dac` like any other type — the laid one blocks nothing (issue #434);
 /// an unknown name is refused without costing the gesture; and Escape leaves
 /// the canvas exactly as it was.
 void main() {
@@ -54,14 +55,17 @@ void main() {
     await tester.pumpWidget(PhiApp(engine: engine, session: session));
     await tester.pumpAndSettle();
 
-    // Summon the Patcher surface, which seeds slider → sine → dac.
+    // Summon the Patcher surface and lay slider → sine → dac into its empty
+    // patch.
     await tester.tap(railFor(SurfaceId.patcher));
+    await tester.pumpAndSettle();
+    layDemoChain(engine.patcher);
     await tester.pumpAndSettle();
 
     final patcher = engine.patcher;
-    final seeded = patcher.graph.nodes.length;
+    final before = patcher.graph.nodes.length;
 
-    // A patch of empty grid, well clear of the seeded chain (which all sits
+    // A patch of empty grid, well clear of the laid chain (which all sits
     // above scene y≈310).
     final canvasRect = tester.getRect(find.byType(PatcherCanvas));
     const scenePoint = Offset(220, 380);
@@ -71,7 +75,7 @@ void main() {
       isTrue,
       reason:
           'the canvas must be big enough to hold empty grid below the '
-          'seeded chain — otherwise this test is clicking on nothing',
+          'laid chain — otherwise this test is clicking on nothing',
     );
 
     Finder box() => find.byKey(PatcherCanvas.inlineCreateKey);
@@ -145,7 +149,7 @@ void main() {
     await press(LogicalKeyboardKey.enter);
 
     expect(box(), findsNothing);
-    expect(patcher.graph.nodes, hasLength(seeded + 1));
+    expect(patcher.graph.nodes, hasLength(before + 1));
     final made = patcher.graph.nodes.last;
     expect(made.type, Obj.dSine);
     // `~sine` was never typed in full, and the `220` landed as its creation
@@ -166,38 +170,38 @@ void main() {
 
     // ── 4) Ctrl+Z un-creates it, with no click in between ────────────────────
     await ctrlZ();
-    expect(patcher.graph.nodes, hasLength(seeded));
+    expect(patcher.graph.nodes, hasLength(before));
     expect(patcher.graph.nodeById(made.id), isNull);
 
     // ── 5) `dac` creates like any other type (issue #434) ────────────────────
-    // The bare name resolves to the canonical `~dac`, and the ~dac the surface
-    // seeded does not block a second one.
+    // The bare name resolves to the canonical `~dac`, and the ~dac the test
+    // laid does not block a second one.
     await doubleClick();
     await type('dac');
     await press(LogicalKeyboardKey.enter);
 
     expect(box(), findsNothing);
-    expect(patcher.graph.nodes, hasLength(seeded + 1));
+    expect(patcher.graph.nodes, hasLength(before + 1));
     expect(patcher.graph.nodes.last.type, Obj.dDac);
     await ctrlZ();
-    expect(patcher.graph.nodes, hasLength(seeded));
+    expect(patcher.graph.nodes, hasLength(before));
 
     // ── 6) an unknown name is refused inline, and the box stays open ─────────
     await doubleClick();
     await type('zzzz');
     await press(LogicalKeyboardKey.enter);
 
-    expect(patcher.graph.nodes, hasLength(seeded));
+    expect(patcher.graph.nodes, hasLength(before));
     expect(box(), findsOneWidget);
     expect(find.byKey(PatchInlineObjectBox.rejectKey), findsOneWidget);
 
     // Corrected in place — the typo cost a keystroke, not the gesture.
     await type('slider');
     await press(LogicalKeyboardKey.enter);
-    expect(patcher.graph.nodes, hasLength(seeded + 1));
+    expect(patcher.graph.nodes, hasLength(before + 1));
     expect(patcher.graph.nodes.last.type, Obj.gSlider);
     await ctrlZ();
-    expect(patcher.graph.nodes, hasLength(seeded));
+    expect(patcher.graph.nodes, hasLength(before));
 
     // ── 7) Escape leaves the canvas exactly as it was ────────────────────────
     await doubleClick();
@@ -205,7 +209,7 @@ void main() {
     await press(LogicalKeyboardKey.escape);
 
     expect(box(), findsNothing);
-    expect(patcher.graph.nodes, hasLength(seeded));
+    expect(patcher.graph.nodes, hasLength(before));
 
     session.dispose();
     await engine.dispose();

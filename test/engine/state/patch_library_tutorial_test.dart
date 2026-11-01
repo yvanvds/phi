@@ -126,11 +126,23 @@ void main() {
     );
     expect(recorded, isEmpty, reason: 'nothing is journaled');
     expect(library.openAddress, patch('main'));
-    expect(session.mounted, isFalse, reason: 'no ~dac, nothing to mount');
+    expect(
+      gateway.calls,
+      contains('mountAsSource:${session.instanceId}:null:1.000'),
+      reason:
+          'mounted even without a ~dac, so audio-clocked objects run '
+          '(#528)',
+    );
+    expect(
+      gateway.calls.where((c) => c.startsWith('mountAsSource')),
+      hasLength(1),
+      reason: 'only the tutorial is mounted, never the project patch (#523)',
+    );
 
     library.closeTutorial();
     expect(library.tutorial, isNull);
     expect(library.openEditor, same(projectEditor));
+    expect(gateway.calls, contains('unmountSource:${session.instanceId}'));
     expect(gateway.instances.containsKey(session.instanceId), isFalse);
   });
 

@@ -16,6 +16,7 @@ import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/lay_demo_chain.dart';
 
 /// End-to-end guard for issue #355: a patcher gesture whose pointer is torn
 /// away mid-flight must leave **nothing** behind on the real canvas.
@@ -52,8 +53,10 @@ void main() {
 
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
+    layDemoChain(engine.patcher);
+    await tester.pumpAndSettle();
 
-    // The seed lays down slider → sine → dac, wired with two cables.
+    // The laid chain: slider → sine → dac, wired with two cables.
     final graph = engine.patcher.graph;
     PatchNode nodeOfType(String type) =>
         graph.nodes.firstWhere((n) => n.type == type);
@@ -75,7 +78,7 @@ void main() {
     final sineStart = sine.position;
     final sineDrawnAtStart = tester.getTopLeft(sineLine);
 
-    // The seed wires its cables with the non-journaled primitive, so the undo
+    // The chain wires its cables with the non-journaled primitive, so the undo
     // stack starts empty — anything on it later came from a gesture.
     expect(engine.patcher.undoScope.canUndo, isFalse);
 

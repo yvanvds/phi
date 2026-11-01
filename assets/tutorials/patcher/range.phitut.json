@@ -1,0 +1,485 @@
+{
+  "title": "abs round clip scale zmap — ranges",
+  "covers": [
+    ".abs",
+    ".round",
+    ".clip",
+    ".scale",
+    ".zmap"
+  ],
+  "summary": "Drop a sign, round to a grid, clip to limits, map MIDI values onto 0 to 1 with scale and zmap, and bend scale into a curve.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# abs round clip scale zmap — ranges\nabs drops the sign, round snaps to a grid, clip keeps a number between two limits, and scale and zmap map one range onto another. Each sends a float, and the inlets to the right of the first store new settings for the next number.\nMax's clip and scale send ints when their arguments are whole numbers. Here all five always send floats.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "-3.5",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "170.0",
+          "y": "330.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "300.0",
+          "y": "330.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "410.0"
+        },
+        "parms": "64",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "170.0",
+          "y": "410.0"
+        },
+        "parms": "127",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "280.0",
+          "y": "410.0"
+        },
+        "parms": "160",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "60.0",
+          "y": "460.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "60.0",
+          "y": "520.0"
+        },
+        "parms": "0 127 0 1",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "300.0",
+          "y": "520.0"
+        },
+        "parms": "0 127 0 1",
+        "type": ".zmap",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "60.0",
+          "y": "570.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "300.0",
+          "y": "570.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "160.0"
+        },
+        "parms": "0.37",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "60.0",
+          "y": "650.0"
+        },
+        "parms": "",
+        "type": ".slider",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 21
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 23
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "140.0",
+          "y": "650.0"
+        },
+        "parms": "0 1 100 3200",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "140.0",
+          "y": "700.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "140.0",
+          "y": "760.0"
+        },
+        "parms": "0 1 100 3200 2",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 24
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "140.0",
+          "y": "810.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Click -3.5, 0.37 and 150. abs drops the sign. round 0.25 snaps to the nearest quarter, halfway values away from 0. clip 0 100 holds 150 at 100 and -3.5 at 0.",
+        "type": ".text"
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "640.0",
+          "y": "270.0",
+          "w": "300"
+        },
+        "parms": "2. Click 0.5 to change round's grid to halves, then 0.37 again: 0.5. clip's other two inlets set the low and the high limit the same way.",
+        "type": ".text"
+      },
+      "object 27": {
+        "ID": 27,
+        "gui": {
+          "x": "640.0",
+          "y": "380.0",
+          "w": "300"
+        },
+        "parms": "3. scale 0 127 0 1 turns a MIDI value into 0 to 1. Click 64: about 0.5. Click 160: scale goes on past 1, to 1.26, while zmap stops at the limit. A sixth argument of 1 makes scale clip too.",
+        "type": ".text"
+      },
+      "object 28": {
+        "ID": 28,
+        "gui": {
+          "x": "640.0",
+          "y": "510.0",
+          "w": "300"
+        },
+        "parms": "4. A fifth argument bends scale into a curve: the position in the range is raised to that power. Drag the slider to halfway: the straight scale gives 1650, the curved one 875, giving the low octaves more of the slider, closer to how pitch is heard.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "160.0"
+        },
+        "parms": "150",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "410.0",
+          "y": "160.0"
+        },
+        "parms": "0.5",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "2": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 3
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "280.0"
+        },
+        "parms": "",
+        "type": ".abs",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "170.0",
+          "y": "280.0"
+        },
+        "parms": "0.25",
+        "type": ".round",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "300.0",
+          "y": "280.0"
+        },
+        "parms": "0 100",
+        "type": ".clip",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "330.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      }
+    }
+  }
+}

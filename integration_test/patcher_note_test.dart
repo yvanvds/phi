@@ -93,7 +93,7 @@ void main() {
     final library = engine.patchLibrary;
     final patcher = engine.patcher;
     final canvasRect = tester.getRect(find.byType(PatcherCanvas));
-    // Empty grid below the seeded slider → sine → dac chain.
+    // Empty grid.
     const scenePoint = Offset(220, 380);
     final at = canvasRect.topLeft + scenePoint;
     expect(canvasRect.contains(at), isTrue);

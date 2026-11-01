@@ -18,6 +18,7 @@ import 'package:yse/yse.dart';
 
 import '../test/engine/test_doubles/fake_patcher_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/lay_demo_chain.dart';
 
 /// End-to-end proof that a `.f` number box is actually editable on the canvas
 /// (issue #353), driven through the real [PhiApp] — real rail navigation, real
@@ -64,14 +65,16 @@ void main() {
     await tester.pumpWidget(PhiApp(engine: engine, session: session));
     await tester.pumpAndSettle();
 
-    // Summon the Patcher surface, which seeds slider → sine → dac and registers
-    // the built-in node types.
+    // Summon the Patcher surface, which registers the built-in node types, and
+    // lay slider → sine → dac into its empty patch.
     await tester.tap(railFor(SurfaceId.patcher));
+    await tester.pumpAndSettle();
+    layDemoChain(engine.patcher);
     await tester.pumpAndSettle();
 
     // Drop a `.f` box onto the canvas — the same node the palette creates.
     final patcher = engine.patcher;
-    // The seeded `~dac`, named by its own id: it is an object box now
+    // The laid `~dac`, named by its own id: it is an object box now
     // (issue #379), printing exactly the `~dac` the palette also lists.
     final dacLine = find.byKey(
       PatcherNodeView.objectLineKey(

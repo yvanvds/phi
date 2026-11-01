@@ -47,16 +47,16 @@ void main() {
     await tester.pumpWidget(PhiApp(engine: engine, session: session));
     await tester.pumpAndSettle();
 
-    // Summon the Patcher surface, which seeds slider → sine → dac.
+    // Summon the Patcher surface; its new patch opens empty.
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
 
     final patcher = engine.patcher;
-    final seeded = patcher.graph.nodes.length;
+    final before = patcher.graph.nodes.length;
 
     final canvas = find.byType(PatcherCanvas);
     final canvasRect = tester.getRect(canvas);
-    // Empty grid, clear of the seeded chain (which sits above scene y≈310).
+    // Empty grid.
     const scenePoint = Offset(220, 380);
     final at = canvasRect.topLeft + scenePoint;
     expect(canvasRect.contains(at), isTrue);
@@ -105,7 +105,7 @@ void main() {
     await press(LogicalKeyboardKey.enter);
 
     expect(box(), findsNothing);
-    expect(patcher.graph.nodes, hasLength(seeded + 1));
+    expect(patcher.graph.nodes, hasLength(before + 1));
     final made = patcher.graph.nodes.last;
     expect(made.type, PatchObjectTypes.dSine);
     expect(patcher.argsOf(made.id), '220');
@@ -129,7 +129,7 @@ void main() {
     );
     await press(LogicalKeyboardKey.escape);
     expect(box(), findsNothing);
-    expect(patcher.graph.nodes, hasLength(seeded + 1));
+    expect(patcher.graph.nodes, hasLength(before + 1));
 
     await mouse.removePointer();
     session.dispose();

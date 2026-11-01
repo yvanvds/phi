@@ -53,12 +53,8 @@ void main() {
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
 
-    // Start from an empty canvas: the demo seed's nodes are not what this test
-    // is about, and they would sit over the one that is.
     final patcher = engine.patcher;
-    for (final id in patcher.graph.nodes.map((n) => n.id).toList()) {
-      patcher.removeNode(id);
-    }
+    expect(patcher.graph.nodes, isEmpty, reason: 'a new patch opens empty');
     await tester.pumpAndSettle();
 
     // One node of our own, near the scene origin so it is certainly on screen
