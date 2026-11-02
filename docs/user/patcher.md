@@ -254,6 +254,14 @@ for:
   `fromsymbol`), text and character codes (`atoi` and `itoa`), joining items
   into a name (`combine`), spelling a message out as codes (`spell`) and
   changing case (`tolower` and `toupper`). Each pair shares one tutorial.
+- **I/O, messaging and values:** sending without a cord (`s` and `r`, which
+  share one tutorial), sending to a name chosen as the patch runs (`forward`),
+  one value shared by name (`value`) and writing messages to the log panel
+  (`print`). A name belongs to its patch. For now only one `r` of a name hears
+  an `s` in the same patch. The `s` and `r` tutorial also shows how to reach
+  an `r` from the Code surface: copy it to the project, then
+  `patch.tutorials.s_r.send('pitch', 67)`. A tutorial for subpatch inlets and
+  outlets follows once subpatches arrive.
 
 Each tutorial is a small working patch, with numbered notes that walk you
 through it. Where Phi's object differs from the Max object of the same name,

@@ -1,0 +1,168 @@
+{
+  "title": "print — write messages to the log",
+  "covers": [
+    ".print"
+  ],
+  "summary": "Write numbers, words and bangs to Phi's log panel under a name, and cap how many lines a print writes at once.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# print — write messages to the log\nprint writes every message that reaches it to Phi's log panel, one line each, after its name: print pitch writes pitch: 60. Without a name it writes print. A second argument caps the lines it writes per engine tick, 16 by default. Unlike Max, the lines go to Phi's log with the engine's (App Message) tag in front, not to a Max console.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "640.0",
+          "y": "260.0",
+          "w": "300"
+        },
+        "parms": "2. Click hello and the button next to it. A print with no name writes print: hello and print: bang.",
+        "type": ".text"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "640.0",
+          "y": "360.0",
+          "w": "300"
+        },
+        "parms": "3. Click the lower button. uzi 5 sends 1 to 5 at once, but print flood 2 writes two lines per tick: flood: 1, flood: 2, then one line saying the rest were dropped.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "pitch",
+        "type": ".print"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "200.0",
+          "y": "160.0"
+        },
+        "parms": "hello",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "200.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".print"
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "310.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "320.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "380.0"
+        },
+        "parms": "5",
+        "type": ".uzi",
+        "outputs": {
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "440.0"
+        },
+        "parms": "flood 2",
+        "type": ".print"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Open the log panel with the log toggle in the status bar, or Ctrl+J once you have clicked the canvas (#537). Type 60 into the box: the log shows pitch: 60.",
+        "type": ".text"
+      }
+    }
+  }
+}

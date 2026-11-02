@@ -4224,6 +4224,251 @@ void main() {
     });
   });
 
+  test('every I/O, messaging and value type has a tutorial (#504)', () {
+    for (final type in ['.s', '.r', '.forward', '.value', '.print']) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+    expect(index.tutorialFor('.s'), index.tutorialFor('.r'));
+  });
+
+  group('I/O, messaging and value tutorials (#504) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+    final others = <int>[];
+
+    void render(int blocks) {
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+      }
+    }
+
+    void mount(int id) {
+      gateway.mountAsSource(id);
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(id); i++) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(id), isTrue, reason: 'mounted');
+      render(20);
+    }
+
+    // Every tutorial is mounted while open (#528); so is this copy. [name]
+    // opens it the way a project copy opens: named, on the engine bus.
+    void open(String slug, {String name = ''}) {
+      inst = gateway.createInstance(name: name);
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+      mount(inst);
+    }
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      for (final o in others) {
+        gateway.disposeInstance(o);
+      }
+      others.clear();
+      render(20);
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    int msg(String text) => graph.objects
+        .singleWhere((o) => o.type == '.m' && o.args == text)
+        .handleId;
+    // A send reaches its receive on the next rendered block.
+    String value(int id) {
+      render(3);
+      return gateway.guiValue(inst, id);
+    }
+
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    void type(int id, num v) => v is int
+        ? gateway.sendInt(inst, id, 0, v)
+        : gateway.sendFloat(inst, id, 0, v.toDouble());
+    // A fresh object in [i] wired to a fresh list box.
+    (int, int) probe(int i, String t, String args, [String box = '.l']) {
+      final o = gateway.createObject(i, t, args: args);
+      final l = gateway.createObject(i, box);
+      gateway.connect(i, fromHandleId: o, outlet: 0, toHandleId: l, inlet: 0);
+      return (o, l);
+    }
+
+    // A second, separate patch, mounted.
+    int another({String name = ''}) {
+      final o = gateway.createInstance(name: name);
+      others.add(o);
+      mount(o);
+      return o;
+    }
+
+    test('s and r: a number, a bang, a list, local names, the bus', () async {
+      open('s-r', name: 'tutorials.s_r');
+      final pitch = at('.i', 330, 220);
+      final hits = at('.i', 330, 420);
+      type(at('.i', 60, 160), 64);
+      expect(value(pitch), '64');
+      click(msg('72'));
+      expect(value(pitch), '72');
+      click(at('.b', 60, 300));
+      final first = value(hits);
+      click(at('.b', 60, 300));
+      expect(
+        int.parse(value(hits)),
+        int.parse(first) + 1,
+        reason: 'the counter counts the clicks',
+      );
+      // The title note: a list goes through too.
+      final (_, list) = probe(inst, '.r', 'notes');
+      final sendNotes = gateway.createObject(inst, '.s', args: 'notes');
+      gateway.sendList(inst, sendNotes, 0, '60 100');
+      expect(value(list), '60 100');
+      // A name belongs to its patch: an r in another patch hears nothing.
+      final other = another();
+      final (_, otherPitch) = probe(other, '.r', 'pitch', '.i');
+      type(at('.i', 60, 160), 65);
+      expect(value(pitch), '65');
+      expect(gateway.guiValue(other, otherPitch), '0');
+      // Note 3: s publishes on patcher.<patch>.<name>, and the Code surface's
+      // patch.tutorials.s_r.send('pitch', 67) publishes a float there.
+      final heard = <BusValue>[];
+      final sub = Bus.subscribe('patcher.tutorials.s_r.pitch')
+          .listen((f) => heard.add(f.value));
+      type(at('.i', 60, 160), 66);
+      await Future<void>.delayed(Duration.zero);
+      await sub.cancel();
+      expect(heard, [const BusInt(66)]);
+      expect(value(pitch), '66');
+      Bus.publish('patcher.tutorials.s_r.pitch', const BusFloat(67));
+      expect(value(pitch), '67');
+    });
+
+    test(
+      's and r: only one r of a name hears an s (yse-soundengine #1239)',
+      () {
+        // The title note's engine gap. When this fails, the engine delivers to
+        // every r: drop the caveat from the tutorial and this test.
+        open('s-r');
+        final boxes = [
+          for (var i = 0; i < 3; i++) probe(inst, '.r', 'pitch', '.i').$2,
+        ];
+        type(at('.i', 60, 160), 61);
+        final got = [
+          for (final b in [at('.i', 330, 220), ...boxes]) value(b),
+        ];
+        expect(got.where((v) => v == '61'), hasLength(1), reason: '$got');
+      },
+    );
+
+    test('forward: no name, a name, another, nowhere, a number', () {
+      open('forward');
+      final number = at('.i', 60, 160);
+      final left = at('.i', 60, 400);
+      final right = at('.i', 200, 400);
+      type(number, 5);
+      expect((value(left), value(right)), ('0', '0'), reason: 'no name yet');
+      click(msg('left'));
+      type(number, 7);
+      expect((value(left), value(right)), ('7', '0'));
+      click(msg('right'));
+      type(number, 8);
+      expect((value(left), value(right)), ('7', '8'));
+      click(msg('nowhere'));
+      type(number, 9);
+      expect((value(left), value(right)), ('7', '8'), reason: 'lost');
+      // Note 3: a number is a name too.
+      final fwd = at('.forward', 60, 240);
+      final (_, two) = probe(inst, '.r', '2', '.i');
+      gateway.sendInt(inst, fwd, 1, 2);
+      type(number, 10);
+      expect(value(two), '10');
+      // The title note: send left on the left inlet is passed on as it is.
+      final (_, words) = probe(inst, '.r', 'words');
+      gateway.sendMessage(inst, fwd, 1, 'words');
+      gateway.sendMessage(inst, fwd, 0, 'send left');
+      expect(value(words), 'send left');
+      expect(value(left), '7');
+    });
+
+    test('value: a start value, stored silently, set and read anywhere', () {
+      open('value');
+      final out = at('.f', 360, 280);
+      final read = at('.b', 360, 160);
+      click(read);
+      expect(double.parse(value(out)), 0.5);
+      // Each value gain sends only on a bang: wire a box to the left one to
+      // see that storing sends nothing.
+      final leftValue = at('.value', 60, 220);
+      final watch = gateway.createObject(inst, '.f');
+      gateway.connect(
+        inst,
+        fromHandleId: leftValue,
+        outlet: 0,
+        toHandleId: watch,
+        inlet: 0,
+      );
+      type(at('.f', 60, 160), 0.8);
+      expect(double.parse(value(out)), 0.5, reason: 'only stored');
+      expect(double.parse(value(watch)), 0, reason: 'stores, sends nothing');
+      click(read);
+      expect(double.parse(value(out)), closeTo(0.8, 1e-6));
+      click(msg('0.25'));
+      click(read);
+      expect(double.parse(value(out)), 0.25);
+      // The title note: a list is stored too.
+      gateway.sendList(inst, leftValue, 0, '1 2');
+      final (reader, list) = probe(inst, '.value', 'gain');
+      click(reader);
+      expect(value(list), '1 2');
+      // A name is shared only inside its patch.
+      final other = another();
+      final (theirs, theirOut) = probe(other, '.value', 'gain 3', '.i');
+      gateway.sendBang(other, theirs, 0);
+      render(3);
+      expect(gateway.guiValue(other, theirOut), '3', reason: 'its own');
+      click(read);
+      expect(value(list), '1 2', reason: 'this patch keeps its own');
+    });
+
+    test('print: a named line, the default name, the per-tick cap', () async {
+      final lines = <String>[];
+      final sub = Log.instance.messages.listen(lines.add);
+      addTearDown(sub.cancel);
+      open('print');
+      type(at('.i', 60, 160), 60);
+      click(msg('hello'));
+      click(at('.b', 310, 160));
+      render(3);
+      click(at('.b', 60, 320));
+      render(3);
+      for (var i = 0; i < 50 && !lines.any((l) => l.contains('dropped')); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      final printed = [
+        for (final l in lines)
+          if (l.contains(': ')) l.substring(l.indexOf(RegExp(r'\w+: '))),
+      ];
+      expect(printed, [
+        'pitch: 60',
+        'print: hello',
+        'print: bang',
+        'flood: 1',
+        'flood: 2',
+        'flood: rate limit reached (2 per tick); further messages dropped',
+      ]);
+      expect(
+        lines.first,
+        startsWith('(App Message)'),
+        reason: "the engine's tag in front",
+      );
+    });
+  });
+
   test('report: object types with no tutorial yet', () {
     final missing = [
       for (final t in engineTypes.toList()..sort())

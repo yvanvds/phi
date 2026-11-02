@@ -3019,7 +3019,13 @@ main + app          (orchestration)
   `.prepend` because of #521) and strings (#503: `sprintf`, `regexp`,
   `tosymbol-fromsymbol`, `atoi-itoa`, `combine`, `spell`,
   `tolower-toupper`; typed text comes from `.textedit`; every list a string
-  tutorial reads must fit its `.l` uncut, which a stored `w` now allows, #533). The domain clock six reach a libYSE
+  tutorial reads must fit its `.l` uncut, which a stored `w` now allows, #533)
+  and I/O, messaging and values (#504: `s-r`, `forward`, `value`, `print`;
+  one `.r` per name because libYSE 3.1.0 delivers an `.s` to only one `.r` of
+  a name in a patch, yse-soundengine#1239; the `s-r` copy is reached at
+  `patcher.tutorials.s_r.<slot>`; `.print` lines reach the log panel through
+  `RealEngineLogSource`; the subpatch boundary objects wait for #481, #536).
+  The domain clock six reach a libYSE
   domain clock by name; their clocks advance with the audio blocks whether or
   not the patch is mounted, are never destroyed by a patch object, and are not
   Phi's time domains (Phi mints its own `phi.midi.*` / `phi.metronome`
@@ -3050,7 +3056,8 @@ main + app          (orchestration)
   `patcher_routing_tutorials`,
   `patcher_randomness_tutorials`,
   `patcher_list_tutorials`,
-  `patcher_string_tutorials`: each opens its tutorials
+  `patcher_string_tutorials`,
+  `patcher_messaging_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
   that no note or object overlaps another). Every one of them opens a
   tutorial through the shared `openTutorialBySearch(tester, type)` helper in

@@ -1,0 +1,186 @@
+{
+  "title": "forward — send to a name chosen as it runs",
+  "covers": [
+    ".forward"
+  ],
+  "summary": "Send to an r chosen with a message, change the destination while the patch runs, and send to a name no r has.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# forward — send to a name chosen as it runs\nforward sends what reaches its left inlet to the r with the name it was last given. A name on the right inlet changes where it sends while the patch runs. Until it has a name, forward sends nothing. Unlike Max, the name goes to the right inlet: there is no send message, and send left on the left inlet is passed on like any other message.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Type 5 into the box at the top. Nothing arrives anywhere: forward has no name yet.",
+        "type": ".text"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "640.0",
+          "y": "260.0",
+          "w": "300"
+        },
+        "parms": "2. Click left, then type 7: it reaches r left. Click right and type 8: now it reaches r right, and the box under r left keeps 7.",
+        "type": ".text"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "640.0",
+          "y": "380.0",
+          "w": "300"
+        },
+        "parms": "3. Click nowhere and type 9. No r has that name, so the number is lost. A number is a name too: send forward 2 on the right and it reaches r 2.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "60.0",
+          "y": "240.0"
+        },
+        "parms": "",
+        "type": ".forward"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "200.0",
+          "y": "160.0"
+        },
+        "parms": "left",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 2
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "310.0",
+          "y": "160.0"
+        },
+        "parms": "right",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 2
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "420.0",
+          "y": "160.0"
+        },
+        "parms": "nowhere",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 2
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "340.0"
+        },
+        "parms": "left",
+        "type": ".r",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "400.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "200.0",
+          "y": "340.0"
+        },
+        "parms": "right",
+        "type": ".r",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "200.0",
+          "y": "400.0"
+        },
+        "parms": "",
+        "type": ".i"
+      }
+    }
+  }
+}
