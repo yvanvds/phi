@@ -2288,10 +2288,10 @@ void main() {
 
     test('thresh quickthresh: a chord, a pause, a trickle', () {
       open('thresh-quickthresh');
-      final tl = at('.l', 60, 340);
+      final tl = at('.l', 60, 490);
       final ql = at('.l', 300, 340);
       final tn = at('.i', 180, 440);
-      final qn = at('.i', 420, 440);
+      final qn = at('.i', 540, 440);
       click(at('.b', 400, 160));
       audio(350);
       expect((value(tl), value(ql)), ('60 64 67', '60 64 67'));

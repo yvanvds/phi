@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
@@ -292,11 +291,7 @@ void main() {
       );
       if (shown.evaluate().isEmpty) return false;
       for (final e in shown.evaluate()) {
-        expect(
-          (e.renderObject! as RenderParagraph).didExceedMaxLines,
-          isFalse,
-          reason: '"$text" is cut off in its list box',
-        );
+        expectListTextFits(e);
       }
       return true;
     }
