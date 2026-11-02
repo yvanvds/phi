@@ -3107,7 +3107,11 @@ main + app          (orchestration)
   which gives an inactive window a moment (1 s, #542) to come back before it
   types into the browser's search field, re-asks for the keyboard and
   checks the field got the text, typing again if it did not; new
-  tutorial tests use it too. The audio cases mount the
+  tutorial tests use it too. The tests that type into number boxes go
+  through `typeIntoField(tester, field, text, what: ...)` in
+  `test_support/type_into_field.dart` (#544), which survives the window
+  going inactive mid-typing without committing the value twice; both share
+  `untilWindowActive` (`test_support/until_window_active.dart`). The audio cases mount the
   tutorial on master and read the offline session's master meter
   (`renderOffline` + `Channel.master.peakLinearPost`) to check what is
   heard.

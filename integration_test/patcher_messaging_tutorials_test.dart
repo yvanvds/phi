@@ -35,6 +35,8 @@ import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
 import '../test/surfaces/patcher/test_support/expect_list_boxes_uncut.dart';
 import '../test/surfaces/patcher/test_support/open_tutorial_by_search.dart';
+import '../test/surfaces/patcher/test_support/type_into_field.dart';
+import '../test/surfaces/patcher/test_support/until_window_active.dart';
 
 /// End-to-end proof of the **I/O, messaging and value tutorials** (issue
 /// #504) through the real [PhiApp]: real rail navigation, fonts and layout,
@@ -148,7 +150,11 @@ void main() {
       final tutorial = library.tutorial;
       expect(tutorial, isNotNull, reason: type);
       expect(tutorial!.slug, slug);
-      expect(find.byKey(PatchTutorialBar.bannerKey), findsOneWidget);
+      expect(
+        find.byKey(PatchTutorialBar.bannerKey),
+        findsOneWidget,
+        reason: '$slug tutorial banner',
+      );
       expect(find.byType(PatchNoteBox), findsNWidgets(notes), reason: slug);
       expect(
         find.textContaining(heading, findRichText: true),
@@ -191,7 +197,7 @@ void main() {
     }
 
     Future<void> tap(Finder f) async {
-      expect(f, findsOneWidget);
+      expect(f, findsOneWidget, reason: 'tap target: $f');
       await tester.tap(f);
       await tester.pumpAndSettle();
     }
@@ -239,23 +245,11 @@ void main() {
     }
 
     // Types [text] into the number box at ([x], [y]) and commits it, which
-    // sends it on.
+    // sends it on (#544: through the shared helper, which survives the
+    // window going inactive mid-typing).
     Future<void> typeInto(String type, double x, double y, String text) async {
       final field = numberField(type, x, y);
-      expect(field, findsOneWidget, reason: '$type at ($x, $y)');
-      // enterText asks for the keyboard only the first time it types into a
-      // field: click the box, and forget the remembered field (#527).
-      await tester.tap(field);
-      await tester.pumpAndSettle();
-      tester.binding.focusedEditable = null;
-      await tester.enterText(field, text);
-      expect(
-        tester.widget<TextField>(field).focusNode!.hasFocus,
-        isTrue,
-        reason: 'the click focused $type at ($x, $y)',
-      );
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
+      await typeIntoField(tester, field, text, what: '$type at ($x, $y)');
     }
 
     // ── forward: a name chosen as it runs ───────────────────────────────────
@@ -310,17 +304,47 @@ void main() {
     // Ctrl+J, the way note 1 says. The tutorial was opened from the search
     // field and a number box has just let go of the keyboard, so this proves
     // the shell's shortcuts survive a field releasing focus (#537).
+    //
+    // Keys reach the shell's bindings only while its window is active: an
+    // `inactive` window parks the focus on the root scope, above them, until
+    // the window is back, the way a real keyboard cannot reach an unfocused
+    // window (#544). So give an inactive window its grace first, and press
+    // again (up to three tries) should it lose focus in that last instant.
     Future<void> pressCtrlJ() async {
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pumpAndSettle();
+      for (var attempt = 0; attempt < 3; attempt++) {
+        await untilWindowActive(tester);
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+        await tester.pumpAndSettle();
+        if (find.byType(LogPanel).evaluate().isNotEmpty) return;
+      }
     }
 
     Finder logRow(String text) => find.descendant(
       of: find.byType(LogPanel),
       matching: find.textContaining(text),
     );
+    // Checks the log panel shows [text] [matcher] times, naming the lines it
+    // does show when it does not (#544).
+    void expectLog(String text, Matcher matcher, [String why = '']) {
+      final lines = [
+        for (final e
+            in find
+                .descendant(
+                  of: find.byType(LogPanel),
+                  matching: find.byType(Text),
+                )
+                .evaluate())
+          (e.widget as Text).data ?? (e.widget as Text).textSpan?.toPlainText(),
+      ];
+      expect(
+        logRow(text),
+        matcher,
+        reason: 'log line "$text" $why; the panel shows: ${lines.join(' | ')}',
+      );
+    }
+
     // The engine's lines reach the panel through a port: render, then let
     // them arrive.
     Future<void> settleLog() async {
@@ -334,20 +358,27 @@ void main() {
     expect(find.byType(LogPanel), findsNothing);
     await typeInto('.i', 60, 160, '60');
     await pressCtrlJ();
-    expect(find.byType(LogPanel), findsOneWidget, reason: 'Ctrl+J (#537)');
+    expect(
+      find.byType(LogPanel),
+      findsOneWidget,
+      reason:
+          'Ctrl+J (#537) opened the log '
+          '(app lifecycle: ${WidgetsBinding.instance.lifecycleState}, '
+          'focus: ${FocusManager.instance.primaryFocus})',
+    );
     await settleLog();
-    expect(logRow('pitch: 60'), findsOneWidget);
+    expectLog('pitch: 60', findsOneWidget);
     await tap(message('hello'));
     await tap(buttonAt(310, 160));
     await settleLog();
-    expect(logRow('print: hello'), findsOneWidget);
-    expect(logRow('print: bang'), findsOneWidget);
+    expectLog('print: hello', findsOneWidget);
+    expectLog('print: bang', findsOneWidget);
     await tap(buttonAt(60, 320));
     await settleLog();
-    expect(logRow('flood: 1'), findsOneWidget);
-    expect(logRow('flood: 2'), findsOneWidget);
-    expect(logRow('further messages dropped'), findsOneWidget);
-    expect(logRow('flood: 3'), findsNothing, reason: 'two lines per tick');
+    expectLog('flood: 1', findsOneWidget);
+    expectLog('flood: 2', findsOneWidget);
+    expectLog('further messages dropped', findsOneWidget);
+    expectLog('flood: 3', findsNothing, 'two lines per tick');
     // The status bar's toggle closes it again.
     await tap(find.byKey(LogPanelToggle.toggleKey));
     expect(find.byType(LogPanel), findsNothing);

@@ -30,6 +30,7 @@ import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
 import '../test/surfaces/patcher/test_support/expect_list_boxes_uncut.dart';
 import '../test/surfaces/patcher/test_support/open_tutorial_by_search.dart';
+import '../test/surfaces/patcher/test_support/type_into_field.dart';
 
 /// End-to-end proof of the **array tutorials** (issue #507) through the real
 /// [PhiApp]: real rail navigation, fonts and layout, the real asset bundle and
@@ -227,13 +228,9 @@ void main() {
     // Types [text] into the number box at ([x], [y]) and commits it.
     Future<void> typeInto(String type, double x, double y, String text) async {
       final field = numberField(type, x, y);
-      expect(field, findsOneWidget, reason: '$type at ($x, $y)');
-      await tester.tap(field);
-      await tester.pumpAndSettle();
-      tester.binding.focusedEditable = null;
-      await tester.enterText(field, text);
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
+      // Through the shared helper, which survives the window going
+      // inactive mid-typing (#544).
+      await typeIntoField(tester, field, text, what: '$type at ($x, $y)');
     }
 
     // array.deserialize parses on the engine's background pool and lands on a
