@@ -1,0 +1,350 @@
+{
+  "title": "notein and xnotein — notes from a keyboard",
+  "covers": [
+    ".notein",
+    ".xnotein"
+  ],
+  "summary": "Play a saw voice on master from a MIDI keyboard, read pitch, velocity and channel, listen to one channel only, and read the release velocity with xnotein.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# notein and xnotein — notes from a keyboard\nnotein sends the pitch, velocity and channel of every note that arrives on a MIDI input port, right to left: the channel first, the pitch last. A release reports velocity 0, whether the keyboard sent a note-off or a note-on with velocity 0. xnotein also reports the release velocity: how fast the key came up.\nThe first argument is the input port, counted from 0; the midiinfo tutorial lists them. A port that cannot be opened, or no keyboard at all, leaves the object silent, and the patch still loads. On Windows a port can be open in one place at a time, so untick it under Settings › MIDI for a patch to hear it. The second argument is a channel to listen to, 1-16, or 0 for all.\nMax's notein drops its channel outlet when it is given a channel. Here the outlet stays and sends that channel, so the cords keep their places when you add an argument.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "250.0"
+        },
+        "parms": "0",
+        "type": ".notein",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "610.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "380.0",
+          "y": "250.0"
+        },
+        "parms": "0 10",
+        "type": ".notein",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "380.0",
+          "y": "310.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "480.0",
+          "y": "310.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "690.0"
+        },
+        "parms": "0",
+        "type": ".xnotein",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          },
+          "output 3": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "60.0",
+          "y": "750.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "160.0",
+          "y": "750.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "260.0",
+          "y": "750.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "360.0",
+          "y": "750.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "640.0",
+          "y": "240.0",
+          "w": "300"
+        },
+        "parms": "1. Play keys to hear a saw on the master bus. The pitch goes through mtof to the oscillator, the velocity through scale to its level. The boxes show pitch, velocity and channel. Let go: velocity 0 silences the voice. It has one oscillator, so the last key wins.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "60.0",
+          "y": "310.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "640.0",
+          "y": "370.0",
+          "w": "300"
+        },
+        "parms": "2. notein 0 10 listens to channel 10 only, where drum pads usually play. Notes on other channels pass it by, and its channel box always shows 10.",
+        "type": ".text"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "640.0",
+          "y": "680.0",
+          "w": "300"
+        },
+        "parms": "3. xnotein has a third outlet: the release velocity, from a note-off message. Let go of a key slowly, then fast. A note-on reports 0 there, and so does a key released with a note-on of velocity 0, which carries no release velocity.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "160.0",
+          "y": "310.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "260.0",
+          "y": "310.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "370.0"
+        },
+        "parms": "",
+        "type": ".mtof",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "430.0"
+        },
+        "parms": "",
+        "type": "~saw",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "490.0"
+        },
+        "parms": "2500",
+        "type": "~lp",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "160.0",
+          "y": "430.0"
+        },
+        "parms": "0 127 0 0.2",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "550.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 10
+            },
+            "Count": 2
+          }
+        }
+      }
+    }
+  }
+}

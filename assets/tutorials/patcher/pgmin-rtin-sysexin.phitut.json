@@ -1,0 +1,520 @@
+{
+  "title": "pgmin, rtin and sysexin — programs, clock and SysEx",
+  "covers": [
+    ".pgmin",
+    ".rtin",
+    ".sysexin"
+  ],
+  "summary": "Recall preset slots with program changes, follow MIDI clock, start and stop from a sequencer, and capture a SysEx message into a list.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# pgmin, rtin and sysexin — programs, clock and SysEx\npgmin reports program changes as 1-128, the numbers most devices show, with the channel. rtin reports the real-time bytes a sequencer or drum machine sends to keep others in time: 248 is a clock tick, 24 to a quarter note, 250 start, 251 continue, 252 stop and 255 reset. sysexin sends every byte of a system-exclusive message, from 240 to 247, and nothing else.\nThe first argument is the input port, counted from 0; the midiinfo tutorial lists them. A port that cannot be opened, or no keyboard at all, leaves the object silent, and the patch still loads. On Windows a port can be open in one place at a time, so untick it under Settings › MIDI for a patch to hear it.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "230.0"
+        },
+        "parms": "0",
+        "type": ".pgmin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "360.0",
+          "y": "290.0"
+        },
+        "parms": "i i",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "460.0",
+          "y": "350.0"
+        },
+        "parms": "247",
+        "type": ".sel",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "360.0",
+          "y": "410.0"
+        },
+        "parms": "256 group",
+        "type": ".zl",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "360.0",
+          "y": "470.0",
+          "w": "270"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "560.0"
+        },
+        "parms": "0",
+        "type": ".rtin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "60.0",
+          "y": "620.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "160.0",
+          "y": "620.0"
+        },
+        "parms": "248 250 252",
+        "type": ".sel",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 2
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "160.0",
+          "y": "680.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 23
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "280.0",
+          "y": "680.0"
+        },
+        "parms": "reset",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "390.0",
+          "y": "680.0"
+        },
+        "parms": "1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 21
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "60.0",
+          "y": "290.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "500.0",
+          "y": "680.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 21
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "390.0",
+          "y": "740.0"
+        },
+        "parms": "",
+        "type": ".t"
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "160.0",
+          "y": "740.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "160.0",
+          "y": "800.0"
+        },
+        "parms": "24",
+        "type": "./",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 24
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "160.0",
+          "y": "860.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "640.0",
+          "y": "220.0",
+          "w": "300"
+        },
+        "parms": "1. Pick program 1 to 4 on your device. pgmin shows the program and the channel, and minus 1 recalls that preset slot, counted from 0: the tempo and cutoff boxes jump to the values the slot holds. Program 5 and up are slots this preset does not have, and nothing changes.",
+        "type": ".text"
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "640.0",
+          "y": "360.0",
+          "w": "300"
+        },
+        "parms": "2. Send a SysEx message, or a dump from a synth. trigger hands each byte to zl group, then to sel 247: the closing byte bangs zl group, which sends the whole message to the list box. A long dump runs past the edge of the box.",
+        "type": ".text"
+      },
+      "object 27": {
+        "ID": 27,
+        "gui": {
+          "x": "640.0",
+          "y": "550.0",
+          "w": "300"
+        },
+        "parms": "3. Start a sequencer that sends MIDI clock to this port. rtin shows each byte. Start resets the counter and switches the toggle on, stop switches it off. The counter counts clock ticks, and divided by 24 they are quarter notes.",
+        "type": ".text"
+      },
+      "object 28": {
+        "ID": 28,
+        "gui": {
+          "x": "640.0",
+          "y": "690.0",
+          "w": "300"
+        },
+        "parms": "4. Continue, 251, leaves the count where stop left it, because only 250 resets it. Many sequencers keep sending ticks while they are stopped, so the count runs on: the toggle tells you whether one is playing.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "160.0",
+          "y": "290.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "350.0"
+        },
+        "parms": "1",
+        "type": ".-",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "160.0",
+          "y": "470.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "260.0",
+          "y": "470.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "410.0"
+        },
+        "parms": "4",
+        "type": ".preset",
+        "state": {
+          "active": -1,
+          "slots": [
+            {
+              "objects": [
+                {
+                  "object": 5,
+                  "type": ".i",
+                  "value": "90"
+                },
+                {
+                  "object": 6,
+                  "type": ".i",
+                  "value": "800"
+                }
+              ],
+              "slot": 0
+            },
+            {
+              "objects": [
+                {
+                  "object": 5,
+                  "type": ".i",
+                  "value": "120"
+                },
+                {
+                  "object": 6,
+                  "type": ".i",
+                  "value": "1600"
+                }
+              ],
+              "slot": 1
+            },
+            {
+              "objects": [
+                {
+                  "object": 5,
+                  "type": ".i",
+                  "value": "140"
+                },
+                {
+                  "object": 6,
+                  "type": ".i",
+                  "value": "3200"
+                }
+              ],
+              "slot": 2
+            },
+            {
+              "objects": [
+                {
+                  "object": 5,
+                  "type": ".i",
+                  "value": "174"
+                },
+                {
+                  "object": 6,
+                  "type": ".i",
+                  "value": "6400"
+                }
+              ],
+              "slot": 3
+            }
+          ]
+        },
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "470.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "360.0",
+          "y": "230.0"
+        },
+        "parms": "0",
+        "type": ".sysexin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

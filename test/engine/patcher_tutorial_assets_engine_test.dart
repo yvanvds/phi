@@ -11,6 +11,8 @@ import 'package:phi/engine/bridge/patcher_graph_snapshot.dart';
 import 'package:phi/engine/bridge/real_patcher_gateway.dart';
 import 'package:yse/yse.dart';
 
+import 'test_support/midi_loopback.dart';
+
 /// The **bundled tutorials** against the real engine, headless (issue #489):
 /// every index entry points at a file that exists, every indexed and covered
 /// type is in the engine's catalogue, and every tutorial's dump `parseJson`s
@@ -19,6 +21,28 @@ import 'package:yse/yse.dart';
 ///
 /// This is the test a content issue (#490–#510) leans on: add the file, add
 /// the index lines, and this proves the tutorial loads on the engine Phi ships.
+/// The MIDI input types the MIDI input tutorials cover (#508).
+const midiInputTypes = {
+  '.midiin',
+  '.xmidiin',
+  '.midiparse',
+  '.notein',
+  '.xnotein',
+  '.ctlin',
+  '.xctlin',
+  '.bendin',
+  '.xbendin',
+  '.xbendin2',
+  '.touchin',
+  '.polyin',
+  '.pgmin',
+  '.rtin',
+  '.sysexin',
+  '.rpnin',
+  '.nrpnin',
+  '.midiinfo',
+};
+
 void main() {
   late RealPatcherGateway gateway;
   late Set<String> engineTypes;
@@ -6026,6 +6050,374 @@ void main() {
       final (none, hit) = bangs('.array.regexp', 'names x', 1);
       click(none);
       expect(value(hit), 'hit');
+    });
+  });
+
+  test('every MIDI input type has a tutorial (#508)', () {
+    for (final type in midiInputTypes) {
+      expect(engineTypes, contains(type), reason: type);
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+  });
+
+  // The MIDI input objects listen to a real input port, and the engine has no
+  // call that injects a message into one. So these tests play MIDI the way a
+  // keyboard does, through a loopback port (see MidiLoopback); on a machine
+  // without one (Windows, CI runners) the keyboard steps are skipped.
+  group('MIDI input tutorials (#508) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+    MidiLoopback? loop;
+
+    setUpAll(() => loop = MidiLoopback.open());
+    tearDownAll(() => loop?.close());
+
+    void render(int blocks) {
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+      }
+    }
+
+    // Every tutorial is mounted while open (#528), and a MIDI input object
+    // only drains its port in a mounted patch's audio blocks. The tutorials
+    // listen on port 0; on a machine whose loopback is another port, the
+    // copy opened here listens there instead.
+    void open(String slug) {
+      final dump = load(slug).payload.dump;
+      final port = loop?.inputPort ?? 0;
+      for (final o in dump.values.cast<Map<String, Object?>>()) {
+        if (!midiInputTypes.contains(o['type'])) continue;
+        if (o['type'] == '.midiparse') continue;
+        final args = (o['parms']! as String).split(' ');
+        o['parms'] = ['$port', ...args.skip(1)].join(' ');
+      }
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(dump));
+      graph = gateway.enumerate(inst);
+      gateway.mountAsSource(inst);
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: 'mounted');
+      render(20);
+    }
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      render(20);
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    int msg(String text) => graph.objects
+        .singleWhere((o) => o.type == '.m' && o.args == text)
+        .handleId;
+    String value(int id) {
+      render(3);
+      return gateway.guiValue(inst, id);
+    }
+
+    void click(int id) => gateway.sendBang(inst, id, 0);
+
+    // The loudest master peak over [blocks] blocks.
+    double loudness([int blocks = 60]) {
+      var peak = 0.0;
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+        final p = Channel.master.peakLinearPost();
+        if (p > peak) peak = p;
+      }
+      return peak;
+    }
+
+    // Whether this machine can play MIDI into a patch; marks the test
+    // skipped when it cannot.
+    bool keyboard() {
+      if (loop != null) return true;
+      markTestSkipped('no MIDI loopback port on this machine');
+      return false;
+    }
+
+    // Plays [bytes] into the loopback, then renders with real pauses until
+    // the box [id] shows [expected]: a message reaches the patch in
+    // wall-clock time, on a block after it arrived.
+    void play(List<int> bytes, int id, String expected) {
+      loop!.send(bytes);
+      for (var i = 0; i < 2000 && gateway.guiValue(inst, id) != expected; i++) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.guiValue(inst, id), expected, reason: '$bytes');
+    }
+
+    test('midiin-midiparse: bytes by hand, running status', () {
+      open('midiin-midiparse');
+      final note = at('.l', 60, 510);
+      final channel = at('.i', 360, 580);
+      // Note 2.
+      for (final m in ['144', '60', '100']) {
+        click(msg(m));
+      }
+      expect(value(note), '60 100');
+      expect(value(channel), '1');
+      // Note 3.
+      click(msg('60'));
+      click(msg('0'));
+      expect(value(note), '60 0', reason: 'running status: a release');
+    });
+
+    test('midiin-midiparse: a port, raw and parsed', () {
+      if (!keyboard()) return;
+      open('midiin-midiparse');
+      final byte = at('.i', 60, 290);
+      final framed = at('.l', 300, 290);
+      final note = at('.l', 60, 510);
+      // Note 1.
+      play([144, 60, 100], framed, '144 60 100');
+      expect(value(byte), '100', reason: 'the last byte');
+      expect(value(note), '60 100');
+      play([128, 60, 40], framed, '128 60 40');
+      expect(value(note), '60 0', reason: 'a note-off reports velocity 0');
+      play([144, 62, 0], framed, '144 62 0');
+      expect(value(note), '62 0');
+      // Note 4: every outlet.
+      play([176, 1, 64], at('.l', 320, 510), '1 64');
+      play([192, 4], at('.i', 60, 580), '5');
+      play([208, 90], at('.i', 160, 580), '90');
+      play([224, 0, 80], at('.i', 260, 580), '80');
+      play([161, 60, 70], at('.l', 190, 510), '60 70');
+      expect(value(at('.i', 360, 580)), '2');
+      final raw = at('.l', 460, 580);
+      play([240, 67, 16, 1, 2, 247], raw, '240 67 16 1 2 247');
+      expect(value(framed), '240 67 16 1 2 247');
+      play([248], raw, '248');
+    });
+
+    test('notein: a saw from the keyboard, channel 10, release velocity', () {
+      if (!keyboard()) return;
+      open('notein');
+      final pitch = at('.i', 60, 310);
+      final velocity = at('.i', 160, 310);
+      final channel = at('.i', 260, 310);
+      final release = at('.i', 260, 750);
+      expect(loudness(), 0, reason: 'silent until a key is played');
+      // Note 1.
+      play([144, 60, 100], pitch, '60');
+      expect((value(velocity), value(channel)), ('100', '1'));
+      expect(loudness(), greaterThan(0.05), reason: 'the saw sounds');
+      play([128, 60, 33], velocity, '0');
+      loudness(20);
+      expect(loudness(), lessThan(1e-3), reason: 'the release silences it');
+      // Note 3.
+      expect(value(release), '33');
+      expect(value(at('.i', 160, 750)), '0');
+      play([144, 62, 90], at('.i', 60, 750), '62');
+      expect(value(release), '0', reason: 'a note-on has none');
+      play([144, 62, 0], velocity, '0');
+      expect(value(release), '0', reason: 'nor a note-on with velocity 0');
+      // Note 2.
+      final drum = at('.i', 380, 310);
+      final drumChannel = at('.i', 480, 310);
+      play([153, 36, 90], drum, '36');
+      expect(value(drumChannel), '10');
+      expect(value(channel), '10', reason: 'notein 0 hears every channel');
+      play([145, 64, 90], pitch, '64');
+      expect(value(drum), '36', reason: 'channel 2 passes notein 0 10 by');
+      play([129, 64, 0], velocity, '0');
+    });
+
+    test('ctlin: every controller, two filters into scale, 14 bits', () {
+      if (!keyboard()) return;
+      open('ctlin');
+      final v = at('.i', 60, 310);
+      final cutoff = at('.f', 60, 510);
+      final level = at('.f', 240, 510);
+      final fine = at('.i', 60, 770);
+      // Note 1.
+      play([177, 74, 20], v, '20');
+      expect(value(at('.i', 160, 310)), '74');
+      expect(value(at('.i', 260, 310)), '2');
+      // Note 2.
+      play([176, 1, 64], v, '64');
+      expect(double.parse(value(cutoff)), closeTo(200 + 64 / 127 * 3800, 0.01));
+      expect(loudness(), 0, reason: 'silent until the volume moves');
+      play([176, 7, 127], v, '127');
+      expect(double.parse(value(level)), closeTo(0.2, 1e-6));
+      expect(loudness(), greaterThan(0.05));
+      play([176, 74, 10], v, '10');
+      expect(
+        double.parse(value(cutoff)),
+        closeTo(200 + 64 / 127 * 3800, 0.01),
+        reason: 'ctlin 0 0 1 hears controller 1 only',
+      );
+      // Note 3.
+      expect(value(fine), '8192', reason: 'coarse 64 alone');
+      play([176, 33, 100], fine, '8292');
+      play([176, 7, 0], v, '0');
+      expect(value(fine), '8292', reason: 'controller 7 is not its pair');
+      loudness(20);
+      expect(loudness(), lessThan(1e-3));
+    });
+
+    test('bendin-touchin: 7 and 14 bits, two bytes, pressure', () {
+      if (!keyboard()) return;
+      open('bendin-touchin');
+      final bend = at('.i', 60, 290);
+      final wide = at('.i', 300, 290);
+      final semitones = at('.f', 300, 410);
+      final msb = at('.i', 60, 430);
+      final lsb = at('.i', 160, 430);
+      // Notes 1 and 2.
+      play([225, 0, 64], wide, '8192');
+      expect((value(bend), value(at('.i', 160, 290))), ('64', '2'));
+      expect(value(at('.i', 400, 290)), '2');
+      expect(double.parse(value(semitones)), 0);
+      expect((value(msb), value(lsb)), ('64', '0'));
+      play([224, 127, 127], wide, '16383');
+      expect(value(bend), '127');
+      expect(double.parse(value(semitones)), closeTo(2, 0.001));
+      expect((value(msb), value(lsb)), ('127', '127'));
+      play([224, 5, 32], wide, '4101');
+      expect((value(bend), value(msb), value(lsb)), ('32', '32', '5'));
+      // Note 3.
+      play([209, 77], at('.i', 60, 570), '77');
+      expect(value(at('.i', 160, 570)), '2');
+      play([160, 60, 55], at('.i', 400, 570), '55');
+      expect(value(at('.i', 300, 570)), '60');
+      expect(value(at('.i', 500, 570)), '1');
+    });
+
+    test('pgmin-rtin-sysexin: presets, SysEx, clock', () {
+      if (!keyboard()) return;
+      open('pgmin-rtin-sysexin');
+      final program = at('.i', 60, 290);
+      final tempo = at('.i', 160, 470);
+      final cutoff = at('.i', 260, 470);
+      final recalled = at('.i', 60, 470);
+      // Note 1.
+      play([192, 1], recalled, '1');
+      expect((value(tempo), value(cutoff)), ('120', '1600'));
+      expect(value(program), '2');
+      expect(value(at('.i', 160, 290)), '1');
+      play([193, 3], recalled, '3');
+      expect((value(tempo), value(cutoff)), ('174', '6400'));
+      expect(value(at('.i', 160, 290)), '2');
+      play([192, 4], program, '5');
+      // A recall is handed to the engine's timer thread: give one time to
+      // land, measured in wall-clock time.
+      for (var i = 0; i < 100; i++) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect((value(tempo), value(cutoff)), ('174', '6400'));
+      expect(value(recalled), '3', reason: 'slot 4 does not exist');
+      play([192, 0], recalled, '0');
+      expect((value(tempo), value(cutoff)), ('90', '800'));
+      // Note 2.
+      final dump = at('.l', 360, 470);
+      play([240, 67, 16, 1, 2, 247], dump, '240 67 16 1 2 247');
+      play([240, 125, 1, 247], dump, '240 125 1 247');
+      // Note 3.
+      final status = at('.i', 60, 620);
+      final running = at('.t', 390, 740);
+      final ticks = at('.i', 160, 740);
+      final beats = at('.i', 160, 860);
+      play([250], status, '250');
+      expect(value(running), 'on');
+      for (var i = 0; i < 47; i++) {
+        loop!.send([248]);
+      }
+      play([248], ticks, '48');
+      expect(value(beats), '2');
+      play([252], status, '252');
+      expect(value(running), 'off');
+      // Note 4.
+      play([251], status, '251');
+      expect(value(running), 'off');
+      play([248], ticks, '49');
+      play([250], status, '250');
+      play([248], ticks, '1');
+    });
+
+    test('rpnin-nrpnin: coarse and fine, parameter numbers', () {
+      if (!keyboard()) return;
+      open('rpnin-nrpnin');
+      final rv = at('.i', 60, 270);
+      final coarse = at('.i', 60, 390);
+      final fine = at('.i', 160, 390);
+      // Notes 1 and 2.
+      loop!
+        ..send([176, 101, 0])
+        ..send([176, 100, 0]);
+      play([176, 6, 12], rv, '1536');
+      expect((value(coarse), value(fine)), ('12', '0'));
+      expect(value(at('.i', 160, 270)), '0');
+      expect(value(at('.i', 260, 270)), '1');
+      play([176, 38, 50], rv, '1586');
+      expect((value(coarse), value(fine)), ('12', '50'));
+      // Note 3.
+      final nv = at('.i', 60, 530);
+      loop!
+        ..send([177, 99, 1])
+        ..send([177, 98, 8]);
+      play([177, 6, 64], nv, '8192');
+      expect(value(at('.i', 160, 530)), '136');
+      expect(value(at('.i', 260, 530)), '2');
+      expect(value(rv), '1586', reason: 'an NRPN is not an RPN');
+    });
+
+    test('midiinfo: inputs, outputs, refresh', () {
+      open('midiinfo');
+      final count = at('.i', 300, 370);
+      final last = at('.l', 60, 430);
+      final system = System.instance;
+      String lastOf(int n, String Function(int) name) {
+        final full = '${n - 1} ${name(n - 1)}';
+        return full.length > 66 ? full.substring(0, 66) : full;
+      }
+
+      // Note 1.
+      click(at('.b', 60, 230));
+      final inputs = system.midiInDeviceCount;
+      expect(value(count), '$inputs');
+      if (inputs > 0) {
+        expect(value(last), lastOf(inputs, system.midiInDeviceName));
+      }
+      // Note 2.
+      click(msg('output'));
+      expect(value(count), '$inputs', reason: 'output only switches');
+      click(at('.b', 60, 230));
+      final outputs = system.midiOutDeviceCount;
+      expect(value(count), '$outputs');
+      if (outputs > 0) {
+        expect(value(last), lastOf(outputs, system.midiOutDeviceName));
+      }
+      click(msg('input'));
+      click(at('.b', 60, 230));
+      expect(value(count), '$inputs');
+      // Note 3.
+      gateway.sendList(inst, last, 0, 'before');
+      click(msg('refresh'));
+      for (
+        var i = 0;
+        i < 2000 && gateway.guiValue(inst, last) == 'before';
+        i++
+      ) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      if (inputs > 0) {
+        expect(value(last), lastOf(inputs, system.midiInDeviceName));
+      }
     });
   });
 

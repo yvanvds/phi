@@ -1,0 +1,205 @@
+{
+  "title": "midiinfo — the machine's MIDI ports",
+  "covers": [
+    ".midiinfo"
+  ],
+  "summary": "List the MIDI input and output ports with their index numbers, print every port to the log, and rescan after plugging a device in.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# midiinfo — the machine's MIDI ports\nmidiinfo lists the MIDI ports. A bang sends how many there are, then an index and a name for each port. The index is the port argument that notein, ctlin, midiin and the other MIDI objects take, counted from 0. Its argument is input or output: which ports to list.\nMax fills a umenu from midiinfo to pick a port, and lists the ports again on every bang. Here a umenu's items are fixed, and the port is an argument: read the index, then type it after the object's name. A bang reads the ports as they were when the patch opened; refresh scans again. At most eight MIDI input objects can listen to one port.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "230.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "640.0",
+          "y": "220.0",
+          "w": "300"
+        },
+        "parms": "1. Click the button. The box on the right shows how many input ports there are. For each one, the index arrives first and prepend stores it, then the name arrives and goes out behind it. The list box shows the last port, and print writes every port to the log.",
+        "type": ".text"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "640.0",
+          "y": "360.0",
+          "w": "300"
+        },
+        "parms": "2. Click output, then the button: now the output ports are listed, the numbers midiout takes. input switches back. Neither sends on its own.",
+        "type": ".text"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "640.0",
+          "y": "460.0",
+          "w": "300"
+        },
+        "parms": "3. Plug a device in, then click refresh. The ports are scanned again in the background, and the new listing is sent as soon as the scan is done.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "150.0",
+          "y": "230.0"
+        },
+        "parms": "input",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "260.0",
+          "y": "230.0"
+        },
+        "parms": "output",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "380.0",
+          "y": "230.0"
+        },
+        "parms": "refresh",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "300.0"
+        },
+        "parms": "input",
+        "type": ".midiinfo",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 1,
+              "Object": 6
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "370.0"
+        },
+        "parms": "",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "300.0",
+          "y": "370.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "430.0",
+          "w": "500"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "490.0"
+        },
+        "parms": "ports",
+        "type": ".print"
+      }
+    }
+  }
+}

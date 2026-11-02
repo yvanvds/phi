@@ -3049,7 +3049,19 @@ main + app          (orchestration)
   first reloads the array empty, yse-soundengine#1245); an array is shown with
   `.array.tolist`/`.array.tostring` into a `.l`, or through `.prepend` when a
   result can be a single int; the seeded `.array.shuffle` is checked by
-  reopening the tutorial).
+  reopening the tutorial)
+  and MIDI input (#508: `midiin-midiparse`, `notein`, `ctlin`,
+  `bendin-touchin`, `pgmin-rtin-sysexin`, `rpnin-nrpnin`, `midiinfo`; the
+  objects listen on port 0, and the tests play them through a real port
+  because libYSE has no call that injects MIDI into its input hub
+  (yse-soundengine#1247): `test/engine/test_support/midi_loopback.dart`
+  (`MidiLoopback`) sends raw bytes into ALSA's `Midi Through` port, which
+  comes back as an input. Where there is no such port (Windows, CI runners)
+  the keyboard steps skip and the rest still runs. At most eight MIDI input
+  objects in all open patches can listen to one port, and a closed patch
+  gives its slots back only once libYSE destroys it, a moment later
+  (yse-soundengine#1246). So the integration test renders with real pauses
+  after closing each tutorial. `.preset` recalls on the timer thread).
   The domain clock six reach a libYSE
   domain clock by name; their clocks advance with the audio blocks whether or
   not the patch is mounted, are never destroyed by a patch object, and are not
@@ -3085,7 +3097,8 @@ main + app          (orchestration)
   `patcher_messaging_tutorials`,
   `patcher_data_sequencer_tutorials`,
   `patcher_dictionary_tutorials`,
-  `patcher_array_tutorials`: each opens its tutorials
+  `patcher_array_tutorials`,
+  `patcher_midi_input_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
   that no note or object overlaps another). Every one of them opens a
   tutorial through the shared `openTutorialBySearch(tester, type)` helper in

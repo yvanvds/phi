@@ -303,6 +303,22 @@ for:
   For now, place an `array` before the other objects that name it: when one
   of them was placed first, the array opens empty instead of with its saved
   contents.
+- **MIDI input:** raw bytes from a MIDI input port, one at a time or framed
+  into messages, and taken apart into notes, controllers and the rest
+  (`midiin`, `xmidiin` and `midiparse`), notes from a keyboard playing a saw,
+  with the release velocity (`notein` and `xnotein`), knobs and faders into
+  a filter and a level, also at 14 bits (`ctlin` and `xctlin`), the pitch
+  wheel at 7 and 14 bits, and key pressure (`bendin`, `xbendin`,
+  `xbendin2`, `touchin` and `polyin`), program changes recalling `preset`
+  slots, MIDI clock, start and stop, and SysEx (`pgmin`, `rtin` and
+  `sysexin`), parameter messages (`rpnin` and `nrpnin`) and the machine's
+  MIDI ports (`midiinfo`). Each group shares one tutorial. The objects
+  listen on port 0, the first input `midiinfo` lists. To use another port,
+  type its number after the object's name. Without a keyboard they stay
+  silent, but you can feed `midiparse` bytes by hand. On Windows a port can
+  be open in only one place at a time, so untick it under Settings › MIDI
+  for a patch to hear it. For now, at most eight MIDI input objects in all
+  open patches can listen to one port, and a ninth stays silent.
 
 Each tutorial is a small working patch, with numbered notes that walk you
 through it. Where Phi's object differs from the Max object of the same name,
