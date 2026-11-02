@@ -3259,6 +3259,417 @@ void main() {
     });
   });
 
+  test('every randomness type has a tutorial (#501)', () {
+    for (final type in ['.random', '.drunk', '.urn', '.prob', '.decide']) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+  });
+
+  // Randomness is checked by range and distribution, and exactly only where a
+  // seed makes it replayable, so none of these can flake.
+  group('randomness tutorials (#501) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    void render(int blocks) {
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+      }
+    }
+
+    // Every tutorial is mounted while open (#528); so is this copy.
+    void open(String slug) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+      gateway.mountAsSource(inst);
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: '$slug mounted');
+      render(20);
+    }
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      render(20);
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    // A message box by its text: each tutorial's are unique.
+    int msg(String text) => graph.objects
+        .singleWhere((o) => o.type == '.m' && o.args == text)
+        .handleId;
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    // Typing a number into a box sends it on.
+    void type(int id, int v) => gateway.sendInt(inst, id, 0, v);
+    String value(int id) => gateway.guiValue(inst, id);
+    int integer(int id) => int.parse(value(id));
+
+    // Clicks [button] [n] times and reads the box [out] after each click.
+    List<int> clicks(int button, int out, int n) {
+      final read = <int>[];
+      for (var i = 0; i < n; i++) {
+        click(button);
+        read.add(integer(out));
+      }
+      return read;
+    }
+
+    // How often each value turned up in [xs].
+    Map<int, int> tally(Iterable<int> xs) {
+      final counts = <int, int>{};
+      for (final x in xs) {
+        counts[x] = (counts[x] ?? 0) + 1;
+      }
+      return counts;
+    }
+
+    // The loudest master peak over [blocks] blocks.
+    double loudness(int blocks) {
+      var peak = 0.0;
+      for (var i = 0; i < blocks; i++) {
+        render(1);
+        final p = Channel.master.peakLinearPost();
+        if (p > peak) peak = p;
+      }
+      return peak;
+    }
+
+    test('random: 0 to N-1 evenly, a die, the range inlet, no seed', () {
+      open('random');
+      final out = at('.i', 60, 290);
+      final button = at('.b', 60, 160);
+      final six = clicks(button, out, 1200);
+      // 200 of each expected; 120 or 280 is more than six deviations out.
+      expect(tally(six).keys.toSet(), {0, 1, 2, 3, 4, 5});
+      for (final c in tally(six).values) {
+        expect(c, inInclusiveRange(120, 280));
+      }
+      expect(integer(at('.i', 170, 340)), integer(out) + 1, reason: 'a die');
+      var repeats = 0;
+      for (var i = 1; i < six.length; i++) {
+        if (six[i] == six[i - 1]) repeats++;
+      }
+      expect(repeats, greaterThan(100), reason: 'twice in a row happens');
+      final before = value(out);
+      click(msg('2'));
+      expect(value(out), before, reason: 'setting the range sends nothing');
+      expect(tally(clicks(button, out, 400)).keys.toSet(), {0, 1});
+      click(msg('100'));
+      final hundred = clicks(button, out, 2000);
+      expect(hundred.reduce(math.min), greaterThanOrEqualTo(0));
+      expect(hundred.reduce(math.max), lessThanOrEqualTo(99));
+      expect(tally(hundred).length, greaterThan(90), reason: '0 to 99');
+      final random = at('.random', 60, 230);
+      gateway.sendFloat(inst, random, 1, 2.9);
+      expect(tally(clicks(button, out, 200)).keys.toSet(), {0, 1});
+      for (final r in [1, 0]) {
+        gateway.sendInt(inst, random, 1, r);
+        expect(tally(clicks(button, out, 50)).keys, [0], reason: 'range $r');
+      }
+      // Note 4: no seed on this engine (yse-soundengine#1236). When the
+      // engine gains one this fails, and the notes need rewriting.
+      final params = gateway
+          .objectTypes()
+          .singleWhere((d) => d.type == '.random')
+          .params;
+      expect([for (final p in params) p.name], ['range']);
+    });
+
+    test('drunk: small steps, clipped edges, step size, the seed', () {
+      open('drunk');
+      final pos = at('.i', 60, 350);
+      final button = at('.b', 170, 160);
+      List<int> walk(int n) => clicks(button, pos, n);
+      // Checks every step of [steps], from [start], against [ok].
+      void steps(int start, List<int> steps, bool Function(int, int) ok) {
+        var prev = start;
+        for (final p in steps) {
+          expect(p, inInclusiveRange(0, 24));
+          expect(ok(prev, p), isTrue, reason: '$prev to $p');
+          prev = p;
+        }
+      }
+
+      expect(value(pos), '0', reason: 'nothing sent yet');
+      final first = walk(400);
+      steps(0, first, (a, b) => (b - a).abs() <= 2);
+      expect(tally(first).length, greaterThan(10), reason: 'it wanders');
+      click(msg('12'));
+      expect(integer(pos), 12, reason: 'moved there and sent');
+      click(msg('8'));
+      final leaps = walk(400);
+      steps(12, leaps, (a, b) => (b - a).abs() <= 7);
+      var big = 0;
+      for (var i = 1; i < leaps.length; i++) {
+        if ((leaps[i] - leaps[i - 1]).abs() > 2) big++;
+      }
+      expect(big, greaterThan(50), reason: 'leaps of up to 7');
+      click(msg('-2'));
+      click(msg('12'));
+      // Never a step of 0, except where an edge clips the step away.
+      steps(
+        12,
+        walk(400),
+        (a, b) => (b - a).abs() == 1 || a == b && {0, 24}.contains(a),
+      );
+      click(msg('3'));
+      final seed = at('.i', 390, 160);
+      type(seed, 5);
+      click(msg('12'));
+      final a = walk(30);
+      type(seed, 5);
+      click(msg('12'));
+      expect(walk(30), a, reason: 'seed 5 and 12 again: the same steps');
+      type(seed, 6);
+      click(msg('12'));
+      expect(walk(30), isNot(a), reason: 'another seed, another walk');
+    });
+
+    test('drunk: seed 7 replays the same walk every time it opens', () {
+      List<int> firstSteps() {
+        open('drunk');
+        final steps = clicks(at('.b', 170, 160), at('.i', 60, 350), 40);
+        gateway.disposeInstance(inst);
+        return steps;
+      }
+
+      final a = firstSteps();
+      expect(firstSteps(), a);
+      open('drunk'); // for the tearDown
+    });
+
+    test('drunk: the toggle plays the walk on master', () {
+      open('drunk');
+      expect(loudness(100), 0, reason: 'silent until the toggle');
+      final toggle = at('.t', 60, 160);
+      gateway.sendInt(inst, toggle, 0, 1);
+      expect(loudness(200), greaterThan(0.05), reason: 'a sine on master');
+      gateway.sendInt(inst, toggle, 0, 0);
+      loudness(20);
+      expect(loudness(100), 0, reason: 'off again');
+    });
+
+    test('urn: every number once, the empty bang, clear, auto-refill', () {
+      open('urn');
+      final dealt = at('.i', 60, 350);
+      final empties = at('.i', 200, 400);
+      final button = at('.b', 60, 160);
+      final clear = at('.m', 170, 160);
+      List<int> deal(int n) => clicks(button, dealt, n);
+      const all = {0, 1, 2, 3, 4, 5};
+      final round = deal(6);
+      expect(round.toSet(), all, reason: 'each once');
+      expect(value(empties), '0');
+      click(button);
+      expect(integer(dealt), round.last, reason: 'nothing new');
+      expect(integer(empties), 1, reason: 'the right outlet');
+      click(button);
+      expect(integer(empties), 2, reason: 'every bang says so');
+      click(clear);
+      final orders = <String>{};
+      for (var r = 0; r < 10; r++) {
+        final again = deal(6);
+        expect(again.toSet(), all, reason: 'all back');
+        orders.add(again.join());
+        click(clear);
+      }
+      expect(orders.length, greaterThan(1), reason: 'a new order');
+      click(msg('3'));
+      expect(deal(3).toSet(), {0, 1, 2}, reason: 'limit 3, refilled');
+      click(msg('6'));
+      // The toggle opens the gate: the empty bang reaches clear.
+      final toggle = at('.t', 340, 290);
+      gateway.sendInt(inst, toggle, 0, 1);
+      final forever = deal(70);
+      final counted = integer(empties);
+      // Every seventh bang meets the empty urn, which refills it.
+      for (var r = 0; r < 10; r++) {
+        final chunk = forever.sublist(r * 7, r * 7 + 6);
+        expect(chunk.toSet(), all, reason: 'round $r');
+      }
+      expect(counted, greaterThanOrEqualTo(10 + 2), reason: 'counted');
+      gateway.sendInt(inst, toggle, 0, 0);
+      click(clear);
+      // A seed reshuffles the rest; what was dealt stays dealt.
+      final two = deal(2);
+      type(at('.i', 280, 160), 9);
+      expect({...two, ...deal(4)}, all, reason: 'no repeats');
+    });
+
+    test('urn: seed 3 deals the same first round every time it opens', () {
+      List<int> firstRound() {
+        open('urn');
+        final round = clicks(at('.b', 60, 160), at('.i', 60, 350), 6);
+        gateway.disposeInstance(inst);
+        return round;
+      }
+
+      final a = firstRound();
+      expect(firstRound(), a);
+      open('urn');
+    });
+
+    test('prob: loaded transitions, weights, dump, add, dead end', () {
+      open('prob');
+      final state = at('.i', 60, 410);
+      final stuck = at('.i', 170, 460);
+      final prob = at('.prob', 60, 350);
+      final button = at('.b', 60, 160);
+      expect(value(state), '0');
+      final pairs = <(int, int)>[];
+      var from = 0;
+      for (final to in clicks(button, state, 3000)) {
+        pairs.add((from, to));
+        from = to;
+      }
+      expect(pairs.toSet(), {(0, 1), (0, 2), (1, 0), (1, 2), (2, 0)});
+      double share((int, int) p) =>
+          pairs.where((q) => q == p).length /
+          pairs.where((q) => q.$1 == p.$1).length;
+      expect(share((0, 1)), closeTo(0.75, 0.06), reason: '3 out of 4');
+      expect(share((1, 0)), closeTo(0.5, 0.07), reason: 'alike');
+      expect(share((2, 0)), 1, reason: 'always back to 0');
+      final dump = at('.l', 300, 410);
+      click(msg('dump'));
+      expect(value(dump), '2 0 1', reason: 'the last one');
+      // 0 2 4: the right boxes first, the left one sends.
+      type(at('.i', 280, 560), 4);
+      type(at('.i', 170, 560), 2);
+      type(at('.i', 60, 560), 0);
+      expect(value(at('.l', 60, 680)), '0 2 4');
+      final next = <int>[];
+      for (var i = 0; i < 1400; i++) {
+        type(prob, 0);
+        click(button);
+        next.add(integer(state));
+      }
+      expect(
+        next.where((n) => n == 2).length / next.length,
+        closeTo(4 / 7, 0.06),
+        reason: 'from 0 now 3 to 4 for state 2',
+      );
+      // A weight of 0 switches it off.
+      gateway.sendList(inst, prob, 0, '0 2 0');
+      for (var i = 0; i < 100; i++) {
+        type(prob, 0);
+        click(button);
+        expect(integer(state), 1, reason: 'only 1 is left from 0');
+      }
+      // Dead end: 3 sets the state without sending; the bang reports it.
+      final shown = value(state);
+      click(msg('3'));
+      expect(value(state), shown, reason: 'nothing sent');
+      expect(value(stuck), '0');
+      click(button);
+      expect((value(state), integer(stuck)), (shown, 1), reason: 'stuck');
+      click(button);
+      expect(integer(state), 1, reason: 'back at 0, which goes to 1 now');
+      // The seed: the same seed and start, the same chain.
+      gateway.sendList(inst, prob, 0, '0 2 1');
+      final seed = at('.i', 500, 160);
+      List<int> chain() {
+        type(prob, 0);
+        return clicks(button, state, 30);
+      }
+
+      type(seed, 11);
+      final a = chain();
+      type(seed, 11);
+      expect(chain(), a);
+      click(msg('clear'));
+      click(button);
+      expect(integer(stuck), 2, reason: 'cleared: no way out of anything');
+    });
+
+    test('prob: seed 5 replays the same chain every time it opens', () {
+      List<int> chain() {
+        open('prob');
+        final c = clicks(at('.b', 60, 160), at('.i', 60, 410), 40);
+        gateway.disposeInstance(inst);
+        return c;
+      }
+
+      final a = chain();
+      expect(chain(), a);
+      open('prob');
+    });
+
+    test('decide: 0 or 1, either way through the gate, the seed', () {
+      open('decide');
+      final flip = at('.i', 340, 350);
+      final left = at('.i', 60, 630);
+      final right = at('.i', 200, 630);
+      final button = at('.b', 170, 160);
+      final flips = clicks(button, flip, 1000);
+      expect(flips.toSet(), {0, 1});
+      final ones = flips.where((f) => f == 1).length;
+      expect(ones, inInclusiveRange(400, 600), reason: 'a fair coin');
+      expect(
+        (integer(left), integer(right)),
+        (1000 - ones, ones),
+        reason: '0 goes left, 1 right, every bang counted once',
+      );
+      var longest = 1;
+      var run = 1;
+      for (var i = 1; i < flips.length; i++) {
+        run = flips[i] == flips[i - 1] ? run + 1 : 1;
+        longest = math.max(longest, run);
+      }
+      expect(longest, greaterThanOrEqualTo(4), reason: 'runs happen');
+      final seed = at('.i', 280, 160);
+      type(seed, 7);
+      final a = clicks(button, flip, 40);
+      type(seed, 7);
+      expect(clicks(button, flip, 40), a, reason: 'seed 7 replays');
+      // An int flips too, its value ignored.
+      final decide = at('.decide', 200, 350);
+      final counted = integer(left) + integer(right);
+      gateway.sendInt(inst, decide, 0, 42);
+      expect(value(flip), anyOf('0', '1'));
+      expect(integer(left) + integer(right), counted, reason: 'no bang');
+    });
+
+    test('decide: seed 7 flips the same way every time it opens', () {
+      List<int> flips() {
+        open('decide');
+        final f = clicks(at('.b', 170, 160), at('.i', 340, 350), 40);
+        gateway.disposeInstance(inst);
+        return f;
+      }
+
+      final a = flips();
+      expect(flips(), a);
+      open('decide');
+    });
+
+    test('decide: the toggle flips five times a second', () {
+      open('decide');
+      final toggle = at('.t', 60, 160);
+      // metro keeps wall-clock time: bound the count by the time it ran.
+      final clock = Stopwatch()..start();
+      gateway.sendInt(inst, toggle, 0, 1);
+      while (clock.elapsedMilliseconds < 1100) {
+        render(4);
+        sleep(const Duration(milliseconds: 5));
+      }
+      gateway.sendInt(inst, toggle, 0, 0);
+      final ran = clock.elapsedMilliseconds;
+      final n = integer(at('.i', 60, 630)) + integer(at('.i', 200, 630));
+      expect(n, greaterThanOrEqualTo(3), reason: 'a tick at once, then more');
+      expect(n, lessThanOrEqualTo(ran ~/ 200 + 1), reason: 'every 200 ms');
+    });
+  });
+
   test('report: object types with no tutorial yet', () {
     final missing = [
       for (final t in engineTypes.toList()..sort())

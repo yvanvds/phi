@@ -3006,9 +3006,11 @@ main + app          (orchestration)
   `thresh-quickthresh`), domain clocks (#498: `transport`, `tempo`,
   `timepoint`, `setclock`, `when`, `translate`), control flow (#499:
   `trigger`, `bangbang`, `uzi`, `if`, `loadbang-loadmess`, `onebang`,
-  `buddy-bondo`, `next-match`) and routing (#500: `route-routepass`, `sel`,
+  `buddy-bondo`, `next-match`), routing (#500: `route-routepass`, `sel`,
   `gate-switch`, `router-matrix`, `split`, `spray-funnel-cycle`,
-  `bucket-decode`). The domain clock six reach a libYSE
+  `bucket-decode`) and randomness (#501: `random`, `drunk`, `urn`, `prob`,
+  `decide`; checked by range and distribution, and exactly only through a
+  seed; `.random` has no seed on libYSE 3.1.0, yse-soundengine#1236). The domain clock six reach a libYSE
   domain clock by name; their clocks advance with the audio blocks whether or
   not the patch is mounted, are never destroyed by a patch object, and are not
   Phi's time domains (Phi mints its own `phi.midi.*` / `phi.metronome`
@@ -3036,7 +3038,8 @@ main + app          (orchestration)
   `patcher_time_tutorials`,
   `patcher_clock_domain_tutorials`,
   `patcher_control_flow_tutorials`,
-  `patcher_routing_tutorials`: each opens its tutorials
+  `patcher_routing_tutorials`,
+  `patcher_randomness_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
   that no note or object overlaps another). Every one of them opens a
   tutorial through the shared `openTutorialBySearch(tester, type)` helper in

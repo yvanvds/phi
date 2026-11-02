@@ -228,6 +228,10 @@ for:
   patchbay for messages (`router` and `matrix`), ranges (`split`), spreading
   over outlets (`spray`, `funnel` and `cycle`), and shifting and selecting
   (`bucket` and `decode`). Each group of two or more shares one tutorial.
+- **Randomness:** a random number (`random`), a random walk (`drunk`), every
+  number once before any repeats (`urn`), weighted chains of states (`prob`)
+  and a coin flip (`decide`). `drunk`, `urn`, `prob` and `decide` take a seed
+  that replays the same numbers; `random` has none yet.
 
 Each tutorial is a small working patch, with numbered notes that walk you
 through it. Where Phi's object differs from the Max object of the same name,
