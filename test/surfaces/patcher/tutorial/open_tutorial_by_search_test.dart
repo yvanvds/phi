@@ -157,6 +157,32 @@ void main() {
     variant: TargetPlatformVariant.only(TargetPlatform.linux),
   );
 
+  testWidgets(
+    'openTutorialBySearch types into a window that stays inactive without '
+    'waiting long for it (#542)',
+    (tester) async {
+      // Under xvfb-run, with no window manager, the window can go inactive
+      // once a tutorial opens and never come back. Typing still works then:
+      // the tap focuses the field and enterText opens its connection.
+      addTearDown(() => setLifecycle(tester, AppLifecycleState.resumed));
+      await pumpBrowser(tester);
+      FocusManager.instance.primaryFocus?.unfocus();
+      setLifecycle(tester, AppLifecycleState.inactive);
+      await tester.pump();
+      final took = Stopwatch()..start();
+      await openTutorialBySearch(tester, '.-');
+      took.stop();
+      expect(typed(tester), '.-');
+      expect(opened, ['.-']);
+      expect(
+        took.elapsed,
+        lessThan(const Duration(seconds: 4)),
+        reason: 'gave up waiting for a window that never comes back',
+      );
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.linux),
+  );
+
   testWidgets('openTutorialBySearch scrolls to an entry the search leaves '
       'below the fold (#541)', (tester) async {
     // `.s` also matches `.seq`, `.sel` and every description with `.s` in
