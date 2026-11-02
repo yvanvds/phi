@@ -1,0 +1,291 @@
+{
+  "title": "dict.join and dict.group — merging and grouping",
+  "covers": [
+    ".dict.join",
+    ".dict.group"
+  ],
+  "summary": "Merge a base dictionary with an override, and group a dictionary's entries by their values.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# dict.join and dict.group — merging and grouping\ndict.join base preset out writes into out every entry of base, then every entry of preset: where both hold a key, the preset value wins. dict.group kit bypart writes each entry of kit into bypart under its own value, so the entries that share a value end up together. With a third argument, a key, dict.group reads kit as records and groups each record by the value it holds at that key.\nUnlike Max, dict.group does not gather a stream of messages: send set messages to a dict for that.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "160.0",
+          "y": "600.0"
+        },
+        "parms": "kit",
+        "type": ".dict",
+        "state": {
+          "contents": {
+            "bass": "synth",
+            "kick": "drums",
+            "lead": "synth",
+            "snare": "drums"
+          }
+        },
+        "outputs": {
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "660.0"
+        },
+        "parms": "kit bypart",
+        "type": ".dict.group",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "720.0"
+        },
+        "parms": "bypart",
+        "type": ".dict.serialize",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "780.0",
+          "w": "640"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "760.0",
+          "y": "200.0",
+          "w": "300"
+        },
+        "parms": "1. Click the left button: base sends its reference, which runs dict.join. out holds freq and wave from base, and gain 0.8 and cutoff from preset.",
+        "type": ".text"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "760.0",
+          "y": "300.0",
+          "w": "300"
+        },
+        "parms": "2. Type 0.3 in the gain box, which sets gain in preset, and join again: gain 0.3. Neither base nor preset is changed by a join.",
+        "type": ".text"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "760.0",
+          "y": "400.0",
+          "w": "300"
+        },
+        "parms": "3. Click the button above dict.group: bypart holds synth with bass and lead under it, and drums with kick and snare. The groups come in the order their values first appear in kit.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "240.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "240.0",
+          "y": "280.0"
+        },
+        "parms": "set gain",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "340.0"
+        },
+        "parms": "base",
+        "type": ".dict",
+        "state": {
+          "contents": {
+            "freq": 440,
+            "gain": 0.5,
+            "wave": "sine"
+          }
+        },
+        "outputs": {
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "240.0",
+          "y": "340.0"
+        },
+        "parms": "preset",
+        "type": ".dict",
+        "state": {
+          "contents": {
+            "cutoff": 1200,
+            "gain": 0.8
+          }
+        },
+        "outputs": {
+          "output 1": {
+            "0": {
+              "Inlet": 1,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "400.0"
+        },
+        "parms": "base preset out",
+        "type": ".dict.join",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "460.0"
+        },
+        "parms": "out",
+        "type": ".dict.serialize",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "520.0",
+          "w": "420"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "600.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

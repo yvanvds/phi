@@ -270,6 +270,16 @@ for:
   a multi-track recorder (`mtr`). The `coll` and `textfile` tutorials write a
   file (`cues.txt`, `lines.txt`) into the folder Phi was started from and read
   it back.
+- **Dictionaries:** a named store of keys and values that is saved with the
+  patch and shared by name (`dict`), a dictionary built from inlets and taken
+  apart again (`dict.pack` and `dict.unpack`), routing on the keys it holds
+  and comparing two (`dict.route` and `dict.compare`), walking, splitting and
+  trimming one (`dict.iter`, `dict.slice` and `dict.strip`), merging and
+  grouping (`dict.join` and `dict.group`), and dictionaries as JSON text and
+  in the log panel (`dict.serialize`, `dict.deserialize` and `dict.print`).
+  A cord carries only a reference (`dictionary <name>`), never the
+  dictionary itself. For now, a dictionary that is loaded with a patch, or
+  read from JSON, has its keys in alphabetical order.
 
 Each tutorial is a small working patch, with numbered notes that walk you
 through it. Where Phi's object differs from the Max object of the same name,

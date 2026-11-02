@@ -5078,6 +5078,360 @@ void main() {
     },
   );
 
+  test('every dictionary type has a tutorial (#506)', () {
+    for (final type in [
+      '.dict', '.dict.pack', '.dict.unpack', '.dict.route', //
+      '.dict.compare', '.dict.iter', '.dict.slice', '.dict.strip',
+      '.dict.join', '.dict.group', '.dict.serialize', '.dict.deserialize',
+      '.dict.print',
+    ]) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+  });
+
+  group('dictionary tutorials (#506) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    void render(int blocks) {
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+      }
+    }
+
+    // Every tutorial is mounted while open (#528).
+    void open(String slug) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+      gateway.mountAsSource(inst);
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: 'mounted');
+      render(20);
+    }
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      render(20);
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    String value(int id) {
+      render(3);
+      return gateway.guiValue(inst, id);
+    }
+
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    void type(int id, num v) => v is int
+        ? gateway.sendInt(inst, id, 0, v)
+        : gateway.sendFloat(inst, id, 0, v.toDouble());
+    // A fresh object wired to a fresh list box.
+    (int, int) probe(String t, String args, {int outlet = 0}) {
+      final o = gateway.createObject(inst, t, args: args);
+      final l = gateway.createObject(inst, '.l');
+      gateway.connect(
+        inst,
+        fromHandleId: o,
+        outlet: outlet,
+        toHandleId: l,
+        inlet: 0,
+      );
+      return (o, l);
+    }
+
+    // What dict.serialize makes of the dictionary [name], right now.
+    String json(String name) {
+      final (s, l) = probe('.dict.serialize', name);
+      click(s);
+      return value(l);
+    }
+
+    // dict.deserialize parses on a worker thread and lands on a later block:
+    // render with real pauses until [done] holds.
+    void renderUntil(bool Function() done) {
+      for (var i = 0; i < 500 && !done(); i++) {
+        render(2);
+        sleep(const Duration(milliseconds: 2));
+      }
+      expect(done(), isTrue, reason: 'the background work finished');
+    }
+
+    test('dict: get, set, a miss, size, keys, delete, clear, the reference, '
+        'a shared name', () {
+      open('dict');
+      final data = at('.l', 60, 520);
+      final freq = at('.m', 60, 220);
+      final chord = at('.m', 170, 220);
+      click(freq);
+      expect(value(data), 'got 440');
+      click(chord);
+      expect(value(data), 'got 0 4 7');
+      click(at('.m', 280, 220));
+      expect(value(data), 'missing');
+      // Note 2: the number box sets freq through prepend.
+      type(at('.i', 400, 220), 330);
+      click(freq);
+      expect(value(data), 'got 330');
+      // Note 3, and the title note's load order (yse-soundengine#1243).
+      click(at('.m', 200, 340));
+      expect(value(data), 'got 3');
+      click(at('.m', 310, 340));
+      expect(value(data), 'got chord freq gain');
+      click(at('.m', 530, 220));
+      click(chord);
+      expect(value(data), 'missing', reason: 'deleted');
+      // Note 4: the reference.
+      click(at('.b', 530, 340));
+      expect(value(at('.l', 320, 520)), 'dictionary synth');
+      // Note 5: the lower dict shares the dictionary.
+      click(at('.m', 60, 600));
+      expect(value(at('.i', 60, 780)), '330');
+      click(at('.m', 420, 340));
+      click(at('.m', 200, 340));
+      expect(value(data), 'got 0', reason: 'clear removes every entry');
+      // Title note: keys nest with ::, and the order a dictionary was written
+      // in is lost when it is saved and loaded again (#1243).
+      final top = at('.dict', 60, 400);
+      gateway.sendList(inst, top, 0, 'set voice::1::freq 440');
+      gateway.sendList(inst, top, 0, 'set amp 1');
+      expect(json('synth'), '{"voice":{"1":{"freq":440}},"amp":1}');
+      final saved = gateway.dumpJson(inst);
+      final copy = gateway.createInstance();
+      gateway.parseJson(copy, saved);
+      final reloaded = gateway
+          .enumerate(copy)
+          .objects
+          .firstWhere((o) => o.type == '.dict')
+          .handleId;
+      final keys = gateway.createObject(copy, '.l');
+      final got = gateway.createObject(copy, '.prepend', args: 'got');
+      gateway
+        ..connect(
+          copy,
+          fromHandleId: reloaded,
+          outlet: 0,
+          toHandleId: got,
+          inlet: 0,
+        )
+        ..connect(
+          copy,
+          fromHandleId: got,
+          outlet: 0,
+          toHandleId: keys,
+          inlet: 0,
+        )
+        ..sendList(copy, reloaded, 0, 'getkeys');
+      render(3);
+      expect(
+        gateway.guiValue(copy, keys),
+        'got amp voice',
+        reason: 'yse-soundengine#1243: a reload sorts the keys',
+      );
+      gateway.disposeInstance(copy);
+    });
+
+    test('dict.pack and dict.unpack: cold then hot, right to left', () {
+      open('dict-pack-unpack');
+      final ref = at('.l', 300, 340);
+      final both = at('.l', 60, 580);
+      type(at('.f', 240, 220), 0.5);
+      expect(value(ref), '', reason: 'the right inlet only stores');
+      type(at('.i', 60, 220), 440);
+      expect(value(ref), 'dictionary voice');
+      expect(json('voice'), '{"freq":440,"gain":0.5}');
+      expect(value(at('.i', 60, 460)), '440');
+      expect(double.parse(value(at('.f', 240, 460))), 0.5);
+      expect(value(both), '440 0.5', reason: 'right to left: one list');
+      // Note 3.
+      type(at('.f', 240, 220), 0.8);
+      type(at('.i', 60, 220), 220);
+      expect(value(both), '220 0.8');
+      // A key that never got a value is written empty and unpacks to nothing.
+      final (fresh, freshRef) = probe('.dict.pack', 'blank freq gain');
+      final (empty, emptyOut) = probe('.dict.unpack', 'blank gain');
+      gateway.connect(
+        inst,
+        fromHandleId: fresh,
+        outlet: 0,
+        toHandleId: empty,
+        inlet: 0,
+      );
+      type(fresh, 1);
+      expect(value(freshRef), 'dictionary blank');
+      expect(json('blank'), '{"freq":1,"gain":""}');
+      expect(value(emptyOut), '', reason: 'nothing for an empty value');
+    });
+
+    test(
+      'dict.route and dict.compare: first key, none, a verdict and paths',
+      () {
+        open('dict-route-compare');
+        final routed = at('.l', 60, 580);
+        final button = at('.b', 180, 340);
+        final clear = at('.m', 60, 340);
+        type(at('.i', 60, 220), 60);
+        click(button);
+        expect(value(routed), 'note');
+        click(clear);
+        type(at('.i', 220, 220), 7);
+        click(button);
+        expect(value(routed), 'cc');
+        click(clear);
+        click(button);
+        expect(value(routed), 'none');
+        type(at('.i', 220, 220), 7);
+        type(at('.i', 60, 220), 60);
+        click(button);
+        expect(value(routed), 'note', reason: 'the first key argument wins');
+        // Title note: a key matches an entry under it.
+        gateway.sendList(inst, at('.dict', 60, 400), 0, 'clear');
+        gateway.sendList(inst, at('.dict', 60, 400), 0, 'set cc::1 7');
+        click(button);
+        expect(value(routed), 'cc');
+        // Note 3.
+        final equal = at('.i', 380, 460);
+        final paths = at('.l', 470, 460);
+        final compare = at('.b', 540, 280);
+        click(compare);
+        expect((value(equal), value(paths)), ('0', 'tempo'));
+        type(at('.i', 380, 220), 100);
+        gateway.sendList(inst, paths, 0, 'unchanged');
+        click(compare);
+        expect((value(equal), value(paths)), ('1', 'unchanged'));
+        // Title note: values compared as text.
+        gateway.sendFloat(inst, at('.prepend', 380, 280), 0, 100);
+        click(compare);
+        expect(value(equal), '0', reason: '100 and 100. differ');
+      },
+    );
+
+    test('dict.iter, dict.slice and dict.strip: pairs, a slice, a strip', () {
+      open('dict-iter-slice-strip');
+      final pairs = at('.l', 60, 460);
+      click(at('.b', 60, 220));
+      expect(
+        value(pairs),
+        'name lead voice::1::freq 440 voice::1::gain 0.5 voice::2::freq 220',
+      );
+      // Note 2.
+      click(at('.b', 60, 540));
+      expect(value(at('.l', 60, 720)), '{"freq":440,"gain":0.5}');
+      expect(
+        value(at('.l', 300, 720)),
+        '{"name":"lead","voice":{"2":{"freq":220}}}',
+      );
+      // Note 3: strip edits synth in place and its reference runs iter.
+      click(at('.b', 300, 220));
+      expect(value(pairs), 'name lead voice::1::freq 440 voice::1::gain 0.5');
+      click(at('.b', 60, 540));
+      expect(value(at('.l', 300, 720)), '{"name":"lead"}');
+      // Title note: the reference runs iter too.
+      gateway.sendList(inst, pairs, 0, 'before');
+      gateway.sendList(inst, at('.dict.iter', 60, 340), 0, 'dictionary synth');
+      expect(value(pairs), startsWith('name lead'));
+    });
+
+    test('dict.join and dict.group: an override and groups by value', () {
+      open('dict-join-group');
+      final out = at('.l', 60, 520);
+      click(at('.b', 60, 220));
+      expect(value(out), '{"freq":440,"gain":0.8,"wave":"sine","cutoff":1200}');
+      type(at('.f', 240, 220), 0.3);
+      click(at('.b', 60, 220));
+      expect(value(out), '{"freq":440,"gain":0.3,"wave":"sine","cutoff":1200}');
+      expect(json('base'), '{"freq":440,"gain":0.5,"wave":"sine"}');
+      expect(json('preset'), '{"cutoff":1200,"gain":0.3}');
+      // Note 3.
+      click(at('.b', 60, 600));
+      expect(
+        value(at('.l', 60, 780)),
+        '{"synth":{"bass":"synth","lead":"synth"},'
+        '"drums":{"kick":"drums","snare":"drums"}}',
+      );
+      // Title note: with a key, records group by the value at that key.
+      final notes = gateway.createObject(inst, '.dict', args: 'notes');
+      for (final m in [
+        'set n1::inst bass', 'set n1::pitch 40', //
+        'set n2::inst lead', 'set n3::inst bass',
+      ]) {
+        gateway.sendList(inst, notes, 0, m);
+      }
+      click(
+        gateway.createObject(inst, '.dict.group', args: 'notes byinst inst'),
+      );
+      expect(
+        json('byinst'),
+        '{"bass":{"n1":{"inst":"bass","pitch":40},"n3":{"inst":"bass"}},'
+        '"lead":{"n2":{"inst":"lead"}}}',
+      );
+    });
+
+    test('dict.serialize, dict.deserialize and dict.print: JSON both ways, '
+        'the log, a file', () async {
+      final lines = <String>[];
+      final sub = Log.instance.messages.listen(lines.add);
+      addTearDown(sub.cancel);
+      open('dict-serialize');
+      final bpm = at('.i', 60, 640);
+      click(at('.b', 60, 220));
+      expect(
+        value(at('.l', 60, 400)),
+        '{"bpm":120,"chord":[0,4,7],"title":"intro"}',
+      );
+      renderUntil(() => value(bpm) == '120');
+      expect(json('copy'), '{"bpm":120,"chord":[0,4,7],"title":"intro"}');
+      // Note 3: the typed JSON replaces copy.
+      click(at('.m', 260, 460));
+      renderUntil(() => value(bpm) == '90');
+      expect(json('copy'), '{"bpm":90,"title":"outro"}');
+      // The title note: deserialized keys come in alphabetical order (#1243).
+      final des = at('.dict.deserialize', 60, 520);
+      gateway.sendList(inst, des, 0, '{"title":"x","bpm":60}');
+      renderUntil(() => value(bpm) == '60');
+      expect(json('copy'), '{"bpm":60,"title":"x"}');
+      for (var i = 0; i < 50 && !lines.any((l) => l.contains('"x"')); i++) {
+        render(2);
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      final printed = [
+        for (final l in lines)
+          if (l.contains('copy: ')) l.substring(l.indexOf('copy: ')),
+      ];
+      expect(printed, containsAllInOrder(['copy: {', 'copy:   "bpm": 90,']));
+      expect(printed.last, 'copy: }');
+      // The title note: write and read a file.
+      final dir = Directory.systemTemp.createTempSync('phi_506_');
+      final old = Directory.current;
+      Directory.current = dir;
+      try {
+        gateway.sendList(
+          inst,
+          at('.dict.serialize', 60, 340),
+          0,
+          'write song.json',
+        );
+        final file = File('${dir.path}/song.json');
+        renderUntil(file.existsSync);
+        renderUntil(() => file.readAsStringSync().contains('intro'));
+        gateway.sendList(inst, des, 0, 'read song.json');
+        renderUntil(() => value(bpm) == '120');
+      } finally {
+        Directory.current = old;
+        dir.deleteSync(recursive: true);
+      }
+    });
+  });
+
   test('report: object types with no tutorial yet', () {
     final missing = [
       for (final t in engineTypes.toList()..sort())

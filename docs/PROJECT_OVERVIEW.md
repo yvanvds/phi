@@ -3032,7 +3032,14 @@ main + app          (orchestration)
   round trips use a relative name, which libYSE resolves against the process
   working directory, so the tests switch it to a temp folder; `.seq`,
   `.qlist` and `.mtr` count time in audio blocks, so their rhythms are
-  checked block by block).
+  checked block by block)
+  and dictionaries (#506: `dict`, `dict-pack-unpack`, `dict-route-compare`,
+  `dict-iter-slice-strip`, `dict-join-group`, `dict-serialize`; each `.dict`'s
+  contents ship in its saved `state` as `contents`, and libYSE reloads them in
+  alphabetical key order, yse-soundengine#1243; multi-word commands are built
+  with `.prepend` because of #521; a dictionary is shown with
+  `.dict.serialize` into a `.l`; `.dict.deserialize` parses on a worker thread,
+  so the tests render with real pauses until its reference arrives).
   The domain clock six reach a libYSE
   domain clock by name; their clocks advance with the audio blocks whether or
   not the patch is mounted, are never destroyed by a patch object, and are not
@@ -3066,7 +3073,8 @@ main + app          (orchestration)
   `patcher_list_tutorials`,
   `patcher_string_tutorials`,
   `patcher_messaging_tutorials`,
-  `patcher_data_sequencer_tutorials`: each opens its tutorials
+  `patcher_data_sequencer_tutorials`,
+  `patcher_dictionary_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
   that no note or object overlaps another). Every one of them opens a
   tutorial through the shared `openTutorialBySearch(tester, type)` helper in
