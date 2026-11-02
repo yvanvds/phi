@@ -1,0 +1,462 @@
+{
+  "title": "array.sort, shuffle, random and more — reordering",
+  "covers": [
+    ".array.sort",
+    ".array.reverse",
+    ".array.rotate",
+    ".array.shuffle",
+    ".array.scramble",
+    ".array.random"
+  ],
+  "summary": "Sort, reverse, rotate and shuffle an array in place, keep a second array in the same order, and pick elements at random.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "720"
+        },
+        "parms": "# array.sort, shuffle, random and more — reordering\nrow opens holding the notes 64 60 67 62 65, and vel their velocities 90 100 70 110 80, one per note. Every object here except array.random changes row in place and sends its reference, which runs array.tolist to show row now.\nsort, shuffle and scramble also send the order they applied: for each new position, the position the element came from. array.indexmap vel puts vel in that same order, so each note keeps its velocity.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "520.0",
+          "y": "620.0"
+        },
+        "parms": "row",
+        "type": ".array",
+        "state": {
+          "contents": [
+            64,
+            60,
+            67,
+            62,
+            65
+          ]
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "420.0",
+          "y": "280.0"
+        },
+        "parms": "row",
+        "type": ".array.rotate",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "600.0",
+          "y": "280.0"
+        },
+        "parms": "row 5",
+        "type": ".array.shuffle",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "300.0",
+          "y": "360.0"
+        },
+        "parms": "vel",
+        "type": ".array.indexmap",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "560.0",
+          "y": "360.0",
+          "w": "120"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "420.0"
+        },
+        "parms": "row",
+        "type": ".array.tolist",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "300.0",
+          "y": "420.0"
+        },
+        "parms": "vel",
+        "type": ".array.tolist",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "60.0",
+          "y": "480.0",
+          "w": "150"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "300.0",
+          "y": "480.0",
+          "w": "170"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "60.0",
+          "y": "560.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "300.0",
+          "y": "560.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 21
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "520.0",
+          "y": "680.0"
+        },
+        "parms": "vel",
+        "type": ".array",
+        "state": {
+          "contents": [
+            90,
+            100,
+            70,
+            110,
+            80
+          ]
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "60.0",
+          "y": "620.0"
+        },
+        "parms": "row",
+        "type": ".array.scramble",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "300.0",
+          "y": "620.0"
+        },
+        "parms": "row",
+        "type": ".array.random",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "300.0",
+          "y": "680.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "820.0",
+          "y": "200.0",
+          "w": "300"
+        },
+        "parms": "1. Click the sort button: row 60 62 64 65 67, the order 1 3 0 4 2, and vel follows: 100 110 90 80 70. Click -1: a negative number sorts descending, 67 65 64 62 60. Numbers sort before words, and equal elements keep their order.",
+        "type": ".text"
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "820.0",
+          "y": "350.0",
+          "w": "300"
+        },
+        "parms": "2. reverse turns row around. Type 1 in the rotate box: each element moves one place toward the end and the last wraps round to the front; -1 goes the other way. Neither sends an order, so vel no longer matches row.",
+        "type": ".text"
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "820.0",
+          "y": "500.0",
+          "w": "300"
+        },
+        "parms": "3. array.shuffle row 5 shuffles with the seed 5: the same shuffles every time the tutorial opens. array.scramble is the same object, here without a seed, so its order differs every time. Both send their order, and vel follows.",
+        "type": ".text"
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "820.0",
+          "y": "650.0",
+          "w": "300"
+        },
+        "parms": "4. array.random row picks one element and leaves row as it is. Each pick is independent, so a note can come twice in a row. A seed argument, as with shuffle, repeats the picks.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "120.0",
+          "y": "220.0"
+        },
+        "parms": "-1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "260.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "420.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "600.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "280.0"
+        },
+        "parms": "row",
+        "type": ".array.sort",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "260.0",
+          "y": "280.0"
+        },
+        "parms": "row",
+        "type": ".array.reverse",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

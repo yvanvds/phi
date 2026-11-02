@@ -280,6 +280,29 @@ for:
   A cord carries only a reference (`dictionary <name>`), never the
   dictionary itself. For now, a dictionary that is loaded with a patch, or
   read from JSON, has its keys in alphabetical order.
+- **Arrays:** an ordered list of values that is saved with the patch and
+  shared by name, read by position and searched (`array`, `array.at`,
+  `array.length`, `array.index`, `array.indexof` and `array.indexmap`), built
+  and edited step by step (`array.push`, `array.pop`, `array.shift`,
+  `array.unshift`, `array.insert`, `array.remove`, `array.replace` and
+  `array.fill`), cut, joined and reshaped (`array.slice`, `array.subarray`,
+  `array.split`, `array.wrap`, `array.concat`, `array.flatten`,
+  `array.join`, `array.group` and `array.thin`), worked on element by element
+  (`array.map`, `array.filter`, `array.reduce`, `array.foreach`,
+  `array.every`, `array.some`, `array.expr`, `array.iter`, `array.stream` and
+  `array.tuplewise`), reordered and picked from at random (`array.sort`,
+  `array.reverse`, `array.rotate`, `array.shuffle`, `array.scramble` and
+  `array.random`), summed up (`array.max`, `array.min`, `array.mean`,
+  `array.median`, `array.mode` and `array.stddev`), compared as sets
+  (`array.union`, `array.sect`, `array.unique`, `array.sub`,
+  `array.compare`, `array.change` and `array.routepass`) and converted
+  (`array.tolist`, `array.tostring`, `array.tosymbol`, `array.deserialize`
+  and `array.regexp`). Each group shares one tutorial. A cord carries only a
+  reference (`array <name>`), never the array itself, and where Max sends
+  each element out to a callback, Phi's objects take an expression instead.
+  For now, place an `array` before the other objects that name it: when one
+  of them was placed first, the array opens empty instead of with its saved
+  contents.
 
 Each tutorial is a small working patch, with numbered notes that walk you
 through it. Where Phi's object differs from the Max object of the same name,

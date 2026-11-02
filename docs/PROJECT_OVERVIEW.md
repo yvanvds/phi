@@ -3039,7 +3039,17 @@ main + app          (orchestration)
   alphabetical key order, yse-soundengine#1243; multi-word commands are built
   with `.prepend` because of #521; a dictionary is shown with
   `.dict.serialize` into a `.l`; `.dict.deserialize` parses on a worker thread,
-  so the tests render with real pauses until its reference arrives).
+  so the tests render with real pauses until its reference arrives)
+  and arrays (#507: `array`, `array-edit`, `array-slice-combine`,
+  `array-functional`, `array-order-random`, `array-stats`,
+  `array-sets-compare`, `array-convert`; each array's contents ship in the
+  saved `state` of an `.array` holder, and only the object that creates a
+  named array restores its contents, in stored-ID order, so the holders take
+  the lowest IDs after the title note (a saved patch with a binder placed
+  first reloads the array empty, yse-soundengine#1245); an array is shown with
+  `.array.tolist`/`.array.tostring` into a `.l`, or through `.prepend` when a
+  result can be a single int; the seeded `.array.shuffle` is checked by
+  reopening the tutorial).
   The domain clock six reach a libYSE
   domain clock by name; their clocks advance with the audio blocks whether or
   not the patch is mounted, are never destroyed by a patch object, and are not
@@ -3074,7 +3084,8 @@ main + app          (orchestration)
   `patcher_string_tutorials`,
   `patcher_messaging_tutorials`,
   `patcher_data_sequencer_tutorials`,
-  `patcher_dictionary_tutorials`: each opens its tutorials
+  `patcher_dictionary_tutorials`,
+  `patcher_array_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
   that no note or object overlaps another). Every one of them opens a
   tutorial through the shared `openTutorialBySearch(tester, type)` helper in

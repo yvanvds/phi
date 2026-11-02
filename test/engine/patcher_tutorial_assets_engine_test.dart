@@ -5432,6 +5432,603 @@ void main() {
     });
   });
 
+  test('every array type has a tutorial (#507)', () {
+    final arrays = [
+      for (final t in engineTypes)
+        if (t == '.array' || t.startsWith('.array.')) t,
+    ];
+    expect(arrays, hasLength(57));
+    for (final type in arrays) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+  });
+
+  group('array tutorials (#507) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    void render(int blocks) {
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+      }
+    }
+
+    // Every tutorial is mounted while open (#528).
+    void mount() {
+      graph = gateway.enumerate(inst);
+      gateway.mountAsSource(inst);
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: 'mounted');
+      render(20);
+    }
+
+    void open(String slug) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      mount();
+    }
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      render(20);
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    String value(int id) {
+      render(3);
+      return gateway.guiValue(inst, id);
+    }
+
+    double number(int id) => double.parse(value(id));
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    void type(int id, num v) => v is int
+        ? gateway.sendInt(inst, id, 0, v)
+        : gateway.sendFloat(inst, id, 0, v.toDouble());
+    void mark(int id) => gateway.sendList(inst, id, 0, 'before');
+    // A fresh object wired from [outlet] to a fresh list box.
+    (int, int) probe(String t, String args, {int outlet = 0}) {
+      final o = gateway.createObject(inst, t, args: args);
+      final l = gateway.createObject(inst, '.l');
+      gateway.connect(
+        inst,
+        fromHandleId: o,
+        outlet: outlet,
+        toHandleId: l,
+        inlet: 0,
+      );
+      return (o, l);
+    }
+
+    // A fresh object whose bang outlet [outlet] makes a list box say hit.
+    (int, int) bangs(String t, String args, int outlet) {
+      final o = gateway.createObject(inst, t, args: args);
+      final m = gateway.createObject(inst, '.m', args: 'hit');
+      final l = gateway.createObject(inst, '.l');
+      gateway
+        ..connect(
+          inst,
+          fromHandleId: o,
+          outlet: outlet,
+          toHandleId: m,
+          inlet: 0,
+        )
+        ..connect(inst, fromHandleId: m, outlet: 0, toHandleId: l, inlet: 0);
+      return (o, l);
+    }
+
+    // The array [name] right now, as text.
+    String contents(String name) {
+      final (s, l) = probe('.array.tostring', name);
+      click(s);
+      return value(l);
+    }
+
+    // A fresh array [name] holding [list].
+    void fill(String name, String list) {
+      final a = gateway.createObject(inst, '.array', args: name);
+      gateway
+        ..sendList(inst, a, 0, 'clear')
+        ..sendList(inst, a, 0, 'append $list');
+    }
+
+    // array.deserialize parses on the engine's background pool and lands on a
+    // later block: render with real pauses until [done] holds.
+    void renderUntil(bool Function() done) {
+      for (var i = 0; i < 500 && !done(); i++) {
+        render(2);
+        sleep(const Duration(milliseconds: 2));
+      }
+      expect(done(), isTrue, reason: 'the background work finished');
+    }
+
+    test('array: get, size, a miss, append, the reference, at, index, '
+        'indexof, indexmap, saved contents', () {
+      open('array');
+      final data = at('.l', 60, 460);
+      final getvalue = at('.m', 60, 220);
+      click(getvalue);
+      expect(value(data), 'got 60 64 67 72');
+      click(at('.m', 170, 220));
+      expect(value(data), 'got 4');
+      final get = at('.i', 280, 220);
+      type(get, 2);
+      expect(value(data), 'got 67');
+      type(get, 9);
+      expect(value(data), 'missing');
+      // Note 2.
+      type(at('.i', 400, 220), 76);
+      click(getvalue);
+      expect(value(data), 'got 60 64 67 72 76');
+      click(at('.b', 520, 220));
+      expect(value(at('.l', 300, 460)), 'array notes');
+      expect(value(at('.i', 480, 460)), '5');
+      // Note 3, and the title note: nothing wraps, a negative is refused.
+      final pos = at('.i', 60, 560);
+      final fetched = at('.l', 60, 740);
+      type(pos, 1);
+      expect(value(fetched), 'at 64');
+      mark(fetched);
+      click(at('.array.at', 60, 620));
+      expect(value(fetched), 'at 64', reason: 'a bang fetches again');
+      type(pos, 9);
+      expect(value(fetched), 'miss');
+      mark(fetched);
+      gateway.sendInt(inst, at('.array.at', 60, 620), 0, -1);
+      expect(value(fetched), 'before', reason: 'refused, not wrapped');
+      // Note 4.
+      final find = at('.i', 300, 560);
+      final found = at('.l', 300, 740);
+      final indexof = at('.i', 540, 680);
+      type(find, 67);
+      expect(value(found), 'index 2');
+      expect(value(indexof), '2');
+      type(find, 61);
+      expect(value(found), 'none');
+      expect(value(indexof), '-1');
+      mark(found);
+      gateway.sendFloat(inst, at('.array.index', 300, 620), 0, 67);
+      expect(value(found), 'none', reason: 'the float 67. is not the int 67');
+      // Note 5.
+      click(at('.b', 60, 820));
+      expect(value(at('.l', 300, 880)), 'array notes');
+      click(getvalue);
+      expect(value(data), 'got 72 67 64 60');
+      // The title note: the contents are saved with the patch.
+      final saved = gateway.dumpJson(inst);
+      gateway.disposeInstance(inst);
+      render(20);
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, saved);
+      mount();
+      click(at('.m', 60, 220));
+      expect(value(at('.l', 60, 460)), 'got 72 67 64 60');
+      // The title note: with another object of the name placed first, the
+      // saved contents do not load (yse-soundengine#1245).
+      final first = gateway.createInstance();
+      gateway.createObject(first, '.array.length', args: 'late');
+      final late = gateway.createObject(first, '.array', args: 'late');
+      gateway.sendList(first, late, 0, 'append 1 2');
+      final unloaded = gateway.dumpJson(first);
+      gateway.disposeInstance(first);
+      render(20);
+      final again = gateway.createInstance();
+      gateway.parseJson(again, unloaded);
+      final reloaded = gateway
+          .enumerate(again)
+          .objects
+          .firstWhere((o) => o.type == '.array')
+          .handleId;
+      final size = gateway.createObject(again, '.prepend', args: 'size');
+      final out = gateway.createObject(again, '.l');
+      gateway
+        ..connect(
+          again,
+          fromHandleId: reloaded,
+          outlet: 0,
+          toHandleId: size,
+          inlet: 0,
+        )
+        ..connect(
+          again,
+          fromHandleId: size,
+          outlet: 0,
+          toHandleId: out,
+          inlet: 0,
+        )
+        ..sendList(again, reloaded, 0, 'getsize');
+      render(3);
+      expect(
+        gateway.guiValue(again, out),
+        'size 0',
+        reason: 'yse-soundengine#1245: the binder created the store first',
+      );
+      gateway.disposeInstance(again);
+    });
+
+    test('array.push, pop, shift, unshift, insert, remove, replace, fill', () {
+      open('array-edit');
+      final now = at('.l', 60, 460);
+      final took = at('.l', 420, 400);
+      type(at('.i', 60, 220), 66);
+      expect(value(now), 'now 60 62 64 66');
+      type(at('.i', 240, 220), 58);
+      expect(value(now), 'now 58 60 62 64 66');
+      // Note 2.
+      final pop = at('.b', 420, 220);
+      click(pop);
+      expect((value(took), value(now)), ('took 66', 'now 58 60 62 64'));
+      click(at('.b', 580, 220));
+      expect((value(took), value(now)), ('took 58', 'now 60 62 64'));
+      // Note 3.
+      final insValue = at('.i', 60, 540);
+      final insPos = at('.i', 180, 540);
+      type(insPos, 1);
+      type(insValue, 61);
+      expect(value(now), 'now 60 61 62 64');
+      type(insPos, 9);
+      type(insValue, 5);
+      expect(contents('queue'), '60 61 62 64', reason: 'past the end');
+      final remove = at('.i', 420, 540);
+      type(remove, 0);
+      expect((value(took), value(now)), ('took 60', 'now 61 62 64'));
+      type(remove, 9);
+      expect(value(took), 'miss');
+      // Note 4.
+      final replace = at('.b', 60, 680);
+      final count = at('.i', 60, 800);
+      click(replace);
+      expect((value(count), value(now)), ('1', 'now 61 62 99'));
+      click(replace);
+      expect(value(count), '0');
+      click(at('.b', 420, 680));
+      expect(value(now), 'now 0 0 0 0');
+      // Note 2: an empty queue bangs the right outlet.
+      for (var i = 0; i < 4; i++) {
+        click(pop);
+      }
+      expect(value(took), 'took 0');
+      click(pop);
+      expect((value(took), value(now)), ('empty', 'empty'));
+    });
+
+    test('array.slice, subarray, split, wrap, concat, flatten, join, group, '
+        'thin', () {
+      open('array-slice-combine');
+      click(at('.b', 60, 300));
+      expect(value(at('.l', 60, 480)), 'slice 62 64 65');
+      click(at('.b', 260, 300));
+      expect(value(at('.l', 260, 480)), 'sub 67 65 64 62');
+      click(at('.b', 480, 300));
+      expect(value(at('.l', 480, 480)), 'head 60 62 64');
+      expect(value(at('.l', 480, 540)), 'tail 65 67 69 71');
+      // Right first: one list box on both outlets ends on the head.
+      final (split, last) = probe('.array.split', 'scale 3');
+      gateway.connect(
+        inst,
+        fromHandleId: split,
+        outlet: 1,
+        toHandleId: last,
+        inlet: 0,
+      );
+      click(split);
+      expect(value(last), '60 62 64');
+      // Note 2.
+      final wrap = at('.i', 60, 620);
+      final wrapped = at('.i', 60, 740);
+      for (final (pos, want) in [(7, '60'), (9, '64'), (-1, '71')]) {
+        type(wrap, pos);
+        expect(value(wrapped), want, reason: 'wrap $pos');
+      }
+      click(at('.b', 220, 620));
+      expect(value(at('.l', 220, 740)), '60 62 64 65 67 69 71 36 43');
+      click(at('.b', 500, 620));
+      expect(value(at('.l', 500, 740)), '36 43 c4 e4 g4 36 43');
+      // Note 3.
+      click(at('.b', 60, 800));
+      expect(value(at('.l', 60, 920)), 'c4-e4-g4');
+      click(at('.b', 220, 800));
+      expect(value(at('.l', 220, 980)), '| 60 60 60 | 64 64 | 67');
+      // Note 4.
+      click(at('.b', 500, 800));
+      expect(value(at('.i', 660, 920)), '3');
+      expect(value(at('.l', 500, 980)), '0 0.8 3');
+      // The title note: only thin changed its array; an empty result bangs.
+      expect(contents('scale'), '60 62 64 65 67 69 71');
+      expect(contents('hits'), '60 64 60 67 64 60');
+      final (empty, hit) = bangs('.array.slice', 'scale 9', 1);
+      click(empty);
+      expect(value(hit), 'hit');
+    });
+
+    test('array.map, filter, reduce, foreach, every, some, expr, iter, '
+        'stream, tuplewise', () {
+      open('array-functional');
+      final expr = at('.l', 300, 400);
+      final classes = at('.l', 420, 460);
+      final semis = at('.l', 400, 520);
+      final sum = at('.i', 300, 580);
+      final every = at('.i', 300, 640);
+      final some = at('.i', 300, 700);
+      final pairs = at('.l', 340, 760);
+      click(at('.b', 60, 220));
+      expect(value(expr), '72 76 79');
+      expect(contents('chord'), '60 64 67', reason: 'expr changes nothing');
+      expect(value(classes), '0 4 7');
+      expect(value(semis), '0 4 7');
+      expect(value(sum), '191');
+      expect(value(every), '1');
+      expect(value(some), '0');
+      expect(value(pairs), '72 64 55');
+      // Note 3.
+      click(at('.b', 300, 220));
+      expect(contents('chord'), '67 71 74');
+      expect(value(expr), '79 83 86');
+      expect(value(classes), '7 11 2');
+      expect(value(semis), '7 11 14');
+      expect(value(sum), '212');
+      expect(value(every), '1');
+      expect(value(some), '1');
+      expect(value(pairs), '79 71 62');
+      // Note 4.
+      click(at('.b', 560, 220));
+      expect(value(at('.l', 560, 400)), '60 72 65');
+      expect(contents('mel'), '60 72 65');
+      // Note 5.
+      final feed = at('.i', 580, 520);
+      final missing = at('.i', 740, 640);
+      final window = at('.l', 580, 700);
+      for (final (v, short) in [(1, '3'), (2, '2'), (3, '1')]) {
+        type(feed, v);
+        expect(value(missing), short);
+        expect(value(window), '', reason: 'no reference before it is full');
+      }
+      type(feed, 4);
+      expect((value(missing), value(window)), ('0', '1 2 3 4'));
+      type(feed, 5);
+      expect(value(window), '2 3 4 5');
+      // The title note: $i2 is the position.
+      final (pos, positions) = probe('.array.expr', r'chord $i2 + 0');
+      click(pos);
+      expect(value(positions), '0 1 2');
+    });
+
+    test('array.sort, reverse, rotate, shuffle, scramble, random', () {
+      const velOf = {64: 90, 60: 100, 67: 70, 62: 110, 65: 80};
+      void expectPaired() {
+        final notes = contents('row').split(' ').map(int.parse).toList();
+        expect(notes.toSet(), velOf.keys.toSet(), reason: 'a reorder');
+        expect(contents('vel'), [for (final n in notes) velOf[n]].join(' '));
+      }
+
+      open('array-order-random');
+      final row = at('.l', 60, 480);
+      final vel = at('.l', 300, 480);
+      final order = at('.l', 560, 360);
+      // Note 3: seed 5 shuffles the same way every time the tutorial opens.
+      click(at('.b', 600, 220));
+      final shuffled = value(row);
+      final shuffleOrder = value(order);
+      expectPaired();
+      gateway.disposeInstance(inst);
+      render(20);
+      open('array-order-random');
+      click(at('.b', 600, 220));
+      expect((value(row), value(order)), (shuffled, shuffleOrder));
+      gateway.disposeInstance(inst);
+      render(20);
+      open('array-order-random');
+      // Note 1.
+      click(at('.b', 60, 220));
+      expect(value(row), '60 62 64 65 67');
+      expect(value(order), '1 3 0 4 2');
+      expect(value(vel), '100 110 90 80 70');
+      click(at('.m', 120, 220));
+      expect(value(row), '67 65 64 62 60');
+      expect(value(vel), '70 80 90 110 100');
+      // Note 3: scramble sends its order too.
+      click(at('.b', 60, 560));
+      expectPaired();
+      // Note 2.
+      click(at('.b', 60, 220));
+      click(at('.b', 260, 220));
+      expect(value(row), '67 65 64 62 60');
+      final rotate = at('.i', 420, 220);
+      type(rotate, 1);
+      expect(value(row), '60 67 65 64 62');
+      type(rotate, -1);
+      type(rotate, -1);
+      expect(value(row), '65 64 62 60 67');
+      expect(value(vel), '100 110 90 80 70', reason: 'no order: vel stays');
+      // Note 4.
+      final pick = at('.i', 300, 680);
+      final before = contents('row');
+      for (var i = 0; i < 10; i++) {
+        click(at('.b', 300, 560));
+        expect(velOf.keys.map((n) => '$n'), contains(value(pick)));
+      }
+      expect(contents('row'), before, reason: 'random changes nothing');
+      final (a, la) = probe('.array.random', 'row 7');
+      final (b, lb) = probe('.array.random', 'row 7');
+      final pa = gateway.createObject(inst, '.prepend', args: 'x');
+      final pb = gateway.createObject(inst, '.prepend', args: 'x');
+      gateway
+        ..connect(inst, fromHandleId: a, outlet: 0, toHandleId: pa, inlet: 0)
+        ..connect(inst, fromHandleId: pa, outlet: 0, toHandleId: la, inlet: 0)
+        ..connect(inst, fromHandleId: b, outlet: 0, toHandleId: pb, inlet: 0)
+        ..connect(inst, fromHandleId: pb, outlet: 0, toHandleId: lb, inlet: 0);
+      for (var i = 0; i < 6; i++) {
+        click(a);
+        click(b);
+        expect(value(la), value(lb), reason: 'a seed repeats the picks');
+      }
+      // The note: numbers before words, equal elements keep their order.
+      fill('mix', 'b 7. a 3 7');
+      click(gateway.createObject(inst, '.array.sort', args: 'mix'));
+      expect(contents('mix'), '3 7. 7 a b');
+    });
+
+    test('array.max, min, mode, mean, median, stddev', () {
+      open('array-stats');
+      final all = at('.b', 60, 220);
+      final mode = at('.i', 380, 460);
+      final mean = at('.f', 60, 580);
+      click(all);
+      expect(value(at('.i', 60, 460)), '127');
+      expect(value(at('.i', 220, 460)), '40');
+      expect(value(mode), '64');
+      expect(number(mean), closeTo(80.83, 0.005));
+      expect(number(at('.f', 220, 580)), 77);
+      expect(number(at('.f', 380, 580)), closeTo(28.33, 0.005));
+      // Note 3.
+      final push = at('.i', 200, 220);
+      type(push, 127);
+      expect(value(mode), '64', reason: 'a tie goes to the first');
+      type(push, 127);
+      expect(value(mode), '127');
+      expect(number(mean), closeTo(92.375, 0.001));
+      click(at('.m', 360, 220));
+      click(all);
+      expect(value(at('.l', 560, 640)), 'empty');
+      // The title note: words are skipped, except by mode.
+      fill('words', 'a a 3');
+      final (max, maxOut) = probe('.array.max', 'words');
+      final (top, topOut) = probe('.array.mode', 'words');
+      final maxBox = gateway.createObject(inst, '.i');
+      gateway.connect(
+        inst,
+        fromHandleId: max,
+        outlet: 0,
+        toHandleId: maxBox,
+        inlet: 0,
+      );
+      click(max);
+      click(top);
+      expect((value(maxBox), value(topOut)), ('3', 'a'));
+      expect(value(maxOut), '', reason: 'a bare int');
+    });
+
+    test('array.sect, union, unique, sub, compare, change, routepass', () {
+      open('array-sets-compare');
+      for (final (x, want) in [
+        (60.0, '60 64'),
+        (240.0, '60 64 67 57'),
+        (440.0, '60 62 64'),
+        (600.0, '64 60 62'),
+      ]) {
+        click(at('.b', x, 220));
+        expect(value(at('.l', x, 340)), want, reason: 'at $x');
+      }
+      // Note 2.
+      final check = at('.b', 60, 480);
+      final equal = at('.i', 60, 680);
+      final changed = at('.i', 280, 680);
+      final routed = at('.l', 600, 760);
+      click(check);
+      expect(
+        (value(equal), value(changed), value(routed)),
+        ('1', '1', 'fifth'),
+      );
+      click(check);
+      expect(value(changed), '0');
+      // Note 3.
+      type(at('.i', 200, 480), 70);
+      expect(contents('chord'), '60 64 67 70');
+      expect(
+        (value(equal), value(changed), value(routed)),
+        ('0', '1', 'seventh'),
+      );
+      click(at('.m', 380, 480));
+      click(check);
+      expect(value(routed), 'neither');
+      // The title note: spelling and order.
+      fill('ints', '60 64');
+      fill('back', '64 60');
+      fill('floats', '60. 64');
+      final (cmp, _) = probe('.array.compare', 'ints back');
+      final verdict = gateway.createObject(inst, '.i');
+      gateway.connect(
+        inst,
+        fromHandleId: cmp,
+        outlet: 0,
+        toHandleId: verdict,
+        inlet: 0,
+      );
+      gateway.sendInt(inst, verdict, 0, 5);
+      click(cmp);
+      expect(value(verdict), '0', reason: '60 64 is not 64 60');
+      final (union, both) = probe('.array.union', 'ints floats');
+      click(union);
+      expect(value(both), '60 64 60.', reason: '60 and 60. differ');
+    });
+
+    test('array.tolist, tostring, tosymbol, deserialize, regexp', () {
+      open('array-convert');
+      click(at('.b', 60, 220));
+      expect(value(at('.l', 60, 400)), 'kick 1 .wav');
+      expect(value(at('.l', 260, 400)), 'kick 1 .wav');
+      expect(value(at('.l', 480, 400)), 'kick1.wav');
+      // tolist keeps 1 a number: array.index finds the int 1.
+      final (find, _) = probe('.array.index', 'sample');
+      final where = gateway.createObject(inst, '.i');
+      gateway.connect(
+        inst,
+        fromHandleId: find,
+        outlet: 0,
+        toHandleId: where,
+        inlet: 0,
+      );
+      type(find, 1);
+      expect(value(where), '1');
+      // Note 2.
+      click(at('.b', 60, 480));
+      expect(value(at('.i', 60, 660)), '7');
+      expect(value(at('.l', 240, 660)), '7');
+      // Note 3.
+      final shown = at('.l', 440, 660);
+      click(at('.m', 440, 480));
+      renderUntil(() => value(shown) == '60 62.5 kick');
+      expect(contents('loaded'), '60 62.5 kick');
+      final (kind, _) = probe('.array.index', 'loaded');
+      gateway.connect(
+        inst,
+        fromHandleId: kind,
+        outlet: 0,
+        toHandleId: where,
+        inlet: 0,
+      );
+      type(kind, 62.5);
+      expect(value(where), '1', reason: 'the float 62.5');
+      type(kind, 60);
+      expect(value(where), '0', reason: 'the int 60');
+      mark(shown);
+      click(at('.m', 620, 480));
+      for (var i = 0; i < 20; i++) {
+        render(2);
+        sleep(const Duration(milliseconds: 2));
+      }
+      expect(value(shown), 'before', reason: 'no reference is sent');
+      expect(contents('loaded'), '60 62.5 kick');
+      // Note 4.
+      click(at('.b', 60, 740));
+      expect(value(at('.l', 60, 860)), 'c4 c5');
+      click(at('.b', 300, 740));
+      expect(value(at('.l', 300, 860)), 'e4 snare');
+      final (none, hit) = bangs('.array.regexp', 'names x', 1);
+      click(none);
+      expect(value(hit), 'hit');
+    });
+  });
+
   test('report: object types with no tutorial yet', () {
     final missing = [
       for (final t in engineTypes.toList()..sort())

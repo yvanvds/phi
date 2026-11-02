@@ -1,0 +1,554 @@
+{
+  "title": "array.sect, union, compare and more — sets and comparisons",
+  "covers": [
+    ".array.union",
+    ".array.sect",
+    ".array.unique",
+    ".array.sub",
+    ".array.compare",
+    ".array.change",
+    ".array.routepass"
+  ],
+  "summary": "The notes two chords share, the notes of either, a melody without repeats, and testing an array: equal, changed, or holding a value.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "720"
+        },
+        "parms": "# array.sect, union, compare and more — sets and comparisons\ncmaj opens holding the C major triad 60 64 67, amin the A minor triad 57 60 64, line the melody 60 62 60 64 62 and chord a copy of cmaj. Only array.push changes an array here; the other objects send a result.\nElements are compared by spelling, so 7 and 7. are different elements, and array.compare also cares about order: 60 64 is not 64 60.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "400.0"
+        },
+        "parms": "cmaj",
+        "type": ".array",
+        "state": {
+          "contents": [
+            60,
+            64,
+            67
+          ]
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "240.0",
+          "y": "280.0"
+        },
+        "parms": "cmaj amin",
+        "type": ".array.union",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "440.0",
+          "y": "280.0"
+        },
+        "parms": "line",
+        "type": ".array.unique",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "600.0",
+          "y": "280.0"
+        },
+        "parms": "line 3 1",
+        "type": ".array.sub",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "340.0",
+          "w": "100"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "240.0",
+          "y": "340.0",
+          "w": "130"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "440.0",
+          "y": "340.0",
+          "w": "110"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "600.0",
+          "y": "340.0",
+          "w": "110"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "60.0",
+          "y": "480.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "200.0",
+          "y": "480.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "380.0",
+          "y": "480.0"
+        },
+        "parms": "clear",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "200.0",
+          "y": "400.0"
+        },
+        "parms": "amin",
+        "type": ".array",
+        "state": {
+          "contents": [
+            57,
+            60,
+            64
+          ]
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "200.0",
+          "y": "540.0"
+        },
+        "parms": "chord",
+        "type": ".array.push",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 21
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "2": {
+              "Inlet": 0,
+              "Object": 23
+            },
+            "Count": 3
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "60.0",
+          "y": "620.0"
+        },
+        "parms": "chord cmaj",
+        "type": ".array.compare",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 24
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "280.0",
+          "y": "620.0"
+        },
+        "parms": "chord",
+        "type": ".array.change",
+        "outputs": {
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 25
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "460.0",
+          "y": "620.0"
+        },
+        "parms": "chord 70 67",
+        "type": ".array.routepass",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 26
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 27
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 28
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "60.0",
+          "y": "680.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "280.0",
+          "y": "680.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "440.0",
+          "y": "700.0"
+        },
+        "parms": "seventh",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 29
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 27": {
+        "ID": 27,
+        "gui": {
+          "x": "600.0",
+          "y": "700.0"
+        },
+        "parms": "fifth",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 29
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 28": {
+        "ID": 28,
+        "gui": {
+          "x": "440.0",
+          "y": "760.0"
+        },
+        "parms": "neither",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 29
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 29": {
+        "ID": 29,
+        "gui": {
+          "x": "600.0",
+          "y": "760.0",
+          "w": "100"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "340.0",
+          "y": "400.0"
+        },
+        "parms": "line",
+        "type": ".array",
+        "state": {
+          "contents": [
+            60,
+            62,
+            60,
+            64,
+            62
+          ]
+        }
+      },
+      "object 30": {
+        "ID": 30,
+        "gui": {
+          "x": "820.0",
+          "y": "200.0",
+          "w": "300"
+        },
+        "parms": "1. Click the four top buttons. array.sect cmaj amin sends the notes the chords share, in the order of cmaj: 60 64. array.union sends the notes of either, each once: 60 64 67 57. array.unique line drops the repeats: 60 62 64. array.sub line 3 1 sends positions 3 down to 1, both included: 64 60 62. array.sub is array.subarray under another name.",
+        "type": ".text"
+      },
+      "object 31": {
+        "ID": 31,
+        "gui": {
+          "x": "820.0",
+          "y": "410.0",
+          "w": "300"
+        },
+        "parms": "2. Click the lower button: chord sends its reference. array.compare chord cmaj sends 1, the same notes in the same order. array.change chord sends 1 the first time, because it starts out remembering an empty array, then 0 until chord changes. array.routepass chord 70 67 finds no 70 but a 67: fifth.",
+        "type": ".text"
+      },
+      "object 32": {
+        "ID": 32,
+        "gui": {
+          "x": "820.0",
+          "y": "600.0",
+          "w": "300"
+        },
+        "parms": "3. Type 70 in the push box: chord becomes 60 64 67 70, and its reference runs the three again. compare sends 0, change 1, and routepass finds 70 first: seventh. Click clear, then the button: an empty chord goes to the rightmost outlet, neither.",
+        "type": ".text"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "540.0"
+        },
+        "parms": "chord",
+        "type": ".array",
+        "state": {
+          "contents": [
+            60,
+            64,
+            67
+          ]
+        },
+        "outputs": {
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 21
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "2": {
+              "Inlet": 0,
+              "Object": 23
+            },
+            "Count": 3
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "240.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "440.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "600.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "280.0"
+        },
+        "parms": "cmaj amin",
+        "type": ".array.sect",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}
