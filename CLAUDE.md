@@ -60,6 +60,23 @@ flutter test
 flutter run -d windows
 ```
 
+### Integration tests on Linux: always headless
+
+Never run an integration test on the real desktop. Its windows take over the
+developer's screen. The Linux dev machine runs Wayland, so plain `xvfb-run`
+is **not** enough: GTK ignores the Xvfb display and opens on the real screen.
+Use exactly this command, including for background loops, repeat runs and
+extra worktrees:
+
+```bash
+env -u WAYLAND_DISPLAY GDK_BACKEND=x11 xvfb-run -a -s "-screen 0 1920x1080x24" \
+  flutter test integration_test/<file>.dart -d linux
+```
+
+Without `-s`, Xvfb's screen is 640x480, smaller than the 1920x1080 the tests are
+sized for. When you hand integration work to a subagent, paste this command
+word for word.
+
 ## Boundaries
 
 - **Don't** push to `main` without confirmation.
