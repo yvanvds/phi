@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -152,17 +153,34 @@ void main() {
     // ── 2) a GUI control operates: the toggle starts the metro ──────────────
     final toggleId = graph.objects.firstWhere((o) => o.type == '.t').handleId;
     expect(patcherGateway.guiValue(instance, toggleId), 'off');
+    // The metro keeps wall-clock time, so its count depends on how much real
+    // time the tap and its settling take (#534): time the tap on a stopwatch.
+    final clock = Stopwatch()..start();
+    double now() => clock.elapsedMicroseconds / 1000;
+    final tapStart = now();
     await tester.tap(find.byType(PatchToggleSquare));
+    final tapEnd = now();
     await tester.pumpAndSettle();
     expect(
       patcherGateway.guiValue(instance, toggleId),
       'on',
       reason: 'the click reached the real toggle',
     );
-    // A metro bangs once the moment it starts — the counter moved.
+    // A metro bangs once the moment it starts, then once every 500 ms of
+    // real time since (give or take 50 ms of scheduling jitter).
+    final counter = graph.objects
+        .firstWhere(
+          (o) => o.type == '.i' && o.position == const Offset(60, 400),
+        )
+        .handleId;
+    final readAt = now();
     expect(
-      numberBoxes.map((id) => patcherGateway.guiValue(instance, id)),
-      contains(startsWith('1')),
+      int.parse(patcherGateway.guiValue(instance, counter)),
+      inInclusiveRange(
+        1 + math.max(0, ((readAt - tapEnd - 50) / 500).floor()),
+        1 + ((readAt - tapStart + 50) / 500).floor(),
+      ),
+      reason: 'the counter moved at once',
     );
     // Stop it again so nothing ticks on into the copy.
     await tester.tap(find.byType(PatchToggleSquare));

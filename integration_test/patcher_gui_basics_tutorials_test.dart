@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -156,6 +158,36 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    // A metro keeps wall-clock time, so how many times it has ticked depends
+    // on how much real time the test itself takes: a tap and its settling
+    // cost a few ms on a fast runner and hundreds on a slow one (#534). So
+    // tick counts are bounded by real time measured on this stopwatch, never
+    // fixed: one tick at once, then one per period since the tap.
+    final clock = Stopwatch()..start();
+    double now() => clock.elapsedMicroseconds / 1000;
+    // Taps [f] and returns when, on [clock], the tap started and ended: the
+    // press and release reach the patch inside that span. Settling the frame
+    // afterwards is left out of it.
+    Future<({double start, double end})> timedTap(Finder f) async {
+      expect(f, findsOneWidget);
+      final start = now();
+      await tester.tap(f);
+      final end = now();
+      await tester.pumpAndSettle();
+      return (start: start, end: end);
+    }
+
+    // Scheduling jitter of a wall-clock object, in ms.
+    const slack = 50.0;
+    // The ticks of a metro of [period] ms started by [on], read now.
+    Matcher ticksSince(({double start, double end}) on, int period) {
+      final t = now();
+      return inInclusiveRange(
+        1 + math.max(0, ((t - on.end - slack) / period).floor()),
+        1 + ((t - on.start + slack) / period).floor(),
+      );
+    }
+
     Future<void> close() async {
       // Every list box result the walk-through left must show in full.
       expectListBoxesUncut(
@@ -180,10 +212,14 @@ void main() {
 
     // ── .t: click on, bang flips, the metro runs while on ───────────────────
     at = await open('.t', slug: 't', notes: 5, heading: 'A toggle is a switch');
-    await tap(find.byType(PatchToggleSquare));
+    final started = await timedTap(find.byType(PatchToggleSquare));
     expect(value(at('.t', 60, 210)), 'on');
     expect(value(at('.i', 60, 290)), '1');
-    expect(value(at('.i', 180, 410)), '1', reason: 'the metro started');
+    expect(
+      int.parse(value(at('.i', 180, 410))),
+      ticksSince(started, 300),
+      reason: 'the metro started: a tick at once, then one every 300 ms',
+    );
     await tap(find.byType(PatchBangSquare));
     expect(value(at('.i', 60, 290)), '0', reason: 'a bang flips it off');
     await close();
