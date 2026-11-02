@@ -175,7 +175,7 @@
           "y": "420.0",
           "w": "300"
         },
-        "parms": "3. The left lines.txt writes the lines to a file of that name, in the folder Phi was started from. Click it, click clear, then click the right lines.txt: read loads the file back, the button flashes, and query says 2 again.",
+        "parms": "3. The left lines.txt writes the lines to a file of that name: on Windows in the folder phi.exe is in, on Linux in the folder Phi was started from. Click it, click clear, then click the right lines.txt: read loads the file back, the button flashes, and query says 2 again.",
         "type": ".text"
       },
       "object 2": {

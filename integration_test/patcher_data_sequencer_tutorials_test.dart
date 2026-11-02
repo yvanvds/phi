@@ -32,6 +32,7 @@ import '../test/domain/project/test_doubles/fake_project_directory_picker.dart';
 import '../test/domain/project/test_doubles/fake_project_store.dart';
 import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/engine_file_dir.dart';
 import '../test/surfaces/patcher/test_support/expect_list_boxes_uncut.dart';
 import '../test/surfaces/patcher/test_support/open_tutorial_by_search.dart';
 
@@ -48,7 +49,9 @@ import '../test/surfaces/patcher/test_support/open_tutorial_by_search.dart';
 /// results back from the canvas. The sequencers count time in audio blocks,
 /// so the test renders a known number of blocks between events and the
 /// rhythms it checks do not depend on wall-clock time. The coll and textfile
-/// file round trips write into a temporary working directory.
+/// file round trips write where libYSE resolves a relative name
+/// ([engineFileDir]: a temporary working directory on Linux, the executable's
+/// folder on Windows, #541).
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -62,11 +65,26 @@ void main() {
       ..initOffline();
     addTearDown(System.instance.close);
 
-    // A relative file name lands in the working directory: use a fresh one.
+    // A relative file name lands where libYSE resolves it: the working
+    // directory on Linux, so switch it to a fresh one, and the executable's
+    // folder on Windows (#541, yse-soundengine#1249). Clear the tutorials'
+    // files there first, so a file found proves this run wrote it.
     final workDir = Directory.systemTemp.createTempSync('phi_505_it_');
     final oldDir = Directory.current;
     Directory.current = workDir;
+    final fileDir = engineFileDir();
+    File engineFile(String name) =>
+        File('${fileDir.path}${Platform.pathSeparator}$name');
+    void removeTutorialFiles() {
+      for (final name in ['cues.txt', 'lines.txt']) {
+        final f = engineFile(name);
+        if (f.existsSync()) f.deleteSync();
+      }
+    }
+
+    removeTutorialFiles();
     addTearDown(() {
+      removeTutorialFiles();
       Directory.current = oldDir;
       workDir.deleteSync(recursive: true);
     });
@@ -279,15 +297,19 @@ void main() {
     }
 
     // A file request finishes on a worker thread and is delivered on a later
-    // block: render with real pauses until [done] holds.
-    Future<void> renderUntil(bool Function() done) async {
+    // block: render with real pauses until [done] holds. [seen] describes the
+    // state for the failure message.
+    Future<void> renderUntil(
+      bool Function() done, {
+      required String Function() seen,
+    }) async {
       for (var i = 0; i < 500 && !done(); i++) {
         loudness(2);
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 2)),
         );
       }
-      expect(done(), isTrue, reason: 'the file request finished');
+      expect(done(), isTrue, reason: 'the file request finished: ${seen()}');
     }
 
     // ── coll ────────────────────────────────────────────────────────────────
@@ -312,8 +334,8 @@ void main() {
     await typeInto('.i', 60, 200, '4');
     expect(await listAt(60, 320), '72 76 79', reason: 'one shared collection');
     await tap(messageAt(60, 660));
-    final cues = File('${workDir.path}/cues.txt');
-    await renderUntil(cues.existsSync);
+    final cues = engineFile('cues.txt');
+    await renderUntil(cues.existsSync, seen: () => whereIs('cues.txt'));
     expect(cues.readAsStringSync(), contains('4, 72 76 79;'));
     await tap(messageAt(200, 660));
     await typeInto('.i', 60, 200, '2');
@@ -325,7 +347,7 @@ void main() {
     await renderUntil(() {
       gateway.sendInt(instance, topColl, 0, 2);
       return value(data) == '62 65 69';
-    });
+    }, seen: () => 'recall 2 sends "${value(data)}"; ${whereIs('cues.txt')}');
     await typeInto('.i', 60, 200, '3');
     expect(await listAt(60, 320), '64 67 71', reason: 'read from cues.txt');
     await close();
@@ -448,8 +470,8 @@ void main() {
     await typeInto('.i', 440, 200, '2');
     expect(await listAt(60, 570), 'intro');
     await tap(messageAt(200, 270));
-    final lines = File('${workDir.path}/lines.txt');
-    await renderUntil(lines.existsSync);
+    final lines = engineFile('lines.txt');
+    await renderUntil(lines.existsSync, seen: () => whereIs('lines.txt'));
     expect(lines.readAsLinesSync(), ['60 64 67', 'intro']);
     await tap(messageAt(320, 270));
     await tap(messageAt(335, 200));
@@ -460,7 +482,7 @@ void main() {
     await renderUntil(() {
       gateway.sendMessage(instance, textfile, 0, 'query');
       return value(count) == '2';
-    });
+    }, seen: () => 'query says ${value(count)}; ${whereIs('lines.txt')}');
     await typeInto('.i', 440, 200, '1');
     expect(await listAt(60, 570), '60 64 67', reason: 'read back');
     await close();

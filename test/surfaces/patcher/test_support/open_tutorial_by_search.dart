@@ -7,9 +7,10 @@ import 'package:phi/surfaces/patcher/tutorial/patch_tutorial_browser.dart';
 /// Types [type] into the Tutorials browser's search field
 /// ([PatchTutorialBrowser.searchKey]), checks the field really holds it, then
 /// taps the type's entry and settles. The browser is a `ListView` that builds
-/// only the entries near its viewport (#524), so searching is what makes the
-/// entry exist however long the index grows. The palette's Tutorials tab must
-/// already be showing. What the opened tutorial looks like is left to the
+/// only the entries near its viewport (#524), so the helper searches first,
+/// which narrows the list, and scrolls to the entry when the search still
+/// leaves more rows than fit (#541). The palette's Tutorials tab must already
+/// be showing. What the opened tutorial looks like is left to the
 /// caller to check.
 ///
 /// Every tutorial test (`integration_test/patcher_*_tutorials_test.dart`)
@@ -22,12 +23,65 @@ import 'package:phi/surfaces/patcher/tutorial/patch_tutorial_browser.dart';
 /// await openTutorialBySearch(tester, '.metro');
 /// expect(engine.patchLibrary.tutorial!.slug, 'metro');
 /// ```
+///
+/// Searching narrows the list, but a short query can still match more entries
+/// than fit: `.s` also matches every type or description containing `.s`
+/// (`.seq`, `.sel`, …), and the browser builds only the rows near its
+/// viewport. So when the entry is not built yet, the helper scrolls the
+/// browser down until it is (#541), and fails naming the rows it did see.
 Future<void> openTutorialBySearch(WidgetTester tester, String type) async {
   await searchTutorials(tester, type);
   final entry = find.byKey(PatchTutorialBrowser.entryKey(type));
+  await _scrollToEntry(tester, entry, type);
   await tester.ensureVisible(entry);
   await tester.tap(entry);
   await tester.pumpAndSettle();
+}
+
+/// Scrolls the Tutorials browser's list down a row-ish step at a time until
+/// [entry] is built, or the list ends.
+Future<void> _scrollToEntry(
+  WidgetTester tester,
+  Finder entry,
+  String type,
+) async {
+  // The list scrolls down; the search field's own Scrollable runs across.
+  final list = find.descendant(
+    of: find.byType(PatchTutorialBrowser),
+    matching: find.byWidgetPredicate(
+      (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+    ),
+  );
+  final seen = <String>{};
+  for (var step = 0; step < 200 && entry.evaluate().isEmpty; step++) {
+    seen.addAll(_builtEntries());
+    if (list.evaluate().isEmpty) break;
+    final position = tester.state<ScrollableState>(list.first).position;
+    if (position.pixels >= position.maxScrollExtent) break;
+    position.jumpTo(
+      (position.pixels + 96).clamp(0.0, position.maxScrollExtent),
+    );
+    await tester.pumpAndSettle();
+  }
+  seen.addAll(_builtEntries());
+  expect(
+    entry,
+    findsOneWidget,
+    reason:
+        'the Tutorials browser lists $type after searching for it; '
+        'rows seen while scrolling: ${(seen.toList()..sort()).join(' ')}',
+  );
+}
+
+/// The types whose rows the browser has built right now.
+Iterable<String> _builtEntries() sync* {
+  const prefix = 'PatchTutorialBrowser.entry.';
+  for (final e in find.byType(GestureDetector).evaluate()) {
+    final key = e.widget.key;
+    if (key is ValueKey<String> && key.value.startsWith(prefix)) {
+      yield key.value.substring(prefix.length);
+    }
+  }
 }
 
 /// Types [query] into the Tutorials browser's search field and fails the test

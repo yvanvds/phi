@@ -251,7 +251,7 @@
           "y": "640.0",
           "w": "300"
         },
-        "parms": "4. The left cues.txt writes the collection to a text file of that name, one entry per line, in the folder Phi was started from. Click it, then clear: the top coll sends nothing now. The right cues.txt reads the file back, and the button flashes when it has loaded.",
+        "parms": "4. The left cues.txt writes the collection to a text file of that name, one entry per line: on Windows in the folder phi.exe is in, on Linux in the folder Phi was started from. Click it, then clear: the top coll sends nothing now. The right cues.txt reads the file back, and the button flashes when it has loaded.",
         "type": ".text"
       },
       "object 3": {

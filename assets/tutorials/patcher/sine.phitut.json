@@ -102,11 +102,7 @@
               "Inlet": 0,
               "Object": 14
             },
-            "1": {
-              "Inlet": 1,
-              "Object": 14
-            },
-            "Count": 2
+            "Count": 1
           }
         }
       },
@@ -156,7 +152,7 @@
           "y": "540.0",
           "w": "300"
         },
-        "parms": "4. A signal inlet takes one cable: to mix, chain ~+. ~* 0.1 turns the sum down, and ~dac plays it on both channels. Each toggle sends 1 or 0 to a ~*, switching its sine on or off.",
+        "parms": "4. A signal inlet takes one cable: to mix, chain ~+. ~* 0.1 turns the sum down, and ~dac plays it. Each toggle sends 1 or 0 to a ~*, switching its sine on or off.",
         "type": ".text"
       },
       "object 2": {

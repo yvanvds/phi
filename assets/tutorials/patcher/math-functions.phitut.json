@@ -664,11 +664,7 @@
               "Inlet": 0,
               "Object": 41
             },
-            "1": {
-              "Inlet": 1,
-              "Object": 41
-            },
-            "Count": 2
+            "Count": 1
           }
         }
       },

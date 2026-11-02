@@ -156,4 +156,31 @@ void main() {
     },
     variant: TargetPlatformVariant.only(TargetPlatform.linux),
   );
+
+  testWidgets('openTutorialBySearch scrolls to an entry the search leaves '
+      'below the fold (#541)', (tester) async {
+    // `.s` also matches `.seq`, `.sel` and every description with `.s` in
+    // it, which here sort before it: more rows than the browser shows.
+    final types = [for (var i = 0; i < 60; i++) '.s${'x' * (i + 1)}'];
+    final all = [...types.map(object), object('.s')];
+    opened.clear();
+    asInIntegrationTest(tester);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 300,
+            child: PatchTutorialBrowser(
+              objectTypes: all,
+              tutorialTypes: {for (final d in all) d.type},
+              onOpen: opened.add,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openTutorialBySearch(tester, '.s');
+    expect(opened, ['.s']);
+  });
 }

@@ -120,11 +120,7 @@
               "Inlet": 0,
               "Object": 15
             },
-            "1": {
-              "Inlet": 1,
-              "Object": 15
-            },
-            "Count": 2
+            "Count": 1
           }
         }
       },
