@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../../design/widgets/patcher/patch_canvas_constants.dart';
+import '../../design/widgets/patcher/patch_list_box.dart';
 import '../../design/widgets/patcher/patch_object_box_metrics.dart';
 import '../../domain/patcher/item_list_args.dart';
 import '../../domain/patcher/keyboard_layout.dart';
@@ -267,7 +268,16 @@ void registerBuiltInPatcherNodes() {
   registry.register(
     NodeDescriptor(
       type: PatchObjectTypes.gList,
-      defaultSize: Size(_messageBoxWidth, lineHeight),
+      // As wide as its stored `w` (issue #533): a right-edge drag widens it
+      // so a long list can be read, and one never resized opens at the
+      // default width.
+      defaultSize: Size(PatchListBox.defaultWidth, lineHeight),
+      sizeForGui: (gui) => Size(
+        PatchListBox.widthFor(
+          double.tryParse(gui[PatchGuiProperty.width] ?? ''),
+        ),
+        lineHeight,
+      ),
       defaultArgs: '',
       inputs: const [PortSpec(kind: PatchPortKind.control)],
       outputs: const [PortSpec(kind: PatchPortKind.control)],
@@ -661,7 +671,8 @@ const double _menuChevronWidth = 24;
 const double _numberBoxWidth = 64;
 
 /// Width a bare message box opens at — wider than a number box, because what
-/// goes in it is words rather than digits.
+/// goes in it is words rather than digits. A `.l` opens at the same width
+/// ([PatchListBox.defaultWidth]), but can be widened (issue #533).
 const double _messageBoxWidth = 96;
 
 /// Side of a `.dial` — room for the knob and, in the gap at its foot, a

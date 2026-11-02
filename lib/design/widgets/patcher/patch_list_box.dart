@@ -20,6 +20,26 @@ class PatchListBox extends StatelessWidget {
   /// Depth of each notch, as a fraction of the box's height.
   static const double notchFraction = 0.3;
 
+  /// Width a list box opens at, and keeps until it is resized — the width of a
+  /// message box, about ten characters of list.
+  static const double defaultWidth = 96;
+
+  /// Narrowest a right-edge resize takes a list box (issue #533).
+  static const double minWidth = 48;
+
+  /// Widest a right-edge resize takes a list box (issue #533).
+  static const double maxWidth = 640;
+
+  /// [width] held to [minWidth]–[maxWidth], in whole pixels.
+  static double clampWidth(double width) =>
+      width.clamp(minWidth, maxWidth).roundToDouble();
+
+  /// The width a list box with a stored [width] (`w`, null when it was never
+  /// resized) is drawn at — so a patch saved before list boxes could be
+  /// resized opens them at [defaultWidth], as it always did.
+  static double widthFor(double? width) =>
+      width == null ? defaultWidth : clampWidth(width);
+
   /// The box's outline at [size]: a rectangle with a notch cut into each of
   /// its vertical edges. Public for the same reason the number and message
   /// boxes expose theirs — the shape is what the widget is for.

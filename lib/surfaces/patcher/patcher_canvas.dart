@@ -241,11 +241,12 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   Offset _nodeDragScene = Offset.zero;
   bool _draggingNode = false;
 
-  // Note right-edge resize (issue #488): the note whose edge the press landed
-  // on, the scene x of the press and the note's width at that moment. The
+  // Right-edge resize of a note (issue #488) or list box (#533): the node
+  // whose edge the press landed on, the scene x of the press and its width at
+  // that moment. The
   // drag moves the edge by the pointer's horizontal travel; the release
   // journals one step.
-  PatchNodeId? _resizeNote;
+  PatchNodeId? _resizeNode;
   double _resizePressX = 0;
   double _resizeFromWidth = 0;
 
@@ -339,8 +340,9 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
 
   static const double _clickSlop = 4;
 
-  /// Half-width, in scene pixels, of a note's right-edge resize band.
-  static const double _noteEdgeBand = 4;
+  /// Half-width, in scene pixels, of a note's or list box's right-edge resize
+  /// band.
+  static const double _resizeEdgeBand = 4;
 
   /// Zoom range the view is held inside, however it got there — the wheel, a
   /// pinch, or the `Ctrl+0` fit.
@@ -1071,16 +1073,16 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       _controller.beginCableDrag(port);
       return;
     }
-    // The right edge of a note: resize its wrap width (issue #488). Ahead of
-    // the cable grab and the node itself, because the band sits on the very
-    // pixels that would otherwise drag the note.
-    final edge = _noteEdgeAt(scene);
+    // The right edge of a note or list box: resize its width (issues #488,
+    // #533). Ahead of the cable grab and the node itself, because the band
+    // sits on the very pixels that would otherwise drag the node.
+    final edge = _resizeEdgeAt(scene);
     if (edge != null) {
       _invalidatePendingTap();
-      _resizeNote = edge.id;
+      _resizeNode = edge.id;
       _resizePressX = scene.dx;
       _resizeFromWidth = edge.size.width;
-      _controller.beginNoteResize(edge.id);
+      _controller.beginWidthResize(edge.id);
       return;
     }
     // Just off a port, along an existing cable: arm a re-route of that cable.
@@ -1134,9 +1136,9 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       return;
     }
     _trackGhost(event.localPosition);
-    if (_resizeNote != null) {
+    if (_resizeNode != null) {
       final scene = _toScene(event.localPosition);
-      _controller.previewNoteWidth(_resizeFromWidth + scene.dx - _resizePressX);
+      _controller.previewWidth(_resizeFromWidth + scene.dx - _resizePressX);
       return;
     }
     if (_pressCable != null) {
@@ -1225,11 +1227,11 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     }
     final scene = _toScene(event.localPosition);
 
-    // A note resize ends where the pointer let go — one journaled step, or
+    // A width resize ends where the pointer let go — one journaled step, or
     // nothing when the edge came back to where it started.
-    if (_resizeNote != null) {
-      _resizeNote = null;
-      _controller.endNoteResize();
+    if (_resizeNode != null) {
+      _resizeNode = null;
+      _controller.endWidthResize();
       _applyHover(event.localPosition);
       return;
     }
@@ -1560,8 +1562,8 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // them and nothing is journaled. Unconditional — the point of this path is
     // that it clears drag origins however they got there.
     _controller.abortNodeDrag();
-    // A cancelled resize puts the note back at the width the press found.
-    _controller.abortNoteResize();
+    // A cancelled resize puts the node back at the width the press found.
+    _controller.abortWidthResize();
     // A cancelled re-route puts its cable back. Ordered before the drag is
     // dropped because a cable that quietly vanished — the window lost capture
     // mid-gesture — is the worst thing this path could leave behind (#359).
@@ -1595,7 +1597,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       _nodePressScene = Offset.zero;
       _nodeDragScene = Offset.zero;
       _draggingNode = false;
-      _resizeNote = null;
+      _resizeNode = null;
       _resizePressX = 0;
       _resizeFromWidth = 0;
       // A press the user never completed is never half of a double-click — and
@@ -1674,7 +1676,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       _setHover(SystemMouseCursors.precise, port);
       return;
     }
-    if (_noteEdgeAt(scene) != null) {
+    if (_resizeEdgeAt(scene) != null) {
       _setHover(SystemMouseCursors.resizeLeftRight, null);
       return;
     }
@@ -1751,20 +1753,22 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
 
   // ─── hit-testing (scene coordinates) ─────────────────────────────────────
 
-  /// The note whose **right edge** is under [scene] — the resize handle of
-  /// issue #488 — topmost first, or null. A band [_noteEdgeBand] wide either
-  /// side of the edge, the note's full height; only notes have one, and only
-  /// in edit mode, where the canvas owns the presses.
-  PatchNode? _noteEdgeAt(Offset scene) {
+  /// The note or list box whose **right edge** is under [scene] — the resize
+  /// handle of issues #488 and #533 — topmost first, or null. A band
+  /// [_resizeEdgeBand] wide either side of the edge, the node's full height;
+  /// only those two have one
+  /// ([PatcherController.isWidthResizable]), and only in edit mode, where the
+  /// canvas owns the presses.
+  PatchNode? _resizeEdgeAt(Offset scene) {
     if (widget.mode.isRun) return null;
     for (final n in _controller.graph.nodes.toList().reversed) {
-      if (!PatchTypeName.isNote(n.type)) {
-        // A node drawn over a note owns its pixels, edge or not.
+      if (!PatcherController.isWidthResizable(n.type)) {
+        // A node drawn over a resizable one owns its pixels, edge or not.
         if (_rectOf(n).contains(scene)) return null;
         continue;
       }
       final right = n.position.dx + n.size.width;
-      if ((scene.dx - right).abs() <= _noteEdgeBand &&
+      if ((scene.dx - right).abs() <= _resizeEdgeBand &&
           scene.dy >= n.position.dy &&
           scene.dy <= n.position.dy + n.size.height) {
         return n;

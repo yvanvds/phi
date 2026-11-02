@@ -175,9 +175,9 @@ void main() {
 
     void resizeTo(PatchNode node, double width) {
       controller
-        ..beginNoteResize(node.id)
-        ..previewNoteWidth(width)
-        ..endNoteResize();
+        ..beginWidthResize(node.id)
+        ..previewWidth(width)
+        ..endWidthResize();
     }
 
     testWidgets('a paragraph wraps at the default width and grows down', (
@@ -217,10 +217,10 @@ void main() {
         final node = note();
         final initial = node.size;
 
-        controller.beginNoteResize(node.id);
-        controller.previewNoteWidth(300);
-        controller.previewNoteWidth(400.4);
-        controller.endNoteResize();
+        controller.beginWidthResize(node.id);
+        controller.previewWidth(300);
+        controller.previewWidth(400.4);
+        controller.endWidthResize();
 
         expect(node.size.width, 400);
         expect(node.size.height, lessThan(initial.height));
@@ -244,10 +244,10 @@ void main() {
     test('a resize that ends where it started journals nothing', () {
       final node = note();
       resizeTo(node, 300);
-      controller.beginNoteResize(node.id);
-      controller.previewNoteWidth(420);
-      controller.previewNoteWidth(300);
-      controller.endNoteResize();
+      controller.beginWidthResize(node.id);
+      controller.previewWidth(420);
+      controller.previewWidth(300);
+      controller.endWidthResize();
       expect(controller.noteWidthOf(node.id), 300);
 
       // One undo is the first resize itself — the round trip added no step.
@@ -259,9 +259,9 @@ void main() {
     test('a cancelled resize puts the width back', () {
       final node = note();
       resizeTo(node, 300);
-      controller.beginNoteResize(node.id);
-      controller.previewNoteWidth(500);
-      controller.abortNoteResize();
+      controller.beginWidthResize(node.id);
+      controller.previewWidth(500);
+      controller.abortWidthResize();
       expect(node.size.width, 300);
       expect(controller.noteWidthOf(node.id), 300);
     });
@@ -324,7 +324,7 @@ void main() {
       );
     });
 
-    test('only a note can be resized', () {
+    test('an object box cannot be resized', () {
       final sine = controller.addObject(
         desc: FakePatcherGateway.defaultCatalogue.firstWhere(
           (d) => d.type == Obj.dSine,
@@ -333,9 +333,9 @@ void main() {
       );
       final before = sine.size;
       controller
-        ..beginNoteResize(sine.id)
-        ..previewNoteWidth(500)
-        ..endNoteResize();
+        ..beginWidthResize(sine.id)
+        ..previewWidth(500)
+        ..endWidthResize();
       expect(sine.size, before);
       expect(controller.guiPropertyOf(sine.id, PatchGuiProperty.width), '');
     });
@@ -404,9 +404,9 @@ void main() {
     test('colour and width ride along a duplicate and a save → reload', () {
       final node = note();
       controller
-        ..beginNoteResize(node.id)
-        ..previewNoteWidth(300)
-        ..endNoteResize()
+        ..beginWidthResize(node.id)
+        ..previewWidth(300)
+        ..endWidthResize()
         ..setNoteColor(node.id, 'note-violet');
 
       controller.selectNode(node.id);

@@ -12,9 +12,10 @@
 /// Pure Dart (no `package:yse`): the domain names the keys, the bridge only
 /// moves strings.
 abstract final class PatchGuiProperty {
-  /// A note's wrap width in logical pixels (issue #488). Absent on a note
-  /// that was never resized, which then shrink-wraps its text up to the
-  /// default reading width.
+  /// A note's wrap width in logical pixels (issue #488), or a `.l` list
+  /// box's width (issue #533). Absent on one that was never resized: a note
+  /// then shrink-wraps its text up to the default reading width, and a list
+  /// box opens at its default width.
   static const String width = 'w';
 
   /// A note's background colour (issue #511): the **name** of a design-token

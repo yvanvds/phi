@@ -1,0 +1,250 @@
+{
+  "title": "tosymbol and fromsymbol — a list as one word and back",
+  "covers": [
+    ".tosymbol",
+    ".fromsymbol"
+  ],
+  "summary": "Join a message into one symbol with a separator, split it back, change the separator, and parse numbers typed with commas into a list.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# tosymbol and fromsymbol — a list as one word and back\ntosymbol joins the items of a message into one symbol, with its separator between them, so it can be used as one name. fromsymbol splits a symbol on its separator back into a message, and a result that is one number leaves as a number.\nUnlike Max, the separator is the argument and the right inlet rather than a @separator attribute, and the symbol tosymbol makes leaves as a list of one item.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "660.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "220.0",
+          "y": "660.0"
+        },
+        "parms": "",
+        "type": ".iter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "220.0",
+          "y": "720.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "640.0",
+          "y": "220.0",
+          "w": "300"
+        },
+        "parms": "1. Click the button. The field sends osc 3 amp, and tosymbol / joins it into the one word osc/3/amp.",
+        "type": ".text"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "640.0",
+          "y": "310.0",
+          "w": "300"
+        },
+        "parms": "2. fromsymbol / splits it back into osc 3 amp. Click - to make the dash the separator, then the button: osc-3-amp has no / in it, so fromsymbol / leaves it whole.",
+        "type": ".text"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "640.0",
+          "y": "450.0",
+          "w": "300"
+        },
+        "parms": "3. Parsing typed text: type numbers with commas, like 60,64,67, and press Enter. The field sends one word, and fromsymbol , splits it into the list 60 64 67 that iter takes apart.",
+        "type": ".text"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "640.0",
+          "y": "580.0",
+          "w": "300"
+        },
+        "parms": "4. Type one number, 72: fromsymbol sends it as an int, not a list. The number box shows it, and the list box keeps the last list.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "200.0",
+          "y": "220.0"
+        },
+        "parms": "-",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "60.0",
+          "y": "270.0"
+        },
+        "parms": "osc 3 amp",
+        "type": ".textedit",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "330.0"
+        },
+        "parms": "/",
+        "type": ".tosymbol",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "390.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "220.0",
+          "y": "390.0"
+        },
+        "parms": "/",
+        "type": ".fromsymbol",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "220.0",
+          "y": "450.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "540.0"
+        },
+        "parms": "60,64,67",
+        "type": ".textedit",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "600.0"
+        },
+        "parms": ",",
+        "type": ".fromsymbol",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 2
+          }
+        }
+      }
+    }
+  }
+}

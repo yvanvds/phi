@@ -159,6 +159,15 @@ is the note's text, not arguments.
 
 Double-click a note to edit its text, the same as any other object.
 
+## List boxes
+
+A list box (`l`) shows the list it holds on one line, about ten characters
+wide when you place it. A longer list ends in `…`. To read all of it:
+
+- In edit mode, drag the list box's right edge to make it wider or narrower.
+  The width is saved with the patch, and `Ctrl+Z` undoes the resize.
+- In run mode, hover over a cut-off list to see the whole list in a tooltip.
+
 ## The reference panel
 
 The right-hand panel documents the selected palette entry or the selected
@@ -223,6 +232,28 @@ for:
   patch up as it opens (`loadbang` and `loadmess`), a one-shot (`onebang`),
   values that belong together (`buddy` and `bondo`), and events and patterns
   (`next` and `match`). Each pair shares one tutorial.
+- **Routing:** branching on the first item (`route` and `routepass`), a
+  bang for a matching value (`sel`), one way through (`gate` and `switch`), a
+  patchbay for messages (`router` and `matrix`), ranges (`split`), spreading
+  over outlets (`spray`, `funnel` and `cycle`), and shifting and selecting
+  (`bucket` and `decode`). Each group of two or more shares one tutorial.
+- **Randomness:** a random number (`random`), a random walk (`drunk`), every
+  number once before any repeats (`urn`), weighted chains of states (`prob`)
+  and a coin flip (`decide`). `drunk`, `urn`, `prob` and `decide` take a seed
+  that replays the same numbers; `random` has none yet.
+- **Lists:** building a list from several inlets (`pack` and `pak`),
+  splitting one into outlets (`unpack`), one item at a time (`iter`), whole
+  lists end to end and fixed-size chunks (`join` and `unjoin`), adding items
+  before or after (`prepend` and `append`), the list Swiss-army knife (`zl`),
+  and numbering items or swapping one value (`listfunnel` and
+  `substitute`). Each pair shares one tutorial. A message box keeps only its
+  first word for now, so these tutorials build their lists with `prepend`.
+- **Strings and symbols:** formatting numbers and words into a message
+  (`sprintf`), matching and replacing with a regular expression (`regexp`),
+  a list as one word and back, and parsing typed text (`tosymbol` and
+  `fromsymbol`), text and character codes (`atoi` and `itoa`), joining items
+  into a name (`combine`), spelling a message out as codes (`spell`) and
+  changing case (`tolower` and `toupper`). Each pair shares one tutorial.
 
 Each tutorial is a small working patch, with numbered notes that walk you
 through it. Where Phi's object differs from the Max object of the same name,

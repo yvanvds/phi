@@ -1,0 +1,425 @@
+{
+  "title": "route and routepass — branch on the first item",
+  "covers": [
+    ".route",
+    ".routepass"
+  ],
+  "summary": "Send a message out the outlet its first item names, with that item removed (route) or kept (routepass), match numbers and floats, and catch the rest on the right.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# route and routepass — branch on the first item\nroute looks at the first item of every message and sends the message out the outlet of the selector it matches, with that item taken off. routepass matches the same way but keeps the item on. A message that matches nothing leaves the rightmost outlet unchanged.\nMax's route can change a selector from its right inlet. Here route and routepass have one inlet, and their selectors are fixed when they are created.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "100",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "360.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "170.0",
+          "y": "360.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "280.0",
+          "y": "360.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "390.0",
+          "y": "360.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "500.0",
+          "y": "360.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "280.0",
+          "y": "410.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "390.0",
+          "y": "410.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "60.0",
+          "y": "500.0"
+        },
+        "parms": "note ctl",
+        "type": ".routepass",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "60.0",
+          "y": "560.0",
+          "w": "120"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "200.0",
+          "y": "560.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "160.0"
+        },
+        "parms": "64",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "340.0",
+          "y": "560.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Click 100. The prepend in front of route turns it into note 60 100. route matches note and sends 60 100 out its first outlet, without the word. 64 becomes ctl 7 64, and the second box shows 7 64.",
+        "type": ".text"
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "640.0",
+          "y": "310.0",
+          "w": "300"
+        },
+        "parms": "2. Click 5. A number is matched by its value. Nothing is left once the 5 is taken off, so the outlet sends a bang, and its count goes up. 5.0 matches the selector 5 too: an int and a float with the same value are the same number. 0.5 matches 0.5.",
+        "type": ".text"
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "640.0",
+          "y": "500.0",
+          "w": "300"
+        },
+        "parms": "3. The comparison is exact: 0.50001 is not 0.5. When the numbers come out of a calculation, put a round in front.",
+        "type": ".text"
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "640.0",
+          "y": "610.0",
+          "w": "300"
+        },
+        "parms": "4. Click 7. It matches no selector and leaves the rightmost outlet as it came. Wire that outlet into another route to test further.",
+        "type": ".text"
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "640.0",
+          "y": "740.0",
+          "w": "300"
+        },
+        "parms": "5. routepass note ctl gets the same messages. A match leaves whole, with its first word: note 60 100 and ctl 7 64. Use it when the object below still needs to see the word.",
+        "type": ".text"
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "640.0",
+          "y": "890.0",
+          "w": "300"
+        },
+        "parms": "6. The messages are built with prepend because a message box keeps only its first word on this engine (#521).",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "160.0"
+        },
+        "parms": "5",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "390.0",
+          "y": "160.0"
+        },
+        "parms": "5.0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "500.0",
+          "y": "160.0"
+        },
+        "parms": "0.5",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "210.0"
+        },
+        "parms": "note 60",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "200.0",
+          "y": "210.0"
+        },
+        "parms": "ctl 7",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "390.0",
+          "y": "210.0"
+        },
+        "parms": "7",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "280.0"
+        },
+        "parms": "note ctl 5 0.5",
+        "type": ".route",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          },
+          "output 3": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          },
+          "output 4": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

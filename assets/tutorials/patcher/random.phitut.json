@@ -1,0 +1,191 @@
+{
+  "title": "random — a number from 0 to N-1",
+  "covers": [
+    ".random"
+  ],
+  "summary": "Draw random numbers from 0 to N-1 on a bang, turn them into a die, change the range from the right inlet, and see why this random cannot be replayed.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# random — a number from 0 to N-1\nrandom sends a random integer on each bang, from 0 up to one less than its argument, every value as likely as the next. random 6 gives 0 to 5. The right inlet changes the range for the bangs that follow; a float is truncated.\nMax's random also takes a seed, as a second argument and in a seed message, to replay the same numbers. On the engine Phi ships it has neither (yse-soundengine #1236): see note 4.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "640.0",
+          "y": "310.0",
+          "w": "300"
+        },
+        "parms": "2. The right inlet sets the range. Click 2 for a coin, 0 or 1, or 100 for 0 to 99. Setting the range sends nothing: the next bang uses it. A range of 1, or 0, only ever gives 0. Click 6 for the die again.",
+        "type": ".text"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "640.0",
+          "y": "440.0",
+          "w": "300"
+        },
+        "parms": "3. No repeats until every value has come out? See urn. A walk that wanders instead of jumping? drunk. A weighted choice? prob. A coin flip? decide.",
+        "type": ".text"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "640.0",
+          "y": "550.0",
+          "w": "300"
+        },
+        "parms": "4. Phi starts the engine's random generator the same way at every launch, but every random object draws from that one shared stream, so what one gets depends on all the others. There is no seed to replay a random on demand. drunk, urn, prob and decide each have a seed of their own: give them the same seed and they play the same numbers every time.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "160.0"
+        },
+        "parms": "2",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "160.0"
+        },
+        "parms": "6",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "390.0",
+          "y": "160.0"
+        },
+        "parms": "100",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "230.0"
+        },
+        "parms": "6",
+        "type": ".random",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "290.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "170.0",
+          "y": "290.0"
+        },
+        "parms": "1",
+        "type": ".+",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "170.0",
+          "y": "340.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Click the button: a number from 0 to 5 in the box below. Click it again and again. Each of the six turns up about as often as the others, and the same number can come twice in a row. + 1 makes it a die, 1 to 6.",
+        "type": ".text"
+      }
+    }
+  }
+}

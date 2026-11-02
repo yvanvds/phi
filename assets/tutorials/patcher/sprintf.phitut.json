@@ -1,0 +1,259 @@
+{
+  "title": "sprintf — build a message from a format",
+  "covers": [
+    ".sprintf"
+  ],
+  "summary": "Put numbers and words into a format with placeholders: a value with its unit, a message from two inlets, a padded file name and a set number of decimals.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# sprintf — build a message from a format\nsprintf fills the placeholders in a format: %d for an int, %f for a float, %s for a word and %c for a character code. Each placeholder has its own inlet. The left one formats and sends, the others only store.\nUnlike Max's sprintf, the result always leaves as text, so symout changes nothing. Only %d, %i, %f, %s, %c and %% are understood: %x, %g and the like are copied through as text.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "200.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "540.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "300.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "300.0",
+          "y": "480.0"
+        },
+        "parms": "gain %.2f",
+        "type": ".sprintf",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "300.0",
+          "y": "540.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "640.0",
+          "y": "200.0",
+          "w": "300"
+        },
+        "parms": "1. Type 440 into the top left box. sprintf %d Hz puts it in place of %d and sends 440 Hz, a number with its unit. A float is cut to an int there: 440.7 gives 440 too.",
+        "type": ".text"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "640.0",
+          "y": "310.0",
+          "w": "300"
+        },
+        "parms": "2. note %d %d has two placeholders, so two inlets. Click 90: the right inlet stores it and sends nothing. Click 60: the message is note 60 90. A %d that was never set writes 0.",
+        "type": ".text"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "640.0",
+          "y": "420.0",
+          "w": "300"
+        },
+        "parms": "3. A width pads a number: %03d.wav makes 7 into 007.wav, a file name. A precision sets the decimals: gain %.2f writes 0.5 as gain 0.50.",
+        "type": ".text"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "640.0",
+          "y": "520.0",
+          "w": "300"
+        },
+        "parms": "4. A list at the left inlet fills the placeholders from there to the right, one item each. A bang formats again with what is stored.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "60.0",
+          "y": "260.0"
+        },
+        "parms": "%d Hz",
+        "type": ".sprintf",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "60.0",
+          "y": "320.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "300.0",
+          "y": "200.0"
+        },
+        "parms": "60",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "420.0",
+          "y": "200.0"
+        },
+        "parms": "90",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "300.0",
+          "y": "260.0"
+        },
+        "parms": "note %d %d",
+        "type": ".sprintf",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "300.0",
+          "y": "320.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "480.0"
+        },
+        "parms": "%03d.wav",
+        "type": ".sprintf",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

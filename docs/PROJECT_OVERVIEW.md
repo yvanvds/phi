@@ -2793,7 +2793,10 @@ main + app          (orchestration)
   clicks `sendInt` 1/0, momentary presses `sendInt` 1 while held), `.textedit`
   (`PatchTextEditBox`; the number box's focus rules, Enter commits through
   `restoreGuiValueOf`) and `.l` (`PatchListBox`; shows its live stored list, a
-  tap bangs it). **The pattern for every later control body (#471–#473):** a
+  tap bangs it; since #533 its width is the stored `PatchGuiProperty.width`
+  via `sizeForGui`, set by the same right-edge drag as a note —
+  `PatcherController.isWidthResizable` / `beginWidthResize` — and a cut-off
+  list shows whole in a tooltip). **The pattern for every later control body (#471–#473):** a
   `PatchObjectTypes` id plus its drift-guard line, a visual-only `Patch…`
   widget in `lib/design/widgets/patcher/`, a `…NodeBody` in
   `lib/surfaces/patcher/nodes/` that writes through the controller and follows
@@ -3004,9 +3007,19 @@ main + app          (orchestration)
   `div-swap-pong`, `cartopol-poltocar`), time (#497: `metro`, `delay`,
   `pipe`, `line-bline`, `speedlim-qlim`, `timer-clocker`,
   `thresh-quickthresh`), domain clocks (#498: `transport`, `tempo`,
-  `timepoint`, `setclock`, `when`, `translate`) and control flow (#499:
+  `timepoint`, `setclock`, `when`, `translate`), control flow (#499:
   `trigger`, `bangbang`, `uzi`, `if`, `loadbang-loadmess`, `onebang`,
-  `buddy-bondo`, `next-match`). The domain clock six reach a libYSE
+  `buddy-bondo`, `next-match`), routing (#500: `route-routepass`, `sel`,
+  `gate-switch`, `router-matrix`, `split`, `spray-funnel-cycle`,
+  `bucket-decode`), randomness (#501: `random`, `drunk`, `urn`, `prob`,
+  `decide`; checked by range and distribution, and exactly only through a
+  seed; `.random` has no seed on libYSE 3.1.0, yse-soundengine#1236),
+  lists (#502: `pack-pak`, `unpack`, `iter`, `join-unjoin`,
+  `append-prepend`, `zl`, `listfunnel-substitute`; lists are built with
+  `.prepend` because of #521) and strings (#503: `sprintf`, `regexp`,
+  `tosymbol-fromsymbol`, `atoi-itoa`, `combine`, `spell`,
+  `tolower-toupper`; typed text comes from `.textedit`; every list a string
+  tutorial reads must fit its `.l` uncut, which a stored `w` now allows, #533). The domain clock six reach a libYSE
   domain clock by name; their clocks advance with the audio blocks whether or
   not the patch is mounted, are never destroyed by a patch object, and are not
   Phi's time domains (Phi mints its own `phi.midi.*` / `phi.metronome`
@@ -3033,7 +3046,11 @@ main + app          (orchestration)
   `patcher_stateful_math_tutorials`,
   `patcher_time_tutorials`,
   `patcher_clock_domain_tutorials`,
-  `patcher_control_flow_tutorials`: each opens its tutorials
+  `patcher_control_flow_tutorials`,
+  `patcher_routing_tutorials`,
+  `patcher_randomness_tutorials`,
+  `patcher_list_tutorials`,
+  `patcher_string_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
   that no note or object overlaps another). Every one of them opens a
   tutorial through the shared `openTutorialBySearch(tester, type)` helper in

@@ -702,7 +702,7 @@ void main() {
         480,
       ], reason: 'the ramp ignores curves');
       click(at('.m', 370, 140)); // dump
-      expect(numbers(at('.l', 300, 340)), [3, 600, 0, 0.5]);
+      expect(numbers(at('.l', 390, 340)), [3, 600, 0, 0.5]);
       expect(graph.objects.map((o) => o.type), contains('~dac'));
     });
 
@@ -723,7 +723,7 @@ void main() {
       expect(w[0], greaterThan(w[1]), reason: 'nearer the first node');
       expect(w[1], greaterThan(0));
       expect(w.reduce((a, b) => a + b), closeTo(1, 1e-5));
-      expect(numbers(at('.l', 260, 440)), hasLength(4), reason: 'distances');
+      expect(numbers(at('.l', 200, 440)), hasLength(4), reason: 'distances');
       expect(graph.objects.map((o) => o.type), contains('~dac'));
     });
 
@@ -2922,6 +2922,1305 @@ void main() {
         click(msg(n));
       }
       expect(value(found), '3');
+    });
+  });
+
+  test('every routing type has a tutorial (#500)', () {
+    for (final type in [
+      '.route', '.routepass', '.sel', '.gate', '.switch', '.router', //
+      '.matrix', '.split', '.spray', '.funnel', '.cycle', '.bucket', '.decode',
+    ]) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+    expect(index.tutorialFor('.route'), index.tutorialFor('.routepass'));
+    expect(index.tutorialFor('.gate'), index.tutorialFor('.switch'));
+    expect(index.tutorialFor('.router'), index.tutorialFor('.matrix'));
+    expect(index.tutorialFor('.spray'), index.tutorialFor('.funnel'));
+    expect(index.tutorialFor('.spray'), index.tutorialFor('.cycle'));
+    expect(index.tutorialFor('.bucket'), index.tutorialFor('.decode'));
+  });
+
+  group('routing tutorials (#500) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    void render(int blocks) {
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+      }
+    }
+
+    // Every tutorial is mounted while open (#528); so is this copy.
+    void open(String slug) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+      gateway.mountAsSource(inst);
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: '$slug mounted');
+      render(20);
+    }
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      render(20);
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    // A message box by its text: each tutorial's are unique.
+    int msg(String text) => graph.objects
+        .singleWhere((o) => o.type == '.m' && o.args == text)
+        .handleId;
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    // Typing a number into a box sends it on.
+    void type(int id, num v) => v is int
+        ? gateway.sendInt(inst, id, 0, v)
+        : gateway.sendFloat(inst, id, 0, v.toDouble());
+    String value(int id) => gateway.guiValue(inst, id);
+    double number(int id) => double.parse(value(id));
+
+    test('route and routepass: stripped, matched by value, the rest', () {
+      open('route-routepass');
+      final note = at('.l', 60, 360);
+      final ctl = at('.l', 170, 360);
+      final fives = at('.i', 280, 410);
+      final halves = at('.i', 390, 410);
+      final rest = at('.i', 500, 360);
+      click(msg('100'));
+      expect(value(note), '60 100', reason: 'the word taken off');
+      expect(value(at('.l', 60, 560)), 'note 60 100', reason: 'routepass');
+      click(msg('64'));
+      expect(value(ctl), '7 64');
+      expect(value(at('.l', 200, 560)), 'ctl 7 64');
+      click(msg('5'));
+      expect(value(fives), '1', reason: 'nothing left: a bang');
+      click(msg('5.0'));
+      expect(value(fives), '2', reason: '5.0 is the number 5');
+      click(msg('0.5'));
+      expect(value(halves), '1');
+      gateway.sendFloat(inst, at('.route', 60, 280), 0, 0.50001);
+      expect(value(halves), '1', reason: 'exact: 0.50001 is not 0.5');
+      click(msg('7'));
+      expect(value(rest), '7', reason: 'unmatched, out the right');
+      expect(value(at('.i', 340, 560)), '7', reason: 'routepass: the right');
+      expect((value(note), value(fives)), ('60 100', '2'));
+    });
+
+    test('sel: C E G named, the rest passed on, words', () {
+      open('sel');
+      final name = at('.l', 60, 400);
+      final other = at('.i', 400, 290);
+      for (final (n, c) in [('60', 'C'), ('64', 'E'), ('67', 'G')]) {
+        click(msg(n));
+        expect(value(name), c, reason: n);
+      }
+      click(msg('61'));
+      expect((value(name), value(other)), ('G', '61'));
+      type(at('.i', 500, 160), 72);
+      expect(value(other), '72', reason: 'the typed note passes on');
+      type(at('.i', 500, 160), 60);
+      expect((value(name), value(other)), ('C', '72'));
+      gateway.sendFloat(inst, at('.sel', 60, 230), 0, 64.5);
+      expect(value(name), 'C', reason: '64.5 is not 64');
+      expect(value(other), '64', reason: 'it passed on (the box truncates)');
+      final toggle = at('.t', 60, 680);
+      click(msg('start'));
+      expect(value(toggle), 'on');
+      click(msg('stop'));
+      expect(value(toggle), 'off');
+      click(msg('pause'));
+      expect((value(toggle), value(at('.l', 280, 620))), ('off', 'pause'));
+    });
+
+    test('gate and switch: closed at first, chosen from 1, 0 closes', () {
+      open('gate-switch');
+      final data = at('.i', 500, 160);
+      final outs = [
+        for (final x in [60.0, 170.0, 280.0]) at('.i', x, 290),
+      ];
+      List<String> shown() => [for (final o in outs) value(o)];
+      type(data, 5);
+      expect(shown(), ['0', '0', '0'], reason: 'starts closed');
+      click(msg('2'));
+      expect(shown(), ['0', '0', '0'], reason: 'choosing sends nothing');
+      type(data, 6);
+      expect(shown(), ['0', '6', '0']);
+      click(msg('3'));
+      type(data, 7);
+      expect(shown(), ['0', '6', '7']);
+      click(msg('1'));
+      type(data, 8);
+      expect(shown(), ['8', '6', '7']);
+      click(msg('0'));
+      type(data, 9);
+      expect(shown(), ['8', '6', '7'], reason: '0 closes');
+      gateway.sendInt(inst, at('.gate', 60, 230), 0, 2);
+      gateway.sendInt(inst, at('.gate', 60, 230), 0, 4);
+      type(data, 10);
+      expect(shown(), ['8', '6', '7'], reason: 'no outlet 4: closed');
+      final out = at('.i', 60, 550);
+      final choose = at('.i', 60, 420);
+      click(msg('10'));
+      expect(value(out), '0', reason: 'switch starts closed');
+      type(choose, 2);
+      click(msg('10'));
+      click(msg('30'));
+      expect(value(out), '0', reason: 'only inlet 2 passes');
+      click(msg('20'));
+      expect(value(out), '20');
+      type(choose, 3);
+      click(msg('30'));
+      expect(value(out), '30');
+      type(choose, 0);
+      click(msg('20'));
+      expect(value(out), '30', reason: '0 closes');
+    });
+
+    test('router and matrix: a patchbay from the grid, scaled gains', () {
+      open('router-matrix');
+      final grid = at('.matrixctrl', 60, 160);
+      final out0 = at('.i', 60, 340);
+      final out1 = at('.i', 170, 340);
+      gateway.sendList(inst, grid, 0, '0 0 1');
+      expect(value(at('.l', 170, 220)), '0 0 1.', reason: 'a decimal (#522)');
+      click(msg('10'));
+      expect((value(out0), value(out1)), ('10', '0'));
+      gateway.sendList(inst, grid, 0, '0 1 1');
+      click(msg('10'));
+      expect((value(out0), value(out1)), ('10', '10'), reason: 'both');
+      click(msg('20'));
+      expect((value(out0), value(out1)), ('10', '10'), reason: 'unconnected');
+      gateway.sendList(inst, grid, 0, '1 1 1');
+      click(msg('20'));
+      expect((value(out0), value(out1)), ('10', '20'), reason: 'shared out1');
+      gateway.sendList(inst, grid, 0, '0 1 0');
+      click(msg('10'));
+      click(msg('20'));
+      expect((value(out0), value(out1)), ('10', '20'));
+      gateway.sendList(inst, grid, 0, '0 0 0');
+      click(msg('clear'));
+      click(msg('10'));
+      gateway.sendList(inst, grid, 0, '0 1 1');
+      click(msg('clear'));
+      click(msg('10'));
+      expect((value(out0), value(out1)), ('10', '20'), reason: 'cleared');
+      final left = at('.f', 60, 610);
+      final right = at('.f', 170, 610);
+      click(msg('8'));
+      expect((number(left), number(right)), (0, 0), reason: 'unconnected');
+      type(at('.f', 60, 440), 1);
+      click(msg('8'));
+      expect((number(left), number(right)), (8, 0), reason: 'gain 1');
+      type(at('.f', 200, 440), 0.5);
+      click(msg('8'));
+      expect((number(left), number(right)), (8, 4), reason: 'gain 0.5');
+      type(at('.f', 60, 440), 0);
+      type(at('.f', 200, 440), 2);
+      click(msg('8'));
+      expect((number(left), number(right)), (8, 16), reason: 'left cut');
+    });
+
+    test('split: inclusive limits, a three-way velocity split', () {
+      open('split');
+      final soft = at('.f', 60, 290);
+      final medium = at('.f', 200, 350);
+      final loud = at('.f', 340, 350);
+      List<double> shown() => [number(soft), number(medium), number(loud)];
+      click(msg('30'));
+      expect(shown(), [30, 0, 0]);
+      click(msg('63'));
+      expect(shown(), [63, 0, 0], reason: 'the limit is inside');
+      click(msg('64'));
+      expect(shown(), [63, 64, 0]);
+      click(msg('110'));
+      expect(shown(), [63, 64, 110]);
+      type(at('.i', 500, 160), -5);
+      expect(shown(), [63, 64, -5], reason: 'outside both');
+      type(at('.i', 500, 160), 100);
+      expect(shown(), [63, 100, -5]);
+      // Limits from the inlets, the wrong way round.
+      final split = at('.split', 60, 230);
+      gateway.sendInt(inst, split, 1, 20);
+      gateway.sendInt(inst, split, 2, 10);
+      click(msg('30'));
+      expect(shown(), [63, 100, 30], reason: '30 is out of 10 to 20 now');
+      gateway.sendInt(inst, split, 0, 15);
+      expect(shown(), [15, 100, 30], reason: 'the lower is the low limit');
+    });
+
+    test('spray funnel cycle: by index, tagged, round the outlets', () {
+      open('spray-funnel-cycle');
+      final index = at('.i', 60, 160);
+      final outs = [
+        for (final x in [60.0, 150.0, 240.0]) at('.i', x, 320),
+      ];
+      List<String> shown(List<int> ids) => [for (final o in ids) value(o)];
+      type(index, 0);
+      expect(shown(outs), ['60', '64', '0']);
+      type(index, 1);
+      expect(shown(outs), ['60', '60', '64']);
+      type(index, 2);
+      expect(shown(outs), ['60', '60', '60'], reason: '64 dropped');
+      type(index, 0);
+      type(index, -1);
+      expect(shown(outs), ['60', '64', '60'], reason: 'repeated across');
+      final tagged = at('.l', 200, 530);
+      final streams = [
+        for (final x in [60.0, 150.0, 240.0]) at('.i', x, 590),
+      ];
+      for (final (k, x, v) in [(0, 60.0, 5), (1, 150.0, 6), (2, 240.0, 7)]) {
+        type(at('.i', x, 410), v);
+        expect(value(tagged), '$k $v');
+      }
+      expect(shown(streams), ['5', '6', '7'], reason: 'one cord, 3 streams');
+      final dealt = [
+        for (final x in [60.0, 150.0, 240.0]) at('.i', x, 780),
+      ];
+      click(msg('60'));
+      click(msg('64'));
+      click(msg('67'));
+      expect(shown(dealt), ['60', '64', '67']);
+      click(msg('64'));
+      expect(shown(dealt), ['64', '64', '67'], reason: 'back to outlet 0');
+      click(msg('60'));
+      click(msg('60'));
+      expect(shown(dealt), ['64', '60', '60'], reason: 'whatever the value');
+    });
+
+    test('bucket decode: one step behind, echo, roll, clear, one-hot', () {
+      open('bucket-decode');
+      final input = at('.i', 60, 160);
+      final behind = [
+        for (final x in [60.0, 150.0, 240.0]) at('.i', x, 280),
+      ];
+      final echo = [
+        for (final x in [340.0, 430.0, 520.0]) at('.i', x, 280),
+      ];
+      List<String> shown(List<int> ids) => [for (final o in ids) value(o)];
+      type(input, 1);
+      expect(
+        [...shown(behind), ...shown(echo)],
+        ['0', '0', '0', '1', '0', '0'],
+      );
+      type(input, 2);
+      expect(
+        [...shown(behind), ...shown(echo)],
+        ['1', '0', '0', '2', '1', '0'],
+      );
+      type(input, 3);
+      expect(
+        [...shown(behind), ...shown(echo)],
+        ['2', '1', '0', '3', '2', '1'],
+      );
+      click(at('.b', 170, 160));
+      expect(
+        [...shown(behind), ...shown(echo)],
+        ['3', '2', '1', '3', '2', '1'],
+      );
+      click(msg('roll'));
+      expect(shown(echo), ['1', '3', '2'], reason: 'rotated, nothing lost');
+      click(msg('clear'));
+      expect(shown(echo), ['1', '3', '2'], reason: 'clear sends nothing');
+      click(at('.b', 170, 160));
+      expect(
+        [...shown(behind), ...shown(echo)],
+        ['0', '0', '0', '0', '0', '0'],
+      );
+      final select = at('.i', 60, 420);
+      final bank = [
+        for (final x in [60.0, 110.0, 160.0, 210.0]) at('.t', x, 540),
+      ];
+      type(select, 2);
+      expect(shown(bank), ['off', 'off', 'on', 'off']);
+      type(select, 0);
+      expect(shown(bank), ['on', 'off', 'off', 'off']);
+      type(select, 7);
+      expect(shown(bank), ['on', 'off', 'off', 'off'], reason: 'ignored');
+      type(select, 3);
+      final allOn = at('.t', 200, 420);
+      final mute = at('.t', 260, 420);
+      gateway.sendInt(inst, allOn, 0, 1);
+      expect(shown(bank), ['on', 'on', 'on', 'on']);
+      gateway.sendInt(inst, mute, 0, 1);
+      expect(shown(bank), ['off', 'off', 'off', 'off']);
+      gateway.sendInt(inst, mute, 0, 0);
+      gateway.sendInt(inst, allOn, 0, 0);
+      expect(shown(bank), ['off', 'off', 'off', 'on'], reason: 'back to 3');
+    });
+  });
+
+  test('every randomness type has a tutorial (#501)', () {
+    for (final type in ['.random', '.drunk', '.urn', '.prob', '.decide']) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+  });
+
+  // Randomness is checked by range and distribution, and exactly only where a
+  // seed makes it replayable, so none of these can flake.
+  group('randomness tutorials (#501) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    void render(int blocks) {
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+      }
+    }
+
+    // Every tutorial is mounted while open (#528); so is this copy.
+    void open(String slug) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+      gateway.mountAsSource(inst);
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: '$slug mounted');
+      render(20);
+    }
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      render(20);
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    // A message box by its text: each tutorial's are unique.
+    int msg(String text) => graph.objects
+        .singleWhere((o) => o.type == '.m' && o.args == text)
+        .handleId;
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    // Typing a number into a box sends it on.
+    void type(int id, int v) => gateway.sendInt(inst, id, 0, v);
+    String value(int id) => gateway.guiValue(inst, id);
+    int integer(int id) => int.parse(value(id));
+
+    // Clicks [button] [n] times and reads the box [out] after each click.
+    List<int> clicks(int button, int out, int n) {
+      final read = <int>[];
+      for (var i = 0; i < n; i++) {
+        click(button);
+        read.add(integer(out));
+      }
+      return read;
+    }
+
+    // How often each value turned up in [xs].
+    Map<int, int> tally(Iterable<int> xs) {
+      final counts = <int, int>{};
+      for (final x in xs) {
+        counts[x] = (counts[x] ?? 0) + 1;
+      }
+      return counts;
+    }
+
+    // The loudest master peak over [blocks] blocks.
+    double loudness(int blocks) {
+      var peak = 0.0;
+      for (var i = 0; i < blocks; i++) {
+        render(1);
+        final p = Channel.master.peakLinearPost();
+        if (p > peak) peak = p;
+      }
+      return peak;
+    }
+
+    test('random: 0 to N-1 evenly, a die, the range inlet, no seed', () {
+      open('random');
+      final out = at('.i', 60, 290);
+      final button = at('.b', 60, 160);
+      final six = clicks(button, out, 1200);
+      // 200 of each expected; 120 or 280 is more than six deviations out.
+      expect(tally(six).keys.toSet(), {0, 1, 2, 3, 4, 5});
+      for (final c in tally(six).values) {
+        expect(c, inInclusiveRange(120, 280));
+      }
+      expect(integer(at('.i', 170, 340)), integer(out) + 1, reason: 'a die');
+      var repeats = 0;
+      for (var i = 1; i < six.length; i++) {
+        if (six[i] == six[i - 1]) repeats++;
+      }
+      expect(repeats, greaterThan(100), reason: 'twice in a row happens');
+      final before = value(out);
+      click(msg('2'));
+      expect(value(out), before, reason: 'setting the range sends nothing');
+      expect(tally(clicks(button, out, 400)).keys.toSet(), {0, 1});
+      click(msg('100'));
+      final hundred = clicks(button, out, 2000);
+      expect(hundred.reduce(math.min), greaterThanOrEqualTo(0));
+      expect(hundred.reduce(math.max), lessThanOrEqualTo(99));
+      expect(tally(hundred).length, greaterThan(90), reason: '0 to 99');
+      final random = at('.random', 60, 230);
+      gateway.sendFloat(inst, random, 1, 2.9);
+      expect(tally(clicks(button, out, 200)).keys.toSet(), {0, 1});
+      for (final r in [1, 0]) {
+        gateway.sendInt(inst, random, 1, r);
+        expect(tally(clicks(button, out, 50)).keys, [0], reason: 'range $r');
+      }
+      // Note 4: no seed on this engine (yse-soundengine#1236). When the
+      // engine gains one this fails, and the notes need rewriting.
+      final params = gateway
+          .objectTypes()
+          .singleWhere((d) => d.type == '.random')
+          .params;
+      expect([for (final p in params) p.name], ['range']);
+    });
+
+    test('drunk: small steps, clipped edges, step size, the seed', () {
+      open('drunk');
+      final pos = at('.i', 60, 350);
+      final button = at('.b', 170, 160);
+      List<int> walk(int n) => clicks(button, pos, n);
+      // Checks every step of [steps], from [start], against [ok].
+      void steps(int start, List<int> steps, bool Function(int, int) ok) {
+        var prev = start;
+        for (final p in steps) {
+          expect(p, inInclusiveRange(0, 24));
+          expect(ok(prev, p), isTrue, reason: '$prev to $p');
+          prev = p;
+        }
+      }
+
+      expect(value(pos), '0', reason: 'nothing sent yet');
+      final first = walk(400);
+      steps(0, first, (a, b) => (b - a).abs() <= 2);
+      expect(tally(first).length, greaterThan(10), reason: 'it wanders');
+      click(msg('12'));
+      expect(integer(pos), 12, reason: 'moved there and sent');
+      click(msg('8'));
+      final leaps = walk(400);
+      steps(12, leaps, (a, b) => (b - a).abs() <= 7);
+      var big = 0;
+      for (var i = 1; i < leaps.length; i++) {
+        if ((leaps[i] - leaps[i - 1]).abs() > 2) big++;
+      }
+      expect(big, greaterThan(50), reason: 'leaps of up to 7');
+      click(msg('-2'));
+      click(msg('12'));
+      // Never a step of 0, except where an edge clips the step away.
+      steps(
+        12,
+        walk(400),
+        (a, b) => (b - a).abs() == 1 || a == b && {0, 24}.contains(a),
+      );
+      click(msg('3'));
+      final seed = at('.i', 390, 160);
+      type(seed, 5);
+      click(msg('12'));
+      final a = walk(30);
+      type(seed, 5);
+      click(msg('12'));
+      expect(walk(30), a, reason: 'seed 5 and 12 again: the same steps');
+      type(seed, 6);
+      click(msg('12'));
+      expect(walk(30), isNot(a), reason: 'another seed, another walk');
+    });
+
+    test('drunk: seed 7 replays the same walk every time it opens', () {
+      List<int> firstSteps() {
+        open('drunk');
+        final steps = clicks(at('.b', 170, 160), at('.i', 60, 350), 40);
+        gateway.disposeInstance(inst);
+        return steps;
+      }
+
+      final a = firstSteps();
+      expect(firstSteps(), a);
+      open('drunk'); // for the tearDown
+    });
+
+    test('drunk: the toggle plays the walk on master', () {
+      open('drunk');
+      expect(loudness(100), 0, reason: 'silent until the toggle');
+      final toggle = at('.t', 60, 160);
+      gateway.sendInt(inst, toggle, 0, 1);
+      expect(loudness(200), greaterThan(0.05), reason: 'a sine on master');
+      gateway.sendInt(inst, toggle, 0, 0);
+      loudness(20);
+      expect(loudness(100), 0, reason: 'off again');
+    });
+
+    test('urn: every number once, the empty bang, clear, auto-refill', () {
+      open('urn');
+      final dealt = at('.i', 60, 350);
+      final empties = at('.i', 200, 400);
+      final button = at('.b', 60, 160);
+      final clear = at('.m', 170, 160);
+      List<int> deal(int n) => clicks(button, dealt, n);
+      const all = {0, 1, 2, 3, 4, 5};
+      final round = deal(6);
+      expect(round.toSet(), all, reason: 'each once');
+      expect(value(empties), '0');
+      click(button);
+      expect(integer(dealt), round.last, reason: 'nothing new');
+      expect(integer(empties), 1, reason: 'the right outlet');
+      click(button);
+      expect(integer(empties), 2, reason: 'every bang says so');
+      click(clear);
+      final orders = <String>{};
+      for (var r = 0; r < 10; r++) {
+        final again = deal(6);
+        expect(again.toSet(), all, reason: 'all back');
+        orders.add(again.join());
+        click(clear);
+      }
+      expect(orders.length, greaterThan(1), reason: 'a new order');
+      click(msg('3'));
+      expect(deal(3).toSet(), {0, 1, 2}, reason: 'limit 3, refilled');
+      click(msg('6'));
+      // The toggle opens the gate: the empty bang reaches clear.
+      final toggle = at('.t', 340, 290);
+      gateway.sendInt(inst, toggle, 0, 1);
+      final forever = deal(70);
+      final counted = integer(empties);
+      // Every seventh bang meets the empty urn, which refills it.
+      for (var r = 0; r < 10; r++) {
+        final chunk = forever.sublist(r * 7, r * 7 + 6);
+        expect(chunk.toSet(), all, reason: 'round $r');
+      }
+      expect(counted, greaterThanOrEqualTo(10 + 2), reason: 'counted');
+      gateway.sendInt(inst, toggle, 0, 0);
+      click(clear);
+      // A seed reshuffles the rest; what was dealt stays dealt.
+      final two = deal(2);
+      type(at('.i', 280, 160), 9);
+      expect({...two, ...deal(4)}, all, reason: 'no repeats');
+    });
+
+    test('urn: seed 3 deals the same first round every time it opens', () {
+      List<int> firstRound() {
+        open('urn');
+        final round = clicks(at('.b', 60, 160), at('.i', 60, 350), 6);
+        gateway.disposeInstance(inst);
+        return round;
+      }
+
+      final a = firstRound();
+      expect(firstRound(), a);
+      open('urn');
+    });
+
+    test('prob: loaded transitions, weights, dump, add, dead end', () {
+      open('prob');
+      final state = at('.i', 60, 410);
+      final stuck = at('.i', 170, 460);
+      final prob = at('.prob', 60, 350);
+      final button = at('.b', 60, 160);
+      expect(value(state), '0');
+      final pairs = <(int, int)>[];
+      var from = 0;
+      for (final to in clicks(button, state, 3000)) {
+        pairs.add((from, to));
+        from = to;
+      }
+      expect(pairs.toSet(), {(0, 1), (0, 2), (1, 0), (1, 2), (2, 0)});
+      double share((int, int) p) =>
+          pairs.where((q) => q == p).length /
+          pairs.where((q) => q.$1 == p.$1).length;
+      expect(share((0, 1)), closeTo(0.75, 0.06), reason: '3 out of 4');
+      expect(share((1, 0)), closeTo(0.5, 0.07), reason: 'alike');
+      expect(share((2, 0)), 1, reason: 'always back to 0');
+      final dump = at('.l', 300, 410);
+      click(msg('dump'));
+      expect(value(dump), '2 0 1', reason: 'the last one');
+      // 0 2 4: the right boxes first, the left one sends.
+      type(at('.i', 280, 560), 4);
+      type(at('.i', 170, 560), 2);
+      type(at('.i', 60, 560), 0);
+      expect(value(at('.l', 60, 680)), '0 2 4');
+      final next = <int>[];
+      for (var i = 0; i < 1400; i++) {
+        type(prob, 0);
+        click(button);
+        next.add(integer(state));
+      }
+      expect(
+        next.where((n) => n == 2).length / next.length,
+        closeTo(4 / 7, 0.06),
+        reason: 'from 0 now 3 to 4 for state 2',
+      );
+      // A weight of 0 switches it off.
+      gateway.sendList(inst, prob, 0, '0 2 0');
+      for (var i = 0; i < 100; i++) {
+        type(prob, 0);
+        click(button);
+        expect(integer(state), 1, reason: 'only 1 is left from 0');
+      }
+      // Dead end: 3 sets the state without sending; the bang reports it.
+      final shown = value(state);
+      click(msg('3'));
+      expect(value(state), shown, reason: 'nothing sent');
+      expect(value(stuck), '0');
+      click(button);
+      expect((value(state), integer(stuck)), (shown, 1), reason: 'stuck');
+      click(button);
+      expect(integer(state), 1, reason: 'back at 0, which goes to 1 now');
+      // The seed: the same seed and start, the same chain.
+      gateway.sendList(inst, prob, 0, '0 2 1');
+      final seed = at('.i', 500, 160);
+      List<int> chain() {
+        type(prob, 0);
+        return clicks(button, state, 30);
+      }
+
+      type(seed, 11);
+      final a = chain();
+      type(seed, 11);
+      expect(chain(), a);
+      click(msg('clear'));
+      click(button);
+      expect(integer(stuck), 2, reason: 'cleared: no way out of anything');
+    });
+
+    test('prob: seed 5 replays the same chain every time it opens', () {
+      List<int> chain() {
+        open('prob');
+        final c = clicks(at('.b', 60, 160), at('.i', 60, 410), 40);
+        gateway.disposeInstance(inst);
+        return c;
+      }
+
+      final a = chain();
+      expect(chain(), a);
+      open('prob');
+    });
+
+    test('decide: 0 or 1, either way through the gate, the seed', () {
+      open('decide');
+      final flip = at('.i', 340, 350);
+      final left = at('.i', 60, 630);
+      final right = at('.i', 200, 630);
+      final button = at('.b', 170, 160);
+      final flips = clicks(button, flip, 1000);
+      expect(flips.toSet(), {0, 1});
+      final ones = flips.where((f) => f == 1).length;
+      expect(ones, inInclusiveRange(400, 600), reason: 'a fair coin');
+      expect(
+        (integer(left), integer(right)),
+        (1000 - ones, ones),
+        reason: '0 goes left, 1 right, every bang counted once',
+      );
+      var longest = 1;
+      var run = 1;
+      for (var i = 1; i < flips.length; i++) {
+        run = flips[i] == flips[i - 1] ? run + 1 : 1;
+        longest = math.max(longest, run);
+      }
+      expect(longest, greaterThanOrEqualTo(4), reason: 'runs happen');
+      final seed = at('.i', 280, 160);
+      type(seed, 7);
+      final a = clicks(button, flip, 40);
+      type(seed, 7);
+      expect(clicks(button, flip, 40), a, reason: 'seed 7 replays');
+      // An int flips too, its value ignored.
+      final decide = at('.decide', 200, 350);
+      final counted = integer(left) + integer(right);
+      gateway.sendInt(inst, decide, 0, 42);
+      expect(value(flip), anyOf('0', '1'));
+      expect(integer(left) + integer(right), counted, reason: 'no bang');
+    });
+
+    test('decide: seed 7 flips the same way every time it opens', () {
+      List<int> flips() {
+        open('decide');
+        final f = clicks(at('.b', 170, 160), at('.i', 340, 350), 40);
+        gateway.disposeInstance(inst);
+        return f;
+      }
+
+      final a = flips();
+      expect(flips(), a);
+      open('decide');
+    });
+
+    test('decide: the toggle flips five times a second', () {
+      open('decide');
+      final toggle = at('.t', 60, 160);
+      // metro keeps wall-clock time: bound the count by the time it ran.
+      final clock = Stopwatch()..start();
+      gateway.sendInt(inst, toggle, 0, 1);
+      while (clock.elapsedMilliseconds < 1100) {
+        render(4);
+        sleep(const Duration(milliseconds: 5));
+      }
+      gateway.sendInt(inst, toggle, 0, 0);
+      final ran = clock.elapsedMilliseconds;
+      final n = integer(at('.i', 60, 630)) + integer(at('.i', 200, 630));
+      expect(n, greaterThanOrEqualTo(3), reason: 'a tick at once, then more');
+      expect(n, lessThanOrEqualTo(ran ~/ 200 + 1), reason: 'every 200 ms');
+    });
+  });
+
+  test('every list type has a tutorial (#502)', () {
+    for (final type in [
+      '.pack', '.pak', '.unpack', '.iter', '.join', '.unjoin', '.append', //
+      '.prepend', '.zl', '.listfunnel', '.substitute',
+    ]) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+    expect(index.tutorialFor('.pack'), index.tutorialFor('.pak'));
+    expect(index.tutorialFor('.join'), index.tutorialFor('.unjoin'));
+    expect(index.tutorialFor('.append'), index.tutorialFor('.prepend'));
+    expect(index.tutorialFor('.listfunnel'), index.tutorialFor('.substitute'));
+  });
+
+  group('list tutorials (#502) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    void render(int blocks) {
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+      }
+    }
+
+    // Every tutorial is mounted while open (#528); so is this copy.
+    void open(String slug) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+      gateway.mountAsSource(inst);
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: '$slug mounted');
+      render(20);
+    }
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      render(20);
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    // A message box by its text: each tutorial's are unique.
+    int msg(String text) => graph.objects
+        .singleWhere((o) => o.type == '.m' && o.args == text)
+        .handleId;
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    // Typing a number into a box sends it on.
+    void type(int id, num v) => v is int
+        ? gateway.sendInt(inst, id, 0, v)
+        : gateway.sendFloat(inst, id, 0, v.toDouble());
+    String value(int id) => gateway.guiValue(inst, id);
+    double number(int id) => double.parse(value(id));
+
+    test('pack and pak: typed elements, cold inlets, pak sends from all', () {
+      open('pack-pak');
+      final out = at('.l', 60, 290);
+      type(at('.i', 170, 160), 3);
+      click(msg('bar'));
+      expect(value(out), '', reason: 'the right inlets only store');
+      type(at('.f', 60, 160), 1.7);
+      expect(value(out), '1 3. bar', reason: 'int cut, float made, word kept');
+      type(at('.f', 60, 160), 4);
+      expect(value(out), '4 3. bar');
+      click(at('.b', 390, 160));
+      expect(value(out), '4 3. bar', reason: 'a bang sends as it stands');
+      // A word at an int or float element is refused.
+      gateway.sendMessage(inst, at('.pack', 60, 230), 1, 'word');
+      click(at('.b', 390, 160));
+      expect(value(out), '4 3. bar');
+      final pk = at('.i', 60, 700);
+      final pa = at('.i', 240, 700);
+      type(at('.i', 240, 420), 5);
+      expect((value(at('.l', 60, 540)), value(pk)), ('', '0'));
+      expect((value(at('.l', 240, 540)), value(pa)), ('0 5', '1'));
+      type(at('.i', 60, 420), 2);
+      expect((value(at('.l', 60, 540)), value(pk)), ('2 5', '1'));
+      expect((value(at('.l', 240, 540)), value(pa)), ('2 5', '2'));
+      // pak takes a bang at any inlet.
+      gateway.sendBang(inst, at('.pak', 240, 480), 1);
+      expect(value(pa), '3');
+    });
+
+    test('unpack: right to left, typed outlets, only those reached', () {
+      open('unpack');
+      final o0 = at('.i', 60, 340);
+      final o1 = at('.f', 170, 340);
+      final o2 = at('.l', 280, 340);
+      click(msg('foo'));
+      expect((value(o0), number(o1), value(o2)), ('1', 2.0, 'foo'));
+      click(msg('6'));
+      expect((value(o0), number(o1), value(o2)), ('5', 6.0, 'foo'));
+      // Items past the last outlet are dropped; a word at a number outlet
+      // is refused and that outlet sends what it had.
+      gateway.sendList(inst, at('.unpack', 60, 280), 0, 'bar 7 baz qux');
+      expect((value(o0), number(o1), value(o2)), ('5', 7.0, 'baz'));
+      click(at('.b', 340, 160));
+      expect((value(o0), number(o1), value(o2)), ('5', 7.0, 'baz'));
+      click(msg('3'));
+      expect(number(at('.f', 60, 690)), 7, reason: '10 - 3, right first');
+    });
+
+    test('iter: one item at a time, the bang repeats, a number is one', () {
+      open('iter');
+      final last = at('.i', 60, 340);
+      final count = at('.i', 180, 440);
+      final up = at('.f', 300, 390);
+      click(at('.b', 280, 160));
+      expect(value(count), '0', reason: 'nothing to repeat yet');
+      click(msg('67'));
+      expect((value(last), value(count), number(up)), ('67', '3', 79.0));
+      click(at('.b', 280, 160));
+      expect(value(count), '6');
+      click(msg('5'));
+      expect((value(last), value(count), number(up)), ('5', '7', 17.0));
+      gateway.sendList(inst, at('.+', 300, 340), 0, '60 64 67');
+      expect(number(up), 17, reason: '+ ignores a list (note 2)');
+    });
+
+    test('join and unjoin: whole pieces, groups, the rest', () {
+      open('join-unjoin');
+      final join = at('.l', 60, 340);
+      final pack = at('.l', 200, 340);
+      click(msg('4'));
+      expect((value(join), value(pack)), ('', ''), reason: 'right is cold');
+      click(msg('2'));
+      expect((value(join), value(pack)), ('1 2 3 4', '1 2'));
+      click(at('.b', 320, 160));
+      expect((value(join), value(pack)), ('1 2 3 4', '1 2'));
+      // join 3 -1, from the note: every inlet sends.
+      final j3 = gateway.createObject(inst, '.join', args: '3 -1');
+      final j3l = gateway.createObject(inst, '.l');
+      gateway.connect(
+        inst,
+        fromHandleId: j3,
+        outlet: 0,
+        toHandleId: j3l,
+        inlet: 0,
+      );
+      gateway.sendInt(inst, j3, 2, 5);
+      expect(value(j3l), '0 0 5');
+      final g0 = at('.l', 60, 630);
+      final g1 = at('.l', 170, 630);
+      final rest = at('.l', 280, 690);
+      click(msg('5'));
+      expect((value(g0), value(g1), value(rest)), ('1 2', '3 4', 'rest 5'));
+      click(msg('8'));
+      expect((value(g0), value(g1), value(rest)), ('6 7', '3 4', 'rest 8'));
+    });
+
+    test('append and prepend: before, after, replaced, set', () {
+      open('append-prepend');
+      final pre = at('.l', 60, 290);
+      final app = at('.l', 240, 350);
+      type(at('.i', 60, 160), 60);
+      expect((value(pre), value(app)), ('note 60', 'note 60 100'));
+      click(msg('ctl'));
+      expect(value(pre), 'note 60', reason: 'the right inlet sends nothing');
+      type(at('.i', 60, 160), 61);
+      expect((value(pre), value(app)), ('ctl 61', 'ctl 61 100'));
+      click(msg('1'));
+      type(at('.i', 60, 160), 62);
+      expect(value(app), 'ctl 62 1');
+      final packed = at('.l', 60, 640);
+      final count = at('.i', 200, 740);
+      type(at('.i', 60, 460), 5);
+      expect((value(packed), value(count)), ('', '0'), reason: 'set: kept');
+      click(at('.b', 200, 460));
+      expect((value(packed), value(count)), ('5 0', '1'));
+      // The title note: set at the left inlet is put in front like any word.
+      gateway.sendMessage(inst, at('.prepend', 60, 230), 0, 'set ctl');
+      expect(value(pre), 'ctl set ctl');
+      // Note 4: a message box takes a list that arrives as its whole text.
+      final m = gateway.createObject(inst, '.m', args: 'x');
+      gateway.sendMessage(inst, m, 0, 'set 9');
+      expect(value(m), 'set 9');
+    });
+
+    test('zl: len, rev, nth, rot, slice, sort, group, stream', () {
+      open('zl');
+      final left = at('.l', 60, 380);
+      final leftN = at('.i', 200, 380);
+      final right = at('.l', 330, 380);
+      final btn = at('.b', 400, 160);
+      click(msg('1'));
+      expect(value(leftN), '4', reason: 'len of 5 3 8 1');
+      click(msg('rev'));
+      expect(value(left), '', reason: 'a mode switch sends nothing');
+      click(btn);
+      expect(value(left), '1 8 3 5');
+      type(at('.i', 480, 260), 2);
+      click(msg('nth'));
+      click(btn);
+      expect((value(leftN), value(right)), ('3', '5 8 1'));
+      click(msg('rot'));
+      click(btn);
+      expect(value(left), '8 1 5 3');
+      click(msg('slice'));
+      click(btn);
+      expect((value(left), value(right)), ('5 3', '8 1'));
+      click(msg('sort'));
+      click(btn);
+      expect(value(left), '1 3 5 8');
+      type(at('.i', 480, 260), -1);
+      click(btn);
+      expect((value(left), value(right)), ('8 5 3 1', '3 1 2 4'));
+      click(msg('len'));
+      click(btn);
+      expect(value(leftN), '4');
+      final input = at('.i', 60, 500);
+      final group = at('.l', 60, 620);
+      final stream = at('.l', 240, 620);
+      final missing = at('.i', 400, 620);
+      type(input, 1);
+      type(input, 2);
+      expect((value(group), value(stream), value(missing)), ('', '', '1'));
+      type(input, 3);
+      expect(
+        (value(group), value(stream), value(missing)),
+        ('1 2 3', '1 2 3', '0'),
+      );
+      type(input, 4);
+      expect((value(group), value(stream)), ('1 2 3', '2 3 4'));
+      type(input, 5);
+      type(input, 6);
+      expect((value(group), value(stream)), ('4 5 6', '4 5 6'));
+    });
+
+    test('listfunnel and substitute: index pairs, spray, replace', () {
+      open('listfunnel-substitute');
+      click(msg('67'));
+      expect(value(at('.l', 60, 330)), '2 67', reason: 'the last pair');
+      expect(
+        [
+          for (final x in [200.0, 300.0, 400.0]) value(at('.i', x, 390)),
+        ],
+        ['60', '64', '67'],
+      );
+      final lf = gateway.createObject(inst, '.listfunnel', args: '1');
+      final lfl = gateway.createObject(inst, '.l');
+      gateway.connect(
+        inst,
+        fromHandleId: lf,
+        outlet: 0,
+        toHandleId: lfl,
+        inlet: 0,
+      );
+      gateway.sendList(inst, lf, 0, '60 64');
+      expect(value(lfl), '2 64', reason: 'listfunnel 1 starts at 1');
+      final left = at('.l', 60, 680);
+      final right = at('.l', 200, 680);
+      final first = at('.l', 330, 680);
+      click(msg('60'));
+      expect(
+        (value(left), value(right), value(first)),
+        ('72 64 72', '', '72 64 60'),
+      );
+      click(msg('64'));
+      expect((value(left), value(right)), ('72 64 72', '62 64'));
+      type(at('.i', 330, 500), 64);
+      click(msg('60'));
+      expect(value(left), '60 72 60', reason: 'now 64 is the match');
+      gateway.sendInt(inst, at('.substitute', 60, 620), 2, 0);
+      click(msg('60'));
+      expect(value(left), '60 0 60', reason: 'the right inlet: replacement');
+    });
+  });
+
+  test('every string type has a tutorial (#503)', () {
+    for (final type in [
+      '.sprintf', '.regexp', '.tosymbol', '.fromsymbol', '.atoi', '.itoa', //
+      '.combine', '.spell', '.tolower', '.toupper',
+    ]) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+    expect(index.tutorialFor('.tosymbol'), index.tutorialFor('.fromsymbol'));
+    expect(index.tutorialFor('.atoi'), index.tutorialFor('.itoa'));
+    expect(index.tutorialFor('.tolower'), index.tutorialFor('.toupper'));
+  });
+
+  group('string tutorials (#503) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    void render(int blocks) {
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+      }
+    }
+
+    // Every tutorial is mounted while open (#528); so is this copy.
+    void open(String slug) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+      gateway.mountAsSource(inst);
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: '$slug mounted');
+      render(20);
+    }
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      render(20);
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    // A message box by its text: each tutorial's are unique.
+    int msg(String text) => graph.objects
+        .singleWhere((o) => o.type == '.m' && o.args == text)
+        .handleId;
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    // Typing a number into a box sends it on.
+    void type(int id, num v) => v is int
+        ? gateway.sendInt(inst, id, 0, v)
+        : gateway.sendFloat(inst, id, 0, v.toDouble());
+    // Typing into a text field and pressing Enter stores and sends the text.
+    void enter(int field, String text) =>
+        gateway.sendList(inst, field, 0, text);
+    String value(int id) => gateway.guiValue(inst, id);
+    // A fresh object wired to a fresh list box, to check what a note says
+    // about a case the patch does not wire up.
+    (int, int) probe(String t, String args, [int outlet = 0]) {
+      final o = gateway.createObject(inst, t, args: args);
+      final l = gateway.createObject(inst, '.l');
+      gateway.connect(
+        inst,
+        fromHandleId: o,
+        outlet: outlet,
+        toHandleId: l,
+        inlet: 0,
+      );
+      return (o, l);
+    }
+
+    test('sprintf: a unit, two inlets, width, precision, as text', () {
+      open('sprintf');
+      final freq = at('.l', 60, 320);
+      type(at('.i', 60, 200), 440);
+      expect(value(freq), '440 Hz');
+      type(at('.sprintf', 60, 260), 440.7);
+      expect(value(freq), '440 Hz', reason: 'a float is cut to an int');
+      final note = at('.l', 300, 320);
+      click(msg('90'));
+      expect(value(note), '', reason: 'the right inlet only stores');
+      click(msg('60'));
+      expect(value(note), 'note 60 90');
+      type(at('.i', 60, 420), 7);
+      expect(value(at('.l', 60, 540)), '007.wav');
+      type(at('.f', 300, 420), 0.5);
+      expect(value(at('.l', 300, 540)), 'gain 0.50');
+      // Note 2: a %d never set writes 0.
+      final (fresh, freshOut) = probe('.sprintf', 'note %d %d');
+      gateway.sendInt(inst, fresh, 0, 60);
+      expect(value(freshOut), 'note 60 0');
+      // Note 4: a list fills from the left; a bang formats again.
+      final sp = at('.sprintf', 300, 260);
+      gateway.sendList(inst, sp, 0, '61 90');
+      expect(value(note), 'note 61 90');
+      gateway.sendInt(inst, sp, 1, 80);
+      click(sp);
+      expect(value(note), 'note 61 80');
+      // The title note: %x and %g are copied through; symout is dropped.
+      final (other, otherOut) = probe('.sprintf', '%x|%g');
+      gateway.sendList(inst, other, 0, '255 1.5');
+      expect(value(otherOut), '%x|%g');
+      final (sym, symOut) = probe('.sprintf', 'symout freq %d');
+      gateway.sendInt(inst, sym, 0, 3);
+      expect(value(symOut), 'freq 3');
+    });
+
+    test('regexp: matches, groups, substitution, no match', () {
+      open('regexp');
+      final sub = at('.l', 60, 420);
+      final groups = at('.l', 170, 420);
+      final match = at('.l', 280, 420);
+      final none = at('.l', 390, 420);
+      final count = at('.i', 500, 540);
+      click(at('.b', 60, 220));
+      expect(
+        (value(sub), value(groups), value(match), value(none), value(count)),
+        ('c#4 e#5 g', 'e 5', 'e5', '', '2'),
+      );
+      click(msg('hat'));
+      expect(
+        (value(sub), value(match), value(none), value(count)),
+        ('c#4 e#5 g', 'e5', 'hat', '2'),
+        reason: 'no match: only the right outlet',
+      );
+      enter(at('.textedit', 60, 270), 'a1 b2 x');
+      expect((value(sub), value(count)), ('a#1 b#2 x', '4'));
+      // Note 3: %0 inserts the whole match.
+      final (whole, wholeOut) = probe('.regexp', '[a-g][0-9] <%0>');
+      gateway.sendList(inst, whole, 0, 'c4 d');
+      expect(value(wholeOut), '<c4> d');
+      // The title note: re is a message to match, not a command; \s is a
+      // space; \b is not supported, so everything leaves unmatched.
+      final (re, reOut) = probe('.regexp', 'a', 3);
+      gateway.sendMessage(inst, re, 0, 're b');
+      expect(value(reOut), 're b');
+      final (space, spaceOut) = probe('.regexp', r'c\s4', 2);
+      gateway.sendList(inst, space, 0, 'c 4');
+      expect(value(spaceOut), 'c 4');
+      final (wb, wbOut) = probe('.regexp', r'\bc', 3);
+      gateway.sendList(inst, wb, 0, 'c');
+      expect(value(wbOut), 'c');
+    });
+
+    test('tosymbol and fromsymbol: join, split, separator, parse', () {
+      open('tosymbol-fromsymbol');
+      final sym = at('.l', 60, 390);
+      final back = at('.l', 220, 450);
+      click(at('.b', 60, 220));
+      expect((value(sym), value(back)), ('osc/3/amp', 'osc 3 amp'));
+      click(msg('-'));
+      expect(value(sym), 'osc/3/amp', reason: 'the separator sends nothing');
+      click(at('.b', 60, 220));
+      expect((value(sym), value(back)), ('osc-3-amp', 'osc-3-amp'));
+      final field = at('.textedit', 60, 540);
+      final list = at('.l', 60, 660);
+      final item = at('.i', 220, 720);
+      click(field);
+      expect((value(list), value(item)), ('60 64 67', '67'));
+      enter(field, '72');
+      expect((value(list), value(item)), ('60 64 67', '72'));
+      // The title note: tosymbol's symbol leaves as a list of one item.
+      final (one, oneOut) = probe('.tosymbol', '/');
+      gateway.sendList(inst, one, 0, 'a b');
+      expect(value(oneOut), 'a/b');
+    });
+
+    test('atoi and itoa: codes, back to text, append, bang, UTF-8', () {
+      open('atoi-itoa');
+      final codes = at('.l', 60, 320);
+      final text = at('.l', 220, 440);
+      final field = at('.textedit', 60, 200);
+      click(field);
+      expect((value(codes), value(text)), ('104 105', 'hi'));
+      enter(field, 'a b');
+      expect((value(codes), value(text)), ('97 32 98', 'a b'));
+      enter(field, 'hi');
+      type(at('.i', 340, 260), 33);
+      expect(value(text), 'hi', reason: 'the middle inlet sends nothing');
+      click(at('.b', 460, 260));
+      expect(value(text), 'hi!');
+      // Note 3: one code at a time builds a word.
+      enter(field, 'x');
+      gateway.sendInt(inst, at('.itoa', 220, 380), 2, 72);
+      for (final c in [97, 32, 72]) {
+        type(at('.i', 340, 260), c);
+      }
+      click(at('.b', 460, 260));
+      expect(value(text), 'Ha H');
+      // The title note: UTF-8, and itoa's text is always a list.
+      enter(field, 'é');
+      expect((value(codes), value(text)), ('233', 'é'));
+      final (n, nOut) = probe('.itoa', '');
+      gateway.sendList(inst, n, 0, '52 50');
+      expect(value(nOut), '42');
+    });
+
+    test('combine: a file name, cold and hot inlets, triggers -1', () {
+      open('combine');
+      final name = at('.l', 60, 330);
+      click(at('.b', 170, 200));
+      expect(value(name), 'kick-1.wav');
+      type(at('.i', 240, 200), 2);
+      expect(value(name), 'kick-1.wav', reason: 'the third inlet only stores');
+      click(msg('hat'));
+      expect(value(name), 'hat-2.wav');
+      type(at('.i', 200, 420), 4);
+      expect(value(at('.l', 60, 540)), 'bus/4');
+      // The title note: triggers 2 makes only the third inlet send.
+      final (t2, t2Out) = probe('.combine', 'triggers 2 a b c');
+      gateway.sendMessage(inst, t2, 0, 'x');
+      expect(value(t2Out), '');
+      gateway.sendMessage(inst, t2, 2, 'z');
+      expect(value(t2Out), 'xbz');
+    });
+
+    test('spell: codes, a space, iter, padding after the text', () {
+      open('spell');
+      final codes = at('.l', 60, 320);
+      final field = at('.textedit', 60, 200);
+      click(field);
+      expect((value(codes), value(at('.i', 220, 380))), ('104 105', '105'));
+      enter(field, 'a b');
+      expect(value(codes), '97 32 98');
+      type(at('.i', 60, 460), 7);
+      expect(value(at('.l', 60, 580)), '55 48 48');
+      // The title note: a number digit by digit; no bang; 32 by default.
+      final spell = at('.spell', 60, 260);
+      gateway.sendInt(inst, spell, 0, 123);
+      expect(value(codes), '49 50 51');
+      click(spell);
+      expect(value(codes), '49 50 51', reason: 'spell takes no bang');
+      final (pad, padOut) = probe('.spell', '3');
+      gateway.sendInt(inst, pad, 0, 7);
+      expect(value(padOut), '55 32 32');
+    });
+
+    test('tolower and toupper: case, the rest kept, route ignores case', () {
+      open('tolower-toupper');
+      final upper = at('.l', 60, 300);
+      final lower = at('.l', 200, 300);
+      final field = at('.textedit', 60, 180);
+      click(field);
+      expect((value(upper), value(lower)), ('HELLO', 'hello'));
+      enter(field, 'Grüße 42');
+      expect((value(upper), value(lower)), ('GRüßE 42', 'grüße 42'));
+      final plays = at('.i', 60, 650);
+      final stops = at('.i', 170, 650);
+      final rest = at('.l', 280, 590);
+      click(msg('PLAY'));
+      click(msg('Stop'));
+      expect((value(plays), value(stops)), ('1', '1'));
+      final typed = at('.textedit', 280, 400);
+      enter(typed, 'pLaY');
+      expect(value(plays), '2');
+      enter(typed, 'Pause');
+      expect((value(plays), value(stops), value(rest)), ('2', '1', 'pause'));
+      // The title note: a number passes through as a number.
+      final (up, _) = probe('.toupper', '');
+      final n = gateway.createObject(inst, '.i');
+      gateway.connect(
+        inst,
+        fromHandleId: up,
+        outlet: 0,
+        toHandleId: n,
+        inlet: 0,
+      );
+      gateway.sendInt(inst, up, 0, 5);
+      expect(value(n), '5');
     });
   });
 
