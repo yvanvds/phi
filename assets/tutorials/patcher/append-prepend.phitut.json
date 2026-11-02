@@ -1,0 +1,304 @@
+{
+  "title": "append and prepend — add items after or before",
+  "covers": [
+    ".append",
+    ".prepend"
+  ],
+  "summary": "Put a stored message in front of or after everything that arrives, change it from the right inlet, and build a set message that stores a value without sending it.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# append and prepend — add items after or before\nprepend puts its stored message in front of every message that arrives, and append puts it after. The result leaves as one list. The right inlet replaces the stored message.\nMax's prepend changes its message with set. Here set is put in front like any other word; use the right inlet.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "520.0"
+        },
+        "parms": "set",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "580.0"
+        },
+        "parms": "0 0",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "640.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "200.0",
+          "y": "640.0"
+        },
+        "parms": "b",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "200.0",
+          "y": "690.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "200.0",
+          "y": "740.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Type 60 into the number box. prepend note sends note 60, and append 100 adds 100 after it: note 60 100.",
+        "type": ".text"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "640.0",
+          "y": "250.0",
+          "w": "300"
+        },
+        "parms": "2. Click ctl. It goes into the right inlet of prepend and replaces note, without sending anything. Type 61: ctl 61, and ctl 61 100. Click 1 to make append add 1 instead of 100.",
+        "type": ".text"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "640.0",
+          "y": "380.0",
+          "w": "300"
+        },
+        "parms": "3. Many objects take set followed by a value to store the value without sending it. Type 5 into the lower box. prepend set makes set 5, and pack keeps 5 without sending: the count stays. Click the button: pack sends 5 0.",
+        "type": ".text"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "640.0",
+          "y": "530.0",
+          "w": "300"
+        },
+        "parms": "4. A message box here does not take set: a list that arrives replaces its whole text, set included.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "180.0",
+          "y": "160.0"
+        },
+        "parms": "ctl",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "290.0",
+          "y": "160.0"
+        },
+        "parms": "1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "230.0"
+        },
+        "parms": "note",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "290.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "240.0",
+          "y": "290.0"
+        },
+        "parms": "100",
+        "type": ".append",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "240.0",
+          "y": "350.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "460.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "200.0",
+          "y": "460.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

@@ -232,6 +232,13 @@ for:
   number once before any repeats (`urn`), weighted chains of states (`prob`)
   and a coin flip (`decide`). `drunk`, `urn`, `prob` and `decide` take a seed
   that replays the same numbers; `random` has none yet.
+- **Lists:** building a list from several inlets (`pack` and `pak`),
+  splitting one into outlets (`unpack`), one item at a time (`iter`), whole
+  lists end to end and fixed-size chunks (`join` and `unjoin`), adding items
+  before or after (`prepend` and `append`), the list Swiss-army knife (`zl`),
+  and numbering items or swapping one value (`listfunnel` and
+  `substitute`). Each pair shares one tutorial. A message box keeps only its
+  first word for now, so these tutorials build their lists with `prepend`.
 
 Each tutorial is a small working patch, with numbered notes that walk you
 through it. Where Phi's object differs from the Max object of the same name,

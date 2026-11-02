@@ -3670,6 +3670,282 @@ void main() {
     });
   });
 
+  test('every list type has a tutorial (#502)', () {
+    for (final type in [
+      '.pack', '.pak', '.unpack', '.iter', '.join', '.unjoin', '.append', //
+      '.prepend', '.zl', '.listfunnel', '.substitute',
+    ]) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+    expect(index.tutorialFor('.pack'), index.tutorialFor('.pak'));
+    expect(index.tutorialFor('.join'), index.tutorialFor('.unjoin'));
+    expect(index.tutorialFor('.append'), index.tutorialFor('.prepend'));
+    expect(index.tutorialFor('.listfunnel'), index.tutorialFor('.substitute'));
+  });
+
+  group('list tutorials (#502) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    void render(int blocks) {
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+      }
+    }
+
+    // Every tutorial is mounted while open (#528); so is this copy.
+    void open(String slug) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+      gateway.mountAsSource(inst);
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: '$slug mounted');
+      render(20);
+    }
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      render(20);
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    // A message box by its text: each tutorial's are unique.
+    int msg(String text) => graph.objects
+        .singleWhere((o) => o.type == '.m' && o.args == text)
+        .handleId;
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    // Typing a number into a box sends it on.
+    void type(int id, num v) => v is int
+        ? gateway.sendInt(inst, id, 0, v)
+        : gateway.sendFloat(inst, id, 0, v.toDouble());
+    String value(int id) => gateway.guiValue(inst, id);
+    double number(int id) => double.parse(value(id));
+
+    test('pack and pak: typed elements, cold inlets, pak sends from all', () {
+      open('pack-pak');
+      final out = at('.l', 60, 290);
+      type(at('.i', 170, 160), 3);
+      click(msg('bar'));
+      expect(value(out), '', reason: 'the right inlets only store');
+      type(at('.f', 60, 160), 1.7);
+      expect(value(out), '1 3. bar', reason: 'int cut, float made, word kept');
+      type(at('.f', 60, 160), 4);
+      expect(value(out), '4 3. bar');
+      click(at('.b', 390, 160));
+      expect(value(out), '4 3. bar', reason: 'a bang sends as it stands');
+      // A word at an int or float element is refused.
+      gateway.sendMessage(inst, at('.pack', 60, 230), 1, 'word');
+      click(at('.b', 390, 160));
+      expect(value(out), '4 3. bar');
+      final pk = at('.i', 60, 700);
+      final pa = at('.i', 240, 700);
+      type(at('.i', 240, 420), 5);
+      expect((value(at('.l', 60, 540)), value(pk)), ('', '0'));
+      expect((value(at('.l', 240, 540)), value(pa)), ('0 5', '1'));
+      type(at('.i', 60, 420), 2);
+      expect((value(at('.l', 60, 540)), value(pk)), ('2 5', '1'));
+      expect((value(at('.l', 240, 540)), value(pa)), ('2 5', '2'));
+      // pak takes a bang at any inlet.
+      gateway.sendBang(inst, at('.pak', 240, 480), 1);
+      expect(value(pa), '3');
+    });
+
+    test('unpack: right to left, typed outlets, only those reached', () {
+      open('unpack');
+      final o0 = at('.i', 60, 340);
+      final o1 = at('.f', 170, 340);
+      final o2 = at('.l', 280, 340);
+      click(msg('foo'));
+      expect((value(o0), number(o1), value(o2)), ('1', 2.0, 'foo'));
+      click(msg('6'));
+      expect((value(o0), number(o1), value(o2)), ('5', 6.0, 'foo'));
+      // Items past the last outlet are dropped; a word at a number outlet
+      // is refused and that outlet sends what it had.
+      gateway.sendList(inst, at('.unpack', 60, 280), 0, 'bar 7 baz qux');
+      expect((value(o0), number(o1), value(o2)), ('5', 7.0, 'baz'));
+      click(at('.b', 340, 160));
+      expect((value(o0), number(o1), value(o2)), ('5', 7.0, 'baz'));
+      click(msg('3'));
+      expect(number(at('.f', 60, 690)), 7, reason: '10 - 3, right first');
+    });
+
+    test('iter: one item at a time, the bang repeats, a number is one', () {
+      open('iter');
+      final last = at('.i', 60, 340);
+      final count = at('.i', 180, 440);
+      final up = at('.f', 300, 390);
+      click(at('.b', 280, 160));
+      expect(value(count), '0', reason: 'nothing to repeat yet');
+      click(msg('67'));
+      expect((value(last), value(count), number(up)), ('67', '3', 79.0));
+      click(at('.b', 280, 160));
+      expect(value(count), '6');
+      click(msg('5'));
+      expect((value(last), value(count), number(up)), ('5', '7', 17.0));
+      gateway.sendList(inst, at('.+', 300, 340), 0, '60 64 67');
+      expect(number(up), 17, reason: '+ ignores a list (note 2)');
+    });
+
+    test('join and unjoin: whole pieces, groups, the rest', () {
+      open('join-unjoin');
+      final join = at('.l', 60, 340);
+      final pack = at('.l', 200, 340);
+      click(msg('4'));
+      expect((value(join), value(pack)), ('', ''), reason: 'right is cold');
+      click(msg('2'));
+      expect((value(join), value(pack)), ('1 2 3 4', '1 2'));
+      click(at('.b', 320, 160));
+      expect((value(join), value(pack)), ('1 2 3 4', '1 2'));
+      // join 3 -1, from the note: every inlet sends.
+      final j3 = gateway.createObject(inst, '.join', args: '3 -1');
+      final j3l = gateway.createObject(inst, '.l');
+      gateway.connect(
+        inst,
+        fromHandleId: j3,
+        outlet: 0,
+        toHandleId: j3l,
+        inlet: 0,
+      );
+      gateway.sendInt(inst, j3, 2, 5);
+      expect(value(j3l), '0 0 5');
+      final g0 = at('.l', 60, 630);
+      final g1 = at('.l', 170, 630);
+      final rest = at('.l', 280, 690);
+      click(msg('5'));
+      expect((value(g0), value(g1), value(rest)), ('1 2', '3 4', 'rest 5'));
+      click(msg('8'));
+      expect((value(g0), value(g1), value(rest)), ('6 7', '3 4', 'rest 8'));
+    });
+
+    test('append and prepend: before, after, replaced, set', () {
+      open('append-prepend');
+      final pre = at('.l', 60, 290);
+      final app = at('.l', 240, 350);
+      type(at('.i', 60, 160), 60);
+      expect((value(pre), value(app)), ('note 60', 'note 60 100'));
+      click(msg('ctl'));
+      expect(value(pre), 'note 60', reason: 'the right inlet sends nothing');
+      type(at('.i', 60, 160), 61);
+      expect((value(pre), value(app)), ('ctl 61', 'ctl 61 100'));
+      click(msg('1'));
+      type(at('.i', 60, 160), 62);
+      expect(value(app), 'ctl 62 1');
+      final packed = at('.l', 60, 640);
+      final count = at('.i', 200, 740);
+      type(at('.i', 60, 460), 5);
+      expect((value(packed), value(count)), ('', '0'), reason: 'set: kept');
+      click(at('.b', 200, 460));
+      expect((value(packed), value(count)), ('5 0', '1'));
+      // The title note: set at the left inlet is put in front like any word.
+      gateway.sendMessage(inst, at('.prepend', 60, 230), 0, 'set ctl');
+      expect(value(pre), 'ctl set ctl');
+      // Note 4: a message box takes a list that arrives as its whole text.
+      final m = gateway.createObject(inst, '.m', args: 'x');
+      gateway.sendMessage(inst, m, 0, 'set 9');
+      expect(value(m), 'set 9');
+    });
+
+    test('zl: len, rev, nth, rot, slice, sort, group, stream', () {
+      open('zl');
+      final left = at('.l', 60, 380);
+      final leftN = at('.i', 200, 380);
+      final right = at('.l', 330, 380);
+      final btn = at('.b', 400, 160);
+      click(msg('1'));
+      expect(value(leftN), '4', reason: 'len of 5 3 8 1');
+      click(msg('rev'));
+      expect(value(left), '', reason: 'a mode switch sends nothing');
+      click(btn);
+      expect(value(left), '1 8 3 5');
+      type(at('.i', 480, 260), 2);
+      click(msg('nth'));
+      click(btn);
+      expect((value(leftN), value(right)), ('3', '5 8 1'));
+      click(msg('rot'));
+      click(btn);
+      expect(value(left), '8 1 5 3');
+      click(msg('slice'));
+      click(btn);
+      expect((value(left), value(right)), ('5 3', '8 1'));
+      click(msg('sort'));
+      click(btn);
+      expect(value(left), '1 3 5 8');
+      type(at('.i', 480, 260), -1);
+      click(btn);
+      expect((value(left), value(right)), ('8 5 3 1', '3 1 2 4'));
+      click(msg('len'));
+      click(btn);
+      expect(value(leftN), '4');
+      final input = at('.i', 60, 500);
+      final group = at('.l', 60, 620);
+      final stream = at('.l', 240, 620);
+      final missing = at('.i', 400, 620);
+      type(input, 1);
+      type(input, 2);
+      expect((value(group), value(stream), value(missing)), ('', '', '1'));
+      type(input, 3);
+      expect(
+        (value(group), value(stream), value(missing)),
+        ('1 2 3', '1 2 3', '0'),
+      );
+      type(input, 4);
+      expect((value(group), value(stream)), ('1 2 3', '2 3 4'));
+      type(input, 5);
+      type(input, 6);
+      expect((value(group), value(stream)), ('4 5 6', '4 5 6'));
+    });
+
+    test('listfunnel and substitute: index pairs, spray, replace', () {
+      open('listfunnel-substitute');
+      click(msg('67'));
+      expect(value(at('.l', 60, 330)), '2 67', reason: 'the last pair');
+      expect(
+        [
+          for (final x in [200.0, 300.0, 400.0]) value(at('.i', x, 390)),
+        ],
+        ['60', '64', '67'],
+      );
+      final lf = gateway.createObject(inst, '.listfunnel', args: '1');
+      final lfl = gateway.createObject(inst, '.l');
+      gateway.connect(
+        inst,
+        fromHandleId: lf,
+        outlet: 0,
+        toHandleId: lfl,
+        inlet: 0,
+      );
+      gateway.sendList(inst, lf, 0, '60 64');
+      expect(value(lfl), '2 64', reason: 'listfunnel 1 starts at 1');
+      final left = at('.l', 60, 680);
+      final right = at('.l', 200, 680);
+      final first = at('.l', 330, 680);
+      click(msg('60'));
+      expect(
+        (value(left), value(right), value(first)),
+        ('72 64 72', '', '72 64 60'),
+      );
+      click(msg('64'));
+      expect((value(left), value(right)), ('72 64 72', '62 64'));
+      type(at('.i', 330, 500), 64);
+      click(msg('60'));
+      expect(value(left), '60 72 60', reason: 'now 64 is the match');
+      gateway.sendInt(inst, at('.substitute', 60, 620), 2, 0);
+      click(msg('60'));
+      expect(value(left), '60 0 60', reason: 'the right inlet: replacement');
+    });
+  });
+
   test('report: object types with no tutorial yet', () {
     final missing = [
       for (final t in engineTypes.toList()..sort())

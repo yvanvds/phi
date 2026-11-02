@@ -1,0 +1,372 @@
+{
+  "title": "listfunnel and substitute — number the items, swap one value",
+  "covers": [
+    ".listfunnel",
+    ".substitute"
+  ],
+  "summary": "Tag each item of a list with its index and spread the items over outlets with spray, and replace one value by another anywhere in a list.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# listfunnel and substitute — number the items, swap one value\nlistfunnel sends every item of a list with its index in front: 0 60, 1 64. substitute replaces every item that matches one value by another.\nAs in Max. substitute sends a list with a replacement out the left, and one without a match out the right.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "67",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "200.0",
+          "y": "500.0"
+        },
+        "parms": "64",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "330.0",
+          "y": "500.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "550.0"
+        },
+        "parms": "60 64",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "200.0",
+          "y": "550.0"
+        },
+        "parms": "62",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "620.0"
+        },
+        "parms": "60 72",
+        "type": ".substitute",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "330.0",
+          "y": "620.0"
+        },
+        "parms": "60 72 1",
+        "type": ".substitute",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "60.0",
+          "y": "680.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "200.0",
+          "y": "680.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "330.0",
+          "y": "680.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Click 67. prepend makes the list 60 64 67, and listfunnel sends 0 60, 1 64 and 2 67, one after the other. The list box shows the last pair.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "60.0",
+          "y": "210.0"
+        },
+        "parms": "60 64",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "640.0",
+          "y": "270.0",
+          "w": "300"
+        },
+        "parms": "2. spray 3 sends the second item out the outlet the first one names, so item 0 lands in the left box, item 1 in the middle and item 2 on the right. An argument starts the index somewhere else: listfunnel 1.",
+        "type": ".text"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "640.0",
+          "y": "420.0",
+          "w": "300"
+        },
+        "parms": "3. Click 60. substitute 60 72 turns 60 64 60 into 72 64 72 and sends it out the left. A third argument replaces only the first match: 72 64 60.",
+        "type": ".text"
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "640.0",
+          "y": "530.0",
+          "w": "300"
+        },
+        "parms": "4. Click 64. 62 64 has no 60 in it, so it leaves the right outlet as it came. Chain substitutes on that outlet to replace more values.",
+        "type": ".text"
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "640.0",
+          "y": "640.0",
+          "w": "300"
+        },
+        "parms": "5. Type 64 into the box above substitute and click 60 again: now 64 is replaced, 60 72 60. The middle inlet sets the value to look for, the right one the replacement.",
+        "type": ".text"
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "640.0",
+          "y": "770.0",
+          "w": "300"
+        },
+        "parms": "6. The lists are built with prepend because a message box keeps only its first word on this engine (#521).",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "60.0",
+          "y": "270.0"
+        },
+        "parms": "",
+        "type": ".listfunnel",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "330.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "200.0",
+          "y": "330.0"
+        },
+        "parms": "3",
+        "type": ".spray",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "200.0",
+          "y": "390.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "300.0",
+          "y": "390.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "400.0",
+          "y": "390.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "500.0"
+        },
+        "parms": "60",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

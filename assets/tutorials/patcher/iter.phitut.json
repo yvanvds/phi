@@ -1,0 +1,240 @@
+{
+  "title": "iter — one item at a time",
+  "covers": [
+    ".iter"
+  ],
+  "summary": "Send the items of a list out one at a time, first to last, count them, and send the last list again with a bang.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# iter — one item at a time\niter sends the items of a list one by one, first to last. Each item is handled all the way down before the next one leaves, so objects that take single numbers can work through a list.\nAs in Max.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "67",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "300.0",
+          "y": "390.0"
+        },
+        "parms": "",
+        "type": ".f"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "180.0",
+          "y": "440.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Click 67. prepend makes the list 60 64 67, and iter sends 60, 64 and 67. The count goes up by three, one for each item. The box on the left shows 67, the last one.",
+        "type": ".text"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "640.0",
+          "y": "290.0",
+          "w": "300"
+        },
+        "parms": "2. + 12 takes single numbers: a list sent straight to it is ignored on this engine. After iter it works on every item in turn, 72, 76 and 79, and the box shows the last.",
+        "type": ".text"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "640.0",
+          "y": "420.0",
+          "w": "300"
+        },
+        "parms": "3. Click the button. A bang sends the last list again, three more items. Click 5: a single number is a list of one item.",
+        "type": ".text"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "640.0",
+          "y": "530.0",
+          "w": "300"
+        },
+        "parms": "4. The lists are built with prepend because a message box keeps only its first word on this engine (#521).",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "180.0",
+          "y": "160.0"
+        },
+        "parms": "5",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "210.0"
+        },
+        "parms": "60 64",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "280.0"
+        },
+        "parms": "",
+        "type": ".iter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "2": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 3
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "340.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "180.0",
+          "y": "340.0"
+        },
+        "parms": "b",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "300.0",
+          "y": "340.0"
+        },
+        "parms": "12",
+        "type": ".+",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "180.0",
+          "y": "390.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

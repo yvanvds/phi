@@ -1,0 +1,377 @@
+{
+  "title": "join and unjoin — whole lists end to end, and fixed-size chunks",
+  "covers": [
+    ".join",
+    ".unjoin"
+  ],
+  "summary": "Join the lists held by several inlets end to end, next to pack, and split a list into groups of a fixed size with the remainder on the right.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# join and unjoin — whole lists end to end, and fixed-size chunks\njoin puts the messages held by its inlets end to end. Each inlet holds a whole list, of any length. unjoin goes the other way: it cuts a list into groups of a fixed size.\nWhere Max uses the attributes @triggers and @outsize, these take plain arguments: join 3 -1, unjoin 2 2.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "2",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "460.0"
+        },
+        "parms": "5",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "220.0",
+          "y": "460.0"
+        },
+        "parms": "8",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "510.0"
+        },
+        "parms": "1 2 3 4",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "220.0",
+          "y": "510.0"
+        },
+        "parms": "6 7",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "570.0"
+        },
+        "parms": "2 2",
+        "type": ".unjoin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "60.0",
+          "y": "630.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "170.0",
+          "y": "630.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "280.0",
+          "y": "630.0"
+        },
+        "parms": "rest",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "280.0",
+          "y": "690.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Click 4, then 2. The right inlets store 3 4; the lists 1 2 then reach the left inlets, which send. join sends 1 2 3 4: every item of both lists. pack sends 1 2: each of its elements holds one item, so 1 2 fills both and 4 is dropped.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "200.0",
+          "y": "160.0"
+        },
+        "parms": "4",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "640.0",
+          "y": "310.0",
+          "w": "300"
+        },
+        "parms": "2. Only the left inlet sends. Arguments after the inlet count name other inlets that send, counted from 0, and -1 makes every inlet send: join 3 -1. A bang sends the list as it stands.",
+        "type": ".text"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "640.0",
+          "y": "440.0",
+          "w": "300"
+        },
+        "parms": "3. Click 5. unjoin 2 2 cuts 1 2 3 4 5 into groups of two: 1 2 and 3 4. The 5 does not make a full group, so it leaves the rightmost outlet; prepend shows it as rest 5.",
+        "type": ".text"
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "640.0",
+          "y": "570.0",
+          "w": "300"
+        },
+        "parms": "4. Click 8. 6 7 8 has one full group: 6 7. The second outlet only sends a full group, so it still shows 3 4, and 8 is the rest.",
+        "type": ".text"
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "640.0",
+          "y": "680.0",
+          "w": "300"
+        },
+        "parms": "5. The lists are built with prepend because a message box keeps only its first word on this engine (#521).",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "320.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "210.0"
+        },
+        "parms": "1",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "200.0",
+          "y": "210.0"
+        },
+        "parms": "3",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 6
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 7
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "280.0"
+        },
+        "parms": "2",
+        "type": ".join",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "200.0",
+          "y": "280.0"
+        },
+        "parms": "0 0",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "340.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "200.0",
+          "y": "340.0"
+        },
+        "parms": "",
+        "type": ".l"
+      }
+    }
+  }
+}

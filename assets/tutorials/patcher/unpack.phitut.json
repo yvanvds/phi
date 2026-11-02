@@ -1,0 +1,308 @@
+{
+  "title": "unpack — split a list into outlets",
+  "covers": [
+    ".unpack"
+  ],
+  "summary": "Send each item of a list out its own outlet, right to left, with outlet types set by the arguments, and use that order to feed a cold inlet first.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# unpack — split a list into outlets\nunpack sends each item of a list out its own outlet, the rightmost first. Its arguments set the outlets and their types, spelled as for pack: 0 an int, 0. a float, a word sends the item unchanged.\nAs in Max. A word that reaches an int or float outlet is refused, and that outlet sends the value it had.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "foo",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "460.0"
+        },
+        "parms": "3",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "510.0"
+        },
+        "parms": "10",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "570.0"
+        },
+        "parms": "0 0",
+        "type": ".unpack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 1,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "630.0"
+        },
+        "parms": "",
+        "type": ".-",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "690.0"
+        },
+        "parms": "",
+        "type": ".f"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Click foo. prepend makes the list 1.7 2 foo. unpack 0 0. s sends foo out the right, then 2. as a float, then 1: the int outlet cuts 1.7 to 1.",
+        "type": ".text"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "640.0",
+          "y": "270.0",
+          "w": "300"
+        },
+        "parms": "2. Click 6. The list 5 6 has two items, so only the two left outlets send, and the word box keeps foo. Items past the last outlet are dropped.",
+        "type": ".text"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "640.0",
+          "y": "380.0",
+          "w": "300"
+        },
+        "parms": "3. Click the button. A bang sends every outlet's last value again.",
+        "type": ".text"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "640.0",
+          "y": "450.0",
+          "w": "300"
+        },
+        "parms": "4. Right to left is what makes the bottom patch work. Click 3: the list 10 3 puts 3 into the cold right inlet of - first, then 10 into the left, which calculates 10 - 3 = 7.",
+        "type": ".text"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "640.0",
+          "y": "580.0",
+          "w": "300"
+        },
+        "parms": "5. The lists are built with prepend because a message box keeps only its first word on this engine (#521).",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "220.0",
+          "y": "160.0"
+        },
+        "parms": "6",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "340.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "210.0"
+        },
+        "parms": "1.7 2",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "220.0",
+          "y": "210.0"
+        },
+        "parms": "5",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "280.0"
+        },
+        "parms": "0 0. s",
+        "type": ".unpack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "340.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "170.0",
+          "y": "340.0"
+        },
+        "parms": "",
+        "type": ".f"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "280.0",
+          "y": "340.0"
+        },
+        "parms": "",
+        "type": ".l"
+      }
+    }
+  }
+}
