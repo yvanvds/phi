@@ -239,6 +239,13 @@ for:
   and numbering items or swapping one value (`listfunnel` and
   `substitute`). Each pair shares one tutorial. A message box keeps only its
   first word for now, so these tutorials build their lists with `prepend`.
+- **Strings and symbols:** formatting numbers and words into a message
+  (`sprintf`), matching and replacing with a regular expression (`regexp`),
+  a list as one word and back, and parsing typed text (`tosymbol` and
+  `fromsymbol`), text and character codes (`atoi` and `itoa`), joining items
+  into a name (`combine`), spelling a message out as codes (`spell`) and
+  changing case (`tolower` and `toupper`). Each pair shares one tutorial. A
+  list box shows about ten characters, so their examples are short.
 
 Each tutorial is a small working patch, with numbered notes that walk you
 through it. Where Phi's object differs from the Max object of the same name,

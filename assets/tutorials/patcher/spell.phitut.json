@@ -1,0 +1,172 @@
+{
+  "title": "spell — a message as character codes",
+  "covers": [
+    ".spell"
+  ],
+  "summary": "Spell typed text and numbers out as character codes, take the codes apart with iter, and pad a short result to a fixed length.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# spell — a message as character codes\nspell sends the character codes of a message's text as one list: hi gives 104 105, a number is spelled digit by digit, and a space between words is 32. It stores nothing and takes no bang.\nTwo arguments pad a short result: the least number of codes, then the code to fill with, 32 (a space) unless given.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "200.0"
+        },
+        "parms": "hi",
+        "type": ".textedit",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "640.0",
+          "y": "300.0",
+          "w": "300"
+        },
+        "parms": "2. The codes leave together as one list. iter takes them one at a time, and the number box shows the last.",
+        "type": ".text"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "640.0",
+          "y": "460.0",
+          "w": "300"
+        },
+        "parms": "3. spell 3 48 pads to at least three codes with 48, the digit 0. Type 7: 55 48 48. The fill goes after the text, so for leading zeros use sprintf %03d.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "60.0",
+          "y": "260.0"
+        },
+        "parms": "",
+        "type": ".spell",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "60.0",
+          "y": "320.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "220.0",
+          "y": "320.0"
+        },
+        "parms": "",
+        "type": ".iter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "220.0",
+          "y": "380.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "460.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "520.0"
+        },
+        "parms": "3 48",
+        "type": ".spell",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "580.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "640.0",
+          "y": "200.0",
+          "w": "300"
+        },
+        "parms": "1. Click the field and press Enter: hi leaves as 104 105. Type a b: the space between the words is 32, so 97 32 98.",
+        "type": ".text"
+      }
+    }
+  }
+}

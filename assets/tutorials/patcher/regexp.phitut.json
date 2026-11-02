@@ -1,0 +1,239 @@
+{
+  "title": "regexp — match and replace text",
+  "covers": [
+    ".regexp"
+  ],
+  "summary": "Find note names in typed text with a regular expression, read the matches and their groups, rewrite every match with a substitution and catch text that does not match.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# regexp — match and replace text\nregexp looks for a regular expression in every message. Each match leaves the third outlet, and its capture groups the second. With a substitution, the left outlet then sends the whole message with every match replaced. A message with no match leaves the right outlet as it is.\nUnlike Max, the pattern and the substitution are only set as arguments: there are no re or substitute messages. Backreferences, lookaround and \\b are not supported, and a space in a pattern is written \\s.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "500.0",
+          "y": "480.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "500.0",
+          "y": "540.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "640.0",
+          "y": "220.0",
+          "w": "300"
+        },
+        "parms": "1. Click the button: the field sends c4 e5 g. The pattern ([a-g])([0-9]) finds a note name followed by an octave, so it matches c4 and then e5.",
+        "type": ".text"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "640.0",
+          "y": "320.0",
+          "w": "300"
+        },
+        "parms": "2. The boxes show the last match: e5 out of the third outlet, and its groups e 5 out of the second. The count goes up by two, one for each match.",
+        "type": ".text"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "640.0",
+          "y": "420.0",
+          "w": "300"
+        },
+        "parms": "3. The substitution %1#%2 puts a sharp between the two groups: c#4 e#5 g leaves the left outlet once, after the matches. %0 would insert the whole match.",
+        "type": ".text"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "640.0",
+          "y": "520.0",
+          "w": "300"
+        },
+        "parms": "4. Click hat: nothing matches, so hat leaves the right outlet unchanged and nothing else is sent. Type your own notes into the field and press Enter.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "160.0",
+          "y": "220.0"
+        },
+        "parms": "hat",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "60.0",
+          "y": "270.0"
+        },
+        "parms": "c4 e5 g",
+        "type": ".textedit",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "330.0"
+        },
+        "parms": "([a-g])([0-9]) %1#%2",
+        "type": ".regexp",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 2
+          },
+          "output 3": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "170.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "280.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "390.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "500.0",
+          "y": "420.0"
+        },
+        "parms": "b",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

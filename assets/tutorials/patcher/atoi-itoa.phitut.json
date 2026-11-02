@@ -1,0 +1,164 @@
+{
+  "title": "atoi and itoa — text and character codes",
+  "covers": [
+    ".atoi",
+    ".itoa"
+  ],
+  "summary": "Turn typed text into its character codes and back, add a character without sending, and send the result again with a bang.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# atoi and itoa — text and character codes\natoi turns the text of a message into its character codes, and itoa turns codes back into text. Both keep what they made: a bang at the left inlet sends it again, the middle inlet adds to it and the right inlet replaces it, both without sending.\nText is read and written as UTF-8, so é is the one code 233. itoa's text always leaves as a list, even when it reads as a number.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "200.0"
+        },
+        "parms": "hi",
+        "type": ".textedit",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "640.0",
+          "y": "430.0",
+          "w": "300"
+        },
+        "parms": "3. Codes typed one at a time build a word letter by letter: 72 is H, 97 is a, 32 a space. A new word in the field replaces it all.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "60.0",
+          "y": "260.0"
+        },
+        "parms": "",
+        "type": ".atoi",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "60.0",
+          "y": "320.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "220.0",
+          "y": "380.0"
+        },
+        "parms": "",
+        "type": ".itoa",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "220.0",
+          "y": "440.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "340.0",
+          "y": "260.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "460.0",
+          "y": "260.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "640.0",
+          "y": "200.0",
+          "w": "300"
+        },
+        "parms": "1. Click the field and press Enter to send hi, or type a word of your own. atoi spells it as codes: hi gives 104 105, and a space between two words gives 32.",
+        "type": ".text"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "640.0",
+          "y": "310.0",
+          "w": "300"
+        },
+        "parms": "2. itoa turns the codes back into text, so the lower list box shows the word again. Type 33 into the number box: the middle inlet adds ! without sending. Click the button: hi! leaves.",
+        "type": ".text"
+      }
+    }
+  }
+}

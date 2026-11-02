@@ -3946,6 +3946,284 @@ void main() {
     });
   });
 
+  test('every string type has a tutorial (#503)', () {
+    for (final type in [
+      '.sprintf', '.regexp', '.tosymbol', '.fromsymbol', '.atoi', '.itoa', //
+      '.combine', '.spell', '.tolower', '.toupper',
+    ]) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+    expect(index.tutorialFor('.tosymbol'), index.tutorialFor('.fromsymbol'));
+    expect(index.tutorialFor('.atoi'), index.tutorialFor('.itoa'));
+    expect(index.tutorialFor('.tolower'), index.tutorialFor('.toupper'));
+  });
+
+  group('string tutorials (#503) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    void render(int blocks) {
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+      }
+    }
+
+    // Every tutorial is mounted while open (#528); so is this copy.
+    void open(String slug) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+      gateway.mountAsSource(inst);
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: '$slug mounted');
+      render(20);
+    }
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      render(20);
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    // A message box by its text: each tutorial's are unique.
+    int msg(String text) => graph.objects
+        .singleWhere((o) => o.type == '.m' && o.args == text)
+        .handleId;
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    // Typing a number into a box sends it on.
+    void type(int id, num v) => v is int
+        ? gateway.sendInt(inst, id, 0, v)
+        : gateway.sendFloat(inst, id, 0, v.toDouble());
+    // Typing into a text field and pressing Enter stores and sends the text.
+    void enter(int field, String text) =>
+        gateway.sendList(inst, field, 0, text);
+    String value(int id) => gateway.guiValue(inst, id);
+    // A fresh object wired to a fresh list box, to check what a note says
+    // about a case the patch does not wire up.
+    (int, int) probe(String t, String args, [int outlet = 0]) {
+      final o = gateway.createObject(inst, t, args: args);
+      final l = gateway.createObject(inst, '.l');
+      gateway.connect(
+        inst,
+        fromHandleId: o,
+        outlet: outlet,
+        toHandleId: l,
+        inlet: 0,
+      );
+      return (o, l);
+    }
+
+    test('sprintf: a unit, two inlets, width, precision, as text', () {
+      open('sprintf');
+      final freq = at('.l', 60, 320);
+      type(at('.i', 60, 200), 440);
+      expect(value(freq), '440 Hz');
+      type(at('.sprintf', 60, 260), 440.7);
+      expect(value(freq), '440 Hz', reason: 'a float is cut to an int');
+      final note = at('.l', 300, 320);
+      click(msg('90'));
+      expect(value(note), '', reason: 'the right inlet only stores');
+      click(msg('60'));
+      expect(value(note), 'note 60 90');
+      type(at('.i', 60, 420), 7);
+      expect(value(at('.l', 60, 540)), '007.wav');
+      type(at('.f', 300, 420), 0.5);
+      expect(value(at('.l', 300, 540)), 'gain 0.50');
+      // Note 2: a %d never set writes 0.
+      final (fresh, freshOut) = probe('.sprintf', 'note %d %d');
+      gateway.sendInt(inst, fresh, 0, 60);
+      expect(value(freshOut), 'note 60 0');
+      // Note 4: a list fills from the left; a bang formats again.
+      final sp = at('.sprintf', 300, 260);
+      gateway.sendList(inst, sp, 0, '61 90');
+      expect(value(note), 'note 61 90');
+      gateway.sendInt(inst, sp, 1, 80);
+      click(sp);
+      expect(value(note), 'note 61 80');
+      // The title note: %x and %g are copied through; symout is dropped.
+      final (other, otherOut) = probe('.sprintf', '%x|%g');
+      gateway.sendList(inst, other, 0, '255 1.5');
+      expect(value(otherOut), '%x|%g');
+      final (sym, symOut) = probe('.sprintf', 'symout freq %d');
+      gateway.sendInt(inst, sym, 0, 3);
+      expect(value(symOut), 'freq 3');
+    });
+
+    test('regexp: matches, groups, substitution, no match', () {
+      open('regexp');
+      final sub = at('.l', 60, 420);
+      final groups = at('.l', 170, 420);
+      final match = at('.l', 280, 420);
+      final none = at('.l', 390, 420);
+      final count = at('.i', 500, 540);
+      click(at('.b', 60, 220));
+      expect(
+        (value(sub), value(groups), value(match), value(none), value(count)),
+        ('c#4 e#5 g', 'e 5', 'e5', '', '2'),
+      );
+      click(msg('hat'));
+      expect(
+        (value(sub), value(match), value(none), value(count)),
+        ('c#4 e#5 g', 'e5', 'hat', '2'),
+        reason: 'no match: only the right outlet',
+      );
+      enter(at('.textedit', 60, 270), 'a1 b2 x');
+      expect((value(sub), value(count)), ('a#1 b#2 x', '4'));
+      // Note 3: %0 inserts the whole match.
+      final (whole, wholeOut) = probe('.regexp', '[a-g][0-9] <%0>');
+      gateway.sendList(inst, whole, 0, 'c4 d');
+      expect(value(wholeOut), '<c4> d');
+      // The title note: re is a message to match, not a command; \s is a
+      // space; \b is not supported, so everything leaves unmatched.
+      final (re, reOut) = probe('.regexp', 'a', 3);
+      gateway.sendMessage(inst, re, 0, 're b');
+      expect(value(reOut), 're b');
+      final (space, spaceOut) = probe('.regexp', r'c\s4', 2);
+      gateway.sendList(inst, space, 0, 'c 4');
+      expect(value(spaceOut), 'c 4');
+      final (wb, wbOut) = probe('.regexp', r'\bc', 3);
+      gateway.sendList(inst, wb, 0, 'c');
+      expect(value(wbOut), 'c');
+    });
+
+    test('tosymbol and fromsymbol: join, split, separator, parse', () {
+      open('tosymbol-fromsymbol');
+      final sym = at('.l', 60, 390);
+      final back = at('.l', 220, 450);
+      click(at('.b', 60, 220));
+      expect((value(sym), value(back)), ('osc/3/amp', 'osc 3 amp'));
+      click(msg('-'));
+      expect(value(sym), 'osc/3/amp', reason: 'the separator sends nothing');
+      click(at('.b', 60, 220));
+      expect((value(sym), value(back)), ('osc-3-amp', 'osc-3-amp'));
+      final field = at('.textedit', 60, 540);
+      final list = at('.l', 60, 660);
+      final item = at('.i', 220, 720);
+      click(field);
+      expect((value(list), value(item)), ('60 64 67', '67'));
+      enter(field, '72');
+      expect((value(list), value(item)), ('60 64 67', '72'));
+      // The title note: tosymbol's symbol leaves as a list of one item.
+      final (one, oneOut) = probe('.tosymbol', '/');
+      gateway.sendList(inst, one, 0, 'a b');
+      expect(value(oneOut), 'a/b');
+    });
+
+    test('atoi and itoa: codes, back to text, append, bang, UTF-8', () {
+      open('atoi-itoa');
+      final codes = at('.l', 60, 320);
+      final text = at('.l', 220, 440);
+      final field = at('.textedit', 60, 200);
+      click(field);
+      expect((value(codes), value(text)), ('104 105', 'hi'));
+      enter(field, 'a b');
+      expect((value(codes), value(text)), ('97 32 98', 'a b'));
+      enter(field, 'hi');
+      type(at('.i', 340, 260), 33);
+      expect(value(text), 'hi', reason: 'the middle inlet sends nothing');
+      click(at('.b', 460, 260));
+      expect(value(text), 'hi!');
+      // Note 3: one code at a time builds a word.
+      enter(field, 'x');
+      gateway.sendInt(inst, at('.itoa', 220, 380), 2, 72);
+      for (final c in [97, 32, 72]) {
+        type(at('.i', 340, 260), c);
+      }
+      click(at('.b', 460, 260));
+      expect(value(text), 'Ha H');
+      // The title note: UTF-8, and itoa's text is always a list.
+      enter(field, 'é');
+      expect((value(codes), value(text)), ('233', 'é'));
+      final (n, nOut) = probe('.itoa', '');
+      gateway.sendList(inst, n, 0, '52 50');
+      expect(value(nOut), '42');
+    });
+
+    test('combine: a file name, cold and hot inlets, triggers -1', () {
+      open('combine');
+      final name = at('.l', 60, 330);
+      click(at('.b', 170, 200));
+      expect(value(name), 'kick-1.wav');
+      type(at('.i', 240, 200), 2);
+      expect(value(name), 'kick-1.wav', reason: 'the third inlet only stores');
+      click(msg('hat'));
+      expect(value(name), 'hat-2.wav');
+      type(at('.i', 200, 420), 4);
+      expect(value(at('.l', 60, 540)), 'bus/4');
+      // The title note: triggers 2 makes only the third inlet send.
+      final (t2, t2Out) = probe('.combine', 'triggers 2 a b c');
+      gateway.sendMessage(inst, t2, 0, 'x');
+      expect(value(t2Out), '');
+      gateway.sendMessage(inst, t2, 2, 'z');
+      expect(value(t2Out), 'xbz');
+    });
+
+    test('spell: codes, a space, iter, padding after the text', () {
+      open('spell');
+      final codes = at('.l', 60, 320);
+      final field = at('.textedit', 60, 200);
+      click(field);
+      expect((value(codes), value(at('.i', 220, 380))), ('104 105', '105'));
+      enter(field, 'a b');
+      expect(value(codes), '97 32 98');
+      type(at('.i', 60, 460), 7);
+      expect(value(at('.l', 60, 580)), '55 48 48');
+      // The title note: a number digit by digit; no bang; 32 by default.
+      final spell = at('.spell', 60, 260);
+      gateway.sendInt(inst, spell, 0, 123);
+      expect(value(codes), '49 50 51');
+      click(spell);
+      expect(value(codes), '49 50 51', reason: 'spell takes no bang');
+      final (pad, padOut) = probe('.spell', '3');
+      gateway.sendInt(inst, pad, 0, 7);
+      expect(value(padOut), '55 32 32');
+    });
+
+    test('tolower and toupper: case, the rest kept, route ignores case', () {
+      open('tolower-toupper');
+      final upper = at('.l', 60, 300);
+      final lower = at('.l', 200, 300);
+      final field = at('.textedit', 60, 180);
+      click(field);
+      expect((value(upper), value(lower)), ('HELLO', 'hello'));
+      enter(field, 'Grüße 42');
+      expect((value(upper), value(lower)), ('GRüßE 42', 'grüße 42'));
+      final plays = at('.i', 60, 650);
+      final stops = at('.i', 170, 650);
+      final rest = at('.l', 280, 590);
+      click(msg('PLAY'));
+      click(msg('Stop'));
+      expect((value(plays), value(stops)), ('1', '1'));
+      final typed = at('.textedit', 280, 400);
+      enter(typed, 'pLaY');
+      expect(value(plays), '2');
+      enter(typed, 'Pause');
+      expect((value(plays), value(stops), value(rest)), ('2', '1', 'pause'));
+      // The title note: a number passes through as a number.
+      final (up, _) = probe('.toupper', '');
+      final n = gateway.createObject(inst, '.i');
+      gateway.connect(
+        inst,
+        fromHandleId: up,
+        outlet: 0,
+        toHandleId: n,
+        inlet: 0,
+      );
+      gateway.sendInt(inst, up, 0, 5);
+      expect(value(n), '5');
+    });
+  });
+
   test('report: object types with no tutorial yet', () {
     final missing = [
       for (final t in engineTypes.toList()..sort())
