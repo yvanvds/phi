@@ -4469,6 +4469,615 @@ void main() {
     });
   });
 
+  test('every data store and sequencer type has a tutorial (#505)', () {
+    for (final type in [
+      '.coll', '.table', '.funbuff', '.bag', '.capture', //
+      '.textfile', '.seq', '.qlist', '.mtr',
+    ]) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+  });
+
+  group(
+    'data store and sequencer tutorials (#505) do what their notes say',
+    () {
+      late int inst;
+      late PatcherGraphSnapshot graph;
+      final others = <int>[];
+
+      void render(int blocks) {
+        for (var i = 0; i < blocks; i++) {
+          System.instance
+            ..renderOffline(1)
+            ..update();
+        }
+      }
+
+      void mount(int id) {
+        gateway.mountAsSource(id);
+        for (var i = 0; i < 5000 && !gateway.isSourceReady(id); i++) {
+          render(1);
+          sleep(const Duration(milliseconds: 1));
+        }
+        expect(gateway.isSourceReady(id), isTrue, reason: 'mounted');
+        render(20);
+      }
+
+      // Every tutorial is mounted while open (#528).
+      void open(String slug) {
+        inst = gateway.createInstance();
+        gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+        graph = gateway.enumerate(inst);
+        mount(inst);
+      }
+
+      tearDown(() {
+        gateway.disposeInstance(inst);
+        for (final o in others) {
+          gateway.disposeInstance(o);
+        }
+        others.clear();
+        render(20);
+      });
+
+      int at(String type, double x, double y) => graph.objects
+          .firstWhere(
+            (o) => o.type == type && o.position == Offset(x, y),
+            orElse: () => throw StateError('no $type at ($x, $y)'),
+          )
+          .handleId;
+      int msg(String text) => graph.objects
+          .singleWhere((o) => o.type == '.m' && o.args == text)
+          .handleId;
+      String value(int id) => gateway.guiValue(inst, id);
+      void click(int id) => gateway.sendBang(inst, id, 0);
+      void type(int id, num v) => v is int
+          ? gateway.sendInt(inst, id, 0, v)
+          : gateway.sendFloat(inst, id, 0, v.toDouble());
+      // A fresh object in [i] wired to a fresh display box.
+      (int, int) probe(int i, String t, String args, [String box = '.l']) {
+        final o = gateway.createObject(i, t, args: args);
+        final l = gateway.createObject(i, box);
+        gateway.connect(i, fromHandleId: o, outlet: 0, toHandleId: l, inlet: 0);
+        return (o, l);
+      }
+
+      // A file read or write finishes on a worker thread and is delivered on a
+      // later block: render with real pauses until [done] holds.
+      void renderUntil(bool Function() done) {
+        for (var i = 0; i < 500 && !done(); i++) {
+          render(2);
+          sleep(const Duration(milliseconds: 2));
+        }
+      }
+
+      // Runs [body] with the process's working directory set to a fresh temp
+      // folder, where a relative file name lands.
+      void inTempDir(void Function(Directory dir) body) {
+        final dir = Directory.systemTemp.createTempSync('phi_505_');
+        final old = Directory.current;
+        Directory.current = dir;
+        try {
+          body(dir);
+        } finally {
+          Directory.current = old;
+          dir.deleteSync(recursive: true);
+        }
+      }
+
+      test('coll: recall, next and dump, a shared name, a file', () {
+        open('coll');
+        inTempDir((dir) {
+          final data = at('.l', 60, 320);
+          final address = at('.l', 250, 380);
+          final recall = at('.i', 60, 200);
+          type(recall, 2);
+          expect(value(data), '62 65 69');
+          click(msg('intro'));
+          expect(value(data), '0 0 0');
+          // Note 2: next walks the stored order and wraps; the address first.
+          final walked = <String>[];
+          for (var i = 0; i < 5; i++) {
+            click(msg('next'));
+            walked.add('${value(address)} = ${value(data)}');
+          }
+          expect(walked, [
+            'address 1 = 60 64 67',
+            'address 2 = 62 65 69',
+            'address 3 = 64 67 71',
+            'address intro = 0 0 0',
+            'address 1 = 60 64 67',
+          ]);
+          final (dumpDone, dumps) = probe(inst, '.counter', '', '.i');
+          gateway.connect(
+            inst,
+            fromHandleId: at('.coll', 60, 260),
+            outlet: 2,
+            toHandleId: dumpDone,
+            inlet: 0,
+          );
+          click(msg('dump'));
+          expect(value(data), '0 0 0', reason: 'intro is the last entry');
+          expect(value(dumps), '1', reason: 'the third outlet banged');
+          // Note 3: the middle coll shares the collection.
+          type(at('.i', 60, 460), 79);
+          type(recall, 4);
+          expect(value(data), '72 76 79');
+          // Title note: a one-number entry leaves as a number.
+          final (reader, single) = probe(inst, '.coll', 'cues', '.i');
+          gateway.sendList(inst, at('.coll', 60, 580), 0, '5 42');
+          gateway.sendInt(inst, reader, 0, 5);
+          expect(value(single), '42');
+          // Each coll walks with its own pointer: the middle one starts at 1.
+          final mid = at('.coll', 60, 580);
+          final midData = gateway.createObject(inst, '.l');
+          gateway.connect(
+            inst,
+            fromHandleId: mid,
+            outlet: 0,
+            toHandleId: midData,
+            inlet: 0,
+          );
+          gateway.sendMessage(inst, mid, 0, 'next');
+          expect(value(midData), '60 64 67');
+          // Note 4: write, clear, read back.
+          final files = at('.coll', 60, 780);
+          final (loaded, reads) = probe(inst, '.counter', '', '.i');
+          gateway.connect(
+            inst,
+            fromHandleId: files,
+            outlet: 3,
+            toHandleId: loaded,
+            inlet: 0,
+          );
+          click(at('.m', 60, 660));
+          final file = File('${dir.path}/cues.txt');
+          renderUntil(file.existsSync);
+          expect(file.readAsStringSync(), contains('2, 62 65 69;'));
+          expect(file.readAsStringSync(), contains('intro, 0 0 0;'));
+          click(msg('clear'));
+          gateway.sendList(inst, data, 0, 'none');
+          type(recall, 2);
+          expect(value(data), 'none', reason: 'cleared: nothing is sent');
+          click(at('.m', 300, 660));
+          renderUntil(() => value(reads) == '1');
+          expect(value(reads), '1', reason: 'the fourth outlet banged');
+          type(recall, 2);
+          expect(value(data), '62 65 69');
+        });
+      });
+
+      test('table: a step sequence, a changed step, a weighted dice', () {
+        open('table');
+        final address = at('.i', 60, 400);
+        final out = at('.i', 60, 520);
+        const steps = [60, 62, 64, 65, 67, 69, 71, 72];
+        for (var a = 0; a < 8; a++) {
+          type(address, a);
+          expect(value(out), '${steps[a]}', reason: 'step $a');
+        }
+        // Note 1: the metro steps the counter through % 8.
+        final toggle = at('.t', 60, 200);
+        gateway.sendInt(inst, toggle, 0, 1);
+        gateway.sendInt(inst, toggle, 0, 0);
+        final step = int.parse(value(address));
+        expect(step, inInclusiveRange(0, 7), reason: 'the first tick at once');
+        expect(value(out), '${steps[step]}');
+        // Note 2: a value waits on the right inlet for the next address.
+        type(address, 3);
+        expect(value(out), '65');
+        gateway.sendInt(inst, at('.i', 200, 400), 0, 72);
+        gateway.sendList(inst, out, 0, '0');
+        type(address, 3);
+        expect(value(out), '0', reason: 'stored, nothing sent');
+        type(address, 3);
+        expect(value(out), '72');
+        // Note 3: weights 1 2 0 5.
+        final dice = at('.b', 60, 620);
+        final picked = at('.i', 60, 730);
+        final counts = List.filled(4, 0);
+        for (var i = 0; i < 1600; i++) {
+          click(dice);
+          counts[int.parse(value(picked))]++;
+        }
+        expect(counts[2], 0, reason: 'weight 0 never comes up');
+        expect(counts[3], inInclusiveRange(800, 1200), reason: '$counts');
+        expect(counts[1], inInclusiveRange(250, 550), reason: '$counts');
+        expect(counts[0], inInclusiveRange(100, 330), reason: '$counts');
+        // quantile picks by a number: the half-way point of 8 falls in 3.
+        final (q, qOut) = probe(inst, '.table', '4', '.i');
+        gateway.sendMessage(inst, q, 0, 'set 0 1 2 0 5');
+        gateway.sendMessage(inst, q, 0, 'fquantile 0.5');
+        expect(value(qOut), '3');
+        gateway.sendMessage(inst, q, 0, 'fquantile 0.2');
+        expect(value(qOut), '1');
+        // Title note: a second table of the same name does not share.
+        final named = gateway.createObject(inst, '.table', args: 'steps 4');
+        final (twin, twinOut) = probe(inst, '.table', 'steps 4', '.i');
+        gateway.sendList(inst, named, 0, '1 9');
+        gateway.sendInt(inst, twin, 0, 1);
+        expect(value(twinOut), '0');
+      });
+
+      test('funbuff: a staircase, interp, a stored pair, next and goto', () {
+        open('funbuff');
+        final x = at('.i', 60, 220);
+        final y = at('.f', 60, 400);
+        final dx = at('.i', 180, 400);
+        type(x, 150);
+        expect(double.parse(value(y)), 50);
+        type(x, 400);
+        expect(double.parse(value(y)), 20);
+        type(x, -5);
+        expect(double.parse(value(y)), 20, reason: 'below 0: nothing sent');
+        // Note 2.
+        type(at('.f', 260, 220), 200.0);
+        expect(double.parse(value(y)), 35);
+        type(at('.f', 260, 220), 500.0);
+        expect(double.parse(value(y)), 20);
+        type(at('.f', 260, 220), -50.0);
+        expect(double.parse(value(y)), 10);
+        // Note 3.
+        type(at('.i', 160, 220), 99);
+        gateway.sendFloat(inst, y, 0, 0);
+        type(x, 200);
+        expect(double.parse(value(y)), 0, reason: 'stored, nothing sent');
+        type(x, 250);
+        expect(double.parse(value(y)), 99);
+        // Note 4.
+        final (endCount, ends) = probe(inst, '.counter', '', '.i');
+        gateway.connect(
+          inst,
+          fromHandleId: at('.funbuff', 60, 340),
+          outlet: 2,
+          toHandleId: endCount,
+          inlet: 0,
+        );
+        final walked = <String>[];
+        for (var i = 0; i < 4; i++) {
+          click(msg('next'));
+          walked.add('${value(dx)} ${double.parse(value(y))}');
+        }
+        expect(walked, ['0 10.0', '100 50.0', '100 99.0', '100 20.0']);
+        expect(value(ends), '0');
+        click(msg('next'));
+        expect(value(ends), '1', reason: 'past the last pair');
+        click(msg('0'));
+        click(msg('next'));
+        expect((value(dx), double.parse(value(y))), ('0', 10.0));
+      });
+
+      test('bag: toggles add and remove, a bang lists them newest first', () {
+        open('bag');
+        final held = at('.l', 380, 400);
+        final show = at('.b', 380, 200);
+        click(show);
+        expect(value(held), 'held');
+        gateway.sendInt(inst, at('.t', 60, 200), 0, 1);
+        gateway.sendInt(inst, at('.t', 160, 200), 0, 1);
+        click(show);
+        expect(value(held), 'held 64 60');
+        gateway.sendInt(inst, at('.t', 60, 200), 0, 0);
+        click(show);
+        expect(value(held), 'held 64');
+        // Title note: at most once, unless the bag has an argument.
+        final bag = at('.bag', 60, 340);
+        gateway.sendList(inst, bag, 0, '64 1');
+        click(show);
+        expect(value(held), 'held 64');
+        final (dup, dupCount) = probe(inst, '.bag', 'dup', '.i');
+        gateway.sendList(inst, dup, 0, '64 1');
+        gateway.sendInt(inst, dup, 0, 64);
+        gateway.sendMessage(inst, dup, 0, 'length');
+        expect(value(dupCount), '2');
+        click(msg('clear'));
+        click(show);
+        expect(value(held), 'held');
+      });
+
+      test('capture: a ring of four, dump, count, clear', () {
+        open('capture');
+        final add = at('.b', 60, 200);
+        final past = at('.l', 300, 500);
+        final count = at('.i', 160, 440);
+        for (var i = 0; i < 6; i++) {
+          click(add);
+        }
+        expect(value(at('.i', 60, 320)), '6');
+        click(at('.b', 240, 200));
+        expect(value(past), 'past 3 4 5 6');
+        click(msg('count'));
+        expect(value(count), '6');
+        click(msg('count'));
+        expect(value(count), '0');
+        // Title note: a list is one item per element.
+        final capture = at('.capture', 60, 380);
+        gateway.sendList(inst, capture, 0, '7 8');
+        click(at('.b', 240, 200));
+        expect(value(past), 'past 5 6 7 8');
+        click(msg('clear'));
+        click(at('.b', 240, 200));
+        expect(value(past), 'past');
+        click(msg('count'));
+        expect(value(count), '2', reason: 'clear does not reset the count');
+      });
+
+      test('textfile: lines with cr, line n, query, a file', () {
+        open('textfile');
+        inTempDir((dir) {
+          final number = at('.i', 60, 200);
+          final count = at('.i', 200, 510);
+          final shown = at('.l', 60, 570);
+          for (final n in [60, 64, 67]) {
+            type(number, n);
+          }
+          click(msg('cr'));
+          click(msg('intro'));
+          click(msg('cr'));
+          click(msg('query'));
+          expect(value(count), '2');
+          final lineBox = at('.i', 440, 200);
+          type(lineBox, 1);
+          expect(value(shown), '60 64 67');
+          type(lineBox, 2);
+          expect(value(shown), 'intro');
+          // The title note: dump sends every line.
+          final (zl, dumped) = probe(inst, '.zl', 'group');
+          gateway.connect(
+            inst,
+            fromHandleId: at('.textfile', 60, 450),
+            outlet: 0,
+            toHandleId: zl,
+            inlet: 0,
+          );
+          gateway.sendMessage(inst, at('.textfile', 60, 450), 0, 'dump');
+          gateway.sendBang(inst, zl, 0);
+          expect(value(dumped), '60 64 67 intro');
+          // Note 3.
+          final (loaded, reads) = probe(inst, '.counter', '', '.i');
+          gateway.connect(
+            inst,
+            fromHandleId: at('.textfile', 60, 450),
+            outlet: 2,
+            toHandleId: loaded,
+            inlet: 0,
+          );
+          click(at('.m', 200, 270));
+          final file = File('${dir.path}/lines.txt');
+          renderUntil(file.existsSync);
+          expect(file.readAsLinesSync(), ['60 64 67', 'intro']);
+          click(msg('clear'));
+          click(msg('query'));
+          expect(value(count), '0');
+          click(at('.m', 330, 330));
+          renderUntil(() => value(reads) == '1');
+          expect(value(reads), '1', reason: 'the right outlet banged');
+          click(msg('query'));
+          expect(value(count), '2');
+          type(lineBox, 1);
+          expect(value(shown), '60 64 67');
+        });
+      });
+
+      test('seq: record, play back, start -1 on the domain clock', () {
+        open('seq');
+        final note = at('.l', 360, 570);
+        final keys = at('.kslider', 60, 200);
+        final played = at('.kslider', 60, 570);
+        final (endCount, ends) = probe(inst, '.counter', '', '.i');
+        gateway.connect(
+          inst,
+          fromHandleId: at('.seq', 60, 450),
+          outlet: 1,
+          toHandleId: endCount,
+          inlet: 0,
+        );
+        // A key press: velocity, then pitch.
+        void key(int pitch, int velocity) =>
+            gateway.sendList(inst, keys, 0, '$pitch $velocity');
+        click(msg('record'));
+        render(10);
+        key(60, 100);
+        render(40);
+        key(60, 0);
+        key(64, 100);
+        render(40);
+        key(64, 0);
+        click(msg('stop'));
+        // The blocks at which each new note reached the list box.
+        List<(int, String)> watch(void Function() go, int blocks) {
+          final seen = <(int, String)>[];
+          var last = value(note);
+          go();
+          for (var b = 0; b < blocks; b++) {
+            render(1);
+            final now = value(note);
+            if (now != last) seen.add((b, now));
+            last = now;
+          }
+          return seen;
+        }
+
+        final asRecorded = watch(() => click(msg('start')), 150);
+        expect(asRecorded.map((e) => e.$2), ['60 100', '64 100', '64 0']);
+        // 40 blocks apart, as recorded.
+        expect(asRecorded[1].$1 - asRecorded[0].$1, inInclusiveRange(38, 42));
+        expect(value(ends), '1');
+        expect(value(played), isNot(contains('100')), reason: 'all released');
+        // Note 3: start -1 on seqclock at 120 BPM, about as recorded.
+        final onClock = watch(() => click(msg('-1')), 200);
+        expect(onClock.map((e) => e.$2), ['60 100', '64 100', '64 0']);
+        expect(onClock[1].$1 - onClock[0].$1, inInclusiveRange(32, 48));
+        // Note 4: at 60 BPM, half speed; a plain start ignores the clock.
+        click(msg('60'));
+        final slow = watch(() => click(msg('-1')), 300);
+        expect(slow[1].$1 - slow[0].$1, inInclusiveRange(72, 88));
+        click(msg('240'));
+        final fast = watch(() => click(msg('-1')), 150);
+        expect(fast[1].$1 - fast[0].$1, inInclusiveRange(14, 26));
+        click(msg('60'));
+        final plain = watch(() => click(msg('start')), 150);
+        expect(plain[1].$1 - plain[0].$1, inInclusiveRange(38, 42));
+        final doubled = watch(
+          () => gateway.sendMessage(inst, at('.seq', 60, 450), 0, 'start 2048'),
+          150,
+        );
+        expect(doubled[1].$1 - doubled[0].$1, inInclusiveRange(18, 22));
+        click(msg('120'));
+      });
+
+      test('qlist: a timed score to r names, next, tempo', () {
+        open('qlist');
+        final pitch = at('.i', 60, 540);
+        final level = at('.f', 200, 540);
+        final wait = at('.i', 60, 400);
+        final (endCount, ends) = probe(inst, '.counter', '', '.i');
+        gateway.connect(
+          inst,
+          fromHandleId: at('.qlist', 60, 340),
+          outlet: 1,
+          toHandleId: endCount,
+          inlet: 0,
+        );
+        // The blocks at which pitch changed, while playback runs to its end.
+        List<(int, String, String)> play(String endsAt) {
+          final seen = <(int, String, String)>[];
+          var last = value(pitch);
+          for (var b = 0; b < 1000 && value(ends) != endsAt; b++) {
+            render(1);
+            final now = value(pitch);
+            if (now != last) seen.add((b, now, value(level)));
+            last = now;
+          }
+          return seen;
+        }
+
+        click(at('.b', 60, 220));
+        final score = play('1');
+        expect(score.map((e) => (e.$2, double.parse(e.$3))), [
+          ('60', 0.5),
+          ('64', 0.5),
+          ('67', 0.2),
+        ]);
+        expect(value(wait), '500');
+        // 500 ms apart: 187.5 blocks of 128 at 48 kHz.
+        final gap = score[1].$1 - score[0].$1;
+        expect(gap, inInclusiveRange(180, 195));
+        // Note 2: next steps by hand, without waiting.
+        // A word line reaches its r on the next rendered block.
+        void step() {
+          click(msg('next'));
+          render(3);
+        }
+
+        click(msg('rewind'));
+        step();
+        expect((value(pitch), value(wait)), ('60', '500'));
+        step();
+        expect(value(pitch), '64');
+        step();
+        expect(value(pitch), '67');
+        expect(value(ends), '2', reason: 'next ran past the last line');
+        // stop halts playback where it is.
+        click(at('.b', 60, 220));
+        render(10);
+        click(msg('stop'));
+        render(400);
+        expect(value(pitch), '60');
+        // Note 3: tempo 2 halves the waits.
+        type(at('.f', 430, 220), 2.0);
+        click(at('.b', 60, 220));
+        final fast = play('3');
+        expect(
+          fast[1].$1 - fast[0].$1,
+          inInclusiveRange(gap ~/ 2 - 3, gap ~/ 2 + 3),
+        );
+        // Title note: only r objects in this patch hear it.
+        final other = gateway.createInstance();
+        others.add(other);
+        mount(other);
+        final (_, theirs) = probe(other, '.r', 'pitch', '.i');
+        click(msg('rewind'));
+        click(msg('next'));
+        render(3);
+        expect(gateway.guiValue(other, theirs), '0');
+      });
+
+      test('qlist: only one r of a name hears a word line '
+          '(yse-soundengine #1239)', () {
+        // The title note's engine gap. When this fails, the engine delivers to
+        // every r: drop the caveat from the tutorial and this test.
+        open('qlist');
+        final boxes = [
+          for (var i = 0; i < 3; i++) probe(inst, '.r', 'pitch', '.i').$2,
+        ];
+        click(msg('next'));
+        render(3);
+        final got = [
+          for (final b in [at('.i', 60, 540), ...boxes]) value(b),
+        ];
+        expect(got.where((v) => v == '60'), hasLength(1), reason: '$got');
+      });
+
+      test('mtr: two tracks recorded, played together and one alone', () {
+        open('mtr');
+        final in1 = at('.i', 300, 280);
+        final in2 = at('.i', 420, 280);
+        final out1 = at('.i', 60, 400);
+        final out2 = at('.i', 160, 400);
+        click(msg('record'));
+        render(10);
+        type(in1, 1);
+        type(in2, 10);
+        render(50);
+        type(in1, 2);
+        render(50);
+        type(in1, 3);
+        type(in2, 30);
+        click(msg('stop'));
+        expect(
+          (value(out1), value(out2)),
+          ('0', '0'),
+          reason: 'recording only',
+        );
+        List<(int, String, String)> watch(int blocks) {
+          final seen = <(int, String, String)>[];
+          var last = (value(out1), value(out2));
+          for (var b = 0; b < blocks; b++) {
+            render(1);
+            final now = (value(out1), value(out2));
+            if (now != last) seen.add((b, now.$1, now.$2));
+            last = now;
+          }
+          return seen;
+        }
+
+        click(at('.m', 165, 220));
+        final both = watch(150);
+        expect(both.map((e) => (e.$2, e.$3)), [
+          ('1', '10'),
+          ('2', '10'),
+          ('3', '30'),
+        ]);
+        expect(both[1].$1 - both[0].$1, 50, reason: 'the recorded rhythm');
+        // Note 2: stop halts both.
+        type(out1, 0);
+        type(out2, 0);
+        click(at('.m', 165, 220));
+        render(20);
+        click(msg('stop'));
+        expect((value(out1), value(out2)), ('1', '10'));
+        expect(watch(150), isEmpty, reason: 'stopped');
+        // Note 3: play into track 2 plays it alone.
+        type(out1, 0);
+        type(out2, 0);
+        click(at('.m', 420, 220));
+        final alone = watch(150);
+        expect(alone.map((e) => (e.$2, e.$3)), [('0', '10'), ('0', '30')]);
+      });
+    },
+  );
+
   test('report: object types with no tutorial yet', () {
     final missing = [
       for (final t in engineTypes.toList()..sort())

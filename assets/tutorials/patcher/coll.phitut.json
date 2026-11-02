@@ -1,0 +1,394 @@
+{
+  "title": "coll — messages stored at addresses",
+  "covers": [
+    ".coll"
+  ],
+  "summary": "Recall cues stored at number and word addresses, walk them with next and dump, share them between colls of one name, and save them to a file.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# coll — messages stored at addresses\nA coll stores messages, each at an address: a number or a word. Send it an address and it sends the message stored there. Every coll with the same name shares one collection, and the collection is saved with the patch, so these start with four cues: chords at 1, 2 and 3, and 0 0 0 at intro.\nThe entries keep the order they were stored in, not the order of their addresses. There is no editing window.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "200.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "460.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "520.0"
+        },
+        "parms": "4 72 76",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "580.0"
+        },
+        "parms": "cues",
+        "type": ".coll"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "660.0"
+        },
+        "parms": "cues.txt",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "200.0",
+          "y": "660.0"
+        },
+        "parms": "clear",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "300.0",
+          "y": "660.0"
+        },
+        "parms": "cues.txt",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "60.0",
+          "y": "720.0"
+        },
+        "parms": "write",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "300.0",
+          "y": "720.0"
+        },
+        "parms": "read",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "60.0",
+          "y": "780.0"
+        },
+        "parms": "cues",
+        "type": ".coll",
+        "outputs": {
+          "output 3": {
+            "0": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "60.0",
+          "y": "840.0"
+        },
+        "parms": "",
+        "type": ".b"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "140.0",
+          "y": "200.0"
+        },
+        "parms": "intro",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "640.0",
+          "y": "200.0",
+          "w": "300"
+        },
+        "parms": "1. Type 2 into the top number box: the coll sends 62 65 69, the cue at address 2. Click intro for the cue at the word address intro. A one-number entry leaves as a number, anything else as a list.",
+        "type": ".text"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "640.0",
+          "y": "320.0",
+          "w": "300"
+        },
+        "parms": "2. next sends the entry at the pointer, then moves the pointer on, wrapping after the last. Its address leaves the second outlet first; prepend address shows it. dump sends every entry in order, then flashes the button on the third outlet.",
+        "type": ".text"
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "640.0",
+          "y": "450.0",
+          "w": "300"
+        },
+        "parms": "3. The middle coll is named cues too, so it is the same collection. Type 79 into the box above it: prepend makes 4 72 76 79, a number then a message, which stores 72 76 79 at 4. Type 4 into the top box: the top coll has it. Each coll walks with its own pointer.",
+        "type": ".text"
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "640.0",
+          "y": "640.0",
+          "w": "300"
+        },
+        "parms": "4. The left cues.txt writes the collection to a text file of that name, one entry per line, in the folder Phi was started from. Click it, then clear: the top coll sends nothing now. The right cues.txt reads the file back, and the button flashes when it has loaded.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "250.0",
+          "y": "200.0"
+        },
+        "parms": "next",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "360.0",
+          "y": "200.0"
+        },
+        "parms": "dump",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "260.0"
+        },
+        "parms": "cues",
+        "type": ".coll",
+        "state": {
+          "entries": [
+            {
+              "key": "1",
+              "value": "60 64 67"
+            },
+            {
+              "key": "2",
+              "value": "62 65 69"
+            },
+            {
+              "key": "3",
+              "value": "64 67 71"
+            },
+            {
+              "key": "intro",
+              "value": "0 0 0"
+            }
+          ]
+        },
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "320.0",
+          "w": "160"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "250.0",
+          "y": "320.0"
+        },
+        "parms": "address",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "420.0",
+          "y": "320.0"
+        },
+        "parms": "",
+        "type": ".b"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "250.0",
+          "y": "380.0",
+          "w": "160"
+        },
+        "parms": "",
+        "type": ".l"
+      }
+    }
+  }
+}

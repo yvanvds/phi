@@ -262,6 +262,14 @@ for:
   an `r` from the Code surface: copy it to the project, then
   `patch.tutorials.s_r.send('pitch', 67)`. A tutorial for subpatch inlets and
   outlets follows once subpatches arrive.
+- **Data stores and sequencers:** messages stored at addresses (`coll`), an
+  array of ints read as steps or as weights (`table`), a function stored as
+  points (`funbuff`), the notes held down (`bag`), a record of what went past
+  (`capture`), lines of text (`textfile`), recorded MIDI played back, also on
+  a domain clock (`seq`), a timed score that sends to `r` names (`qlist`) and
+  a multi-track recorder (`mtr`). The `coll` and `textfile` tutorials write a
+  file (`cues.txt`, `lines.txt`) into the folder Phi was started from and read
+  it back.
 
 Each tutorial is a small working patch, with numbered notes that walk you
 through it. Where Phi's object differs from the Max object of the same name,

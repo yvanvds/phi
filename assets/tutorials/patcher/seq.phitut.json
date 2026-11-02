@@ -1,0 +1,368 @@
+{
+  "title": "seq — MIDI recorded and played back",
+  "covers": [
+    ".seq"
+  ],
+  "summary": "Record notes from a keyboard as MIDI bytes, play them back with their timing, and play them on a domain clock that follows its tempo.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# seq — MIDI recorded and played back\nA seq records raw MIDI bytes, each with the time since the one before, and plays them back in the same rhythm. Here midiformat turns the upper keyboard into bytes, and midiparse turns the playback back into notes for the lower keyboard. Time is counted in audio blocks. The sequence is not saved with the patch: read and write keep it in a MIDI file.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "200.0"
+        },
+        "parms": "",
+        "type": ".kslider",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 1,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "450.0"
+        },
+        "parms": "",
+        "type": ".seq",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "510.0"
+        },
+        "parms": "",
+        "type": ".midiparse",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "320.0",
+          "y": "510.0"
+        },
+        "parms": "",
+        "type": ".b"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "570.0"
+        },
+        "parms": "",
+        "type": ".kslider"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "360.0",
+          "y": "570.0",
+          "w": "120"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "60.0",
+          "y": "670.0"
+        },
+        "parms": "60",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "170.0",
+          "y": "670.0"
+        },
+        "parms": "120",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "280.0",
+          "y": "670.0"
+        },
+        "parms": "240",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "60.0",
+          "y": "730.0"
+        },
+        "parms": "seqclock 120",
+        "type": ".setclock"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "640.0",
+          "y": "200.0",
+          "w": "300"
+        },
+        "parms": "1. Click record, play a few notes on the upper keyboard, and click stop. Pressing a key is a note-on, letting go a note-off.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "340.0",
+          "y": "200.0"
+        },
+        "parms": "record",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "640.0",
+          "y": "280.0",
+          "w": "300"
+        },
+        "parms": "2. Click start: the lower keyboard plays the notes back with their timing, and the list box shows each one as pitch and velocity. The button flashes just before the last event.",
+        "type": ".text"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "640.0",
+          "y": "380.0",
+          "w": "300"
+        },
+        "parms": "3. start -1 plays by ticks instead of its own clock, and 48 ticks a second is the recorded speed. loadmess clock seqclock, sent as the patch opened, lets the domain clock seqclock supply them, 24 a beat. Click -1: at 120 BPM it plays as recorded.",
+        "type": ".text"
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "640.0",
+          "y": "520.0",
+          "w": "300"
+        },
+        "parms": "4. Click 60, then -1: at 60 BPM the clock supplies half the ticks, and the notes come at half speed. 240 plays them twice as fast. A plain start ignores the clock; start 2048 would play twice as fast without one.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "440.0",
+          "y": "200.0"
+        },
+        "parms": "stop",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "540.0",
+          "y": "200.0"
+        },
+        "parms": "start",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "360.0",
+          "y": "270.0"
+        },
+        "parms": "clock seqclock",
+        "type": ".loadmess",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "300.0"
+        },
+        "parms": "0 0",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "360.0",
+          "y": "330.0"
+        },
+        "parms": "-1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "360.0"
+        },
+        "parms": "",
+        "type": ".midiformat",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "360.0",
+          "y": "390.0"
+        },
+        "parms": "start",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

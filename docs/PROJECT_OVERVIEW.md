@@ -3024,7 +3024,15 @@ main + app          (orchestration)
   one `.r` per name because libYSE 3.1.0 delivers an `.s` to only one `.r` of
   a name in a patch, yse-soundengine#1239; the `s-r` copy is reached at
   `patcher.tutorials.s_r.<slot>`; `.print` lines reach the log panel through
-  `RealEngineLogSource`; the subpatch boundary objects wait for #481, #536).
+  `RealEngineLogSource`; the subpatch boundary objects wait for #481, #536)
+  and data stores and sequencers (#505: `coll`, `table`, `funbuff`, `bag`,
+  `capture`, `textfile`, `seq`, `qlist`, `mtr`; stored contents ship in each
+  object's saved `state`; a `.l` drops a bare int, so stores that send one
+  number at a time are gathered with `.trigger b … <word>` + `.zl group`; file
+  round trips use a relative name, which libYSE resolves against the process
+  working directory, so the tests switch it to a temp folder; `.seq`,
+  `.qlist` and `.mtr` count time in audio blocks, so their rhythms are
+  checked block by block).
   The domain clock six reach a libYSE
   domain clock by name; their clocks advance with the audio blocks whether or
   not the patch is mounted, are never destroyed by a patch object, and are not
@@ -3057,7 +3065,8 @@ main + app          (orchestration)
   `patcher_randomness_tutorials`,
   `patcher_list_tutorials`,
   `patcher_string_tutorials`,
-  `patcher_messaging_tutorials`: each opens its tutorials
+  `patcher_messaging_tutorials`,
+  `patcher_data_sequencer_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
   that no note or object overlaps another). Every one of them opens a
   tutorial through the shared `openTutorialBySearch(tester, type)` helper in
