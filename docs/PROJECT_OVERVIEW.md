@@ -3004,9 +3004,11 @@ main + app          (orchestration)
   `div-swap-pong`, `cartopol-poltocar`), time (#497: `metro`, `delay`,
   `pipe`, `line-bline`, `speedlim-qlim`, `timer-clocker`,
   `thresh-quickthresh`), domain clocks (#498: `transport`, `tempo`,
-  `timepoint`, `setclock`, `when`, `translate`) and control flow (#499:
+  `timepoint`, `setclock`, `when`, `translate`), control flow (#499:
   `trigger`, `bangbang`, `uzi`, `if`, `loadbang-loadmess`, `onebang`,
-  `buddy-bondo`, `next-match`). The domain clock six reach a libYSE
+  `buddy-bondo`, `next-match`) and routing (#500: `route-routepass`, `sel`,
+  `gate-switch`, `router-matrix`, `split`, `spray-funnel-cycle`,
+  `bucket-decode`). The domain clock six reach a libYSE
   domain clock by name; their clocks advance with the audio blocks whether or
   not the patch is mounted, are never destroyed by a patch object, and are not
   Phi's time domains (Phi mints its own `phi.midi.*` / `phi.metronome`
@@ -3033,7 +3035,8 @@ main + app          (orchestration)
   `patcher_stateful_math_tutorials`,
   `patcher_time_tutorials`,
   `patcher_clock_domain_tutorials`,
-  `patcher_control_flow_tutorials`: each opens its tutorials
+  `patcher_control_flow_tutorials`,
+  `patcher_routing_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
   that no note or object overlaps another). Every one of them opens a
   tutorial through the shared `openTutorialBySearch(tester, type)` helper in

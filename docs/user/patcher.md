@@ -223,6 +223,11 @@ for:
   patch up as it opens (`loadbang` and `loadmess`), a one-shot (`onebang`),
   values that belong together (`buddy` and `bondo`), and events and patterns
   (`next` and `match`). Each pair shares one tutorial.
+- **Routing:** branching on the first item (`route` and `routepass`), a
+  bang for a matching value (`sel`), one way through (`gate` and `switch`), a
+  patchbay for messages (`router` and `matrix`), ranges (`split`), spreading
+  over outlets (`spray`, `funnel` and `cycle`), and shifting and selecting
+  (`bucket` and `decode`). Each group of two or more shares one tutorial.
 
 Each tutorial is a small working patch, with numbered notes that walk you
 through it. Where Phi's object differs from the Max object of the same name,

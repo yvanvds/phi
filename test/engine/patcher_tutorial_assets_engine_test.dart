@@ -2925,6 +2925,340 @@ void main() {
     });
   });
 
+  test('every routing type has a tutorial (#500)', () {
+    for (final type in [
+      '.route', '.routepass', '.sel', '.gate', '.switch', '.router', //
+      '.matrix', '.split', '.spray', '.funnel', '.cycle', '.bucket', '.decode',
+    ]) {
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+    expect(index.tutorialFor('.route'), index.tutorialFor('.routepass'));
+    expect(index.tutorialFor('.gate'), index.tutorialFor('.switch'));
+    expect(index.tutorialFor('.router'), index.tutorialFor('.matrix'));
+    expect(index.tutorialFor('.spray'), index.tutorialFor('.funnel'));
+    expect(index.tutorialFor('.spray'), index.tutorialFor('.cycle'));
+    expect(index.tutorialFor('.bucket'), index.tutorialFor('.decode'));
+  });
+
+  group('routing tutorials (#500) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    void render(int blocks) {
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+      }
+    }
+
+    // Every tutorial is mounted while open (#528); so is this copy.
+    void open(String slug) {
+      inst = gateway.createInstance();
+      gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
+      graph = gateway.enumerate(inst);
+      gateway.mountAsSource(inst);
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: '$slug mounted');
+      render(20);
+    }
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      render(20);
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    // A message box by its text: each tutorial's are unique.
+    int msg(String text) => graph.objects
+        .singleWhere((o) => o.type == '.m' && o.args == text)
+        .handleId;
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    // Typing a number into a box sends it on.
+    void type(int id, num v) => v is int
+        ? gateway.sendInt(inst, id, 0, v)
+        : gateway.sendFloat(inst, id, 0, v.toDouble());
+    String value(int id) => gateway.guiValue(inst, id);
+    double number(int id) => double.parse(value(id));
+
+    test('route and routepass: stripped, matched by value, the rest', () {
+      open('route-routepass');
+      final note = at('.l', 60, 360);
+      final ctl = at('.l', 170, 360);
+      final fives = at('.i', 280, 410);
+      final halves = at('.i', 390, 410);
+      final rest = at('.i', 500, 360);
+      click(msg('100'));
+      expect(value(note), '60 100', reason: 'the word taken off');
+      expect(value(at('.l', 60, 560)), 'note 60 100', reason: 'routepass');
+      click(msg('64'));
+      expect(value(ctl), '7 64');
+      expect(value(at('.l', 200, 560)), 'ctl 7 64');
+      click(msg('5'));
+      expect(value(fives), '1', reason: 'nothing left: a bang');
+      click(msg('5.0'));
+      expect(value(fives), '2', reason: '5.0 is the number 5');
+      click(msg('0.5'));
+      expect(value(halves), '1');
+      gateway.sendFloat(inst, at('.route', 60, 280), 0, 0.50001);
+      expect(value(halves), '1', reason: 'exact: 0.50001 is not 0.5');
+      click(msg('7'));
+      expect(value(rest), '7', reason: 'unmatched, out the right');
+      expect(value(at('.i', 340, 560)), '7', reason: 'routepass: the right');
+      expect((value(note), value(fives)), ('60 100', '2'));
+    });
+
+    test('sel: C E G named, the rest passed on, words', () {
+      open('sel');
+      final name = at('.l', 60, 400);
+      final other = at('.i', 400, 290);
+      for (final (n, c) in [('60', 'C'), ('64', 'E'), ('67', 'G')]) {
+        click(msg(n));
+        expect(value(name), c, reason: n);
+      }
+      click(msg('61'));
+      expect((value(name), value(other)), ('G', '61'));
+      type(at('.i', 500, 160), 72);
+      expect(value(other), '72', reason: 'the typed note passes on');
+      type(at('.i', 500, 160), 60);
+      expect((value(name), value(other)), ('C', '72'));
+      gateway.sendFloat(inst, at('.sel', 60, 230), 0, 64.5);
+      expect(value(name), 'C', reason: '64.5 is not 64');
+      expect(value(other), '64', reason: 'it passed on (the box truncates)');
+      final toggle = at('.t', 60, 680);
+      click(msg('start'));
+      expect(value(toggle), 'on');
+      click(msg('stop'));
+      expect(value(toggle), 'off');
+      click(msg('pause'));
+      expect((value(toggle), value(at('.l', 280, 620))), ('off', 'pause'));
+    });
+
+    test('gate and switch: closed at first, chosen from 1, 0 closes', () {
+      open('gate-switch');
+      final data = at('.i', 500, 160);
+      final outs = [
+        for (final x in [60.0, 170.0, 280.0]) at('.i', x, 290),
+      ];
+      List<String> shown() => [for (final o in outs) value(o)];
+      type(data, 5);
+      expect(shown(), ['0', '0', '0'], reason: 'starts closed');
+      click(msg('2'));
+      expect(shown(), ['0', '0', '0'], reason: 'choosing sends nothing');
+      type(data, 6);
+      expect(shown(), ['0', '6', '0']);
+      click(msg('3'));
+      type(data, 7);
+      expect(shown(), ['0', '6', '7']);
+      click(msg('1'));
+      type(data, 8);
+      expect(shown(), ['8', '6', '7']);
+      click(msg('0'));
+      type(data, 9);
+      expect(shown(), ['8', '6', '7'], reason: '0 closes');
+      gateway.sendInt(inst, at('.gate', 60, 230), 0, 2);
+      gateway.sendInt(inst, at('.gate', 60, 230), 0, 4);
+      type(data, 10);
+      expect(shown(), ['8', '6', '7'], reason: 'no outlet 4: closed');
+      final out = at('.i', 60, 550);
+      final choose = at('.i', 60, 420);
+      click(msg('10'));
+      expect(value(out), '0', reason: 'switch starts closed');
+      type(choose, 2);
+      click(msg('10'));
+      click(msg('30'));
+      expect(value(out), '0', reason: 'only inlet 2 passes');
+      click(msg('20'));
+      expect(value(out), '20');
+      type(choose, 3);
+      click(msg('30'));
+      expect(value(out), '30');
+      type(choose, 0);
+      click(msg('20'));
+      expect(value(out), '30', reason: '0 closes');
+    });
+
+    test('router and matrix: a patchbay from the grid, scaled gains', () {
+      open('router-matrix');
+      final grid = at('.matrixctrl', 60, 160);
+      final out0 = at('.i', 60, 340);
+      final out1 = at('.i', 170, 340);
+      gateway.sendList(inst, grid, 0, '0 0 1');
+      expect(value(at('.l', 170, 220)), '0 0 1.', reason: 'a decimal (#522)');
+      click(msg('10'));
+      expect((value(out0), value(out1)), ('10', '0'));
+      gateway.sendList(inst, grid, 0, '0 1 1');
+      click(msg('10'));
+      expect((value(out0), value(out1)), ('10', '10'), reason: 'both');
+      click(msg('20'));
+      expect((value(out0), value(out1)), ('10', '10'), reason: 'unconnected');
+      gateway.sendList(inst, grid, 0, '1 1 1');
+      click(msg('20'));
+      expect((value(out0), value(out1)), ('10', '20'), reason: 'shared out1');
+      gateway.sendList(inst, grid, 0, '0 1 0');
+      click(msg('10'));
+      click(msg('20'));
+      expect((value(out0), value(out1)), ('10', '20'));
+      gateway.sendList(inst, grid, 0, '0 0 0');
+      click(msg('clear'));
+      click(msg('10'));
+      gateway.sendList(inst, grid, 0, '0 1 1');
+      click(msg('clear'));
+      click(msg('10'));
+      expect((value(out0), value(out1)), ('10', '20'), reason: 'cleared');
+      final left = at('.f', 60, 610);
+      final right = at('.f', 170, 610);
+      click(msg('8'));
+      expect((number(left), number(right)), (0, 0), reason: 'unconnected');
+      type(at('.f', 60, 440), 1);
+      click(msg('8'));
+      expect((number(left), number(right)), (8, 0), reason: 'gain 1');
+      type(at('.f', 200, 440), 0.5);
+      click(msg('8'));
+      expect((number(left), number(right)), (8, 4), reason: 'gain 0.5');
+      type(at('.f', 60, 440), 0);
+      type(at('.f', 200, 440), 2);
+      click(msg('8'));
+      expect((number(left), number(right)), (8, 16), reason: 'left cut');
+    });
+
+    test('split: inclusive limits, a three-way velocity split', () {
+      open('split');
+      final soft = at('.f', 60, 290);
+      final medium = at('.f', 200, 350);
+      final loud = at('.f', 340, 350);
+      List<double> shown() => [number(soft), number(medium), number(loud)];
+      click(msg('30'));
+      expect(shown(), [30, 0, 0]);
+      click(msg('63'));
+      expect(shown(), [63, 0, 0], reason: 'the limit is inside');
+      click(msg('64'));
+      expect(shown(), [63, 64, 0]);
+      click(msg('110'));
+      expect(shown(), [63, 64, 110]);
+      type(at('.i', 500, 160), -5);
+      expect(shown(), [63, 64, -5], reason: 'outside both');
+      type(at('.i', 500, 160), 100);
+      expect(shown(), [63, 100, -5]);
+      // Limits from the inlets, the wrong way round.
+      final split = at('.split', 60, 230);
+      gateway.sendInt(inst, split, 1, 20);
+      gateway.sendInt(inst, split, 2, 10);
+      click(msg('30'));
+      expect(shown(), [63, 100, 30], reason: '30 is out of 10 to 20 now');
+      gateway.sendInt(inst, split, 0, 15);
+      expect(shown(), [15, 100, 30], reason: 'the lower is the low limit');
+    });
+
+    test('spray funnel cycle: by index, tagged, round the outlets', () {
+      open('spray-funnel-cycle');
+      final index = at('.i', 60, 160);
+      final outs = [
+        for (final x in [60.0, 150.0, 240.0]) at('.i', x, 320),
+      ];
+      List<String> shown(List<int> ids) => [for (final o in ids) value(o)];
+      type(index, 0);
+      expect(shown(outs), ['60', '64', '0']);
+      type(index, 1);
+      expect(shown(outs), ['60', '60', '64']);
+      type(index, 2);
+      expect(shown(outs), ['60', '60', '60'], reason: '64 dropped');
+      type(index, 0);
+      type(index, -1);
+      expect(shown(outs), ['60', '64', '60'], reason: 'repeated across');
+      final tagged = at('.l', 200, 530);
+      final streams = [
+        for (final x in [60.0, 150.0, 240.0]) at('.i', x, 590),
+      ];
+      for (final (k, x, v) in [(0, 60.0, 5), (1, 150.0, 6), (2, 240.0, 7)]) {
+        type(at('.i', x, 410), v);
+        expect(value(tagged), '$k $v');
+      }
+      expect(shown(streams), ['5', '6', '7'], reason: 'one cord, 3 streams');
+      final dealt = [
+        for (final x in [60.0, 150.0, 240.0]) at('.i', x, 780),
+      ];
+      click(msg('60'));
+      click(msg('64'));
+      click(msg('67'));
+      expect(shown(dealt), ['60', '64', '67']);
+      click(msg('64'));
+      expect(shown(dealt), ['64', '64', '67'], reason: 'back to outlet 0');
+      click(msg('60'));
+      click(msg('60'));
+      expect(shown(dealt), ['64', '60', '60'], reason: 'whatever the value');
+    });
+
+    test('bucket decode: one step behind, echo, roll, clear, one-hot', () {
+      open('bucket-decode');
+      final input = at('.i', 60, 160);
+      final behind = [
+        for (final x in [60.0, 150.0, 240.0]) at('.i', x, 280),
+      ];
+      final echo = [
+        for (final x in [340.0, 430.0, 520.0]) at('.i', x, 280),
+      ];
+      List<String> shown(List<int> ids) => [for (final o in ids) value(o)];
+      type(input, 1);
+      expect(
+        [...shown(behind), ...shown(echo)],
+        ['0', '0', '0', '1', '0', '0'],
+      );
+      type(input, 2);
+      expect(
+        [...shown(behind), ...shown(echo)],
+        ['1', '0', '0', '2', '1', '0'],
+      );
+      type(input, 3);
+      expect(
+        [...shown(behind), ...shown(echo)],
+        ['2', '1', '0', '3', '2', '1'],
+      );
+      click(at('.b', 170, 160));
+      expect(
+        [...shown(behind), ...shown(echo)],
+        ['3', '2', '1', '3', '2', '1'],
+      );
+      click(msg('roll'));
+      expect(shown(echo), ['1', '3', '2'], reason: 'rotated, nothing lost');
+      click(msg('clear'));
+      expect(shown(echo), ['1', '3', '2'], reason: 'clear sends nothing');
+      click(at('.b', 170, 160));
+      expect(
+        [...shown(behind), ...shown(echo)],
+        ['0', '0', '0', '0', '0', '0'],
+      );
+      final select = at('.i', 60, 420);
+      final bank = [
+        for (final x in [60.0, 110.0, 160.0, 210.0]) at('.t', x, 540),
+      ];
+      type(select, 2);
+      expect(shown(bank), ['off', 'off', 'on', 'off']);
+      type(select, 0);
+      expect(shown(bank), ['on', 'off', 'off', 'off']);
+      type(select, 7);
+      expect(shown(bank), ['on', 'off', 'off', 'off'], reason: 'ignored');
+      type(select, 3);
+      final allOn = at('.t', 200, 420);
+      final mute = at('.t', 260, 420);
+      gateway.sendInt(inst, allOn, 0, 1);
+      expect(shown(bank), ['on', 'on', 'on', 'on']);
+      gateway.sendInt(inst, mute, 0, 1);
+      expect(shown(bank), ['off', 'off', 'off', 'off']);
+      gateway.sendInt(inst, mute, 0, 0);
+      gateway.sendInt(inst, allOn, 0, 0);
+      expect(shown(bank), ['off', 'off', 'off', 'on'], reason: 'back to 3');
+    });
+  });
+
   test('report: object types with no tutorial yet', () {
     final missing = [
       for (final t in engineTypes.toList()..sort())
