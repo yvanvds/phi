@@ -29,6 +29,7 @@ import '../test/domain/project/test_doubles/fake_project_directory_picker.dart';
 import '../test/domain/project/test_doubles/fake_project_store.dart';
 import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/expect_list_boxes_uncut.dart';
 import '../test/surfaces/patcher/test_support/open_tutorial_by_search.dart';
 
 /// End-to-end proof of the **GUI basics tutorials** (issue #490) through the
@@ -155,7 +156,14 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    Future<void> close() => tap(find.byKey(PatchTutorialBar.closeKey));
+    Future<void> close() async {
+      // Every list box result the walk-through left must show in full.
+      expectListBoxesUncut(
+        tester,
+        where: engine.patchLibrary.tutorial?.slug ?? '',
+      );
+      await tap(find.byKey(PatchTutorialBar.closeKey));
+    }
 
     // ── .b: a click and a number both press the button ──────────────────────
     var at = await open(

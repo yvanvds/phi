@@ -32,6 +32,7 @@ import '../test/domain/project/test_doubles/fake_project_directory_picker.dart';
 import '../test/domain/project/test_doubles/fake_project_store.dart';
 import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/expect_list_boxes_uncut.dart';
 import '../test/surfaces/patcher/test_support/open_tutorial_by_search.dart';
 
 /// End-to-end proof of the **clock, delay and ramp tutorials** (issue #497)
@@ -202,6 +203,11 @@ void main() {
     // Closes the tutorial. Back on the project patch, which is still empty
     // and stopped (#523).
     Future<void> close() async {
+      // Every list box result the walk-through left must show in full.
+      expectListBoxesUncut(
+        tester,
+        where: engine.patchLibrary.tutorial?.slug ?? '',
+      );
       await tap(find.byKey(PatchTutorialBar.closeKey));
       expect(gateway.isSourceReady(engine.patcher.instanceId), isFalse);
     }

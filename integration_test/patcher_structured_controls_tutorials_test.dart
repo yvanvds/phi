@@ -37,6 +37,7 @@ import '../test/domain/project/test_doubles/fake_project_directory_picker.dart';
 import '../test/domain/project/test_doubles/fake_project_store.dart';
 import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/expect_list_boxes_uncut.dart';
 import '../test/surfaces/patcher/test_support/open_tutorial_by_search.dart';
 
 /// End-to-end proof of the **structured control tutorials** (issue #493)
@@ -163,7 +164,14 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    Future<void> close() => tap(find.byKey(PatchTutorialBar.closeKey));
+    Future<void> close() async {
+      // Every list box result the walk-through left must show in full.
+      expectListBoxesUncut(
+        tester,
+        where: engine.patchLibrary.tutorial?.slug ?? '',
+      );
+      await tap(find.byKey(PatchTutorialBar.closeKey));
+    }
 
     // Every widget [f] finds, top to bottom on the canvas — or left to right
     // with [across].
@@ -275,7 +283,7 @@ void main() {
     );
     expect(graph().positions, hasLength(5), reason: 'a click adds a point');
     await tap(message('dump'));
-    expect(numbers(at('.l', 300, 340)).first, 4, reason: 'the last index');
+    expect(numbers(at('.l', 390, 340)).first, 4, reason: 'the last index');
     await close();
 
     // ── .nodes: drag the cursor, the middle is silent ───────────────────────

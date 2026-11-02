@@ -2793,7 +2793,10 @@ main + app          (orchestration)
   clicks `sendInt` 1/0, momentary presses `sendInt` 1 while held), `.textedit`
   (`PatchTextEditBox`; the number box's focus rules, Enter commits through
   `restoreGuiValueOf`) and `.l` (`PatchListBox`; shows its live stored list, a
-  tap bangs it). **The pattern for every later control body (#471–#473):** a
+  tap bangs it; since #533 its width is the stored `PatchGuiProperty.width`
+  via `sizeForGui`, set by the same right-edge drag as a note —
+  `PatcherController.isWidthResizable` / `beginWidthResize` — and a cut-off
+  list shows whole in a tooltip). **The pattern for every later control body (#471–#473):** a
   `PatchObjectTypes` id plus its drift-guard line, a visual-only `Patch…`
   widget in `lib/design/widgets/patcher/`, a `…NodeBody` in
   `lib/surfaces/patcher/nodes/` that writes through the controller and follows
@@ -3015,8 +3018,8 @@ main + app          (orchestration)
   `append-prepend`, `zl`, `listfunnel-substitute`; lists are built with
   `.prepend` because of #521) and strings (#503: `sprintf`, `regexp`,
   `tosymbol-fromsymbol`, `atoi-itoa`, `combine`, `spell`,
-  `tolower-toupper`; typed text comes from `.textedit`, and results are kept
-  to the ten characters a `.l` shows, #533). The domain clock six reach a libYSE
+  `tolower-toupper`; typed text comes from `.textedit`; every list a string
+  tutorial reads must fit its `.l` uncut, which a stored `w` now allows, #533). The domain clock six reach a libYSE
   domain clock by name; their clocks advance with the audio blocks whether or
   not the patch is mounted, are never destroyed by a patch object, and are not
   Phi's time domains (Phi mints its own `phi.midi.*` / `phi.metronome`

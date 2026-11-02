@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
@@ -31,6 +32,7 @@ import '../test/domain/project/test_doubles/fake_project_directory_picker.dart';
 import '../test/domain/project/test_doubles/fake_project_store.dart';
 import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/expect_list_boxes_uncut.dart';
 import '../test/surfaces/patcher/test_support/open_tutorial_by_search.dart';
 
 /// End-to-end proof of the **routing tutorials** (issue #500) through the
@@ -200,6 +202,11 @@ void main() {
     // Closes the tutorial. Back on the project patch, which is still empty
     // and stopped (#523).
     Future<void> close() async {
+      // Every list box result the walk-through left must show in full.
+      expectListBoxesUncut(
+        tester,
+        where: engine.patchLibrary.tutorial?.slug ?? '',
+      );
       await tap(find.byKey(PatchTutorialBar.closeKey));
       expect(gateway.isSourceReady(engine.patcher.instanceId), isFalse);
     }
@@ -282,15 +289,26 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    // Whether a list box on the canvas shows [text], once the live-value poll
-    // has come due.
+    // Whether a list box on the canvas shows [text] in full, once the
+    // live-value poll has come due. A list box cuts a list longer than its
+    // width off with an ellipsis, so a tutorial's results must fit the box to
+    // be read (issue #533).
     Future<bool> listShows(String text) async {
       await tester.pump(const Duration(milliseconds: 150));
       await tester.pumpAndSettle();
-      return find
-          .descendant(of: find.byType(PatchListBox), matching: find.text(text))
-          .evaluate()
-          .isNotEmpty;
+      final shown = find.descendant(
+        of: find.byType(PatchListBox),
+        matching: find.text(text),
+      );
+      if (shown.evaluate().isEmpty) return false;
+      for (final e in shown.evaluate()) {
+        expect(
+          (e.renderObject! as RenderParagraph).didExceedMaxLines,
+          isFalse,
+          reason: '"$text" is cut off in its list box',
+        );
+      }
+      return true;
     }
 
     // Taps the grid cell at [column], [row] of the 2-by-2 matrixctrl and lets

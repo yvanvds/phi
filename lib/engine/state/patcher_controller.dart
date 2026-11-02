@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/widgets.dart';
 
 import '../../design/widgets/patcher/patch_canvas_constants.dart';
+import '../../design/widgets/patcher/patch_list_box.dart';
 import '../../design/widgets/patcher/patch_note_box.dart';
 import '../../design/widgets/patcher/patch_note_metrics.dart';
 import '../../design/widgets/patcher/patch_object_box_metrics.dart';
@@ -168,8 +169,8 @@ class PatcherController {
   /// node with no decoration has no entry.
   final Map<PatchNodeId, Map<String, String>> _guiByNode = {};
 
-  /// The note a right-edge resize is in flight on, and the width property it
-  /// had when the press landed (`''` for a never-resized note) — so the
+  /// The note or list box a right-edge resize is in flight on, and the width
+  /// property it had when the press landed (`''` for a never-resized one) — so the
   /// release journals one step from there and a cancel can put it back.
   PatchNodeId? _resizing;
   String _resizeOrigin = '';
@@ -896,39 +897,52 @@ class PatcherController {
     );
   }
 
-  // ─── note resize (issue #488) ────────────────────────────────────────
+  // ─── width resize: notes (issue #488) and list boxes (#533) ──────────
 
-  /// Start a right-edge resize of the note at [id], remembering the width it
-  /// had so the release journals one step and a cancel can restore it. A
-  /// no-op for anything that is not a note.
-  void beginNoteResize(PatchNodeId id) {
+  /// Whether a node of [type] has a right edge that resizes its width — a
+  /// note (its wrap width, issue #488) or a `.l` list box (#533), both stored
+  /// as [PatchGuiProperty.width].
+  static bool isWidthResizable(String type) =>
+      PatchTypeName.isNote(type) || type == PatchObjectTypes.gList;
+
+  /// The stored width of a resized `.l` list box, or null for one that never
+  /// was (it then opens at [PatchListBox.defaultWidth]).
+  double? listBoxWidthOf(PatchNodeId id) =>
+      double.tryParse(guiPropertyOf(id, PatchGuiProperty.width));
+
+  /// Start a right-edge resize of the note or list box at [id], remembering
+  /// the width it had so the release journals one step and a cancel can
+  /// restore it. A no-op for anything else ([isWidthResizable]).
+  void beginWidthResize(PatchNodeId id) {
     final node = graph.nodeById(id);
-    if (node == null || !PatchTypeName.isNote(node.type)) return;
+    if (node == null || !isWidthResizable(node.type)) return;
     _resizing = id;
     _resizeOrigin = guiPropertyOf(id, PatchGuiProperty.width);
   }
 
-  /// Show the in-flight resize at [width] — live, unjournaled, held to
-  /// [PatchNoteMetrics]' range.
-  void previewNoteWidth(double width) {
+  /// Show the in-flight resize at [width] — live, unjournaled, held to the
+  /// range of what is being resized ([PatchNoteMetrics] or [PatchListBox]).
+  void previewWidth(double width) {
     final id = _resizing;
     if (id == null) return;
-    setGuiPropertyPrimitive(
-      id,
-      PatchGuiProperty.width,
-      _formatWidth(PatchNoteMetrics.clampWidth(width)),
-    );
+    final node = graph.nodeById(id);
+    if (node == null) return;
+    final clamped = PatchTypeName.isNote(node.type)
+        ? PatchNoteMetrics.clampWidth(width)
+        : PatchListBox.clampWidth(width);
+    setGuiPropertyPrimitive(id, PatchGuiProperty.width, _formatWidth(clamped));
   }
 
   /// Finish the resize: one journaled [SetPatchGuiPropertyCommand] from the
-  /// width the press found, so a single `Ctrl+Z` puts the note back. A release
+  /// width the press found, so a single `Ctrl+Z` puts the node back. A release
   /// that ended where it started records nothing.
-  void endNoteResize() {
+  void endWidthResize() {
     final id = _resizing;
     _resizing = null;
     if (id == null) return;
     final now = guiPropertyOf(id, PatchGuiProperty.width);
     if (now == _resizeOrigin) return;
+    final isNote = PatchTypeName.isNote(graph.nodeById(id)?.type ?? '');
     undoScope.run(
       SetPatchGuiPropertyCommand(
         this,
@@ -936,14 +950,14 @@ class PatcherController {
         key: PatchGuiProperty.width,
         value: now,
         previous: _resizeOrigin,
-        label: 'resize note',
+        label: isNote ? 'resize note' : 'resize list box',
       ),
     );
   }
 
   /// Drop an in-flight resize and put the width back — a cancelled gesture is
   /// not an edit.
-  void abortNoteResize() {
+  void abortWidthResize() {
     final id = _resizing;
     _resizing = null;
     if (id == null) return;

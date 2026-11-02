@@ -159,6 +159,15 @@ is the note's text, not arguments.
 
 Double-click a note to edit its text, the same as any other object.
 
+## List boxes
+
+A list box (`l`) shows the list it holds on one line, about ten characters
+wide when you place it. A longer list ends in `…`. To read all of it:
+
+- In edit mode, drag the list box's right edge to make it wider or narrower.
+  The width is saved with the patch, and `Ctrl+Z` undoes the resize.
+- In run mode, hover over a cut-off list to see the whole list in a tooltip.
+
 ## The reference panel
 
 The right-hand panel documents the selected palette entry or the selected
@@ -244,8 +253,7 @@ for:
   a list as one word and back, and parsing typed text (`tosymbol` and
   `fromsymbol`), text and character codes (`atoi` and `itoa`), joining items
   into a name (`combine`), spelling a message out as codes (`spell`) and
-  changing case (`tolower` and `toupper`). Each pair shares one tutorial. A
-  list box shows about ten characters, so their examples are short.
+  changing case (`tolower` and `toupper`). Each pair shares one tutorial.
 
 Each tutorial is a small working patch, with numbered notes that walk you
 through it. Where Phi's object differs from the Max object of the same name,

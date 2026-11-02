@@ -702,7 +702,7 @@ void main() {
         480,
       ], reason: 'the ramp ignores curves');
       click(at('.m', 370, 140)); // dump
-      expect(numbers(at('.l', 300, 340)), [3, 600, 0, 0.5]);
+      expect(numbers(at('.l', 390, 340)), [3, 600, 0, 0.5]);
       expect(graph.objects.map((o) => o.type), contains('~dac'));
     });
 
@@ -723,7 +723,7 @@ void main() {
       expect(w[0], greaterThan(w[1]), reason: 'nearer the first node');
       expect(w[1], greaterThan(0));
       expect(w.reduce((a, b) => a + b), closeTo(1, 1e-5));
-      expect(numbers(at('.l', 260, 440)), hasLength(4), reason: 'distances');
+      expect(numbers(at('.l', 200, 440)), hasLength(4), reason: 'distances');
       expect(graph.objects.map((o) => o.type), contains('~dac'));
     });
 
