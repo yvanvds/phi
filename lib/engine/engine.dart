@@ -70,6 +70,7 @@ import 'bridge/yse_gateway.dart';
 import 'state/audio_stall_tracker.dart';
 import 'state/audition_voice_control_port.dart';
 import 'state/clip_registry_publisher.dart';
+import 'state/domain_clock_publisher.dart';
 import 'state/domain_tempo_control_port.dart';
 import 'state/engine_midi_controller.dart';
 import 'state/engine_state_slice_applier.dart';
@@ -617,6 +618,38 @@ class PhiEngine {
   /// down with the channels, disposed on [stop].
   PatchReconciler? _patchReconciler;
 
+  /// One engine clock per `domain.` entity, named by its address, for patches
+  /// to follow (issue #529). `null` when no patcher gateway was injected.
+  /// Created on [start], released around an audio-session restart and on
+  /// [stop].
+  DomainClockPublisher? _domainClocks;
+
+  /// The published clock name a patch uses to follow the `domain.` entity at
+  /// [domain] — its address, e.g. `domain.drum` (issue #529).
+  String domainClockName(EntityAddress domain) =>
+      DomainClockPublisher.clockNameFor(domain);
+
+  /// The `domain.` entities of the bound registry that carry a [TimeDomain].
+  Iterable<EntityAddress> _domainAddresses() sync* {
+    for (final node in _mixRegistry.childrenOfKind(RegistryKinds.domain)) {
+      if (node is RegistryEntity && node.payload is TimeDomain) {
+        yield EntityAddress(kind: RegistryKinds.domain, segments: [node.name]);
+      }
+    }
+  }
+
+  /// The tempo the `domain.` entity at [domain] is *played* at — its
+  /// effective tempo (a state's live override over the authored BPM) bent by
+  /// the tempo fader, the rate a clip subscribed to it runs at. `null` when no
+  /// such domain exists. What its published clock runs at (issue #529).
+  double? _playedDomainTempo(EntityAddress domain) {
+    final tempo = _effectiveDomainTempo(domain);
+    if (tempo == null) return null;
+    return _midi?.tempoSources.apply(tempo) ?? tempo;
+  }
+
+  void _syncDomainClocks() => _domainClocks?.sync();
+
   /// The last patch source-placement degradation (a stale placement bus), or
   /// `null` — surfaced the same way [lastAudioNotice] is (design §4, §8).
   final ValueNotifier<PatchPlacementNotice?> _lastPatchNotice =
@@ -738,6 +771,10 @@ class PhiEngine {
     // names (design §3, issue #231). The incremental event stream keeps it in
     // step from here.
     _mirrorBinder.resync();
+    // A new project's domains are new domains, even under the old names: drop
+    // the old project's clocks so the channel sync below publishes fresh ones
+    // that count from this project's opening (issue #529).
+    _domainClocks?.release();
     _teardownChannels();
     _syncChannelsFromRegistry();
     // Re-point the state machine at the project's `state.` namespace (issue
@@ -756,6 +793,7 @@ class PhiEngine {
     // slice, issue #243) die with it — the new project runs on its authored
     // domain tempos until one of *its* states applies.
     _midi?.clearDomainTempoOverrides();
+    _syncDomainClocks();
     _adoptClipAndRebindPublisher();
     // Rebind the patcher entity strip to the new project's `patch.` namespace,
     // seeding a default patch when it carries none, and open the first (issue
@@ -861,6 +899,7 @@ class PhiEngine {
   void _applyDomainTempo(EntityAddress domain, double bpm) {
     _midi?.applyDomainTempo(domain, bpm);
     _metronome?.applyTempo();
+    _syncDomainClocks();
   }
 
   /// The current effective tempo of the `domain.` entity at [domain] — a live
@@ -1163,6 +1202,17 @@ class PhiEngine {
         resolveBus: _resolvePatchBus,
         onNotice: (notice) => _lastPatchNotice.value = notice,
       );
+      // The time domains' clocks for patches to follow (issue #529). Synced
+      // at the head of every channel sync — before the reconciler creates
+      // any patch, so a patch object naming `domain.drum` finds Phi's clock
+      // rather than making one of its own — and whenever a played tempo
+      // moves (a state override, the tempo fader).
+      _domainClocks = DomainClockPublisher(
+        publish: (name, tempo) => pg.publishClock(name, tempo: tempo),
+        domains: _domainAddresses,
+        tempoOf: _playedDomainTempo,
+      );
+      _midi?.tempoSources.addListener(_syncDomainClocks);
     }
     // Explicit rather than defaulted: the stall tracker derives its threshold
     // from this exact period, so the two must not drift (issue #350).
@@ -1310,6 +1360,10 @@ class PhiEngine {
       _patchReconciler?.teardown();
       _patchReconciler = null;
       _patcherGateway?.disposeAll();
+      // The domains' published clocks close with the session (issue #529).
+      _midi?.tempoSources.removeListener(_syncDomainClocks);
+      _domainClocks?.release();
+      _domainClocks = null;
       // The trigger scheduler listens to the state machine and the runtime
       // variables — detach it (and its reserved clocks) before they go.
       _stateTriggers?.dispose();
@@ -1385,6 +1439,9 @@ class PhiEngine {
   /// No-op before [start] (no gateway to create channels on).
   void _syncChannelsFromRegistry() {
     if (!_started) return;
+    // Domain clocks first (issue #529): the patch reconcile at the tail of
+    // this sync must find them already published.
+    _syncDomainClocks();
     final desired = _walkMixTree();
     final desiredAddresses = {for (final node in desired) node.address};
 
@@ -1788,6 +1845,9 @@ class PhiEngine {
     _patchLibrary?.releaseEditors();
     _teardownChannels();
     _patcherGateway?.disposeAll();
+    // The domains' clocks go with the session; the channel sync below
+    // publishes them again before any patch reopens (issue #529).
+    _domainClocks?.release();
 
     final ok = _audio.restartTo(desired);
 

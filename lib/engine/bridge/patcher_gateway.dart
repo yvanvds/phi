@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'patch_clock.dart';
 import 'patch_object_descriptor.dart';
 import 'patcher_graph_snapshot.dart';
 import 'patcher_node_snapshot.dart';
@@ -242,4 +243,12 @@ abstract interface class PatcherGateway {
   /// palette and reference panel read only this. The `patcher` (subpatch)
   /// type is filtered out (design §10 decision 2). Registry order.
   List<PatchObjectDescriptor> objectTypes();
+
+  // ─── published clocks (issue #529) ───────────────────────────────────
+
+  /// Create an engine domain clock named [name], running at [tempo] BPM, for
+  /// patch clock objects to follow by that name. Returns `null` when a live
+  /// clock already owns [name] (the engine's first registration wins — a
+  /// patch's `.transport` or `.setclock` may have made it first).
+  PatchClock? publishClock(String name, {required double tempo});
 }

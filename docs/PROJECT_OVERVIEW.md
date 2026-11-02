@@ -3065,9 +3065,24 @@ main + app          (orchestration)
   after closing each tutorial. `.preset` recalls on the timer thread).
   The domain clock six reach a libYSE
   domain clock by name; their clocks advance with the audio blocks whether or
-  not the patch is mounted, are never destroyed by a patch object, and are not
-  Phi's time domains (Phi mints its own `phi.midi.*` / `phi.metronome`
-  clocks; a patch following a `TimeDomain` is #529). On libYSE 3.1.0
+  not the patch is mounted, and are never destroyed by a patch object. A
+  patch follows a Phi time domain by its address (#529): `PhiEngine` publishes
+  one engine clock per `domain.` entity through a `DomainClockPublisher`
+  (`lib/engine/state/`), named `domain.<name>` and minted by
+  `PatcherGateway.publishClock` (a bridge `PatchClock`, `RealPatchClock` over
+  `DomainClock`). It is synced at the head of every channel sync — before the
+  reconciler creates any patch, so a patch object naming `domain.drum` binds
+  Phi's clock rather than making its own — and whenever a played tempo moves
+  (a state's tempo override, the tempo fader). It runs at the domain's played
+  tempo (override over authored, bent by the fader), counts beats from when
+  it was published (START neither starts nor resets it), lives exactly as long
+  as the domain, and is released around an audio-session restart and on stop.
+  Phi owns its tempo: the domain never reads it back, so a patch writing it
+  moves only that patch's objects until the domain's tempo next changes (the
+  engine has no read-only clock). The `transport` and `setclock` tutorials show
+  `when domain.drum` and a metro on `clock domain.drum`. Clip sessions, the
+  count-in and the click keep their own `phi.midi.*` and `phi.metronome`
+  clocks. On libYSE 3.1.0
   `.line`, `.delay`, `.pipe`, `.thresh`, `.quickthresh`, `.speedlim`, `.qlim`
   and `.makenote`'s note-off run
   on the audio clock, only in a mounted, rendered patch (`.metro`, `.clocker`

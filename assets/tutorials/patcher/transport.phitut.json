@@ -242,8 +242,79 @@
           "y": "820.0",
           "w": "300"
         },
-        "parms": "5. This clock belongs to the patch. Phi's own transport and time domains, such as domain.drum, run clocks of their own: START does not start song, and a patch cannot follow a Phi time domain yet.",
+        "parms": "5. song belongs to the patch: START does not start it. Each of Phi's time domains has a clock of its own, named by the domain's address, that a patch can follow. Click the button above when domain.drum: it sends the drum domain's tempo, 124 in a new project, on the right, then its beat on the left. Phi runs that clock at the domain's tempo from the moment the project opens, START or not, so leave its tempo to Phi: send start, stop and tempos to a clock of the patch's own.",
         "type": ".text"
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "300.0",
+          "y": "560.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 24
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "300.0",
+          "y": "620.0"
+        },
+        "parms": "domain.drum",
+        "type": ".when",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 25
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 26
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "300.0",
+          "y": "680.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "440.0",
+          "y": "680.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
       },
       "object 3": {
         "ID": 3,

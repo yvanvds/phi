@@ -225,8 +225,10 @@ for:
   (`timepoint`), a clock for `metro` and `delay` to count beats on
   (`setclock`), asking where a clock is (`when`) and converting between
   milliseconds, beats, ticks and Hz (`translate`). These clocks belong to the
-  patch: `START` does not start them, and a patch cannot follow one of Phi's
-  time domains yet.
+  patch: `START` does not start them. A patch can also follow one of Phi's
+  time domains by its address, such as `domain.drum` (see
+  [Following a time domain](#following-a-time-domain)); the `transport` and
+  `setclock` tutorials show how.
 - **Control flow and ordering:** doing things right to left (`trigger` and
   `bangbang`), a loop in one message (`uzi`), conditions (`if`), setting a
   patch up as it opens (`loadbang` and `loadmess`), a one-shot (`onebang`),
@@ -334,6 +336,33 @@ opening a tutorial does not start it. Use `COPY TO PROJECT` to get an editable c
 `patch.tutorials`. Use `CLOSE` to go back to your own patch. Opening a
 project patch also closes it. A tutorial is never saved with the project
 unless you copy it.
+
+## Following a time domain
+
+Each of the project's time domains has a clock a patch can follow. Its name is
+the domain's address: `domain.drum` for the `drum` domain. Use that name
+wherever a clock object takes one: `when domain.drum` reports the domain's
+beat and tempo, `timepoint domain.drum 32` bangs at beat 32,
+`translate ms beats domain.drum` converts at its tempo, and `metro`, `delay`
+and `clocker` count beats on it after `clock domain.drum`.
+
+- **Tempo.** The clock runs at the tempo the domain is played at: its own
+  tempo, or the tempo a state applied to it, bent by the tempo fader. When that
+  tempo changes, everything on the clock follows.
+- **Beats.** The clock counts beats from the moment the project opens, or the
+  domain is created. It always runs: `START` and `STOP` do not start, stop or
+  reset it, and it has no seek. When Phi restarts audio, for a new device or
+  sample rate, the count starts again from 0.
+- **Read it, don't drive it.** Phi sets the clock's tempo. Don't send `start`,
+  `stop` or a tempo to `domain.drum` from `transport`, `setclock` or `tempo`:
+  it would change only the patch objects on that clock, never the domain or its
+  clips, and only until the domain's tempo next changes. Give the patch a clock
+  of its own to drive instead.
+- **Lifetime.** The clock exists for as long as the domain does. Remove the
+  domain and objects on its clock stop moving. If a patch named a clock
+  `domain.<name>` itself before that domain existed, Phi cannot take that name
+  over: the domain's clock appears the next time Phi restarts audio or is
+  started again.
 
 ## Placing a patch
 
