@@ -1,0 +1,584 @@
+{
+  "title": "array — a named list of values",
+  "covers": [
+    ".array",
+    ".array.at",
+    ".array.length",
+    ".array.index",
+    ".array.indexof",
+    ".array.indexmap"
+  ],
+  "summary": "An array of values shared by name: add, fetch by position, measure, find a value and reorder by a map.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "720"
+        },
+        "parms": "# array — a named list of values\narray notes holds an ordered list of elements, each one value: an int, a float or a word. It opens holding 60 64 67 72, because the contents are saved with the patch. Positions start at 0, and a position the array does not have is refused, never wrapped.\nEvery .array object takes the name of its array as the first argument, and objects with the same name share one array. Unlike Max, an array never travels down a cord: a cord carries only the reference array notes, and any .array object it reaches runs on that array. For now, place the .array before the other objects that name its array: when one of them was placed first, the saved contents do not load (yse-soundengine#1245).",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "340.0"
+        },
+        "parms": "notes",
+        "type": ".array",
+        "state": {
+          "contents": [
+            60,
+            64,
+            67,
+            72
+          ]
+        },
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 2
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "200.0",
+          "y": "400.0"
+        },
+        "parms": "missing",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "480.0",
+          "y": "400.0"
+        },
+        "parms": "notes",
+        "type": ".array.length",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "460.0",
+          "w": "200"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "300.0",
+          "y": "460.0",
+          "w": "140"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "480.0",
+          "y": "460.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "60.0",
+          "y": "560.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "60.0",
+          "y": "620.0"
+        },
+        "parms": "notes",
+        "type": ".array.at",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "60.0",
+          "y": "680.0"
+        },
+        "parms": "at",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "180.0",
+          "y": "680.0"
+        },
+        "parms": "miss",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "60.0",
+          "y": "740.0",
+          "w": "100"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "getvalue",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 1
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "300.0",
+          "y": "560.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 21
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 25
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "300.0",
+          "y": "620.0"
+        },
+        "parms": "notes",
+        "type": ".array.index",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 23
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "300.0",
+          "y": "680.0"
+        },
+        "parms": "index",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 24
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "420.0",
+          "y": "680.0"
+        },
+        "parms": "none",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 24
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "300.0",
+          "y": "740.0",
+          "w": "100"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "500.0",
+          "y": "620.0"
+        },
+        "parms": "notes",
+        "type": ".array.indexof",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 26
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "540.0",
+          "y": "680.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 27": {
+        "ID": 27,
+        "gui": {
+          "x": "60.0",
+          "y": "820.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 28
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 28": {
+        "ID": 28,
+        "gui": {
+          "x": "60.0",
+          "y": "880.0"
+        },
+        "parms": "notes 3 2 1 0",
+        "type": ".array.indexmap",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 29
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 29": {
+        "ID": 29,
+        "gui": {
+          "x": "300.0",
+          "y": "880.0",
+          "w": "130"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "170.0",
+          "y": "220.0"
+        },
+        "parms": "getsize",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 1
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 30": {
+        "ID": 30,
+        "gui": {
+          "x": "820.0",
+          "y": "200.0",
+          "w": "300"
+        },
+        "parms": "1. Click getvalue: got 60 64 67 72. Click getsize: got 4. Type 2 in the get box: prepend makes it get 2, and notes sends the element at position 2, got 67. Type 9: notes has no position 9, so the right outlet bangs and the box shows missing.",
+        "type": ".text"
+      },
+      "object 31": {
+        "ID": 31,
+        "gui": {
+          "x": "820.0",
+          "y": "370.0",
+          "w": "300"
+        },
+        "parms": "2. Type 76 in the append box: append 76 adds it at the end. Click the button: the middle outlet sends the reference array notes, and array.length notes reports 5.",
+        "type": ".text"
+      },
+      "object 32": {
+        "ID": 32,
+        "gui": {
+          "x": "820.0",
+          "y": "500.0",
+          "w": "300"
+        },
+        "parms": "3. array.at notes fetches by position: type 1 for at 64. Past the end its right outlet bangs: type 9 for miss. A bang fetches the last position again.",
+        "type": ".text"
+      },
+      "object 33": {
+        "ID": 33,
+        "gui": {
+          "x": "820.0",
+          "y": "610.0",
+          "w": "300"
+        },
+        "parms": "4. array.index notes finds a value: type 67 for index 2. On a miss its right outlet bangs: type 61 for none, while array.indexof sends -1. A value matches by spelling, so the float 67. would not find the int 67.",
+        "type": ".text"
+      },
+      "object 34": {
+        "ID": 34,
+        "gui": {
+          "x": "820.0",
+          "y": "760.0",
+          "w": "300"
+        },
+        "parms": "5. Click the lowest button: array.indexmap notes 3 2 1 0 rebuilds notes from the elements at positions 3, 2, 1 and 0. Click getvalue: got 72 67 64 60. Position 4 is not in the map, so 76 is gone.",
+        "type": ".text"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "280.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "400.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "520.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 1
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "280.0",
+          "y": "280.0"
+        },
+        "parms": "get",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 1
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "400.0",
+          "y": "280.0"
+        },
+        "parms": "append",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 1
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "400.0"
+        },
+        "parms": "got",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

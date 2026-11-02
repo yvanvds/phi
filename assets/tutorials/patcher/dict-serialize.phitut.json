@@ -1,0 +1,208 @@
+{
+  "title": "dict.serialize, dict.deserialize and dict.print — dictionaries as text",
+  "covers": [
+    ".dict.serialize",
+    ".dict.deserialize",
+    ".dict.print"
+  ],
+  "summary": "Turn a dictionary into a line of JSON, read JSON back into another dictionary, and print a dictionary to the log.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# dict.serialize, dict.deserialize and dict.print — dictionaries as text\ndict.serialize sends a dictionary as one line of JSON: :: keys become nested objects and a value of several numbers an array. dict.deserialize reads such a line into the dictionary it names, replacing what it held, and sends its reference one audio block later. dict.print writes a dictionary to the log as indented JSON, each line starting with its name.\nA message holds at most 255 characters; for more, send write song.json to dict.serialize and read song.json to dict.deserialize, which use a file of up to 128 KiB. Unlike Max, the JSON leaves as a message, not a dictionary, and deserialized keys come in alphabetical order (yse-soundengine#1243).",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "640.0",
+          "y": "200.0",
+          "w": "300"
+        },
+        "parms": "1. Click the button: song sends its reference to dict.serialize, which sends the JSON text shown below it.",
+        "type": ".text"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "640.0",
+          "y": "290.0",
+          "w": "300"
+        },
+        "parms": "2. The same text goes into dict.deserialize, which fills copy. Its reference runs dict.unpack, which sends bpm, 120, and dict.print. Open the log with Ctrl+J or the status bar's log toggle to see copy: lines.",
+        "type": ".text"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "640.0",
+          "y": "420.0",
+          "w": "300"
+        },
+        "parms": "3. Click the JSON message box: copy now holds bpm 90 and title outro, and the log shows it. Write JSON without spaces in a message box: on this engine it keeps only its first word.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "60.0",
+          "y": "280.0"
+        },
+        "parms": "song",
+        "type": ".dict",
+        "state": {
+          "contents": {
+            "bpm": 120,
+            "chord": [
+              0,
+              4,
+              7
+            ],
+            "title": "intro"
+          }
+        },
+        "outputs": {
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "60.0",
+          "y": "340.0"
+        },
+        "parms": "song",
+        "type": ".dict.serialize",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "400.0",
+          "w": "360"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "260.0",
+          "y": "460.0"
+        },
+        "parms": "{\"bpm\":90,\"title\":\"outro\"}",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "520.0"
+        },
+        "parms": "copy",
+        "type": ".dict.deserialize",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "580.0"
+        },
+        "parms": "copy bpm",
+        "type": ".dict.unpack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "260.0",
+          "y": "580.0"
+        },
+        "parms": "copy",
+        "type": ".dict.print"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "640.0"
+        },
+        "parms": "",
+        "type": ".i"
+      }
+    }
+  }
+}

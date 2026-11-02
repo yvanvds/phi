@@ -619,7 +619,7 @@ void main() {
       notes: 4,
       heading: threshHeading,
     );
-    final held = at('.l', 60, 340);
+    final held = at('.l', 60, 490);
     final quick = at('.l', 300, 340);
     await tap(buttonAt(400, 160));
     audio(600);
@@ -629,7 +629,7 @@ void main() {
     }
     audio(700);
     expect((value(held), value(quick)), ('67 64 60', '67 64 60'));
-    expect((value(at('.i', 180, 440)), value(at('.i', 420, 440))), ('2', '2'));
+    expect((value(at('.i', 180, 440)), value(at('.i', 540, 440))), ('2', '2'));
     // The trickle: metro keeps real time, the groups audio time.
     await tap(toggleAt(60, 530));
     for (var i = 0; i < 20; i++) {
@@ -638,7 +638,7 @@ void main() {
     }
     await tap(toggleAt(60, 530));
     expect(value(at('.i', 180, 440)), '2', reason: 'thresh holds on');
-    expect(whole(at('.i', 420, 440)), greaterThan(3), reason: 'quick groups');
+    expect(whole(at('.i', 540, 440)), greaterThan(3), reason: 'quick groups');
     audio(600);
     final trickle = value(held).split(' ');
     expect(trickle.length, greaterThan(4), reason: 'one long list: $trickle');

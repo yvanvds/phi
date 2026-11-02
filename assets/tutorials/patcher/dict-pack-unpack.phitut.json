@@ -1,0 +1,199 @@
+{
+  "title": "dict.pack and dict.unpack — a dictionary from inlets and back",
+  "covers": [
+    ".dict.pack",
+    ".dict.unpack"
+  ],
+  "summary": "Write a dictionary from one inlet per key, then send its values out of one outlet per key, right to left.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# dict.pack and dict.unpack — a dictionary from inlets and back\ndict.pack voice freq gain writes the dictionary voice with one inlet per key: freq on the left, gain on the right. Like pack, the left inlet stores its value and writes, the others only store, so set the right-hand values first. Writing replaces the whole dictionary, then sends its reference.\ndict.unpack voice freq gain is its pair: the reference makes it send each value out of its own outlet, right to left. Unlike Max, a cord carries only the reference dictionary voice, never the dictionary itself, so the first argument names the dictionary.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "640.0",
+          "y": "200.0",
+          "w": "300"
+        },
+        "parms": "1. Type 0.5 in the gain box: nothing happens yet, the right inlet only stores. Type 440 in the freq box: voice is written with freq 440 and gain 0.5, and the reference dictionary voice leaves the outlet.",
+        "type": ".text"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "640.0",
+          "y": "320.0",
+          "w": "300"
+        },
+        "parms": "2. The reference runs dict.unpack, which sends gain, then freq. Right to left: the cold inlet of pack is filled before the hot one, so pack sends 440 0.5 in one go.",
+        "type": ".text"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "640.0",
+          "y": "430.0",
+          "w": "300"
+        },
+        "parms": "3. Type 0.8 in gain, then 220 in freq: both outlets follow. A key that never got a value is written empty, and dict.unpack sends nothing for it.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "240.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "60.0",
+          "y": "280.0"
+        },
+        "parms": "voice freq gain",
+        "type": ".dict.pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "300.0",
+          "y": "340.0",
+          "w": "160"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "400.0"
+        },
+        "parms": "voice freq gain",
+        "type": ".dict.unpack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 2
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 8
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "460.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "240.0",
+          "y": "460.0"
+        },
+        "parms": "",
+        "type": ".f"
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "520.0"
+        },
+        "parms": "0 0.",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "580.0",
+          "w": "160"
+        },
+        "parms": "",
+        "type": ".l"
+      }
+    }
+  }
+}

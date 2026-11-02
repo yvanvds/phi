@@ -1,0 +1,345 @@
+{
+  "title": "ctlin and xctlin — knobs, faders and pedals",
+  "covers": [
+    ".ctlin",
+    ".xctlin"
+  ],
+  "summary": "Read every control change, follow the modulation wheel into a filter cutoff and the volume controller into a level through scale, and read a 14-bit controller with xctlin.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# ctlin and xctlin — knobs, faders and pedals\nctlin sends the value, controller number and channel of every control change, right to left. Controller 1 is the modulation wheel, 7 volume and 64 the sustain pedal. xctlin pairs controllers 0-31 with their fine partners 32-63 and sends one 14-bit value, 0-16383.\nThe first argument is the input port, counted from 0; the midiinfo tutorial lists them. A port that cannot be opened, or no keyboard at all, leaves the object silent, and the patch still loads. On Windows a port can be open in one place at a time, so untick it under Settings › MIDI for a patch to hear it. Then come a channel, 1-16 or 0 for all, and the controller to listen to, or -1 for all: 0 is a real controller, bank select.\nMax's ctlin drops outlets when it is given arguments. Here all three stay.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "250.0"
+        },
+        "parms": "0",
+        "type": ".ctlin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "240.0",
+          "y": "510.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "420.0",
+          "y": "390.0"
+        },
+        "parms": "110",
+        "type": "~saw",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "420.0",
+          "y": "510.0"
+        },
+        "parms": "200",
+        "type": "~lp",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "420.0",
+          "y": "570.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 14
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "420.0",
+          "y": "630.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "60.0",
+          "y": "710.0"
+        },
+        "parms": "0 0 1",
+        "type": ".xctlin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "60.0",
+          "y": "770.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "160.0",
+          "y": "770.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "260.0",
+          "y": "770.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "640.0",
+          "y": "240.0",
+          "w": "300"
+        },
+        "parms": "1. Move any knob or fader: the top boxes show its value, its controller number and its channel.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "60.0",
+          "y": "310.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "640.0",
+          "y": "380.0",
+          "w": "300"
+        },
+        "parms": "2. ctlin 0 0 1 follows only the modulation wheel, and ctlin 0 0 7 only volume. scale turns 0-127 into a cutoff of 200-4000 Hz and a level of 0-0.2 for a saw on the master bus. It is silent until you raise the volume.",
+        "type": ".text"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "640.0",
+          "y": "700.0",
+          "w": "300"
+        },
+        "parms": "3. xctlin 0 0 1 reads the modulation wheel at 14 bits: controller 1 is the coarse half and 33 the fine half. A wheel that sends only controller 1 moves in steps of 128: 64 reads as 8192.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "160.0",
+          "y": "310.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "260.0",
+          "y": "310.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "390.0"
+        },
+        "parms": "0 0 1",
+        "type": ".ctlin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "240.0",
+          "y": "390.0"
+        },
+        "parms": "0 0 7",
+        "type": ".ctlin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "450.0"
+        },
+        "parms": "0 127 200 4000",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "240.0",
+          "y": "450.0"
+        },
+        "parms": "0 127 0 0.2",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "510.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,263 @@
+{
+  "title": "funbuff — a function as points",
+  "covers": [
+    ".funbuff"
+  ],
+  "summary": "Look up a y by x on a staircase of stored points, interpolate between them, store a new point, and step through the points with next.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# funbuff — a function as points\nA funbuff stores (x, y) pairs of ints, kept sorted by x. Send it an x and it sends the y stored there or, when there is none, the y at the nearest lower x: the function is a staircase. A number on the right inlet waits for the next x, which then stores the pair instead. This one holds (0, 10), (100, 50) and (300, 20). It was sent embed 1, so they are saved with the patch.\nUnlike Max, a funbuff does not read or write files and has no editing window.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "180.0",
+          "y": "400.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "300.0",
+          "y": "400.0"
+        },
+        "parms": "",
+        "type": ".b"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "640.0",
+          "y": "220.0",
+          "w": "300"
+        },
+        "parms": "1. Type 150 into the left box: 50, the y at 100, the nearest lower x. Any x from 300 up sends 20. An x below 0 sends nothing.",
+        "type": ".text"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "640.0",
+          "y": "310.0",
+          "w": "300"
+        },
+        "parms": "2. interp draws straight lines between the points instead. Type 200 into the float box: interp 200 sends 35, halfway from 50 to 20. Outside the points it sends the first or the last y.",
+        "type": ".text"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "640.0",
+          "y": "420.0",
+          "w": "300"
+        },
+        "parms": "3. To store a pair, type the y into the second box, then the x into the first: 99, then 200, stores (200, 99) and sends nothing. Type 250: 99.",
+        "type": ".text"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "640.0",
+          "y": "510.0",
+          "w": "300"
+        },
+        "parms": "4. next steps through the pairs by x. It sends the distance from the x before out of the middle outlet, then the y. Past the last pair it flashes the button instead and stays there: click 0 for goto 0, back to the start. With times as x, the distances are the waits of a sequence.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "160.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "260.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "360.0",
+          "y": "220.0"
+        },
+        "parms": "next",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "470.0",
+          "y": "220.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "260.0",
+          "y": "280.0"
+        },
+        "parms": "interp",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "470.0",
+          "y": "280.0"
+        },
+        "parms": "goto",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "340.0"
+        },
+        "parms": "",
+        "type": ".funbuff",
+        "state": {
+          "embed": true,
+          "pairs": [
+            {
+              "x": 0,
+              "y": 10
+            },
+            {
+              "x": 100,
+              "y": 50
+            },
+            {
+              "x": 300,
+              "y": 20
+            }
+          ]
+        },
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "400.0"
+        },
+        "parms": "",
+        "type": ".f"
+      }
+    }
+  }
+}

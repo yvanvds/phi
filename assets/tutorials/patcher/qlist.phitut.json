@@ -1,0 +1,267 @@
+{
+  "title": "qlist — a timed score",
+  "covers": [
+    ".qlist"
+  ],
+  "summary": "Play a score that sends to r names in time, step through it by hand, and play it faster with tempo.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# qlist — a timed score\nA qlist is a list of lines played in time. A line that starts with a word goes to the r of that name, the rest of the line being the message. A line of numbers leaves the left outlet, and its first number is the wait, in milliseconds, before the next line. The list is saved with the patch. This one is: pitch 60; level 0.5; 500; pitch 64; 500; pitch 67; level 0.2.\nUnlike Max, a word line reaches only the r objects in this patch, and for now only one r of each name.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "480.0"
+        },
+        "parms": "pitch",
+        "type": ".r",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "200.0",
+          "y": "480.0"
+        },
+        "parms": "level",
+        "type": ".r",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "540.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "200.0",
+          "y": "540.0"
+        },
+        "parms": "",
+        "type": ".f"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "640.0",
+          "y": "220.0",
+          "w": "300"
+        },
+        "parms": "1. Click the button: r pitch gets 60 and r level 0.5 at once, then pitch 64 half a second later, then 67 and 0.2. Each wait leaves the left outlet, and the button on the middle outlet flashes at the end. A bang always plays from the top.",
+        "type": ".text"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "640.0",
+          "y": "350.0",
+          "w": "300"
+        },
+        "parms": "2. next steps by hand: it sends the word lines up to the next number line, sends that and stops, without waiting. rewind goes back to the top, and stop halts playback where it is.",
+        "type": ".text"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "640.0",
+          "y": "450.0",
+          "w": "300"
+        },
+        "parms": "3. tempo scales the waits: type 2 into the float box and click the button to play twice as fast. clock with a name waits on a YSE domain clock instead, and the waits are then beats.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "110.0",
+          "y": "220.0"
+        },
+        "parms": "next",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "215.0",
+          "y": "220.0"
+        },
+        "parms": "stop",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "320.0",
+          "y": "220.0"
+        },
+        "parms": "rewind",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "430.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "430.0",
+          "y": "280.0"
+        },
+        "parms": "tempo",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "340.0"
+        },
+        "parms": "",
+        "type": ".qlist",
+        "state": {
+          "cues": [
+            "pitch 60",
+            "level 0.5",
+            "500",
+            "pitch 64",
+            "500",
+            "pitch 67",
+            "level 0.2"
+          ]
+        },
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "400.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "160.0",
+          "y": "400.0"
+        },
+        "parms": "",
+        "type": ".b"
+      }
+    }
+  }
+}

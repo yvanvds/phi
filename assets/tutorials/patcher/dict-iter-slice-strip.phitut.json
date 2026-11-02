@@ -1,0 +1,282 @@
+{
+  "title": "dict.iter, dict.slice and dict.strip — walking and cutting a dictionary",
+  "covers": [
+    ".dict.iter",
+    ".dict.slice",
+    ".dict.strip"
+  ],
+  "summary": "Walk a dictionary entry by entry, split off the entries under a key, and remove them in place.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# dict.iter, dict.slice and dict.strip — walking and cutting a dictionary\nsynth holds name lead and two voices. A bang runs each of these objects, and so does the reference dictionary synth. dict.iter sends each entry as its whole :: key followed by its value, then bangs its right outlet. dict.slice splits off the entries under a key into a dictionary of their own; dict.strip removes them in place.\nUnlike Max, dict.slice and dict.strip take one key, not a list of keys, and the results go into dictionaries named in the arguments.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "660.0"
+        },
+        "parms": "v1",
+        "type": ".dict.serialize",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "300.0",
+          "y": "660.0"
+        },
+        "parms": "rest",
+        "type": ".dict.serialize",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "720.0",
+          "w": "200"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "300.0",
+          "y": "720.0",
+          "w": "360"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "680.0",
+          "y": "200.0",
+          "w": "300"
+        },
+        "parms": "1. Click the left button: dict.iter walks synth one entry at a time. zl group gathers the pairs, and the done bang from the right outlet sends them as one list.",
+        "type": ".text"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "680.0",
+          "y": "300.0",
+          "w": "300"
+        },
+        "parms": "2. Click the button above dict.slice: the entries under voice::1 go into v1 with voice::1:: taken off their keys, everything else into rest. dict.serialize shows each as text.",
+        "type": ".text"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "680.0",
+          "y": "410.0",
+          "w": "300"
+        },
+        "parms": "3. Click the right button: dict.strip removes every entry under voice::2 from synth itself, and its reference runs dict.iter, which shows what is left. Slice again: rest holds only name. Reopen the tutorial to get the voice back.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "300.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "160.0",
+          "y": "220.0"
+        },
+        "parms": "synth",
+        "type": ".dict",
+        "state": {
+          "contents": {
+            "name": "lead",
+            "voice": {
+              "1": {
+                "freq": 440,
+                "gain": 0.5
+              },
+              "2": {
+                "freq": 220
+              }
+            }
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "300.0",
+          "y": "280.0"
+        },
+        "parms": "synth voice::2",
+        "type": ".dict.strip",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "340.0"
+        },
+        "parms": "synth",
+        "type": ".dict.iter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "400.0"
+        },
+        "parms": "group",
+        "type": ".zl",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "460.0",
+          "w": "540"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "540.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "600.0"
+        },
+        "parms": "synth v1 rest voice::1",
+        "type": ".dict.slice",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

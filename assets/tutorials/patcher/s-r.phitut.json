@@ -1,0 +1,196 @@
+{
+  "title": "s and r — send without a cord",
+  "covers": [
+    ".s",
+    ".r"
+  ],
+  "summary": "Send numbers and bangs from s to r with no cord between them, and reach an r from the Code surface on the engine bus.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# s and r — send without a cord\ns sends whatever reaches it to the r with the same name, with no cord between them: s pitch reaches r pitch. A bang, a number and a list all go through. Unlike Max, a name belongs to its patch, so an r in another patch does not hear this s. For now only one r of a name hears an s in the same patch (yse-soundengine #1239), so this tutorial gives each name one r.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "160.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "330.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "640.0",
+          "y": "160.0",
+          "w": "300"
+        },
+        "parms": "1. Type 64 into the box on the left, or click 72. s pitch sends it, r pitch on the right sends it on, and the box under it shows it. No cord joins them.",
+        "type": ".text"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "640.0",
+          "y": "300.0",
+          "w": "300"
+        },
+        "parms": "2. Click the button. s hit sends the bang to r hit, and the counter under it counts the clicks.",
+        "type": ".text"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "640.0",
+          "y": "420.0",
+          "w": "300"
+        },
+        "parms": "3. Every s is also on the engine bus, at patcher.<patch>.<name>, and every r listens there. A tutorial has no name, so click COPY TO PROJECT first: the copy is patch.tutorials.s_r. Then, in the Code surface, patch.tutorials.s_r.send('pitch', 67) reaches r pitch. Code always sends a float, and the int box shows 67.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "pitch",
+        "type": ".s"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "170.0",
+          "y": "160.0"
+        },
+        "parms": "72",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "300.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "360.0"
+        },
+        "parms": "hit",
+        "type": ".s"
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "330.0",
+          "y": "160.0"
+        },
+        "parms": "pitch",
+        "type": ".r",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "330.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "330.0",
+          "y": "300.0"
+        },
+        "parms": "hit",
+        "type": ".r",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "330.0",
+          "y": "360.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

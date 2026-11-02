@@ -1,0 +1,237 @@
+{
+  "title": "rpnin and nrpnin — parameter messages",
+  "covers": [
+    ".rpnin",
+    ".nrpnin"
+  ],
+  "summary": "Read registered parameters such as the pitch-bend range, split a value into its coarse and fine bytes, and read a device's own parameters with nrpnin.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# rpnin and nrpnin — parameter messages\nSome settings travel as a series of control changes. Controllers 101 and 100 select a registered parameter (RPN), 99 and 98 a non-registered one (NRPN), and controllers 6 and 38 then write its value, coarse and fine. rpnin and nrpnin follow the series and send each value written, with the parameter number and the channel, right to left.\nThe first argument is the input port, counted from 0; the midiinfo tutorial lists them. A port that cannot be opened, or no keyboard at all, leaves the object silent, and the patch still loads. On Windows a port can be open in one place at a time, so untick it under Settings › MIDI for a patch to hear it. The second argument is a channel, 1-16, or 0 for all.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "210.0"
+        },
+        "parms": "0",
+        "type": ".rpnin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "530.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "160.0",
+          "y": "530.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "260.0",
+          "y": "530.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "640.0",
+          "y": "200.0",
+          "w": "300"
+        },
+        "parms": "1. Set the pitch-bend range on a controller that sends it as RPN 0. rpnin sends the value, parameter 0 and the channel. The value is 14 bits: shifting it right by 7 gives the coarse byte, the semitones, and the low 7 bits are the fine byte, the cents.",
+        "type": ".text"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "640.0",
+          "y": "320.0",
+          "w": "300"
+        },
+        "parms": "2. A device that writes only the coarse byte moves the value in steps of 128: 12 semitones reads as 1536. The parameters are 0 pitch-bend range, 1 fine tuning, 2 coarse tuning, 3 tuning program and 4 tuning bank.",
+        "type": ".text"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "640.0",
+          "y": "460.0",
+          "w": "300"
+        },
+        "parms": "3. nrpnin does the same for a device's own parameters. The parameter number is coarse times 128 plus fine, so 1 and 8 on controllers 99 and 98 read as 136. What each number means is in the device's manual.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "60.0",
+          "y": "270.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "160.0",
+          "y": "270.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "260.0",
+          "y": "270.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "330.0"
+        },
+        "parms": "7",
+        "type": ".>>",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "160.0",
+          "y": "330.0"
+        },
+        "parms": "127",
+        "type": ".&",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "390.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "160.0",
+          "y": "390.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "470.0"
+        },
+        "parms": "0",
+        "type": ".nrpnin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

@@ -250,6 +250,14 @@ class _WorkstationState extends State<Workstation> {
   /// scope; the patcher surface registers its open patch's (#512).
   final UndoScopes _undoScopes = UndoScopes();
 
+  /// The shell's own focus scope, sitting *inside* the global
+  /// [CallbackShortcuts] (issue #537). When a field lets go of focus — an
+  /// explicit `unfocus()`, or a focused field disposed with its overlay —
+  /// Flutter hands focus to the nearest enclosing scope. Without this scope that
+  /// was the route's, above the shell's bindings, so every global chord went
+  /// dead until the user clicked something focusable in the shell.
+  final FocusScopeNode _shellScope = FocusScopeNode(debugLabel: 'workstation');
+
   /// The project-menu action orchestrator, present only when a project
   /// controller + picker were wired. Shared by the menu and the Ctrl+S shortcut.
   ProjectActions? _actions;
@@ -770,6 +778,7 @@ class _WorkstationState extends State<Workstation> {
 
   @override
   void dispose() {
+    _shellScope.dispose();
     _layout.removeListener(_onLayoutChanged);
     if (_ownsLayout) _layout.dispose();
     if (_ownsCommands) _commands.dispose();
@@ -910,67 +919,72 @@ class _WorkstationState extends State<Workstation> {
     // surface focus. These bindings sit above every surface, so a key a focused
     // widget (a piano roll, a text field) leaves unhandled bubbles up to here; a
     // text field's own undo still wins because it consumes the combo first.
+    // The shell's [FocusScope] keeps focus under these bindings when a field
+    // releases it (issue #537).
     return CallbackShortcuts(
       bindings: _commands.shortcutBindings(),
-      child: Material(
-        color: PhiColors.bg0,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: Column(
-                children: [
-                  TopToolbar(
-                    session: widget.session,
-                    projectController: widget.projectController,
-                    directoryPicker: widget.directoryPicker,
-                    onOpenSettings: widget.projectController != null
-                        ? _openSettings
-                        : null,
-                    onOpenKeyboardShortcuts: _openKeyboardShortcuts,
-                    metronome: widget.engine.metronomeOrNull,
-                    countIn: widget.engine.midiOrNull?.countIn,
-                  ),
-                  Expanded(
-                    child: Row(
-                      children: [
-                        LeftRail(
-                          selected: _focusedSurfaceId,
-                          onSelect: _onSelect,
-                          shortcutLabels: _railShortcutLabels,
-                        ),
-                        Expanded(child: _buildCentre()),
-                        RightInspector(session: widget.session),
-                      ],
+      child: FocusScope(
+        node: _shellScope,
+        child: Material(
+          color: PhiColors.bg0,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Column(
+                  children: [
+                    TopToolbar(
+                      session: widget.session,
+                      projectController: widget.projectController,
+                      directoryPicker: widget.directoryPicker,
+                      onOpenSettings: widget.projectController != null
+                          ? _openSettings
+                          : null,
+                      onOpenKeyboardShortcuts: _openKeyboardShortcuts,
+                      metronome: widget.engine.metronomeOrNull,
+                      countIn: widget.engine.midiOrNull?.countIn,
                     ),
-                  ),
-                  // The log drawer sits above the status bar (design §4,
-                  // decision 2), shown only while open; the status bar's toggle
-                  // + error badge drive it.
-                  AnimatedBuilder(
-                    animation: _logPanel,
-                    builder: (context, _) => _logPanel.isOpen
-                        ? LogPanel(controller: _logPanel)
-                        : const SizedBox.shrink(),
-                  ),
-                  BottomStatus(
-                    engine: widget.engine,
-                    session: widget.session,
-                    logPanel: _logPanel,
-                    audioHealth: _audioHealth.health,
-                    onAudioSettings: widget.projectController == null
-                        ? null
-                        : _openAudioSettings,
-                    onPanic: _onPanic,
-                  ),
-                ],
+                    Expanded(
+                      child: Row(
+                        children: [
+                          LeftRail(
+                            selected: _focusedSurfaceId,
+                            onSelect: _onSelect,
+                            shortcutLabels: _railShortcutLabels,
+                          ),
+                          Expanded(child: _buildCentre()),
+                          RightInspector(session: widget.session),
+                        ],
+                      ),
+                    ),
+                    // The log drawer sits above the status bar (design §4,
+                    // decision 2), shown only while open; the status bar's toggle
+                    // + error badge drive it.
+                    AnimatedBuilder(
+                      animation: _logPanel,
+                      builder: (context, _) => _logPanel.isOpen
+                          ? LogPanel(controller: _logPanel)
+                          : const SizedBox.shrink(),
+                    ),
+                    BottomStatus(
+                      engine: widget.engine,
+                      session: widget.session,
+                      logPanel: _logPanel,
+                      audioHealth: _audioHealth.health,
+                      onAudioSettings: widget.projectController == null
+                          ? null
+                          : _openAudioSettings,
+                      onPanic: _onPanic,
+                    ),
+                  ],
+                ),
               ),
-            ),
-            // The notice channel's transient toasts float above the chrome,
-            // bottom-centre (design §3) — non-interactive, so clicks pass through.
-            Positioned.fill(
-              child: PhiToastOverlay(controller: _noticeCenter.toasts),
-            ),
-          ],
+              // The notice channel's transient toasts float above the chrome,
+              // bottom-centre (design §3) — non-interactive, so clicks pass through.
+              Positioned.fill(
+                child: PhiToastOverlay(controller: _noticeCenter.toasts),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -254,6 +254,71 @@ for:
   `fromsymbol`), text and character codes (`atoi` and `itoa`), joining items
   into a name (`combine`), spelling a message out as codes (`spell`) and
   changing case (`tolower` and `toupper`). Each pair shares one tutorial.
+- **I/O, messaging and values:** sending without a cord (`s` and `r`, which
+  share one tutorial), sending to a name chosen as the patch runs (`forward`),
+  one value shared by name (`value`) and writing messages to the log panel
+  (`print`). A name belongs to its patch. For now only one `r` of a name hears
+  an `s` in the same patch. The `s` and `r` tutorial also shows how to reach
+  an `r` from the Code surface: copy it to the project, then
+  `patch.tutorials.s_r.send('pitch', 67)`. A tutorial for subpatch inlets and
+  outlets follows once subpatches arrive.
+- **Data stores and sequencers:** messages stored at addresses (`coll`), an
+  array of ints read as steps or as weights (`table`), a function stored as
+  points (`funbuff`), the notes held down (`bag`), a record of what went past
+  (`capture`), lines of text (`textfile`), recorded MIDI played back, also on
+  a domain clock (`seq`), a timed score that sends to `r` names (`qlist`) and
+  a multi-track recorder (`mtr`). The `coll` and `textfile` tutorials write a
+  file (`cues.txt`, `lines.txt`) into the folder Phi was started from and read
+  it back.
+- **Dictionaries:** a named store of keys and values that is saved with the
+  patch and shared by name (`dict`), a dictionary built from inlets and taken
+  apart again (`dict.pack` and `dict.unpack`), routing on the keys it holds
+  and comparing two (`dict.route` and `dict.compare`), walking, splitting and
+  trimming one (`dict.iter`, `dict.slice` and `dict.strip`), merging and
+  grouping (`dict.join` and `dict.group`), and dictionaries as JSON text and
+  in the log panel (`dict.serialize`, `dict.deserialize` and `dict.print`).
+  A cord carries only a reference (`dictionary <name>`), never the
+  dictionary itself. For now, a dictionary that is loaded with a patch, or
+  read from JSON, has its keys in alphabetical order.
+- **Arrays:** an ordered list of values that is saved with the patch and
+  shared by name, read by position and searched (`array`, `array.at`,
+  `array.length`, `array.index`, `array.indexof` and `array.indexmap`), built
+  and edited step by step (`array.push`, `array.pop`, `array.shift`,
+  `array.unshift`, `array.insert`, `array.remove`, `array.replace` and
+  `array.fill`), cut, joined and reshaped (`array.slice`, `array.subarray`,
+  `array.split`, `array.wrap`, `array.concat`, `array.flatten`,
+  `array.join`, `array.group` and `array.thin`), worked on element by element
+  (`array.map`, `array.filter`, `array.reduce`, `array.foreach`,
+  `array.every`, `array.some`, `array.expr`, `array.iter`, `array.stream` and
+  `array.tuplewise`), reordered and picked from at random (`array.sort`,
+  `array.reverse`, `array.rotate`, `array.shuffle`, `array.scramble` and
+  `array.random`), summed up (`array.max`, `array.min`, `array.mean`,
+  `array.median`, `array.mode` and `array.stddev`), compared as sets
+  (`array.union`, `array.sect`, `array.unique`, `array.sub`,
+  `array.compare`, `array.change` and `array.routepass`) and converted
+  (`array.tolist`, `array.tostring`, `array.tosymbol`, `array.deserialize`
+  and `array.regexp`). Each group shares one tutorial. A cord carries only a
+  reference (`array <name>`), never the array itself, and where Max sends
+  each element out to a callback, Phi's objects take an expression instead.
+  For now, place an `array` before the other objects that name it: when one
+  of them was placed first, the array opens empty instead of with its saved
+  contents.
+- **MIDI input:** raw bytes from a MIDI input port, one at a time or framed
+  into messages, and taken apart into notes, controllers and the rest
+  (`midiin`, `xmidiin` and `midiparse`), notes from a keyboard playing a saw,
+  with the release velocity (`notein` and `xnotein`), knobs and faders into
+  a filter and a level, also at 14 bits (`ctlin` and `xctlin`), the pitch
+  wheel at 7 and 14 bits, and key pressure (`bendin`, `xbendin`,
+  `xbendin2`, `touchin` and `polyin`), program changes recalling `preset`
+  slots, MIDI clock, start and stop, and SysEx (`pgmin`, `rtin` and
+  `sysexin`), parameter messages (`rpnin` and `nrpnin`) and the machine's
+  MIDI ports (`midiinfo`). Each group shares one tutorial. The objects
+  listen on port 0, the first input `midiinfo` lists. To use another port,
+  type its number after the object's name. Without a keyboard they stay
+  silent, but you can feed `midiparse` bytes by hand. On Windows a port can
+  be open in only one place at a time, so untick it under Settings › MIDI
+  for a patch to hear it. For now, at most eight MIDI input objects in all
+  open patches can listen to one port, and a ninth stays silent.
 
 Each tutorial is a small working patch, with numbered notes that walk you
 through it. Where Phi's object differs from the Max object of the same name,

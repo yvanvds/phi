@@ -1,0 +1,420 @@
+{
+  "title": "dict.route and dict.compare — testing dictionaries",
+  "covers": [
+    ".dict.route",
+    ".dict.compare"
+  ],
+  "summary": "Send a dictionary to the outlet of the first key it holds, and compare two dictionaries entry by entry.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# dict.route and dict.compare — testing dictionaries\ndict.route ev note cc sends the reference of ev out of the outlet of the first key ev holds, or out of the rightmost outlet when it holds neither. A key matches an entry at that key or under it. dict.compare mine theirs sends 1 when the two hold the same entries, 0 when they do not, then the keys that differ. Values are compared as text, so 100 and 100. differ.\nUnlike Max, dict.route tests only whether a key is there, not its value, and the keys are arguments rather than a schema dictionary.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "180.0",
+          "y": "520.0"
+        },
+        "parms": "cc",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "300.0",
+          "y": "520.0"
+        },
+        "parms": "none",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "580.0",
+          "w": "120"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "380.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "380.0",
+          "y": "280.0"
+        },
+        "parms": "set tempo",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "540.0",
+          "y": "280.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "380.0",
+          "y": "340.0"
+        },
+        "parms": "mine",
+        "type": ".dict",
+        "state": {
+          "contents": {
+            "key": "C",
+            "tempo": 120
+          }
+        },
+        "outputs": {
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "480.0",
+          "y": "340.0"
+        },
+        "parms": "theirs",
+        "type": ".dict",
+        "state": {
+          "contents": {
+            "key": "C",
+            "tempo": 100
+          }
+        },
+        "outputs": {
+          "output 1": {
+            "0": {
+              "Inlet": 1,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "380.0",
+          "y": "400.0"
+        },
+        "parms": "mine theirs",
+        "type": ".dict.compare",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "380.0",
+          "y": "460.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "220.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "470.0",
+          "y": "460.0",
+          "w": "120"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "640.0",
+          "y": "200.0",
+          "w": "300"
+        },
+        "parms": "1. Type 60 in the note box: ev now holds note 60. Click the button: the dict sends its reference to dict.route, which finds note and sends it out of the note outlet.",
+        "type": ".text"
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "640.0",
+          "y": "310.0",
+          "w": "300"
+        },
+        "parms": "2. Click clear, type 7 in the cc box and click the button: cc. Click clear and the button again: none. Set both: note, the first key in the arguments wins.",
+        "type": ".text"
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "640.0",
+          "y": "410.0",
+          "w": "300"
+        },
+        "parms": "3. mine holds tempo 120, theirs tempo 100. Click the right button: 0, then tempo, the key that differs. Type 100 in the tempo box and click it again: 1. Nothing more is sent, so the box keeps tempo.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "60.0",
+          "y": "280.0"
+        },
+        "parms": "set note",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "220.0",
+          "y": "280.0"
+        },
+        "parms": "set cc",
+        "type": ".prepend",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "340.0"
+        },
+        "parms": "clear",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "180.0",
+          "y": "340.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "400.0"
+        },
+        "parms": "ev",
+        "type": ".dict",
+        "outputs": {
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "460.0"
+        },
+        "parms": "ev note cc",
+        "type": ".dict.route",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "520.0"
+        },
+        "parms": "note",
+        "type": ".trigger",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

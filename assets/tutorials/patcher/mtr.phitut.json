@@ -1,0 +1,202 @@
+{
+  "title": "mtr — a multi-track recorder",
+  "covers": [
+    ".mtr"
+  ],
+  "summary": "Record two tracks of numbers with their timing, play them back together, and play one track on its own.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# mtr — a multi-track recorder\nAn mtr records the messages on each of its tracks with the time since the one before, and plays them back in the same rhythm. mtr 2 has two tracks: inlets 2 and 3 are their inputs, outlets 2 and 3 their playback, and the leftmost inlet works the whole recorder. Time is counted in audio blocks. The recordings are saved with the patch only after embed 1.\nThere is no editing window.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "record",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "640.0",
+          "y": "220.0",
+          "w": "300"
+        },
+        "parms": "1. Click record. Type a few numbers into the two boxes on the right, in any order and taking your time, then click stop.",
+        "type": ".text"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "640.0",
+          "y": "300.0",
+          "w": "300"
+        },
+        "parms": "2. Click play: the lower boxes replay what you typed, each track in its own rhythm. stop halts both, and play starts again from the beginning.",
+        "type": ".text"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "640.0",
+          "y": "400.0",
+          "w": "300"
+        },
+        "parms": "3. A word in a track's own inlet acts on that track only. The play on the right goes into track 2: it plays track 2 alone. Each track can record and stop on its own in the same way.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "165.0",
+          "y": "220.0"
+        },
+        "parms": "play",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "270.0",
+          "y": "220.0"
+        },
+        "parms": "stop",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "420.0",
+          "y": "220.0"
+        },
+        "parms": "play",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 2,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "300.0",
+          "y": "280.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "420.0",
+          "y": "280.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 2,
+              "Object": 7
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "340.0"
+        },
+        "parms": "2",
+        "type": ".mtr",
+        "outputs": {
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "400.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "160.0",
+          "y": "400.0"
+        },
+        "parms": "",
+        "type": ".i"
+      }
+    }
+  }
+}

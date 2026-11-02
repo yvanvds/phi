@@ -1,0 +1,317 @@
+{
+  "title": "bendin, xbendin, touchin and polyin — the wheel and pressure",
+  "covers": [
+    ".bendin",
+    ".xbendin",
+    ".xbendin2",
+    ".touchin",
+    ".polyin"
+  ],
+  "summary": "Read the pitch wheel at 7 and at 14 bits and as its two bytes, turn it into semitones, and read channel and per-key pressure.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# bendin, xbendin, touchin and polyin — the wheel and pressure\nThe pitch wheel sends pitch bend. bendin reports it at 7 bits, 0-127 with 64 at rest, as Max's does. xbendin reports all 14 bits, 0-16383 with 8192 at rest, and xbendin2 the same as its two bytes: coarse, then fine. Pressing a key harder once it is down sends aftertouch: touchin reports one pressure for the whole channel, polyin a pressure per key.\nThe first argument is the input port, counted from 0; the midiinfo tutorial lists them. A port that cannot be opened, or no keyboard at all, leaves the object silent, and the patch still loads. On Windows a port can be open in one place at a time, so untick it under Settings › MIDI for a patch to hear it. The second argument is a channel, 1-16, or 0 for all.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "230.0"
+        },
+        "parms": "0",
+        "type": ".bendin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 2
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "430.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "160.0",
+          "y": "430.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "510.0"
+        },
+        "parms": "0",
+        "type": ".touchin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "570.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "160.0",
+          "y": "570.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "300.0",
+          "y": "510.0"
+        },
+        "parms": "0",
+        "type": ".polyin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "300.0",
+          "y": "570.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "400.0",
+          "y": "570.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "500.0",
+          "y": "570.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "640.0",
+          "y": "220.0",
+          "w": "300"
+        },
+        "parms": "1. Move the pitch wheel. bendin's box follows in steps of 1 of 127, xbendin's in steps of 1 of 16383: over a two-semitone bend, 7 bits is a step of about three cents. Each also sends the channel.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "60.0",
+          "y": "290.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "640.0",
+          "y": "340.0",
+          "w": "300"
+        },
+        "parms": "2. scale maps xbendin onto -2 to 2 semitones: 8192 is 0, the wheel at rest. xbendin2 shows the same message as its coarse byte, which is bendin's value, and its fine byte: 128 steps between one coarse value and the next.",
+        "type": ".text"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "640.0",
+          "y": "500.0",
+          "w": "300"
+        },
+        "parms": "3. Hold a key and press harder. A keyboard with channel aftertouch sends touchin one pressure for all the keys held; one with polyphonic aftertouch sends polyin the key, its pressure and the channel.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "160.0",
+          "y": "290.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "300.0",
+          "y": "230.0"
+        },
+        "parms": "0",
+        "type": ".xbendin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "Count": 2
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "300.0",
+          "y": "290.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "400.0",
+          "y": "290.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "300.0",
+          "y": "350.0"
+        },
+        "parms": "0 16384 -2 2",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "300.0",
+          "y": "410.0"
+        },
+        "parms": "",
+        "type": ".f"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "370.0"
+        },
+        "parms": "0",
+        "type": ".xbendin2",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

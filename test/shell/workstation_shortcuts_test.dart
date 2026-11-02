@@ -5,7 +5,9 @@ import 'package:phi/app.dart';
 import 'package:phi/domain/session/session_state.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/shell/commands/command_palette.dart';
+import 'package:phi/shell/diagnostics/log_panel.dart';
 import 'package:phi/shell/shortcuts/keyboard_shortcuts_overlay.dart';
+import 'package:phi/shell/workstation.dart';
 import 'package:phi/surfaces/midi/midi_viewport.dart';
 import 'package:phi/surfaces/mix/mix_surface.dart';
 
@@ -164,4 +166,32 @@ void main() {
     session.dispose();
     await engine.dispose();
   });
+  // Issue #537: a field that lets go of focus used to drop primary focus onto
+  // the route's FocusScope — *above* the shell's CallbackShortcuts — so every
+  // global chord went dead until the user clicked inside the shell. The shell
+  // now owns a FocusScope of its own, so a release lands inside the bindings.
+  for (final disposition in UnfocusDisposition.values) {
+    testWidgets('Ctrl+J still opens the log after focus is released '
+        '(${disposition.name}, issue #537)', (tester) async {
+      final session = SessionState();
+      final engine = await pumpApp(tester, session);
+
+      final released = FocusManager.instance.primaryFocus!;
+      released.unfocus(disposition: disposition);
+      await tester.pumpAndSettle();
+      // Whatever now holds focus, it must sit under the shell's bindings — not
+      // on the route scope the workstation lives inside.
+      final routeScope = FocusScope.of(
+        tester.element(find.byType(Workstation)),
+      );
+      expect(FocusManager.instance.primaryFocus, isNot(same(routeScope)));
+
+      expect(find.byType(LogPanel), findsNothing);
+      await pressCtrl(tester, LogicalKeyboardKey.keyJ);
+      expect(find.byType(LogPanel), findsOneWidget);
+
+      session.dispose();
+      await engine.dispose();
+    });
+  }
 }

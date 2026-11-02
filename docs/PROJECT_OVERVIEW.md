@@ -3019,7 +3019,50 @@ main + app          (orchestration)
   `.prepend` because of #521) and strings (#503: `sprintf`, `regexp`,
   `tosymbol-fromsymbol`, `atoi-itoa`, `combine`, `spell`,
   `tolower-toupper`; typed text comes from `.textedit`; every list a string
-  tutorial reads must fit its `.l` uncut, which a stored `w` now allows, #533). The domain clock six reach a libYSE
+  tutorial reads must fit its `.l` uncut, which a stored `w` now allows, #533)
+  and I/O, messaging and values (#504: `s-r`, `forward`, `value`, `print`;
+  one `.r` per name because libYSE 3.1.0 delivers an `.s` to only one `.r` of
+  a name in a patch, yse-soundengine#1239; the `s-r` copy is reached at
+  `patcher.tutorials.s_r.<slot>`; `.print` lines reach the log panel through
+  `RealEngineLogSource`; the subpatch boundary objects wait for #481, #536)
+  and data stores and sequencers (#505: `coll`, `table`, `funbuff`, `bag`,
+  `capture`, `textfile`, `seq`, `qlist`, `mtr`; stored contents ship in each
+  object's saved `state`; a `.l` drops a bare int, so stores that send one
+  number at a time are gathered with `.trigger b … <word>` + `.zl group`; file
+  round trips use a relative name, which libYSE resolves against the process
+  working directory, so the tests switch it to a temp folder; `.seq`,
+  `.qlist` and `.mtr` count time in audio blocks, so their rhythms are
+  checked block by block)
+  and dictionaries (#506: `dict`, `dict-pack-unpack`, `dict-route-compare`,
+  `dict-iter-slice-strip`, `dict-join-group`, `dict-serialize`; each `.dict`'s
+  contents ship in its saved `state` as `contents`, and libYSE reloads them in
+  alphabetical key order, yse-soundengine#1243; multi-word commands are built
+  with `.prepend` because of #521; a dictionary is shown with
+  `.dict.serialize` into a `.l`; `.dict.deserialize` parses on a worker thread,
+  so the tests render with real pauses until its reference arrives)
+  and arrays (#507: `array`, `array-edit`, `array-slice-combine`,
+  `array-functional`, `array-order-random`, `array-stats`,
+  `array-sets-compare`, `array-convert`; each array's contents ship in the
+  saved `state` of an `.array` holder, and only the object that creates a
+  named array restores its contents, in stored-ID order, so the holders take
+  the lowest IDs after the title note (a saved patch with a binder placed
+  first reloads the array empty, yse-soundengine#1245); an array is shown with
+  `.array.tolist`/`.array.tostring` into a `.l`, or through `.prepend` when a
+  result can be a single int; the seeded `.array.shuffle` is checked by
+  reopening the tutorial)
+  and MIDI input (#508: `midiin-midiparse`, `notein`, `ctlin`,
+  `bendin-touchin`, `pgmin-rtin-sysexin`, `rpnin-nrpnin`, `midiinfo`; the
+  objects listen on port 0, and the tests play them through a real port
+  because libYSE has no call that injects MIDI into its input hub
+  (yse-soundengine#1247): `test/engine/test_support/midi_loopback.dart`
+  (`MidiLoopback`) sends raw bytes into ALSA's `Midi Through` port, which
+  comes back as an input. Where there is no such port (Windows, CI runners)
+  the keyboard steps skip and the rest still runs. At most eight MIDI input
+  objects in all open patches can listen to one port, and a closed patch
+  gives its slots back only once libYSE destroys it, a moment later
+  (yse-soundengine#1246). So the integration test renders with real pauses
+  after closing each tutorial. `.preset` recalls on the timer thread).
+  The domain clock six reach a libYSE
   domain clock by name; their clocks advance with the audio blocks whether or
   not the patch is mounted, are never destroyed by a patch object, and are not
   Phi's time domains (Phi mints its own `phi.midi.*` / `phi.metronome`
@@ -3050,7 +3093,12 @@ main + app          (orchestration)
   `patcher_routing_tutorials`,
   `patcher_randomness_tutorials`,
   `patcher_list_tutorials`,
-  `patcher_string_tutorials`: each opens its tutorials
+  `patcher_string_tutorials`,
+  `patcher_messaging_tutorials`,
+  `patcher_data_sequencer_tutorials`,
+  `patcher_dictionary_tutorials`,
+  `patcher_array_tutorials`,
+  `patcher_midi_input_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
   that no note or object overlaps another). Every one of them opens a
   tutorial through the shared `openTutorialBySearch(tester, type)` helper in

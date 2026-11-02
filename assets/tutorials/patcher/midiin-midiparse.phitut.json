@@ -1,0 +1,337 @@
+{
+  "title": "midiin, xmidiin and midiparse — raw MIDI and taking it apart",
+  "covers": [
+    ".midiin",
+    ".xmidiin",
+    ".midiparse"
+  ],
+  "summary": "Watch the raw bytes of a MIDI input port one at a time and framed into messages, split them into notes, controllers, program changes, pressure and bend with midiparse, and feed midiparse bytes by hand.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# midiin, xmidiin and midiparse — raw MIDI and taking it apart\nmidiin sends every byte that arrives on a MIDI input port as an int, in arrival order and uninterpreted. xmidiin frames the same bytes into messages and sends each one as a list, such as 144 60 100: a note-on for middle C, velocity 100, on channel 1. midiparse takes bytes, one at a time or as a list, and splits them into notes, controllers, program changes, pressure and pitch bend, with the channel.\nThe first argument is the input port, counted from 0; the midiinfo tutorial lists them. A port that cannot be opened, or no keyboard at all, leaves the object silent, and the patch still loads. On Windows a port can be open in one place at a time, so untick it under Settings › MIDI for a patch to hear it.\nAt most eight MIDI input objects, in all open patches together, can listen to one port. A ninth stays silent, and nothing says so (yse-soundengine#1246).\nMax's xmidiin sends one byte at a time, like midiin. Here it sends a whole message per list, so you can see where each message ends.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "230.0"
+        },
+        "parms": "0",
+        "type": ".midiin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "510.0",
+          "w": "110"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "190.0",
+          "y": "510.0",
+          "w": "110"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "320.0",
+          "y": "510.0",
+          "w": "110"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "580.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "160.0",
+          "y": "580.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "260.0",
+          "y": "580.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "360.0",
+          "y": "580.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "460.0",
+          "y": "580.0",
+          "w": "170"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "640.0",
+          "y": "220.0",
+          "w": "300"
+        },
+        "parms": "1. Play a key on a keyboard at port 0. midiin sends three ints, and its box shows the last: the velocity. xmidiin sends the three as one list. Let go and the list starts with 128, a note-off, or 144 with velocity 0: keyboards use either.",
+        "type": ".text"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "640.0",
+          "y": "340.0",
+          "w": "300"
+        },
+        "parms": "2. No keyboard? Feed midiparse by hand: click 144, 60 and 100 in turn. The third byte completes a note-on, and the note box shows 60 100. The channel box, second from the right, shows 1: the low four bits of the status byte, counted from 1.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "300.0",
+          "y": "230.0"
+        },
+        "parms": "0",
+        "type": ".xmidiin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "640.0",
+          "y": "460.0",
+          "w": "300"
+        },
+        "parms": "3. Click 60, then 0. A message may leave out its status byte when it repeats, which is called running status, so these two bytes are another note-on: 60 0, a release. Both kinds of release come out as velocity 0.",
+        "type": ".text"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "640.0",
+          "y": "570.0",
+          "w": "300"
+        },
+        "parms": "4. The outlets, left to right: note, poly pressure and controller as pairs, then program (1-128), channel pressure, pitch bend, channel, and everything else as a list of bytes, such as a SysEx dump or a clock tick. Pitch bend is only the coarse byte, 0-127 with 64 at rest, as in Max; xbendin reads all 14 bits.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "60.0",
+          "y": "290.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "300.0",
+          "y": "290.0",
+          "w": "240"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "370.0"
+        },
+        "parms": "144",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "170.0",
+          "y": "370.0"
+        },
+        "parms": "60",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "280.0",
+          "y": "370.0"
+        },
+        "parms": "100",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "390.0",
+          "y": "370.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "440.0"
+        },
+        "parms": "",
+        "type": ".midiparse",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          },
+          "output 3": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          },
+          "output 4": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          },
+          "output 5": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          },
+          "output 6": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          },
+          "output 7": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}
