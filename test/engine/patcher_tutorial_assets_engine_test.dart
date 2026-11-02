@@ -14,6 +14,8 @@ import 'package:phi/engine/state/tutorial/patch_tutorial_session.dart';
 import 'package:phi/shell/diagnostics/engine_log_level.dart';
 import 'package:yse/yse.dart';
 
+import '../surfaces/patcher/test_support/engine_file_dir.dart';
+
 import 'test_support/midi_loopback.dart';
 
 /// The **bundled tutorials** against the real engine, headless (issue #489):
@@ -4623,22 +4625,34 @@ void main() {
       }
 
       // Runs [body] with the process's working directory set to a fresh temp
-      // folder, where a relative file name lands.
-      void inTempDir(void Function(Directory dir) body) {
-        final dir = Directory.systemTemp.createTempSync('phi_505_');
+      // folder and hands it the folder where a relative file name lands
+      // ([engineFileDir]: that temp folder on Linux, the executable's folder
+      // on Windows, #541), cleared of [names] before and after.
+      void inTempDir(List<String> names, void Function(Directory dir) body) {
+        final temp = Directory.systemTemp.createTempSync('phi_505_');
         final old = Directory.current;
-        Directory.current = dir;
+        Directory.current = temp;
+        final dir = engineFileDir();
+        void clear() {
+          for (final n in names) {
+            final f = File('${dir.path}${Platform.pathSeparator}$n');
+            if (f.existsSync()) f.deleteSync();
+          }
+        }
+
+        clear();
         try {
           body(dir);
         } finally {
+          clear();
           Directory.current = old;
-          dir.deleteSync(recursive: true);
+          temp.deleteSync(recursive: true);
         }
       }
 
       test('coll: recall, next and dump, a shared name, a file', () {
         open('coll');
-        inTempDir((dir) {
+        inTempDir(['cues.txt'], (dir) {
           final data = at('.l', 60, 320);
           final address = at('.l', 250, 380);
           final recall = at('.i', 60, 200);
@@ -4702,8 +4716,9 @@ void main() {
             inlet: 0,
           );
           click(at('.m', 60, 660));
-          final file = File('${dir.path}/cues.txt');
+          final file = File('${dir.path}${Platform.pathSeparator}cues.txt');
           renderUntil(file.existsSync);
+          expect(file.existsSync(), isTrue, reason: whereIs('cues.txt'));
           expect(file.readAsStringSync(), contains('2, 62 65 69;'));
           expect(file.readAsStringSync(), contains('intro, 0 0 0;'));
           click(msg('clear'));
@@ -4875,7 +4890,7 @@ void main() {
 
       test('textfile: lines with cr, line n, query, a file', () {
         open('textfile');
-        inTempDir((dir) {
+        inTempDir(['lines.txt'], (dir) {
           final number = at('.i', 60, 200);
           final count = at('.i', 200, 510);
           final shown = at('.l', 60, 570);
@@ -4914,8 +4929,9 @@ void main() {
             inlet: 0,
           );
           click(at('.m', 200, 270));
-          final file = File('${dir.path}/lines.txt');
+          final file = File('${dir.path}${Platform.pathSeparator}lines.txt');
           renderUntil(file.existsSync);
+          expect(file.existsSync(), isTrue, reason: whereIs('lines.txt'));
           expect(file.readAsLinesSync(), ['60 64 67', 'intro']);
           click(msg('clear'));
           click(msg('query'));

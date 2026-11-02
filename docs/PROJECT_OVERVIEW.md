@@ -3030,7 +3030,8 @@ main + app          (orchestration)
   object's saved `state`; a `.l` drops a bare int, so stores that send one
   number at a time are gathered with `.trigger b … <word>` + `.zl group`; file
   round trips use a relative name, which libYSE resolves against the process
-  working directory, so the tests switch it to a temp folder; `.seq`,
+  working directory on Linux but the executable's folder on Windows
+  (yse-soundengine#1249, #541), so the tests look in `engineFileDir()`; `.seq`,
   `.qlist` and `.mtr` count time in audio blocks, so their rhythms are
   checked block by block)
   and dictionaries (#506: `dict`, `dict-pack-unpack`, `dict-route-compare`,

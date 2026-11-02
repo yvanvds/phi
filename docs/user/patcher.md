@@ -268,8 +268,9 @@ for:
   (`capture`), lines of text (`textfile`), recorded MIDI played back, also on
   a domain clock (`seq`), a timed score that sends to `r` names (`qlist`) and
   a multi-track recorder (`mtr`). The `coll` and `textfile` tutorials write a
-  file (`cues.txt`, `lines.txt`) into the folder Phi was started from and read
-  it back.
+  file (`cues.txt`, `lines.txt`) and read it back. A relative file name is
+  kept next to `phi.exe` on Windows, and in the folder Phi was started from
+  on Linux.
 - **Dictionaries:** a named store of keys and values that is saved with the
   patch and shared by name (`dict`), a dictionary built from inlets and taken
   apart again (`dict.pack` and `dict.unpack`), routing on the keys it holds
