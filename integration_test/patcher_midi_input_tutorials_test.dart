@@ -469,13 +469,11 @@ void main() {
       of: find.byType(LogPanel),
       matching: find.textContaining(text),
     );
+    // The audio tutorials before this one logged no engine error (#539), so
+    // no badge is up and the toggle opens the whole log, print lines too.
+    expect(find.byKey(LogPanelToggle.badgeKey), findsNothing);
     await tap(find.byKey(LogPanelToggle.toggleKey));
     expect(find.byType(LogPanel), findsOneWidget, reason: 'the log toggle');
-    // The audio tutorials before this one logged an engine error (#539), so
-    // the toggle opened the log filtered to errors: show everything.
-    if (find.byKey(LogPanel.clearKey).evaluate().isNotEmpty) {
-      await tap(find.byKey(LogPanel.clearKey));
-    }
     await tap(buttonAt(60, 230));
     final inputs = System.instance.midiInDeviceCount;
     expect(await shown('.i', 300, 370), inputs);

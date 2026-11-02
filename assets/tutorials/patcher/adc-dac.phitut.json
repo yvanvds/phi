@@ -14,7 +14,7 @@
           "y": "20.0",
           "w": "640"
         },
-        "parms": "# ~adc and ~dac — a patch's audio in and out\nA ~dac is the patch's audio output: its left inlet is the left channel, its right inlet the right, passed on to whatever hosts the patch. A ~adc is the input: when the patch runs as an insert effect, its outlets carry the left and right channel of the audio it processes. A patch is silent until a signal reaches a ~dac.\nMax's adc~ and dac~ talk to the sound card, and take channel numbers as arguments. Here they talk to the bus the patch is placed on, two channels each, with no arguments.",
+        "parms": "# ~adc and ~dac — a patch's audio in and out\nA ~dac is the patch's audio output: what reaches its inlet is passed on to whatever hosts the patch. A ~adc is the input: when the patch runs as an insert effect, its outlet carries the audio it processes. A patch is silent until a signal reaches a ~dac.\nMax's adc~ and dac~ talk to the sound card, and take channel numbers as arguments. Here they talk to the bus the patch is placed on, with no arguments. A patch has one audio channel, so each has a single inlet or outlet.",
         "type": ".text"
       },
       "object 1": {
@@ -91,13 +91,6 @@
               "Object": 16
             },
             "Count": 1
-          },
-          "output 1": {
-            "0": {
-              "Inlet": 0,
-              "Object": 17
-            },
-            "Count": 1
           }
         }
       },
@@ -133,11 +126,7 @@
               "Inlet": 1,
               "Object": 16
             },
-            "1": {
-              "Inlet": 1,
-              "Object": 17
-            },
-            "Count": 2
+            "Count": 1
           }
         }
       },
@@ -153,7 +142,7 @@
           "output 0": {
             "0": {
               "Inlet": 0,
-              "Object": 18
+              "Object": 17
             },
             "Count": 1
           }
@@ -165,29 +154,11 @@
           "x": "60.0",
           "y": "540.0"
         },
-        "parms": "0",
-        "type": "~*",
-        "outputs": {
-          "output 0": {
-            "0": {
-              "Inlet": 1,
-              "Object": 18
-            },
-            "Count": 1
-          }
-        }
-      },
-      "object 18": {
-        "ID": 18,
-        "gui": {
-          "x": "60.0",
-          "y": "620.0"
-        },
         "parms": "",
         "type": "~dac"
       },
-      "object 19": {
-        "ID": 19,
+      "object 18": {
+        "ID": 18,
         "gui": {
           "x": "560.0",
           "y": "150.0",
@@ -214,8 +185,8 @@
           }
         }
       },
-      "object 20": {
-        "ID": 20,
+      "object 19": {
+        "ID": 19,
         "gui": {
           "x": "560.0",
           "y": "280.0",
@@ -224,18 +195,18 @@
         "parms": "2. The noise below the right ~dac is running, but nothing connects it to a ~dac, so you never hear it.",
         "type": ".text"
       },
-      "object 21": {
-        "ID": 21,
+      "object 20": {
+        "ID": 20,
         "gui": {
           "x": "560.0",
           "y": "370.0",
           "w": "300"
         },
-        "parms": "3. ~adc into ~dac is a passthrough with a gain: the slider sets both ~*, the left channel and the right. In a tutorial the patch plays as a source on master, and ~adc is silent.",
+        "parms": "3. ~adc into ~dac is a passthrough with a gain: the slider sets the ~*. In a tutorial the patch plays as a source on master, and ~adc is silent.",
         "type": ".text"
       },
-      "object 22": {
-        "ID": 22,
+      "object 21": {
+        "ID": 21,
         "gui": {
           "x": "560.0",
           "y": "500.0",
@@ -330,11 +301,7 @@
               "Inlet": 0,
               "Object": 9
             },
-            "1": {
-              "Inlet": 1,
-              "Object": 9
-            },
-            "Count": 2
+            "Count": 1
           }
         }
       },
@@ -352,11 +319,7 @@
               "Inlet": 0,
               "Object": 10
             },
-            "1": {
-              "Inlet": 1,
-              "Object": 10
-            },
-            "Count": 2
+            "Count": 1
           }
         }
       },

@@ -3,12 +3,15 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phi/domain/log/log_level.dart' as phi;
 import 'package:phi/domain/patcher/patch_type_name.dart';
 import 'package:phi/domain/patcher/tutorial/patch_tutorial.dart';
 import 'package:phi/domain/patcher/tutorial/tutorial_catalog.dart';
 import 'package:phi/domain/patcher/tutorial/tutorial_slug.dart';
 import 'package:phi/engine/bridge/patcher_graph_snapshot.dart';
 import 'package:phi/engine/bridge/real_patcher_gateway.dart';
+import 'package:phi/engine/state/tutorial/patch_tutorial_session.dart';
+import 'package:phi/shell/diagnostics/engine_log_level.dart';
 import 'package:yse/yse.dart';
 
 import 'test_support/midi_loopback.dart';
@@ -132,7 +135,7 @@ void main() {
   test('every tutorial parses on the real engine and has a title note', () {
     for (final slug in index.slugs) {
       final tutorial = load(slug);
-      final inst = gateway.createInstance();
+      final inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, jsonEncode(tutorial.payload.dump));
       final graph = gateway.enumerate(inst);
       expect(graph.objects, isNotEmpty, reason: '$slug parsed to nothing');
@@ -145,9 +148,53 @@ void main() {
     }
   });
 
+  // A tutorial opens as a patch with one main output, so its ~dac has one
+  // inlet. A cord into an inlet the engine does not have is refused with
+  // "Patcher: Invalid Connection", an error the log badges (#539). Every
+  // tutorial is opened through PatchTutorialSession, the path the app takes,
+  // and must log no engine error at all. (The tests below open their
+  // instances with one main output too, the way the app does.)
+  test('every tutorial opens the way the app opens it without an engine '
+      'error (#539)', () async {
+    final lines = <String>[];
+    final sub = Log.instance.messages.listen(lines.add);
+    addTearDown(sub.cancel);
+    final errors = <String>[];
+    for (final slug in index.slugs) {
+      lines.clear();
+      final session = PatchTutorialSession.open(
+        gateway,
+        tutorial: load(slug),
+        slug: slug,
+      );
+      // The engine's lines arrive through a port, in order: once this marker
+      // is back, every line the open logged is in [lines].
+      final marker = 'end of tutorial $slug (#539)';
+      Log.instance.sendMessage(marker);
+      final clock = Stopwatch()..start();
+      while (!lines.any((l) => l.contains(marker)) &&
+          clock.elapsed < const Duration(seconds: 10)) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      expect(
+        lines.any((l) => l.contains(marker)),
+        isTrue,
+        reason: 'the engine log reached the test after $slug',
+      );
+      session.dispose();
+      for (final line in lines) {
+        if (line.contains(marker)) continue;
+        if (engineLogLevel(line) == phi.LogLevel.error) {
+          errors.add('$slug: $line');
+        }
+      }
+    }
+    expect(errors, isEmpty);
+  });
+
   test('the metro tutorial sets itself up on load', () {
     final tutorial = load('metro');
-    final inst = gateway.createInstance();
+    final inst = gateway.createInstance(mainOutputs: 1);
     gateway.parseJson(inst, jsonEncode(tutorial.payload.dump));
     final graph = gateway.enumerate(inst);
     final numbers = [
@@ -174,7 +221,7 @@ void main() {
     late PatcherGraphSnapshot graph;
 
     void open(String slug) {
-      inst = gateway.createInstance();
+      inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
       graph = gateway.enumerate(inst);
     }
@@ -320,7 +367,7 @@ void main() {
     late PatcherGraphSnapshot graph;
 
     void open(String slug) {
-      inst = gateway.createInstance();
+      inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
       graph = gateway.enumerate(inst);
     }
@@ -486,7 +533,7 @@ void main() {
     late PatcherGraphSnapshot graph;
 
     void open(String slug) {
-      inst = gateway.createInstance();
+      inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
       graph = gateway.enumerate(inst);
     }
@@ -632,7 +679,7 @@ void main() {
     late PatcherGraphSnapshot graph;
 
     void open(String slug) {
-      inst = gateway.createInstance();
+      inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
       graph = gateway.enumerate(inst);
     }
@@ -882,7 +929,7 @@ void main() {
     }
 
     void open(String slug) {
-      inst = gateway.createInstance();
+      inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
       graph = gateway.enumerate(inst);
       gateway.mountAsSource(inst);
@@ -1129,7 +1176,7 @@ void main() {
     }
 
     void open(String slug, {bool mount = false}) {
-      inst = gateway.createInstance();
+      inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
       graph = gateway.enumerate(inst);
       if (!mount) return;
@@ -1471,7 +1518,7 @@ void main() {
     }
 
     void open(String slug, {bool mount = false}) {
-      inst = gateway.createInstance();
+      inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
       graph = gateway.enumerate(inst);
       if (!mount) return;
@@ -1937,7 +1984,7 @@ void main() {
 
     // Every tutorial is mounted while open (#528); so is this copy.
     void open(String slug) {
-      inst = gateway.createInstance();
+      inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
       graph = gateway.enumerate(inst);
       gateway.mountAsSource(inst);
@@ -2376,7 +2423,7 @@ void main() {
 
     // Every tutorial is mounted while open (#528); so is this copy.
     void open(String slug) {
-      inst = gateway.createInstance();
+      inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
       graph = gateway.enumerate(inst);
       gateway.mountAsSource(inst);
@@ -2701,7 +2748,7 @@ void main() {
 
     // Every tutorial is mounted while open (#528); so is this copy.
     void open(String slug) {
-      inst = gateway.createInstance();
+      inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
       graph = gateway.enumerate(inst);
       gateway.mountAsSource(inst);
@@ -2842,9 +2889,9 @@ void main() {
       open('loadbang-loadmess');
       final gain = at('.f', 60, 220);
       expect(number(gain), closeTo(0.1, 1e-6), reason: 'loadmess 0.1');
-      // Master reads a centred mono sine 3 dB up.
+      // A tutorial is one channel, centred on master: each side 3 dB down.
       final level = loudness();
-      expect(level, closeTo(0.1 * math.sqrt2, 0.01), reason: 'the sine at 0.1');
+      expect(level, closeTo(0.1 / math.sqrt2, 0.01), reason: 'the sine at 0.1');
       final ticks = at('.i', 60, 720);
       expect(value(at('.t', 60, 500)), 'on', reason: 'loadbang');
       final first = int.parse(value(ticks));
@@ -2978,7 +3025,7 @@ void main() {
 
     // Every tutorial is mounted while open (#528); so is this copy.
     void open(String slug) {
-      inst = gateway.createInstance();
+      inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
       graph = gateway.enumerate(inst);
       gateway.mountAsSource(inst);
@@ -3305,7 +3352,7 @@ void main() {
 
     // Every tutorial is mounted while open (#528); so is this copy.
     void open(String slug) {
-      inst = gateway.createInstance();
+      inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
       graph = gateway.enumerate(inst);
       gateway.mountAsSource(inst);
@@ -3721,7 +3768,7 @@ void main() {
 
     // Every tutorial is mounted while open (#528); so is this copy.
     void open(String slug) {
-      inst = gateway.createInstance();
+      inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
       graph = gateway.enumerate(inst);
       gateway.mountAsSource(inst);
@@ -3996,7 +4043,7 @@ void main() {
 
     // Every tutorial is mounted while open (#528); so is this copy.
     void open(String slug) {
-      inst = gateway.createInstance();
+      inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
       graph = gateway.enumerate(inst);
       gateway.mountAsSource(inst);
@@ -4529,7 +4576,7 @@ void main() {
 
       // Every tutorial is mounted while open (#528).
       void open(String slug) {
-        inst = gateway.createInstance();
+        inst = gateway.createInstance(mainOutputs: 1);
         gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
         graph = gateway.enumerate(inst);
         mount(inst);
@@ -5017,7 +5064,7 @@ void main() {
           inInclusiveRange(gap ~/ 2 - 3, gap ~/ 2 + 3),
         );
         // Title note: only r objects in this patch hear it.
-        final other = gateway.createInstance();
+        final other = gateway.createInstance(mainOutputs: 1);
         others.add(other);
         mount(other);
         final (_, theirs) = probe(other, '.r', 'pitch', '.i');
@@ -5127,7 +5174,7 @@ void main() {
 
     // Every tutorial is mounted while open (#528).
     void open(String slug) {
-      inst = gateway.createInstance();
+      inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
       graph = gateway.enumerate(inst);
       gateway.mountAsSource(inst);
@@ -5230,7 +5277,7 @@ void main() {
       gateway.sendList(inst, top, 0, 'set amp 1');
       expect(json('synth'), '{"voice":{"1":{"freq":440}},"amp":1}');
       final saved = gateway.dumpJson(inst);
-      final copy = gateway.createInstance();
+      final copy = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(copy, saved);
       final reloaded = gateway
           .enumerate(copy)
@@ -5492,7 +5539,7 @@ void main() {
     }
 
     void open(String slug) {
-      inst = gateway.createInstance();
+      inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, jsonEncode(load(slug).payload.dump));
       mount();
     }
@@ -5631,21 +5678,21 @@ void main() {
       final saved = gateway.dumpJson(inst);
       gateway.disposeInstance(inst);
       render(20);
-      inst = gateway.createInstance();
+      inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, saved);
       mount();
       click(at('.m', 60, 220));
       expect(value(at('.l', 60, 460)), 'got 72 67 64 60');
       // The title note: with another object of the name placed first, the
       // saved contents do not load (yse-soundengine#1245).
-      final first = gateway.createInstance();
+      final first = gateway.createInstance(mainOutputs: 1);
       gateway.createObject(first, '.array.length', args: 'late');
       final late = gateway.createObject(first, '.array', args: 'late');
       gateway.sendList(first, late, 0, 'append 1 2');
       final unloaded = gateway.dumpJson(first);
       gateway.disposeInstance(first);
       render(20);
-      final again = gateway.createInstance();
+      final again = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(again, unloaded);
       final reloaded = gateway
           .enumerate(again)
@@ -6093,7 +6140,7 @@ void main() {
         final args = (o['parms']! as String).split(' ');
         o['parms'] = ['$port', ...args.skip(1)].join(' ');
       }
-      inst = gateway.createInstance();
+      inst = gateway.createInstance(mainOutputs: 1);
       gateway.parseJson(inst, jsonEncode(dump));
       graph = gateway.enumerate(inst);
       gateway.mountAsSource(inst);

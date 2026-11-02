@@ -351,5 +351,8 @@ like any other insert: you can reorder it or move it to another bus, and
 deleting the patch warns you that the insert uses it. The insert runs the
 same patch you see on the canvas, so an edit is heard at once.
 
+A patch, like a tutorial, has one audio channel: its `~dac` has a single
+inlet and its `~adc` a single outlet.
+
 A patch's edits, placement and the positions of its objects are saved with
 the project.
