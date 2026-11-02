@@ -4,12 +4,14 @@ import 'dart:ui';
 import 'package:yse/yse.dart';
 
 import '../../domain/patcher/patch_port_kind.dart';
+import 'patch_clock.dart';
 import 'patch_object_descriptor.dart';
 import 'patcher_gateway.dart';
 import 'patcher_graph_snapshot.dart';
 import 'patcher_insert_source.dart';
 import 'patcher_node_snapshot.dart';
 import 'real_materialised_synth.dart' show MixBusResolver;
+import 'real_patch_clock.dart';
 
 /// Production [PatcherGateway] that forwards every call to `package:yse`'s
 /// `Patcher` and `Sound.fromPatcher`.
@@ -373,6 +375,15 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
       final h = inst.patcher.getHandleAt(i);
       final id = h.id;
       if (id != null) inst.handles[id] = h;
+    }
+  }
+
+  @override
+  PatchClock? publishClock(String name, {required double tempo}) {
+    try {
+      return RealPatchClock(DomainClock(name, tempo: tempo));
+    } on YseException {
+      return null;
     }
   }
 

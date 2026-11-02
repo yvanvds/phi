@@ -12,11 +12,14 @@ import 'package:phi/domain/patcher/nodes_field.dart';
 import 'package:phi/domain/patcher/patch_port_kind.dart';
 import 'package:phi/domain/patcher/preset_args.dart';
 import 'package:phi/domain/patcher/slider_range.dart';
+import 'package:phi/engine/bridge/patch_clock.dart';
 import 'package:phi/engine/bridge/patch_object_descriptor.dart';
 import 'package:phi/engine/bridge/patcher_gateway.dart';
 import 'package:phi/engine/bridge/patcher_graph_snapshot.dart';
 import 'package:phi/engine/bridge/patcher_node_snapshot.dart';
 import 'package:yse/yse.dart';
+
+import 'fake_patch_clock.dart';
 
 /// In-memory [PatcherGateway] used in unit and widget tests.
 ///
@@ -977,6 +980,31 @@ class FakePatcherGateway implements PatcherGateway {
         );
       }
     }
+  }
+
+  /// Every clock [publishClock] handed out, live or disposed, in order.
+  final List<FakePatchClock> publishedClocks = [];
+
+  /// Clock names something else already owns — a patch's `.transport` that
+  /// made the clock first. [publishClock] refuses them, as the engine does.
+  final Set<String> claimedClockNames = {};
+
+  /// The live (undisposed) published clock named [name], or `null`.
+  FakePatchClock? clockNamed(String name) {
+    for (final c in publishedClocks) {
+      if (c.name == name && !c.disposed) return c;
+    }
+    return null;
+  }
+
+  @override
+  PatchClock? publishClock(String name, {required double tempo}) {
+    if (claimedClockNames.contains(name) || clockNamed(name) != null) {
+      return null;
+    }
+    final clock = FakePatchClock(name, tempo: tempo, publishedAt: calls.length);
+    publishedClocks.add(clock);
+    return clock;
   }
 
   @override

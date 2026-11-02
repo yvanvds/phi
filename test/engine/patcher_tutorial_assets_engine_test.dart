@@ -2466,6 +2466,10 @@ void main() {
     void wait(int ms) => sleep(Duration(milliseconds: ms));
 
     test('transport: start, stop, the tempo, a glide, the beat on a bang', () {
+      // Phi's drum domain clock, as the engine publishes it for a new
+      // project (#529).
+      final drum = gateway.publishClock('domain.drum', tempo: 124)!;
+      addTearDown(drum.dispose);
       open('transport');
       final beat = at('.f', 60, 440);
       final bpm = at('.f', 220, 440);
@@ -2523,6 +2527,27 @@ void main() {
       expect(number(beat), greaterThan(before + 1.5), reason: 'followed');
       toggle(at('.t', 540, 250), 0);
       click(msg('stop'));
+      // when domain.drum reads Phi's drum domain clock (#529).
+      final drumBeat = at('.f', 300, 680);
+      final drumBpm = at('.f', 440, 680);
+      void askDrum() => click(at('.b', 300, 560));
+      askDrum();
+      expect(number(drumBpm), 124, reason: 'the drum domain\'s tempo');
+      final from = number(drumBeat);
+      audio(1000);
+      askDrum();
+      expect(number(drumBeat), closeTo(from + 124 / 60, 0.02));
+      // Phi re-tempos the clock when the domain's tempo changes.
+      drum.setTempo(62);
+      render(1);
+      final slower = number(drumBeat);
+      askDrum();
+      final at62 = number(drumBeat);
+      expect(number(drumBpm), 62);
+      expect(at62, closeTo(slower, 0.02));
+      audio(1000);
+      askDrum();
+      expect(number(drumBeat), closeTo(at62 + 62 / 60, 0.02));
     });
 
     test('tempo: quarter notes round a bar, the tempo, the division', () {
@@ -2611,6 +2636,8 @@ void main() {
     });
 
     test('setclock: two clocks, a metro on each, a delay in beats', () {
+      final drum = gateway.publishClock('domain.drum', tempo: 124)!;
+      addTearDown(drum.dispose);
       open('setclock');
       final left = at('.i', 60, 470);
       final right = at('.i', 300, 470);
@@ -2646,6 +2673,19 @@ void main() {
       click(msg('60'));
       audio(4200);
       expect(value(arrived), '3', reason: 'and on again');
+      // A metro on Phi's drum domain clock (#529): once a beat at 124 BPM,
+      // and at the new tempo once Phi changes it.
+      final ticks = at('.i', 360, 790);
+      toggle(at('.t', 360, 620), 1);
+      expect(value(ticks), '1', reason: 'at once');
+      audio(2000);
+      expect(whole(ticks), 5, reason: '4.1 beats in 2 s at 124');
+      drum.setTempo(248);
+      render(1);
+      final before = whole(ticks);
+      audio(1000);
+      expect(whole(ticks) - before, inInclusiveRange(4, 5), reason: 'at 248');
+      toggle(at('.t', 360, 620), 0);
     });
 
     test('when: beat and tempo on any input; asking makes no clock', () {

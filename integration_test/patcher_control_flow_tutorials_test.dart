@@ -33,6 +33,7 @@ import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
 import '../test/surfaces/patcher/test_support/expect_list_boxes_uncut.dart';
 import '../test/surfaces/patcher/test_support/open_tutorial_by_search.dart';
+import '../test/surfaces/patcher/test_support/type_into_field.dart';
 
 /// End-to-end proof of the **control flow and ordering tutorials** (issue
 /// #499) through the real [PhiApp]: real rail navigation, fonts and
@@ -282,21 +283,9 @@ void main() {
           matching: find.byType(TextField),
         ),
       );
-      expect(field, findsOneWidget, reason: '$type at ($x, $y)');
-      // enterText asks for the keyboard only the first time it types into a
-      // field (the binding remembers it as focusedEditable): click the box,
-      // and forget the remembered field so typing into it twice works (#527).
-      await tester.tap(field);
-      await tester.pumpAndSettle();
-      tester.binding.focusedEditable = null;
-      await tester.enterText(field, text);
-      expect(
-        tester.widget<TextField>(field).focusNode!.hasFocus,
-        isTrue,
-        reason: 'the click focused $type at ($x, $y)',
-      );
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
+      // Through the shared helper, which survives the window going
+      // inactive mid-typing (#544).
+      await typeIntoField(tester, field, text, what: '$type at ($x, $y)');
     }
 
     // Whether a list box on the canvas shows [text] in full, once the

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/surfaces/patcher/tutorial/patch_tutorial_browser.dart';
 
+import 'until_window_active.dart';
+
 /// **The** way a tutorial integration test opens a tutorial (issue #527).
 ///
 /// Types [type] into the Tutorials browser's search field
@@ -108,7 +110,7 @@ Iterable<String> _builtEntries() sync* {
 /// window either, and the field gets its focus back with the window.
 ///
 /// So this helper gives an inactive window a moment to come back (see
-/// [_untilWindowActive]), taps the field, forgets the remembered
+/// [untilWindowActive]), taps the field, forgets the remembered
 /// `focusedEditable` so `enterText` asks for the keyboard again right before
 /// it types, checks the field holds the text, and types again (up to three
 /// tries) if the window was deactivated in that last instant.
@@ -123,7 +125,7 @@ Future<void> searchTutorials(WidgetTester tester, String query) async {
   final search = find.byKey(PatchTutorialBrowser.searchKey);
   String typed() => tester.widget<TextField>(search).controller!.text;
   for (var attempt = 0; attempt < 3 && typed() != query; attempt++) {
-    await _untilWindowActive(tester);
+    await untilWindowActive(tester);
     await tester.tap(search);
     await tester.pumpAndSettle();
     tester.binding.focusedEditable = null;
@@ -137,30 +139,4 @@ Future<void> searchTutorials(WidgetTester tester, String query) async {
         'the Tutorials search field holds "$query" '
         '(app lifecycle: ${WidgetsBinding.instance.lifecycleState})',
   );
-}
-
-/// How long, in real time, [_untilWindowActive] waits for an inactive window
-/// to come back before typing anyway.
-///
-/// Long enough for a live desktop to hand focus back to the test window
-/// (a notification closing, the compositor settling a freshly mapped
-/// window); short, because under `xvfb-run` the window may never come back
-/// and each search used to wait out a 10 s cap, about 13 s with the pumps
-/// (#542).
-const _windowActiveGrace = Duration(seconds: 1);
-
-/// Waits, in real time, up to [_windowActiveGrace] until the app is
-/// `resumed`: its window has OS focus, so the field's text input connection
-/// stays open. Returns early on `resumed`, and gives up quietly after the
-/// grace: [searchTutorials] checks the text and types again if it was lost.
-Future<void> _untilWindowActive(WidgetTester tester) async {
-  final waited = Stopwatch()..start();
-  while (waited.elapsed < _windowActiveGrace) {
-    final state = WidgetsBinding.instance.lifecycleState;
-    if (state == null || state == AppLifecycleState.resumed) return;
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
-    await tester.pump();
-  }
 }

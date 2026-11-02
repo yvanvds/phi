@@ -35,6 +35,7 @@ import '../test/engine/test_doubles/fake_yse_gateway.dart';
 import '../test/surfaces/patcher/test_support/engine_file_dir.dart';
 import '../test/surfaces/patcher/test_support/expect_list_boxes_uncut.dart';
 import '../test/surfaces/patcher/test_support/open_tutorial_by_search.dart';
+import '../test/surfaces/patcher/test_support/type_into_field.dart';
 
 /// End-to-end proof of the **data store and sequencer tutorials** (issue
 /// #505) through the real [PhiApp]: real rail navigation, fonts and layout,
@@ -264,13 +265,9 @@ void main() {
     // Types [text] into the number box at ([x], [y]) and commits it.
     Future<void> typeInto(String type, double x, double y, String text) async {
       final field = numberField(type, x, y);
-      expect(field, findsOneWidget, reason: '$type at ($x, $y)');
-      await tester.tap(field);
-      await tester.pumpAndSettle();
-      tester.binding.focusedEditable = null;
-      await tester.enterText(field, text);
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
+      // Through the shared helper, which survives the window going
+      // inactive mid-typing (#544).
+      await typeIntoField(tester, field, text, what: '$type at ($x, $y)');
     }
 
     // The engine's value of the object [type] at ([x], [y]), read at once

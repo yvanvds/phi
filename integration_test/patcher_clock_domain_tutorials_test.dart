@@ -7,11 +7,13 @@ import 'package:phi/design/widgets/patcher/patch_message_box.dart';
 import 'package:phi/design/widgets/patcher/patch_note_box.dart';
 import 'package:phi/design/widgets/patcher/patch_toggle_square.dart';
 import 'package:phi/domain/project/app_settings/app_settings_controller.dart';
+import 'package:phi/domain/project/entity_address.dart';
 import 'package:phi/domain/project/lifecycle/project_controller.dart';
 import 'package:phi/domain/project/registry_kinds.dart';
 import 'package:phi/domain/project/registry_seed.dart';
 import 'package:phi/domain/project/store/registry_codecs.dart';
 import 'package:phi/domain/session/session_state.dart';
+import 'package:phi/domain/time_domains/time_domain.dart';
 import 'package:phi/engine/bridge/real_patcher_gateway.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
@@ -120,6 +122,13 @@ void main() {
     await tester.pumpAndSettle();
 
     final library = engine.patchLibrary;
+    // The new project's drum time domain, at 124 BPM: a patch follows it by
+    // its address (#529).
+    final drumDomain = EntityAddress.parse('domain.drum');
+    expect(
+      project.registry.entityAt(drumDomain)?.payload,
+      const TimeDomain(name: 'drum', tempo: 124),
+    );
     final patchCount = project.registry
         .childrenOfKind(RegistryKinds.patch)
         .length;
@@ -311,6 +320,31 @@ void main() {
     expect(read(bpm), 240, reason: 'glided to 240');
     expect(whole(at('.i', 60, 550)), (read(beat) / 4).floor(), reason: 'bar');
     await tap(message('stop'));
+    // when domain.drum follows Phi's drum time domain (#529): its tempo and
+    // a beat that runs, START or not, and a tempo change in the project.
+    final drumBeat = at('.f', 300, 680);
+    final drumBpm = at('.f', 440, 680);
+    Future<void> askDrum() => tap(buttonAt(300, 560));
+    await askDrum();
+    expect(read(drumBpm), 124, reason: 'the new project\'s drum tempo');
+    final drumFrom = read(drumBeat);
+    audio(1000);
+    await askDrum();
+    expect(read(drumBeat), closeTo(drumFrom + 124 / 60, 0.1));
+    expect(await shown('.f', 440, 680), 124, reason: 'on screen');
+    project.registry.updateEntityPayload(
+      drumDomain,
+      const TimeDomain(name: 'drum', tempo: 62),
+    );
+    await tester.pump();
+    audio(20);
+    await askDrum();
+    expect(read(drumBpm), 62, reason: 'follows the domain');
+    project.registry.updateEntityPayload(
+      drumDomain,
+      const TimeDomain(name: 'drum', tempo: 124),
+    );
+    await tester.pump();
     await close();
 
     // ── tempo: quarter notes round a bar, the tempo, the division ───────────
@@ -388,7 +422,7 @@ void main() {
     at = await open(
       '.setclock',
       slug: 'setclock',
-      notes: 6,
+      notes: 7,
       heading: 'runs from the moment the patch opens',
     );
     final left = at('.i', 60, 470);
@@ -411,6 +445,28 @@ void main() {
     audio(600);
     expect(value(arrived), '1');
     expect(await shown('.i', 60, 730), 1, reason: 'on screen');
+    // A metro on Phi's drum time domain (#529): once a beat at drum's 124 BPM,
+    // and twice as often once the project doubles drum's tempo.
+    final ticks = at('.i', 360, 790);
+    await tap(toggleAt(360, 620));
+    expect(value(ticks), '1', reason: 'at once');
+    audio(2000);
+    expect(whole(ticks), 5, reason: '4.1 beats in 2 s at 124');
+    project.registry.updateEntityPayload(
+      drumDomain,
+      const TimeDomain(name: 'drum', tempo: 248),
+    );
+    await tester.pump();
+    audio(20);
+    final ticked = whole(ticks);
+    audio(1000);
+    expect(whole(ticks) - ticked, inInclusiveRange(4, 5), reason: 'at 248');
+    await tap(toggleAt(360, 620));
+    project.registry.updateEntityPayload(
+      drumDomain,
+      const TimeDomain(name: 'drum', tempo: 124),
+    );
+    await tester.pump();
     await close();
 
     // ── when: beat and tempo on any input ───────────────────────────────────

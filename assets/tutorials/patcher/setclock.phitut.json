@@ -303,8 +303,62 @@
           "y": "760.0",
           "w": "300"
         },
-        "parms": "5. clocker takes clock <name> the same way, and metro, delay and clocker take a beat time such as 4n in the right inlet; timer takes the clock's name as its argument. A clock stays until Phi closes, at the last tempo it got. A patch cannot follow a Phi time domain yet.",
+        "parms": "5. clocker takes clock <name> the same way, and metro, delay and clocker take a beat time such as 4n in the right inlet; timer takes the clock's name as its argument. A clock stays until Phi closes, at the last tempo it got.",
         "type": ".text"
+      },
+      "object 27": {
+        "ID": 27,
+        "gui": {
+          "x": "360.0",
+          "y": "620.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 29
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 28": {
+        "ID": 28,
+        "gui": {
+          "x": "360.0",
+          "y": "560.0"
+        },
+        "parms": "clock domain.drum",
+        "type": ".loadmess",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 29
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 29": {
+        "ID": 29,
+        "gui": {
+          "x": "360.0",
+          "y": "680.0"
+        },
+        "parms": "1000 1",
+        "type": ".metro",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 30
+            },
+            "Count": 1
+          }
+        }
       },
       "object 3": {
         "ID": 3,
@@ -323,6 +377,48 @@
             "Count": 1
           }
         }
+      },
+      "object 30": {
+        "ID": 30,
+        "gui": {
+          "x": "360.0",
+          "y": "740.0"
+        },
+        "parms": "",
+        "type": ".counter",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 31
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 31": {
+        "ID": 31,
+        "gui": {
+          "x": "360.0",
+          "y": "790.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "Count": 0
+          }
+        }
+      },
+      "object 32": {
+        "ID": 32,
+        "gui": {
+          "x": "640.0",
+          "y": "880.0",
+          "w": "300"
+        },
+        "parms": "6. A patch can follow one of Phi's time domains by its address. loadmess clock domain.drum binds the metro under it to the drum domain's clock. Switch on its toggle: it ticks once a beat at drum's tempo, 124 in a new project, and keeps up when that tempo changes. Phi sets that clock's tempo, so send numbers to a setclock of the patch's own, never to domain.drum.",
+        "type": ".text"
       },
       "object 4": {
         "ID": 4,
