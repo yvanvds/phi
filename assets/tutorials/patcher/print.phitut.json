@@ -160,7 +160,7 @@
           "y": "160.0",
           "w": "300"
         },
-        "parms": "1. Open the log panel with the log toggle in the status bar, or Ctrl+J once you have clicked the canvas (#537). Type 60 into the box: the log shows pitch: 60.",
+        "parms": "1. Press Ctrl+J to open the log panel, or click the log toggle in the status bar. Type 60 into the box: the log shows pitch: 60.",
         "type": ".text"
       }
     }

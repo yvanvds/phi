@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:phi/app.dart';
@@ -46,10 +47,10 @@ import '../test/surfaces/patcher/test_support/open_tutorial_by_search.dart';
 /// notes render and nothing overlaps, then plays the patches with real taps
 /// and real typing into number boxes, and reads the results back from the
 /// canvas, the way the notes tell the user to. print's lines are read from the
-/// log panel, opened with the status bar's log toggle. The s-r tutorial is copied to the project,
-/// and a value published at `patcher.tutorials.s_r.pitch` (what the Code
-/// surface's `patch.tutorials.s_r.send('pitch', 67)` publishes) reaches its
-/// `r pitch`. None of them makes a sound, so master stays silent throughout.
+/// log panel, opened with Ctrl+J right after typing into a number box (#537).
+/// The s-r tutorial is copied to the project, and a value published at
+/// `patcher.tutorials.s_r.pitch` (what the Code surface's
+/// `patch.tutorials.s_r.send('pitch', 67)` publishes) reaches its `r pitch`. None of them makes a sound, so master stays silent throughout.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -306,10 +307,15 @@ void main() {
       notes: 4,
       heading: 'print writes every message that reaches it',
     );
-    // The status bar's log toggle. Ctrl+J does the same, but only while the
-    // focus is inside the workstation; after a text field lets go of it, it
-    // does nothing until the canvas is clicked (#537).
-    Future<void> toggleLog() => tap(find.byKey(LogPanelToggle.toggleKey));
+    // Ctrl+J, the way note 1 says. The tutorial was opened from the search
+    // field and a number box has just let go of the keyboard, so this proves
+    // the shell's shortcuts survive a field releasing focus (#537).
+    Future<void> pressCtrlJ() async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+    }
 
     Finder logRow(String text) => find.descendant(
       of: find.byType(LogPanel),
@@ -326,9 +332,9 @@ void main() {
     }
 
     expect(find.byType(LogPanel), findsNothing);
-    await toggleLog();
-    expect(find.byType(LogPanel), findsOneWidget);
     await typeInto('.i', 60, 160, '60');
+    await pressCtrlJ();
+    expect(find.byType(LogPanel), findsOneWidget, reason: 'Ctrl+J (#537)');
     await settleLog();
     expect(logRow('pitch: 60'), findsOneWidget);
     await tap(message('hello'));
@@ -342,7 +348,8 @@ void main() {
     expect(logRow('flood: 2'), findsOneWidget);
     expect(logRow('further messages dropped'), findsOneWidget);
     expect(logRow('flood: 3'), findsNothing, reason: 'two lines per tick');
-    await toggleLog();
+    // The status bar's toggle closes it again.
+    await tap(find.byKey(LogPanelToggle.toggleKey));
     expect(find.byType(LogPanel), findsNothing);
     await close();
 
