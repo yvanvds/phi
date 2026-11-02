@@ -16,6 +16,7 @@ import 'package:yse/yse.dart';
 
 import '../surfaces/patcher/test_support/engine_file_dir.dart';
 
+import 'test_support/midi_driver_unavailable.dart';
 import 'test_support/midi_loopback.dart';
 
 /// The **bundled tutorials** against the real engine, headless (issue #489):
@@ -26,27 +27,6 @@ import 'test_support/midi_loopback.dart';
 ///
 /// This is the test a content issue (#490–#510) leans on: add the file, add
 /// the index lines, and this proves the tutorial loads on the engine Phi ships.
-/// The MIDI input types the MIDI input tutorials cover (#508).
-const midiInputTypes = {
-  '.midiin',
-  '.xmidiin',
-  '.midiparse',
-  '.notein',
-  '.xnotein',
-  '.ctlin',
-  '.xctlin',
-  '.bendin',
-  '.xbendin',
-  '.xbendin2',
-  '.touchin',
-  '.polyin',
-  '.pgmin',
-  '.rtin',
-  '.sysexin',
-  '.rpnin',
-  '.nrpnin',
-  '.midiinfo',
-};
 
 void main() {
   late RealPatcherGateway gateway;
@@ -156,17 +136,26 @@ void main() {
   // tutorial is opened through PatchTutorialSession, the path the app takes,
   // and must log no engine error at all. (The tests below open their
   // instances with one main output too, the way the app does.)
+  //
+  // One exception, a fact about the host rather than the tutorial: on a
+  // machine with no MIDI input system (a CI runner without an ALSA
+  // sequencer), a MIDI input object logs RtMidi's driver error when it opens.
+  // That line is set apart only when it matches that message exactly and the
+  // tutorial holds a MIDI input object.
   test('every tutorial opens the way the app opens it without an engine '
       'error (#539)', () async {
     final lines = <String>[];
     final sub = Log.instance.messages.listen(lines.add);
     addTearDown(sub.cancel);
     final errors = <String>[];
+    final hostErrors = <String>[];
     for (final slug in index.slugs) {
       lines.clear();
+      final tutorial = load(slug);
+      final hasMidiIn = holdsMidiInput(tutorial.payload.dump);
       final session = PatchTutorialSession.open(
         gateway,
-        tutorial: load(slug),
+        tutorial: tutorial,
         slug: slug,
       );
       // The engine's lines arrive through a port, in order: once this marker
@@ -186,12 +175,19 @@ void main() {
       session.dispose();
       for (final line in lines) {
         if (line.contains(marker)) continue;
-        if (engineLogLevel(line) == phi.LogLevel.error) {
+        if (engineLogLevel(line) != phi.LogLevel.error) continue;
+        if (hasMidiIn && isMidiInDriverUnavailable(line)) {
+          hostErrors.add('$slug: $line');
+        } else {
           errors.add('$slug: $line');
         }
       }
     }
     expect(errors, isEmpty);
+    if (hostErrors.isNotEmpty) {
+      // ignore: avoid_print
+      print('no MIDI input system on this host:\n  ${hostErrors.join('\n  ')}');
+    }
   });
 
   test('the metro tutorial sets itself up on load', () {

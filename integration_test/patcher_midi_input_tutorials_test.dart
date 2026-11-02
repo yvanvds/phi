@@ -6,6 +6,7 @@ import 'package:phi/design/widgets/patcher/patch_bang_square.dart';
 import 'package:phi/design/widgets/patcher/patch_list_box.dart';
 import 'package:phi/design/widgets/patcher/patch_message_box.dart';
 import 'package:phi/design/widgets/patcher/patch_note_box.dart';
+import 'package:phi/domain/log/log_level.dart' as phi;
 import 'package:phi/domain/project/app_settings/app_settings_controller.dart';
 import 'package:phi/domain/project/lifecycle/project_controller.dart';
 import 'package:phi/domain/project/registry_seed.dart';
@@ -16,6 +17,7 @@ import 'package:phi/engine/bridge/real_patcher_gateway.dart';
 import 'package:phi/engine/engine.dart';
 import 'package:phi/shell/diagnostics/log_panel.dart';
 import 'package:phi/shell/diagnostics/log_panel_toggle.dart';
+import 'package:phi/shell/diagnostics/notice_center.dart';
 import 'package:phi/shell/left_rail/rail_button.dart';
 import 'package:phi/shell/left_rail/surface_id.dart';
 import 'package:phi/surfaces/patcher/nodes/number_node_body.dart';
@@ -31,6 +33,7 @@ import '../test/domain/project/test_doubles/fake_project_directory_picker.dart';
 import '../test/domain/project/test_doubles/fake_project_store.dart';
 import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/engine/test_support/midi_driver_unavailable.dart';
 import '../test/engine/test_support/midi_loopback.dart';
 import '../test/surfaces/patcher/test_support/expect_list_boxes_uncut.dart';
 import '../test/surfaces/patcher/test_support/open_tutorial_by_search.dart';
@@ -86,6 +89,7 @@ void main() {
       engineLogSource: const RealEngineLogSource(),
       telemetryInterval: const Duration(milliseconds: 20),
     );
+    final notices = NoticeCenter.build();
     final session = SessionState();
     final appSettings = AppSettingsController(FakeAppSettingsStore());
     final project = ProjectController(
@@ -102,6 +106,7 @@ void main() {
       PhiApp(
         engine: engine,
         session: session,
+        noticeCenter: notices,
         projectController: project,
         directoryPicker: FakeProjectDirectoryPicker(
           newLocationPath: '/projects/midi-input-tutorials.phi',
@@ -469,11 +474,24 @@ void main() {
       of: find.byType(LogPanel),
       matching: find.textContaining(text),
     );
-    // The audio tutorials before this one logged no engine error (#539), so
-    // no badge is up and the toggle opens the whole log, print lines too.
-    expect(find.byKey(LogPanelToggle.badgeKey), findsNothing);
+    // The tutorials before this one logged no engine error (#539). The one
+    // error a host may add is RtMidi's when it has no MIDI input system at
+    // all (a CI runner without an ALSA sequencer): then the badge is up and
+    // the toggle opens the log filtered to errors, so show everything.
+    final errors = [
+      for (final e in notices.log.entries)
+        if (e.level == phi.LogLevel.error) e.text,
+    ];
+    expect(errors.where((e) => !isMidiInDriverUnavailable(e)), isEmpty);
+    expect(
+      find.byKey(LogPanelToggle.badgeKey),
+      errors.isEmpty ? findsNothing : findsOneWidget,
+    );
     await tap(find.byKey(LogPanelToggle.toggleKey));
     expect(find.byType(LogPanel), findsOneWidget, reason: 'the log toggle');
+    if (find.byKey(LogPanel.clearKey).evaluate().isNotEmpty) {
+      await tap(find.byKey(LogPanel.clearKey));
+    }
     await tap(buttonAt(60, 230));
     final inputs = System.instance.midiInDeviceCount;
     expect(await shown('.i', 300, 370), inputs);
@@ -494,5 +512,6 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await engine.dispose();
     await yse.dispose();
+    notices.dispose();
   });
 }

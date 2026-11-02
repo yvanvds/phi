@@ -27,6 +27,7 @@ import '../test/domain/project/test_doubles/fake_project_directory_picker.dart';
 import '../test/domain/project/test_doubles/fake_project_store.dart';
 import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/engine/test_support/midi_driver_unavailable.dart';
 import '../test/surfaces/patcher/test_support/expect_list_boxes_uncut.dart';
 import '../test/surfaces/patcher/test_support/open_tutorial_by_search.dart';
 
@@ -117,10 +118,29 @@ void main() {
       await tester.pump();
     }
 
-    List<String> errors() => [
-      for (final e in notices.log.entries)
-        if (e.level == phi.LogLevel.error) e.text,
-    ];
+    // Error entries, each with the tutorial open (or just closed) when it
+    // arrived. On a host with no MIDI input system, a MIDI input object logs
+    // RtMidi's driver error when it opens: a fact about the machine, set apart
+    // only when it matches that message exactly and arrives while a tutorial
+    // holding a MIDI input object is open or just closed. Every other error
+    // fails the test.
+    final errors = <String>[];
+    final hostErrors = <String>[];
+    var seen = 0;
+    var midiInWindow = false;
+    void collect() {
+      final entries = notices.log.entries;
+      for (; seen < entries.length; seen++) {
+        final e = entries[seen];
+        if (e.level != phi.LogLevel.error) continue;
+        final where = library.tutorial?.slug ?? '-';
+        if (midiInWindow && isMidiInDriverUnavailable(e.text)) {
+          hostErrors.add('$where: ${e.text}');
+        } else {
+          errors.add('$where: ${e.text}');
+        }
+      }
+    }
 
     // Each tutorial, opened by the first type it covers through the library
     // call the browser's tap and the reference panel's OPEN TUTORIAL make,
@@ -135,14 +155,21 @@ void main() {
       await tester.pumpAndSettle();
       expect(library.tutorial?.slug, slug, reason: type);
       expect(find.byKey(PatchTutorialBar.bannerKey), findsOneWidget);
+      final hasMidiIn = holdsMidiInput(library.tutorial!.tutorial.payload.dump);
+      // A line from the tutorial before may still be on its way.
+      midiInWindow = midiInWindow || hasMidiIn;
       await settle(5);
-      expect(errors(), isEmpty, reason: 'opening the $slug tutorial');
+      collect();
+      expect(errors, isEmpty, reason: 'opening the $slug tutorial');
+      midiInWindow = hasMidiIn;
       expectListBoxesUncut(tester, where: slug);
       await tester.tap(find.byKey(PatchTutorialBar.closeKey));
       await tester.pumpAndSettle();
       // A closed tutorial gives its MIDI input subscriptions back only when
       // libyse frees it, a moment later (yse-soundengine#1246).
       await settle(20);
+      collect();
+      expect(errors, isEmpty, reason: 'closing the $slug tutorial');
     }
 
     // The port delivers in order: once a line printed after every open is
@@ -164,12 +191,21 @@ void main() {
     }
     expect(printed(), isTrue, reason: 'the engine log reaches the app');
 
-    expect(errors(), isEmpty);
-    expect(
-      find.byKey(LogPanelToggle.badgeKey),
-      findsNothing,
-      reason: 'no error badge on the log toggle',
-    );
+    collect();
+    expect(errors, isEmpty);
+    if (hostErrors.isEmpty) {
+      expect(
+        find.byKey(LogPanelToggle.badgeKey),
+        findsNothing,
+        reason: 'no error badge on the log toggle',
+      );
+    } else {
+      // The host has no MIDI input system: that is worth an error, and the
+      // badge rightly shows it. Nothing else may be badged.
+      // ignore: avoid_print
+      print('no MIDI input system on this host:\n  ${hostErrors.join('\n  ')}');
+      expect(find.byKey(LogPanelToggle.badgeKey), findsOneWidget);
+    }
     await tester.tap(find.byKey(PatchTutorialBar.closeKey));
     await tester.pumpAndSettle();
 
