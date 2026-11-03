@@ -3366,6 +3366,33 @@ main + app          (orchestration)
   `patcher_controller_encapsulate_engine_test.dart` (real engine: dump →
   parse → rebuild after each step, renders), `patcher_canvas_test.dart` and
   the `patcher_encapsulate` integration test.
+- **Abstractions** (issue #553, design `docs/design/patcher.md` §13) — one
+  `patch.` entity used as the definition of any number of subpatch boxes, in any
+  number of patches. A box is an **instance** when its name is that entity's
+  address, `patcher patch.gain` (`PatchAbstraction`, `lib/domain/patcher/`, pure
+  Dart; `PatcherController.abstractionOf`, `isWithinInstance`,
+  `outermostInstances`). Its contents are a copy in the parent's flat graph and
+  dump. `PatchInstanceMaterialiser` (`lib/engine/state/`) reconciles one window
+  of a patch with another through direct primitives: objects pair up by type,
+  arguments and position so an edit keeps state and logical ids, cables are
+  compared afterwards, and the parent's cables on a boundary object that goes are
+  re-wired to whatever now claims the pin or counted as dropped.
+  `PatchAbstractionSync` (`lib/engine/state/`, owned by `PatchLibraryController`)
+  runs it over the whole project, definitions before their users, off every
+  editor's undo scope and off registry changes; it also publishes each patch's
+  registry references (so delete-impact lists users), refuses loops with a canvas
+  notice (`PatcherController.notice` → `PatcherCanvas.patchNoticeKey`), and
+  rewrites box names when a definition moves. The library binds an editor to any
+  patch involved (`editorFor`), offers definitions as extra catalogue entries
+  (`abstractionTypes`; `PatcherController` turns such a type id into a `patcher`
+  box) and creates them from a box (`makeAbstraction`). `SubpatchWindows` entries
+  now have an `owner` and may show a whole patch (`box` null, `root` naming it):
+  *open definition* edits the patch in its own window over its own editor, while
+  an instance's own window is held in run mode. `detachInstance` renames the box.
+  Covered by `patch_abstraction_test.dart`,
+  `patch_instance_materialiser_test.dart`, `patch_abstraction_sync_test.dart`,
+  `patch_abstraction_engine_test.dart` (real engine), `subpatch_window_test.dart`
+  and the `native_windows/patcher_abstraction_window` integration test.
 - Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
   switched off for now, issue #447)
 

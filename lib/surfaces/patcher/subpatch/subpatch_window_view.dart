@@ -28,6 +28,7 @@ class SubpatchWindowView extends StatelessWidget {
     required this.editor,
     required this.box,
     required this.objectTypes,
+    this.root,
     this.mode = PatchCanvasMode.edit,
     this.snapToGrid = false,
     this.onToggleMode,
@@ -42,8 +43,12 @@ class SubpatchWindowView extends StatelessWidget {
   /// The editor of the patch the subpatch belongs to.
   final PatcherController editor;
 
-  /// The subpatch box this window shows the inside of.
-  final PatchNodeId box;
+  /// The subpatch box this window shows the inside of, or null for the whole of
+  /// [editor]'s patch: the definition of an abstraction (issue #553).
+  final PatchNodeId? box;
+
+  /// What the window's path starts with when it is not the main window's patch.
+  final String? root;
 
   /// The engine catalogue, for the inline object box.
   final List<PatchObjectDescriptor> objectTypes;
@@ -200,7 +205,7 @@ class _WindowBar extends StatelessWidget {
               // The path follows a rename of this box or of one around it.
               listenable: view.editor.graph,
               builder: (context, _) => Text(
-                view.editor.scopeTitle(view.box),
+                view.editor.scopeTitle(view.box, root: view.root),
                 key: SubpatchWindowView.titleKey,
                 overflow: TextOverflow.ellipsis,
                 style: PhiType.monoS().copyWith(color: PhiColors.fg0),

@@ -53,6 +53,8 @@ class PatchReferencePanel extends StatelessWidget {
     this.onOpenTutorial,
     this.subpatch,
     this.onOpenSubpatch,
+    this.onMakeAbstraction,
+    this.onDetach,
     super.key,
   });
 
@@ -62,6 +64,27 @@ class PatchReferencePanel extends StatelessWidget {
 
   /// Opens the selected subpatch in its window. Null hides the button.
   final VoidCallback? onOpenSubpatch;
+
+  /// Makes the selected ordinary subpatch an instance of a new patch (issue
+  /// #553). Null hides the button.
+  final VoidCallback? onMakeAbstraction;
+
+  /// Makes the selected instance an ordinary subpatch (issue #553). Null hides
+  /// the button.
+  final VoidCallback? onDetach;
+
+  /// Key on the subpatch section's definition readout.
+  static const Key subpatchDefinitionKey = Key(
+    'PatchReferencePanel.subpatch.definition',
+  );
+
+  /// Key on the subpatch section's make-abstraction button.
+  static const Key makeAbstractionKey = Key(
+    'PatchReferencePanel.subpatch.makeAbstraction',
+  );
+
+  /// Key on the subpatch section's detach button.
+  static const Key detachKey = Key('PatchReferencePanel.subpatch.detach');
 
   /// Key on the subpatch section's name readout.
   static const Key subpatchNameKey = Key('PatchReferencePanel.subpatch.name');
@@ -146,6 +169,8 @@ class PatchReferencePanel extends StatelessWidget {
               onOpenTutorial: onOpenTutorial,
               subpatch: subpatch,
               onOpenSubpatch: onOpenSubpatch,
+              onMakeAbstraction: onMakeAbstraction,
+              onDetach: onDetach,
               noteColor: noteColor ?? '',
               onNoteColor: PatchTypeName.isNote(d.type) ? onNoteColor : null,
               keyboard: switch ((
@@ -194,10 +219,14 @@ class _Reference extends StatelessWidget {
     this.onOpenTutorial,
     this.subpatch,
     this.onOpenSubpatch,
+    this.onMakeAbstraction,
+    this.onDetach,
   });
 
   final PatchSubpatchSummary? subpatch;
   final VoidCallback? onOpenSubpatch;
+  final VoidCallback? onMakeAbstraction;
+  final VoidCallback? onDetach;
   final PatchObjectDescriptor descriptor;
   final String? args;
   final VoidCallback? onOpenTutorial;
@@ -273,6 +302,14 @@ class _Reference extends StatelessWidget {
                 value: box.name.isEmpty ? 'untitled' : box.name,
                 valueKey: PatchReferencePanel.subpatchNameKey,
               ),
+              if (box.definition case final definition?)
+                _PortEntry(
+                  lead: 'definition',
+                  doc: box.definitionFollowed ? '' : 'not followed',
+                  meta: const [],
+                  value: definition,
+                  valueKey: PatchReferencePanel.subpatchDefinitionKey,
+                ),
               _PortEntry(
                 lead: 'inlets',
                 doc: '',
@@ -287,25 +324,48 @@ class _Reference extends StatelessWidget {
                 value: '${box.outlets}',
                 valueKey: PatchReferencePanel.subpatchOutletsKey,
               ),
-              if (onOpenSubpatch case final open?)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    PhiSpacing.s3,
-                    PhiSpacing.s1,
-                    PhiSpacing.s3,
-                    PhiSpacing.s1,
-                  ),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: PatchWordButton(
-                      key: PatchReferencePanel.openSubpatchKey,
-                      label: 'open subpatch',
-                      color: PhiColors.voice1,
-                      tooltip: 'open the subpatch in its own window',
-                      onTap: open,
-                    ),
-                  ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  PhiSpacing.s3,
+                  PhiSpacing.s1,
+                  PhiSpacing.s3,
+                  PhiSpacing.s1,
                 ),
+                child: Wrap(
+                  spacing: PhiSpacing.s1,
+                  runSpacing: PhiSpacing.s1,
+                  children: [
+                    if (onOpenSubpatch case final open?)
+                      PatchWordButton(
+                        key: PatchReferencePanel.openSubpatchKey,
+                        label: box.definition == null
+                            ? 'open subpatch'
+                            : 'open definition',
+                        color: PhiColors.voice1,
+                        tooltip: box.definition == null
+                            ? 'open the subpatch in its own window'
+                            : 'open the patch this box is an instance of',
+                        onTap: open,
+                      ),
+                    if (onMakeAbstraction case final make?)
+                      PatchWordButton(
+                        key: PatchReferencePanel.makeAbstractionKey,
+                        label: 'make abstraction',
+                        tooltip: 'make this box an instance of a new patch',
+                        onTap: make,
+                      ),
+                    if (onDetach case final detach?)
+                      PatchWordButton(
+                        key: PatchReferencePanel.detachKey,
+                        label: 'detach',
+                        tooltip:
+                            'keep what the box holds and stop following the '
+                            'definition',
+                        onTap: detach,
+                      ),
+                  ],
+                ),
+              ),
             ],
           ),
         if (d.description.isNotEmpty)

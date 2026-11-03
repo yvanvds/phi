@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../../domain/patcher/patch_abstraction.dart';
 import '../../domain/patcher/patch_library.dart';
+import '../../domain/patcher/patch_node_id.dart';
 import '../../domain/patcher/patch_payload.dart';
 import '../../domain/patcher/tutorial/patch_tutorial.dart';
 import '../../domain/patcher/tutorial/tutorial_catalog.dart';
@@ -19,9 +21,12 @@ import '../../domain/project/project_registry.dart';
 import '../../domain/project/registry_group.dart';
 import '../../domain/project/registry_kinds.dart';
 import '../../domain/project/registry_node.dart';
+import '../bridge/patch_object_descriptor.dart';
 import '../bridge/patcher_gateway.dart';
+import 'patch_abstraction_sync.dart';
 import 'patch_bus_option.dart';
 import 'patch_clipboard.dart';
+import 'patch_instance_materialiser.dart';
 import 'patch_reconciler.dart';
 import 'patch_tree_node.dart';
 import 'patcher_controller.dart';
@@ -60,6 +65,11 @@ import 'tutorial/patch_tutorial_source.dart';
 /// mints an ordinary `patch.tutorials.<slug>` entity from it. Opening a project
 /// patch, a rebind, a session restart and [dispose] all close it.
 ///
+/// **Abstractions (issue #553).** Any patch can be the definition behind subpatch
+/// boxes in other patches. This owns the [PatchAbstractionSync] that keeps those
+/// copies in line, and because it reaches every patch in the project, not only
+/// the open one, it binds an editor to any patch involved ([editorFor]).
+///
 /// It owns neither the [registry] (the project controller does) nor the
 /// reconciler (the engine does); it only listens to the registry and drives the
 /// reconciler, so [dispose] detaches the listener and disposes its own editors.
@@ -74,6 +84,7 @@ class PatchLibraryController extends ChangeNotifier {
   }) : _registry = registry {
     _library = PatchLibrary(registry);
     _registry.addListener(_onRegistryChanged);
+    _abstractions = _newAbstractionSync();
   }
 
   final PatcherGateway _gateway;
@@ -82,6 +93,7 @@ class PatchLibraryController extends ChangeNotifier {
   List<PatchBusOption> Function() _busOptions;
   void Function(ProjectCommand)? _recordCommand;
   late PatchLibrary _library;
+  late PatchAbstractionSync _abstractions;
 
   /// One editor per opened patch, bound to the reconciler's live instance and
   /// kept alive across switches so a re-open shows the same live graph.
@@ -131,7 +143,11 @@ class PatchLibraryController extends ChangeNotifier {
     void Function(ProjectCommand)? recordCommand,
   }) {
     if (busOptions != null) _busOptions = busOptions;
-    if (patches != null) _patches = patches;
+    if (patches != null && !identical(patches, _patches)) {
+      _patches = patches;
+      _abstractions.dispose();
+      _abstractions = _newAbstractionSync();
+    }
     _recordCommand = recordCommand;
     if (identical(registry, _registry)) return;
     _closeTutorial();
@@ -141,10 +157,25 @@ class PatchLibraryController extends ChangeNotifier {
     _registry = registry;
     _library = PatchLibrary(registry);
     _registry.addListener(_onRegistryChanged);
+    _abstractions.dispose();
+    _abstractions = _newAbstractionSync();
     notifyListeners();
   }
 
-  void _onRegistryChanged() => notifyListeners();
+  PatchAbstractionSync _newAbstractionSync() => PatchAbstractionSync(
+    registry: _registry,
+    patches: _patches,
+    gateway: _gateway,
+    editorFor: editorFor,
+    cachedEditor: _boundEditor,
+  );
+
+  void _onRegistryChanged() {
+    // After the turn: a registry change can land half-way through a compound
+    // operation, such as a rename that is about to re-materialise its patch.
+    _abstractions.schedule();
+    notifyListeners();
+  }
 
   // ─── tree ─────────────────────────────────────────────────────────────────
 
@@ -190,24 +221,119 @@ class PatchLibraryController extends ChangeNotifier {
     if (_registry.entityAt(address) == null) return;
     _closeTutorial();
     _patches.sync(_registry); // ensure the native instance exists
-    final instanceId = _patches.instanceIdOf(address);
-    if (instanceId == null) return;
+    if (editorFor(address) == null) return;
     _openAddress = address;
-    _editors.putIfAbsent(
-      address,
-      // A freshly-bound editor mirrors an empty graph; rebuild it from the live
-      // native instance so a patch loaded from disk (or re-materialised by a
-      // rename) shows its graph rather than a blank canvas (issue #308).
-      // A freshly-bound editor mirrors an empty graph; rebuild it from the live
-      // native instance so a patch loaded from disk (or re-materialised by a
-      // rename) shows its graph rather than a blank canvas (issue #308).
-      () => PatcherController.bound(
-        _gateway,
-        instanceId: instanceId,
-        clipboard: _clipboard,
-      )..rebuildFromInstance(),
-    );
+    _abstractions.sync();
     notifyListeners();
+  }
+
+  /// The editor bound to the live instance of the patch at [address], bound
+  /// now if it has none yet, or null when it has no instance. An edit made
+  /// through it reaches the abstraction sync (issue #553).
+  PatcherController? editorFor(EntityAddress address) {
+    final cached = _boundEditor(address);
+    if (cached != null) return cached;
+    final instanceId = _patches.instanceIdOf(address);
+    if (instanceId == null || _editors.containsKey(address)) return null;
+    // A freshly-bound editor mirrors an empty graph; rebuild it from the live
+    // native instance so a patch loaded from disk (or re-materialised by a
+    // rename) shows its graph rather than a blank canvas (issue #308).
+    final editor = PatcherController.bound(
+      _gateway,
+      instanceId: instanceId,
+      clipboard: _clipboard,
+    )..rebuildFromInstance();
+    editor.undoScope.addListener(_onEditorEdited);
+    return _editors[address] = editor;
+  }
+
+  /// The cached editor of [address], if its native instance is still the live
+  /// one. A patch deleted and brought back behind this controller's back has a
+  /// fresh instance, and the old editor goes unless the canvas is still on it.
+  PatcherController? _boundEditor(EntityAddress address) {
+    final editor = _editors[address];
+    if (editor == null) return null;
+    if (_patches.instanceIdOf(address) == editor.instanceId) return editor;
+    if (address != _openAddress) {
+      _editors.remove(address);
+      editor.undoScope.removeListener(_onEditorEdited);
+      editor.dispose();
+    }
+    return null;
+  }
+
+  /// Something was journaled in some editor: an instance may be out of date.
+  void _onEditorEdited() => _abstractions.sync();
+
+  /// The patch [editor] edits, or null for a tutorial's and for a stale one.
+  EntityAddress? addressOf(PatcherController editor) {
+    for (final MapEntry(:key, :value) in _editors.entries) {
+      if (identical(value, editor)) return key;
+    }
+    return null;
+  }
+
+  /// Whether [editor] is still bound here (or is the open tutorial's) — it is
+  /// disposed once its patch is renamed, deleted or swapped away.
+  bool isLive(PatcherController editor) =>
+      identical(_tutorial?.editor, editor) || addressOf(editor) != null;
+
+  // ─── abstractions (issue #553) ──────────────────────────────────────────────
+
+  /// Whether an instance in the patch of [editor] would follow [definition]:
+  /// false when no such patch exists, or when it would reach that patch again.
+  bool canFollow(PatcherController editor, EntityAddress definition) {
+    final patch = addressOf(editor);
+    if (patch == null) return false;
+    return _abstractions.definitionsFor(patch).contains(definition);
+  }
+
+  /// The patches the patch of [editor] can take an instance of, as catalogue
+  /// entries: what the palette and the object box offer beside the engine's
+  /// objects. Empty for a tutorial's editor.
+  List<PatchObjectDescriptor> abstractionTypes(PatcherController editor) {
+    final patch = addressOf(editor);
+    if (patch == null) return const [];
+    return [
+      for (final definition in _abstractions.definitionsFor(patch))
+        PatchObjectDescriptor(
+          type: PatchAbstraction.typeOf(definition),
+          description: 'an instance of this patch, updated when it changes',
+          category: PatchObjectCategory.encapsulation,
+          isDsp: false,
+          inlets: const [],
+          outlets: const [],
+          params: const [],
+        ),
+    ];
+  }
+
+  /// Turn the ordinary subpatch [box] of [editor] into an instance of a new
+  /// `patch.` entity holding a copy of its contents, named after the box, and
+  /// return that entity's address. The box keeps its objects and cables.
+  /// Creating the entity is a project edit and naming the box a journaled step
+  /// of the patch: an undo makes the box ordinary again and leaves the new patch.
+  /// Null for an instance, for a tutorial's editor and for anything but a box.
+  EntityAddress? makeAbstraction(PatcherController editor, PatchNodeId box) {
+    if (addressOf(editor) == null) return null;
+    if (!editor.isSubpatch(box) || editor.isWithinInstance(box)) return null;
+    final name = editor.subpatchNameOf(box);
+    final command = _library.newPatch(
+      name: name.isEmpty ? 'abstraction' : name,
+    );
+    _apply(command);
+    _patches.sync(_registry);
+    final definition = editorFor(command.address);
+    if (definition == null) return null;
+    PatchInstanceMaterialiser(
+      source: editor,
+      sourceScope: box,
+      target: definition,
+      targetScope: null,
+    ).run();
+    editor.applyParams(box, command.address.format());
+    notifyListeners();
+    return command.address;
   }
 
   /// Drop every cached editor — each is bound to a native instance an engine
@@ -594,13 +720,16 @@ class PatchLibraryController extends ChangeNotifier {
   void _dropEditorsUnder(EntityAddress address) {
     for (final key in _editors.keys.toList()) {
       if (key == address || key.isDescendantOf(address)) {
-        _editors.remove(key)?.dispose();
+        final editor = _editors.remove(key);
+        editor?.undoScope.removeListener(_onEditorEdited);
+        editor?.dispose();
       }
     }
   }
 
   void _disposeEditors() {
     for (final editor in _editors.values) {
+      editor.undoScope.removeListener(_onEditorEdited);
       editor.dispose();
     }
     _editors.clear();
@@ -624,6 +753,7 @@ class PatchLibraryController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _abstractions.dispose();
     _closeTutorial();
     tutorialBrowserRequests.dispose();
     _registry.removeListener(_onRegistryChanged);

@@ -10,6 +10,7 @@ import '../../design/widgets/patcher/patch_note_metrics.dart';
 import '../../design/widgets/patcher/patch_object_box_metrics.dart';
 import '../../domain/midi/midi_pitch.dart';
 import '../../domain/patcher/keyboard_layout.dart';
+import '../../domain/patcher/patch_abstraction.dart';
 import '../../domain/patcher/patch_boundary.dart';
 import '../../domain/patcher/patch_cable.dart';
 import '../../domain/patcher/patch_graph.dart';
@@ -21,6 +22,7 @@ import '../../domain/patcher/patch_port.dart';
 import '../../domain/patcher/patch_port_id.dart';
 import '../../domain/patcher/patch_port_kind.dart';
 import '../../domain/patcher/patch_type_name.dart';
+import '../../domain/project/entity_address.dart';
 import '../../domain/project/undo_scope.dart';
 import '../bridge/patch_object_descriptor.dart';
 import '../bridge/patch_pin_compatibility.dart';
@@ -277,10 +279,13 @@ class PatcherController {
     int voice = 1,
     PatchNodeId? container,
   }) {
+    // A definition offered by address (issue #553) is made as what it is: a
+    // `patcher` box whose name is that address.
+    final instance = _instanceBoxFor(desc);
     final command = CreatePatchObjectCommand(
       this,
-      desc: desc,
-      args: args ?? _defaultArgsFor(desc),
+      desc: instance?.desc ?? desc,
+      args: instance?.args ?? args ?? _defaultArgsFor(desc),
       position: position,
       voice: voice,
       container: container,
@@ -443,6 +448,66 @@ class PatcherController {
   bool isSubpatch(PatchNodeId id) =>
       PatchBoundary.isSubpatch(graph.nodeById(id)?.type ?? '');
 
+  // ─── abstractions (issue #553) ───────────────────────────────────────
+
+  /// The `patch.` definition the subpatch box [id] is an instance of, or null
+  /// for an ordinary subpatch and for anything that is not a box.
+  EntityAddress? abstractionOf(PatchNodeId id) =>
+      isSubpatch(id) ? PatchAbstraction.referenceIn(argsOf(id)) : null;
+
+  /// Whether [id] is an instance box or sits inside one, at any depth: what is
+  /// in there comes from the definition, so it is played but never edited.
+  bool isWithinInstance(PatchNodeId id) {
+    for (PatchNodeId? at = id; at != null; at = containerOf(at)) {
+      if (abstractionOf(at) != null) return true;
+    }
+    return false;
+  }
+
+  /// Every definition this patch uses, at any depth.
+  Set<EntityAddress> get abstractionReferences => {
+    for (final node in graph.nodes) ?abstractionOf(node.id),
+  };
+
+  /// The instance boxes the abstraction sync follows: those not inside another
+  /// instance, whose definition already accounts for them.
+  List<PatchNodeId> get outermostInstances => [
+    for (final node in graph.nodes)
+      if (abstractionOf(node.id) != null &&
+          (node.container == null || !isWithinInstance(node.container!)))
+        node.id,
+  ];
+
+  /// Make the instance box [box] an ordinary subpatch that keeps what it holds,
+  /// as one journaled step: it is renamed from the address to the definition's
+  /// own name. A no-op for anything but an instance. Undoing it makes the box
+  /// follow its definition again.
+  void detachInstance(PatchNodeId box) {
+    final definition = abstractionOf(box);
+    if (definition != null) applyParams(box, definition.name);
+  }
+
+  /// A short message for whichever canvas shows this patch to raise on its
+  /// banner: news about the patch that no gesture on that canvas caused.
+  final ValueNotifier<String?> notice = ValueNotifier(null);
+
+  /// Raise [message] through [notice], even when it says what the last one did.
+  void announce(String message) {
+    notice.value = null;
+    notice.value = message;
+  }
+
+  /// The `patcher` box a catalogue entry naming a definition stands for, or
+  /// null for an engine type.
+  ({PatchObjectDescriptor desc, String args})? _instanceBoxFor(
+    PatchObjectDescriptor desc,
+  ) {
+    final definition = PatchAbstraction.addressOfType(desc.type);
+    final box = _catalogue[PatchObjectTypes.patcher];
+    if (definition == null || box == null) return null;
+    return (desc: box, args: definition.format());
+  }
+
   /// The subpatch box [id] sits inside, or null at the top level.
   PatchNodeId? containerOf(PatchNodeId id) => graph.nodeById(id)?.container;
 
@@ -481,12 +546,17 @@ class PatcherController {
   /// The path of [scope] as a window names it: every enclosing subpatch's name
   /// from the top down, joined by ` › ` (`patcher` for an unnamed one). Empty
   /// for the top level.
-  String scopeTitle(PatchNodeId? scope) {
+  ///
+  /// [root] names the patch itself at the head of the path: a window showing a
+  /// definition (issue #553) is opened from another patch, so it says whose
+  /// contents these are.
+  String scopeTitle(PatchNodeId? scope, {String? root}) {
     final names = <String>[];
     for (var at = scope; at != null; at = containerOf(at)) {
       final name = subpatchNameOf(at);
       names.insert(0, name.isEmpty ? PatchObjectTypes.patcher : name);
     }
+    if (root != null) names.insert(0, root);
     return names.join(' › ');
   }
 
@@ -1715,6 +1785,11 @@ class PatcherController {
   }) {
     final node = graph.nodeById(id);
     if (node == null) return 0;
+    // Typing a definition's address over a box re-points it (issue #553).
+    final instance = _instanceBoxFor(desc);
+    if (instance != null) {
+      return applyBoxEdit(id, desc: instance.desc, args: instance.args);
+    }
     if (node.type == desc.type) {
       applyParams(id, args);
       return 0;
@@ -1737,6 +1812,8 @@ class PatcherController {
     final node = graph.nodeById(id);
     if (node == null) return false;
     if (node.type == type || !PatchBoundary.isSubpatch(node.type)) return true;
+    // A definition's address names a box too, so the contents stay (issue #553).
+    if (PatchAbstraction.addressOfType(type) != null) return true;
     return !graph.nodes.any((n) => n.container == id);
   }
 
@@ -1918,18 +1995,21 @@ class PatcherController {
   }
 
   /// Wire [cable] into the native patcher and the Dart mirror.
+  ///
+  /// A cable whose end is gone is not wired at all: an undo or redo can name a
+  /// boundary object of an instance that a change to its definition has since
+  /// taken away (issue #553), and that must not draw a cable to nowhere.
   void addCablePrimitive(PatchCable cable) {
     final src = _nativeByNode[cable.source.nodeId];
     final dst = _nativeByNode[cable.target.nodeId];
-    if (src != null && dst != null) {
-      _gateway.connect(
-        instanceId,
-        fromHandleId: src,
-        outlet: cable.source.index,
-        toHandleId: dst,
-        inlet: cable.target.index,
-      );
-    }
+    if (src == null || dst == null) return;
+    _gateway.connect(
+      instanceId,
+      fromHandleId: src,
+      outlet: cable.source.index,
+      toHandleId: dst,
+      inlet: cable.target.index,
+    );
     graph.addCable(cable);
   }
 
@@ -2181,6 +2261,7 @@ class PatcherController {
 
   void dispose() {
     if (_ownsInstance) _gateway.disposeInstance(instanceId);
+    notice.dispose();
     undoScope.dispose();
     transform.dispose();
     for (final t in _scopeTransforms.values) {
