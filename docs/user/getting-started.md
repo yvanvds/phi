@@ -3,8 +3,19 @@
 ## Install and run
 
 Phi runs on Windows and Linux (x64). There are no prebuilt downloads yet, so
-you build it from source with [Flutter](https://docs.flutter.dev/get-started/install)
-3.47.1 or later:
+you build it from source with [Flutter](https://docs.flutter.dev/get-started/install).
+It needs Flutter's development (master) channel at the exact commit named in
+the `.fvmrc` file in the repository. A stable Flutter release will not work,
+because Phi uses Flutter's new multi-window support, which is only on master
+for now:
+
+```powershell
+git clone https://github.com/flutter/flutter.git flutter-master
+git -C flutter-master checkout <commit from phi/.fvmrc>
+flutter-master/bin/flutter config --enable-windowing
+```
+
+Use that `flutter` for the commands below:
 
 ```powershell
 git clone https://github.com/yvanvds/phi

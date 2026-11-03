@@ -134,6 +134,13 @@ the desktop steward, and Windows the lead platform for regular
 windows), but it is **not on Phi's channel yet**. Adopting it today
 would mean pinning off stable and absorbing API churn and open bugs.
 
+> **Update (#478, 2026-11).** Phi now does exactly that. It tracks a pinned
+> Flutter master revision (`.fvmrc`) with `enable-windowing` on, so that
+> subpatches can open in their own window (#481). By that revision the
+> names had changed: `RegularWindowController` / `RegularWindow` are now
+> `WindowController` / `Window`. The full list at the pin is under
+> "Toolchain" in `docs/PROJECT_OVERVIEW.md`.
+
 One residual unknown even on Route A: whether the ANGLE/macbear GL
 texture actually renders into a *second window's* `FlutterView`.
 Flutter's multi-view umbrella (flutter/flutter#142845) still lists

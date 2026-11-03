@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart' show Tooltip;
 import 'package:flutter/widgets.dart';
+import 'package:material_ui/material_ui.dart' show Tooltip;
 
 import '../../../design/tokens/phi_colors.dart';
 import '../../../design/tokens/phi_type.dart';

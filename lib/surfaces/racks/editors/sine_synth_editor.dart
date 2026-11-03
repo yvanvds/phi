@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../domain/project/entity_address.dart';
 import '../../../domain/synth/sine_synth.dart';

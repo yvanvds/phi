@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:re_editor/re_editor.dart';
 
 import '../../design/tokens/phi_colors.dart';
@@ -200,6 +200,11 @@ class _CodeEditorViewState extends State<CodeEditorView> {
         cursorColor: PhiColors.voice1,
         cursorLineColor: PhiColors.bg1,
         selectionColor: PhiColors.voice1Soft,
+        // Explicit, because re_editor's fallback reads the legacy
+        // `package:flutter/material.dart` Theme, which Phi's material_ui
+        // theme no longer provides (#478). This is the value that fallback
+        // resolved to under Phi's theme (colorScheme.primary at 40%).
+        highlightColor: PhiColors.voice1.withValues(alpha: 0.4),
         codeTheme: _highlightTheme,
       ),
       padding: const EdgeInsets.symmetric(

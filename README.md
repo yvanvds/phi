@@ -26,14 +26,29 @@ planned (Scene · Patcher · Code · State · MIDI · Mix); only Mix has a stub.
 
 - **Engine:** [yse-soundengine](https://github.com/yvanvds/yse-soundengine) (C++).
 - **FFI bridge:** [dart-yse](https://github.com/yvanvds/dart-yse) — package name `yse`.
-- **UI:** Flutter ≥ 3.47.1, Windows and Linux (x64) desktop. There is no 3D
-  Scene renderer on any platform for now (#455).
+- **UI:** Flutter at a pinned master revision (`.fvmrc`, #478), Windows and
+  Linux (x64) desktop. There is no 3D Scene renderer on any platform for now
+  (#455).
 - **Design system:** [`design system/`](design%20system/) — colors, type, motion,
   components. Source-of-truth for the Dart token files under `lib/design/tokens/`.
 
 ## Build
 
-Requires Windows or Linux (x64) and [Flutter](https://docs.flutter.dev/get-started/install) ≥ 3.47.1.
+Requires Windows or Linux (x64) and [Flutter](https://docs.flutter.dev/get-started/install)
+from the **master channel, at the commit pinned in [`.fvmrc`](.fvmrc)** (#478).
+Phi builds on Flutter's experimental multi-window API, which only master has.
+Stable does not resolve the dependencies. Get that SDK and turn the windowing
+flag on:
+
+```bash
+git clone https://github.com/flutter/flutter.git flutter-master
+git -C flutter-master checkout <commit from .fvmrc>
+flutter-master/bin/flutter config --enable-windowing
+```
+
+(FVM users: `fvm use` reads `.fvmrc`.) The flag is stored per user. Stable
+SDKs on the same machine ignore it. CI uses the same pin. To bump it, see
+"Toolchain" in [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md).
 
 ```powershell
 git clone https://github.com/yvanvds/phi
