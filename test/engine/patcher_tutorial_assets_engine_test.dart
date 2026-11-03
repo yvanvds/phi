@@ -6976,6 +6976,553 @@ void main() {
     });
   });
 
+  test('every MIDI processing type has a tutorial (#510)', () {
+    for (final type in [
+      '.makenote', '.stripnote', '.poly', '.sustain', '.borax', '.offer', //
+      '.mpeconfig', '.mpeparse', '.mpeformat',
+    ]) {
+      expect(engineTypes, contains(type), reason: type);
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+    expect(index.tutorialFor('.mpeconfig'), index.tutorialFor('.mpeparse'));
+    expect(index.tutorialFor('.mpeconfig'), index.tutorialFor('.mpeformat'));
+  });
+
+  // The MIDI processing objects work on numbers, without a port. Their
+  // tutorials play notes from message boxes and keyboards on a saw on master;
+  // the MPE tutorial alone sends through a .midiout and reads input port 0,
+  // which this copy points at the loopback (see MidiLoopback).
+  group('MIDI processing tutorials (#510) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+    MidiLoopback? loop;
+    MidiCapture? wire;
+
+    setUpAll(() {
+      loop = MidiLoopback.open();
+      wire = loop?.capture();
+    });
+    tearDownAll(() async {
+      await wire?.close();
+      loop?.close();
+    });
+
+    // One block is 128 frames at 48 kHz: about 2.67 ms of audio.
+    const blockMs = 128 / 48;
+
+    // Renders [blocks] blocks and returns the loudest master peak among them.
+    double loudness([int blocks = 60]) {
+      var peak = 0.0;
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+        final p = Channel.master.peakLinearPost();
+        if (p > peak) peak = p;
+      }
+      return peak;
+    }
+
+    // [ms] milliseconds of audio time, which makenote's durations count.
+    void audio(double ms) => loudness((ms / blockMs).ceil());
+
+    // Renders with real pauses: a .midiout opens its port on a background
+    // thread, and a message reaches the wire, and the patch, in wall-clock
+    // time.
+    Future<void> pause([int ms = 20]) async {
+      for (var i = 0; i < ms; i++) {
+        loudness(1);
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+    }
+
+    // Every tutorial is mounted while open (#528); so is this copy. A
+    // .midiout and .midiin go to the loopback.
+    void open(String slug) {
+      final dump = load(slug).payload.dump;
+      for (final o in dump.values.cast<Map<String, Object?>>()) {
+        if (o['type'] == '.midiout') o['parms'] = '${loop?.outputPort ?? 0}';
+        if (o['type'] == '.midiin') o['parms'] = '${loop?.inputPort ?? 0}';
+      }
+      inst = gateway.createInstance(mainOutputs: 1);
+      gateway.parseJson(inst, jsonEncode(dump));
+      graph = gateway.enumerate(inst);
+      gateway.mountAsSource(inst);
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        loudness(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: '$slug mounted');
+      loudness(20);
+    }
+
+    tearDown(() async {
+      gateway.disposeInstance(inst);
+      await pause();
+      wire?.clear();
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    // A message box by its text: each tutorial's are unique.
+    int msg(String text) => graph.objects
+        .singleWhere((o) => o.type == '.m' && o.args == text)
+        .handleId;
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    void m(String text) => click(msg(text));
+    String value(int id) => gateway.guiValue(inst, id);
+    // A key of the keyboard [keys] pressed at [velocity], or let go at 0, the
+    // way the canvas plays it.
+    void key(int keys, int pitch, int velocity) =>
+        gateway.setGuiValueAt(inst, keys, pitch, '$velocity');
+
+    // Silence on master: a saw at velocity 1 is still louder than this.
+    const silent = 1e-4;
+
+    test('makenote: a metro line, durations, velocities, stop and '
+        'clear', () {
+      open('makenote');
+      final pitch = at('.i', 60, 680);
+      final velocity = at('.i', 170, 680);
+      final toggle = at('.t', 60, 250);
+      expect(loudness(), lessThan(silent), reason: 'quiet until played');
+      // Note 1: the metro bangs at once; counter 1 -> 1 * 2 + 60.
+      gateway.sendInt(inst, toggle, 0, 1);
+      gateway.sendInt(inst, toggle, 0, 0);
+      expect((value(pitch), value(velocity)), ('62', '100'));
+      expect(loudness(10), greaterThan(0.01), reason: 'a saw on master');
+      audio(150);
+      expect(value(velocity), '100', reason: 'still sounding at 150 ms');
+      audio(70);
+      expect((value(pitch), value(velocity)), ('62', '0'), reason: '200 ms');
+      expect(loudness(), lessThan(silent), reason: 'the release stops it');
+      // Note 2: the right inlets set the notes that follow, and send nothing.
+      m('50');
+      m('40');
+      expect((value(pitch), value(velocity)), ('62', '0'));
+      m('67');
+      expect((value(pitch), value(velocity)), ('67', '40'));
+      audio(35);
+      expect(value(velocity), '40');
+      audio(25);
+      expect(value(velocity), '0', reason: 'released after 50 ms');
+      m('110');
+      m('200');
+      m('67');
+      expect(value(velocity), '110');
+      audio(220);
+      expect(value(velocity), '0');
+      // Note 3: two seconds, cut short by stop; clear forgets the release.
+      m('2000');
+      m('67');
+      audio(1000);
+      expect(value(velocity), '110', reason: 'two seconds long');
+      m('stop');
+      expect((value(pitch), value(velocity)), ('67', '0'), reason: 'stop');
+      expect(loudness(), lessThan(silent));
+      m('67');
+      m('clear');
+      audio(2200);
+      expect(value(velocity), '110', reason: 'clear forgot the release');
+      expect(loudness(), greaterThan(0.01), reason: 'the saw keeps sounding');
+      m('50');
+      m('67');
+      audio(70);
+      expect(value(velocity), '0', reason: "another note's release");
+      expect(loudness(), lessThan(silent));
+    });
+
+    test('stripnote: two messages per key, one note-on, a list', () {
+      open('stripnote');
+      final keys = at('.kslider', 60, 250);
+      final every = at('.i', 60, 550);
+      final ons = at('.i', 200, 550);
+      // Note 1.
+      key(keys, 60, 100);
+      expect((value(every), value(ons)), ('1', '1'));
+      expect(loudness(10), greaterThan(0.01), reason: 'a saw on master');
+      key(keys, 60, 0);
+      expect((value(every), value(ons)), ('2', '1'), reason: 'one per key');
+      // Note 2: the release never reaches the saw.
+      expect(loudness(), greaterThan(0.01), reason: 'still sounding');
+      key(keys, 64, 100);
+      key(keys, 64, 0);
+      expect((value(every), value(ons)), ('4', '2'));
+      expect(loudness(), greaterThan(0.01));
+      m('0');
+      expect(loudness(), lessThan(silent), reason: '0 silences it');
+      // Note 3: a list sets the velocity first.
+      click(at('.b', 380, 250));
+      expect(value(ons), '2', reason: 'pack 64 0 sends nothing on');
+      expect(loudness(), lessThan(silent));
+      click(at('.b', 500, 250));
+      expect(value(ons), '3', reason: 'pack 64 90 plays');
+      expect(loudness(), greaterThan(0.01));
+    });
+
+    test('poly: voices, overflow, stealing, releases and stop', () {
+      open('poly');
+      final voice = at('.i', 60, 440);
+      final pitch = at('.i', 140, 440);
+      final velocity = at('.i', 220, 440);
+      final overflow = at('.l', 60, 500);
+      final stealing = at('.l', 340, 500);
+      (String, String, String) a() =>
+          (value(voice), value(pitch), value(velocity));
+      // Note 1.
+      m('100');
+      m('60');
+      expect(a(), ('1', '60', '100'));
+      expect(value(stealing), '1 60 100');
+      expect(loudness(10), greaterThan(0.01), reason: 'a saw on master');
+      m('64');
+      expect(a(), ('2', '64', '100'));
+      expect(value(stealing), '2 64 100');
+      m('67');
+      expect(a(), ('3', '67', '100'));
+      expect(value(stealing), '3 67 100');
+      expect(value(overflow), '');
+      m('71');
+      expect(value(overflow), '71 100', reason: 'no free voice');
+      expect(a(), ('3', '67', '100'), reason: 'not tracked');
+      // Note 2: poly 3 1 gave 71 the voice of 60, the oldest.
+      expect(value(stealing), '1 71 100');
+      expect(loudness(10), greaterThan(0.01));
+      // Note 3.
+      m('0');
+      m('64');
+      expect(a(), ('2', '64', '0'));
+      expect(value(stealing), '2 64 0');
+      m('71');
+      expect(value(overflow), '71 0', reason: 'the release follows it');
+      expect(a(), ('2', '64', '0'));
+      expect(value(stealing), '1 71 0');
+      expect(loudness(10), greaterThan(0.01), reason: '67 still sounds');
+      m('stop');
+      expect(a(), ('3', '67', '0'), reason: 'poly 3 releases 60, then 67');
+      expect(value(stealing), '3 67 0');
+      expect(loudness(), lessThan(silent), reason: 'every voice released');
+    });
+
+    test('poly: each voice plays its own saw', () {
+      open('poly');
+      m('100');
+      for (final (p, v) in [('60', '1'), ('64', '2'), ('67', '3')]) {
+        m(p);
+        expect(value(at('.l', 340, 500)), '$v $p 100');
+        expect(loudness(10), greaterThan(0.01), reason: 'voice $v');
+        m('stop');
+        expect(loudness(), lessThan(silent), reason: 'voice $v released');
+        // Take the voices below it again, so the next note gets the next.
+        m('60');
+        if (v == '2') m('64');
+      }
+    });
+
+    test('sustain: the pedal holds releases, lowest first, flush and '
+        'clear', () async {
+      open('sustain');
+      final keys = at('.kslider', 60, 260);
+      final pedal = at('.t', 380, 260);
+      final pitch = at('.i', 60, 420);
+      final velocity = at('.i', 170, 420);
+      final lines = <String>[];
+      final sub = Log.instance.messages.listen(lines.add);
+      addTearDown(sub.cancel);
+      // Note 1.
+      key(keys, 60, 100);
+      expect((value(pitch), value(velocity)), ('60', '100'));
+      expect(loudness(10), greaterThan(0.01), reason: 'a saw on master');
+      key(keys, 60, 0);
+      expect(value(velocity), '0', reason: 'pedal up: the release passes');
+      expect(loudness(), lessThan(silent));
+      // Note 2.
+      gateway.sendInt(inst, pedal, 0, 1);
+      key(keys, 64, 100);
+      key(keys, 64, 0);
+      expect((value(pitch), value(velocity)), ('64', '100'), reason: 'held');
+      expect(loudness(), greaterThan(0.01), reason: 'the saw sounds on');
+      key(keys, 67, 100);
+      key(keys, 67, 0);
+      key(keys, 62, 100);
+      key(keys, 62, 0);
+      expect((value(pitch), value(velocity)), ('62', '100'));
+      gateway.sendInt(inst, pedal, 0, 0);
+      expect((value(pitch), value(velocity)), ('67', '0'), reason: 'last 67');
+      expect(loudness(), lessThan(silent));
+      const marker = 'end of sustain (#510)';
+      Log.instance.sendMessage(marker);
+      for (var i = 0; i < 2000 && !lines.any((l) => l.contains(marker)); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      expect(
+        [
+          for (final l in lines)
+            if (l.contains('sustain:')) l.substring(l.indexOf('sustain:')),
+        ],
+        [
+          'sustain: 60 100',
+          'sustain: 60 0',
+          'sustain: 64 100',
+          'sustain: 67 100',
+          'sustain: 62 100',
+          'sustain: 62 0',
+          'sustain: 64 0',
+          'sustain: 67 0',
+        ],
+        reason: 'lowest pitch first',
+      );
+      // Note 3.
+      gateway.sendInt(inst, pedal, 0, 1);
+      key(keys, 60, 100);
+      key(keys, 60, 0);
+      expect(value(velocity), '100');
+      m('flush');
+      expect((value(pitch), value(velocity)), ('60', '0'), reason: 'flush');
+      key(keys, 64, 100);
+      key(keys, 64, 0);
+      expect(value(velocity), '100', reason: 'the pedal is still down');
+      m('clear');
+      expect(value(velocity), '100', reason: 'clear sends nothing');
+      gateway.sendInt(inst, pedal, 0, 0);
+      expect(value(velocity), '100', reason: 'nothing held any more');
+      expect(loudness(), greaterThan(0.01), reason: 'the saw sounds on');
+      key(keys, 65, 100);
+      key(keys, 65, 0);
+      expect(loudness(), lessThan(silent), reason: 'until another release');
+    });
+
+    test('borax: numbers, voices, durations, deltas and reset', () {
+      open('borax');
+      final keys = at('.kslider', 60, 340);
+      int box(int outlet) {
+        final (row, col) = (outlet ~/ 5, outlet % 5);
+        return at(
+          outlet == 6 || outlet == 8 ? '.f' : '.i',
+          60.0 + 110 * col,
+          550.0 + 60 * row,
+        );
+      }
+
+      List<String> top() => [for (var i = 0; i < 5; i++) value(box(i))];
+      double number(int outlet) => double.parse(value(box(outlet)));
+      final clock = Stopwatch()..start();
+      double now() => clock.elapsedMicroseconds / 1000;
+      // Note 1.
+      final pressed = now();
+      key(keys, 60, 100);
+      final pressedEnd = now();
+      expect(top(), ['1', '1', '1', '60', '100']);
+      expect(loudness(10), greaterThan(0.01), reason: 'a saw on master');
+      sleep(const Duration(milliseconds: 120));
+      final released = now();
+      key(keys, 60, 0);
+      final releasedEnd = now();
+      expect(top(), ['1', '1', '0', '60', '0']);
+      expect(value(box(5)), '1', reason: 'one note ended');
+      expect(
+        number(6),
+        inInclusiveRange(released - pressedEnd - 5, releasedEnd - pressed + 5),
+        reason: 'how long the key was held',
+      );
+      expect(value(box(7)), '0', reason: 'no delta yet');
+      // Note 2.
+      sleep(const Duration(milliseconds: 60));
+      final second = now();
+      key(keys, 64, 100);
+      final secondEnd = now();
+      expect(top(), ['2', '1', '1', '64', '100']);
+      expect(value(box(7)), '1');
+      expect(
+        number(8),
+        inInclusiveRange(second - pressedEnd - 5, secondEnd - pressed + 5),
+        reason: 'the time since the previous press',
+      );
+      m('delta');
+      expect(value(box(7)), '2', reason: 'delta reads it again');
+      key(keys, 64, 0);
+      // Note 3.
+      m('60');
+      m('64');
+      m('67');
+      expect(top(), ['5', '3', '3', '67', '100']);
+      expect(
+        [
+          for (final p in [60, 64, 67]) gateway.guiValueAt(inst, keys, p),
+        ],
+        ['100', '100', '100'],
+        reason: 'the keys stay down',
+      );
+      m('0');
+      m('64');
+      expect(top(), ['4', '2', '2', '64', '0'], reason: 'voice 2 ends');
+      m('100');
+      click(at('.b', 200, 430));
+      expect(top(), [
+        '5',
+        '3',
+        '0',
+        '67',
+        '0',
+      ], reason: 'note-offs, voice order');
+      expect(gateway.guiValueAt(inst, keys, 60), '100', reason: 'keys stay');
+      key(keys, 72, 100);
+      expect(top(), ['1', '1', '1', '72', '100'], reason: 'counting again');
+    });
+
+    test('offer: one-time pairs, one waiting y, a list, bang and clear', () {
+      open('offer');
+      final out = at('.i', 60, 490);
+      // Note 1.
+      m('72');
+      m('60');
+      expect(value(out), '0', reason: 'storing sends nothing');
+      m('60');
+      expect(value(out), '72');
+      gateway.sendInt(inst, out, 1, 0);
+      m('60');
+      expect(value(out), '0', reason: 'the pair is gone');
+      // Note 2.
+      m('72');
+      m('79');
+      m('67');
+      click(at('.b', 300, 320));
+      // Note 3: the bang lists 79, then 76, and deletes nothing.
+      click(at('.b', 60, 320));
+      expect(value(out), '76');
+      gateway.sendInt(inst, out, 1, 0);
+      m('67');
+      expect(value(out), '79', reason: '67 was paired with 79');
+      gateway.sendInt(inst, out, 1, 0);
+      m('clear');
+      click(at('.b', 60, 320));
+      expect(value(out), '0', reason: 'clear deleted 64,76');
+    });
+
+    test('mpe: a zone, two notes with their own bend, pressure and slide, '
+        'read back with channel and role', () async {
+      open('mpeconfig-mpeparse-mpeformat');
+      await pause(100);
+      expect(wire?.messages ?? [], isEmpty, reason: 'allnotesoff is lost');
+      final config = at('.l', 60, 410);
+      final built = at('.l', 60, 790);
+      final note = at('.l', 60, 1070);
+      int parsed(int i) => at('.i', 170.0 + 80 * i, 1070);
+      final (bend, pressure, slide, channel, role) = (
+        parsed(0),
+        parsed(1),
+        parsed(2),
+        parsed(3),
+        parsed(4),
+      );
+      Future<void> sent(List<List<int>> expected) async {
+        final w = wire;
+        if (w == null) return;
+        for (var i = 0; i < 2000 && w.messages.length < expected.length; i++) {
+          await pause(1);
+        }
+        await pause(5);
+        expect(w.messages, expected);
+        w.clear();
+      }
+
+      // What mpeparse shows once the last message is back.
+      Future<void> back(int id, String expected) async {
+        if (loop == null) return;
+        for (var i = 0; i < 2000 && value(id) != expected; i++) {
+          await pause(1);
+        }
+        expect(value(id), expected, reason: 'read back by mpeparse');
+      }
+
+      // Note 1.
+      m('15');
+      expect(value(config), '176 6 15');
+      await sent([
+        [176, 100, 6],
+        [176, 101, 0],
+        [176, 6, 15],
+      ]);
+      // Note 2.
+      m('2');
+      expect(value(built), '', reason: 'the channel only stores');
+      click(at('.b', 60, 540));
+      expect(value(built), '145 60 100');
+      await sent([
+        [145, 60, 100],
+      ]);
+      await back(note, '60 100');
+      if (loop != null) expect((value(channel), value(role)), ('2', '1'));
+      m('8363');
+      expect(value(built), '225 43 65');
+      await back(bend, '8363');
+      m('90');
+      expect(value(built), '209 90');
+      await back(pressure, '90');
+      m('30');
+      expect(value(built), '177 74 30');
+      await back(slide, '30');
+      await sent([
+        [225, 43, 65],
+        [209, 90],
+        [177, 74, 30],
+      ]);
+      m('3');
+      click(at('.b', 280, 540));
+      expect(value(built), '146 64 90');
+      await back(note, '64 90');
+      await back(channel, '3');
+      m('8192');
+      expect(value(built), '226 0 64');
+      await back(bend, '8192');
+      m('2');
+      m('60');
+      expect(value(built), '145 60 0', reason: 'a pitch alone releases');
+      await back(note, '60 0');
+      await back(channel, '2');
+      await sent([
+        [146, 64, 90],
+        [226, 0, 64],
+        [145, 60, 0],
+      ]);
+      // Note 1, on: 7 members leave channel 9 outside the zone, and the
+      // master channel's role is 2.
+      m('7');
+      expect(value(config), '176 6 7');
+      m('0');
+      expect(value(config), '176 6 0', reason: '0 switches MPE off');
+      m('7');
+      await sent([
+        [176, 100, 6],
+        [176, 101, 0],
+        [176, 6, 7],
+        [176, 100, 6],
+        [176, 101, 0],
+        [176, 6, 0],
+        [176, 100, 6],
+        [176, 101, 0],
+        [176, 6, 7],
+      ]);
+      final l = loop;
+      if (l == null) return;
+      l.send([152, 72, 80]);
+      await back(note, '72 80');
+      expect((value(channel), value(role)), ('9', '0'));
+      l.send([136, 72, 0]);
+      await back(note, '72 0');
+      l.send([208, 50]);
+      await back(pressure, '50');
+      expect((value(channel), value(role)), ('1', '2'));
+      l.send([149, 48, 70]);
+      await back(note, '48 70');
+      expect((value(channel), value(role)), ('6', '1'));
+    });
+  });
+
   test('report: object types with no tutorial yet', () {
     final missing = [
       for (final t in engineTypes.toList()..sort())

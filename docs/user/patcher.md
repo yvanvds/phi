@@ -341,6 +341,17 @@ for:
   receives. Elsewhere, set both ports to a loopback port. A message box
   keeps only its first word for now, so these tutorials build their lists
   with `append` and fill `sxformat`'s placeholders one inlet at a time.
+- **MIDI processing:** a metro line of notes that end by themselves
+  (`makenote`), counting only note-ons (`stripnote`), giving each note a
+  voice for a three-voice saw, with overflow and voice stealing (`poly`), a
+  sustain pedal (`sustain`), note statistics such as voices, durations and
+  the time between notes (`borax`), number pairs that are read once
+  (`offer`), and MPE: a zone, notes with their own pitch bend, pressure and
+  slide, and reading them back (`mpeconfig`, `mpeformat` and `mpeparse`,
+  which share one tutorial). These objects work on numbers, not on a port,
+  and the tutorials play them from keyboards and message boxes on a saw on
+  the master bus. The MPE tutorial sends to output port 0 and reads input
+  port 0, as the MIDI output tutorials do.
 
 Each tutorial is a small working patch, with numbered notes that walk you
 through it. Where Phi's object differs from the Max object of the same name,

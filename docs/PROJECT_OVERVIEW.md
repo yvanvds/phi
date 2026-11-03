@@ -3075,7 +3075,14 @@ main + app          (orchestration)
   messages never go into a `.l`: the wrapper's `guiValue` cannot decode them
   (dart-yse#109). `test_support/midi_driver_unavailable.dart` sets RtMidi's
   "no MIDI system" error apart for a tutorial holding a `.midiout` as well
-  as a MIDI input object).
+  as a MIDI input object)
+  and MIDI processing (#510: `makenote`, `stripnote`, `poly`, `sustain`,
+  `borax`, `offer`, `mpeconfig-mpeparse-mpeformat`; these objects need no
+  port, so the tutorials play them from `.kslider`s and message boxes on a
+  saw on master, and the tests press keys through `setGuiValueAt`, the
+  canvas's path. The MPE one alone sends through `.midiout 0`, opened by
+  the same `allnotesoff` loadbang, and reads input port 0 with `.midiin 0`
+  into `.mpeparse`; its byte lists are numeric, so they may go into a `.l`).
   The domain clock six reach a libYSE
   domain clock by name; their clocks advance with the audio blocks whether or
   not the patch is mounted, and are never destroyed by a patch object. A
@@ -3128,7 +3135,8 @@ main + app          (orchestration)
   `patcher_dictionary_tutorials`,
   `patcher_array_tutorials`,
   `patcher_midi_input_tutorials`,
-  `patcher_midi_output_tutorials`: each opens its tutorials
+  `patcher_midi_output_tutorials`,
+  `patcher_midi_processing_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
   that no note or object overlaps another). Every one of them opens a
   tutorial through the shared `openTutorialBySearch(tester, type)` helper in

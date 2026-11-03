@@ -1,0 +1,567 @@
+{
+  "title": "mpeconfig, mpeformat and mpeparse — MPE",
+  "covers": [
+    ".mpeconfig",
+    ".mpeformat",
+    ".mpeparse"
+  ],
+  "summary": "Configure an MPE zone, play two notes on their own channels with their own pitch bend, pressure and slide to a MIDI output port, and read MPE back with each message's channel and role.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# mpeconfig, mpeformat and mpeparse — MPE\nMPE, MIDI Polyphonic Expression, gives each sounding note its own MIDI channel, so pitch bend, pressure and slide can move one note of a chord. A zone has a master channel, whose messages apply to every note, and member channels, one per note. In the lower zone the master is channel 1 and the members count up from 2. mpeconfig tells a device how many member channels there are, mpeformat builds MPE messages as byte lists for midiout, and mpeparse reads them back.\nMax's MPE objects can place up to seven zones anywhere and trade in mpeevent messages for poly~. Here there are the two zones MPE defines, lower (argument 0) and upper (1), and the member channel is what a note is known by. mpeparse reports only the MPE messages: wire midiparse to the same source for the rest.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "290.0"
+        },
+        "parms": "15",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "590.0"
+        },
+        "parms": "60 100",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "170.0",
+          "y": "590.0"
+        },
+        "parms": "60",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "280.0",
+          "y": "590.0"
+        },
+        "parms": "64 90",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "390.0",
+          "y": "590.0"
+        },
+        "parms": "64",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "660.0"
+        },
+        "parms": "8192",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "170.0",
+          "y": "660.0"
+        },
+        "parms": "8363",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "280.0",
+          "y": "660.0"
+        },
+        "parms": "90",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 2,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "390.0",
+          "y": "660.0"
+        },
+        "parms": "30",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 3,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "60.0",
+          "y": "730.0"
+        },
+        "parms": "",
+        "type": ".mpeformat",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "60.0",
+          "y": "790.0",
+          "w": "160"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "290.0"
+        },
+        "parms": "7",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "60.0",
+          "y": "870.0"
+        },
+        "parms": "0",
+        "type": ".midiout"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "300.0",
+          "y": "790.0"
+        },
+        "parms": "",
+        "type": ".loadbang",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "300.0",
+          "y": "840.0"
+        },
+        "parms": "allnotesoff",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "60.0",
+          "y": "950.0"
+        },
+        "parms": "0",
+        "type": ".midiin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 24
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "60.0",
+          "y": "1010.0"
+        },
+        "parms": "",
+        "type": ".mpeparse",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 25
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 26
+            },
+            "Count": 1
+          },
+          "output 2": {
+            "0": {
+              "Inlet": 0,
+              "Object": 27
+            },
+            "Count": 1
+          },
+          "output 3": {
+            "0": {
+              "Inlet": 0,
+              "Object": 28
+            },
+            "Count": 1
+          },
+          "output 4": {
+            "0": {
+              "Inlet": 0,
+              "Object": 29
+            },
+            "Count": 1
+          },
+          "output 5": {
+            "0": {
+              "Inlet": 0,
+              "Object": 30
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "60.0",
+          "y": "1070.0"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "170.0",
+          "y": "1070.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 27": {
+        "ID": 27,
+        "gui": {
+          "x": "250.0",
+          "y": "1070.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 28": {
+        "ID": 28,
+        "gui": {
+          "x": "330.0",
+          "y": "1070.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 29": {
+        "ID": 29,
+        "gui": {
+          "x": "410.0",
+          "y": "1070.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "290.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 30": {
+        "ID": 30,
+        "gui": {
+          "x": "490.0",
+          "y": "1070.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 31": {
+        "ID": 31,
+        "gui": {
+          "x": "640.0",
+          "y": "290.0",
+          "w": "300"
+        },
+        "parms": "1. Click 15: mpeconfig 0 builds the configuration message for the lower zone, three controller messages on channel 1, and midiout sends them. The list box shows the last, 176 6 15: 15 member channels. A device that receives it sets the member channels' bend range to 48 semitones. 7 leaves channels 9 to 16 for ordinary MIDI, and 0 switches MPE off.",
+        "type": ".text"
+      },
+      "object 32": {
+        "ID": 32,
+        "gui": {
+          "x": "640.0",
+          "y": "470.0",
+          "w": "300"
+        },
+        "parms": "2. mpeformat plays on the member channel its right inlet stores: click 2. The button above pack 60 100 plays middle C on channel 2, 145 60 100. 8363 bends that note up about a semitone at the 48-semitone range, as the full 14 bits, and 8192 is the bend at rest. 90 presses the note, and 30 slides it, controller 74. Click 3 and the button above pack 64 90: E on channel 3, with a bend of its own. A pitch alone, 60 or 64, releases a note: click its channel first.",
+        "type": ".text"
+      },
+      "object 33": {
+        "ID": 33,
+        "gui": {
+          "x": "640.0",
+          "y": "700.0",
+          "w": "300"
+        },
+        "parms": "3. midiout opens its port when the first message arrives, and that first message is lost. So loadbang sends allnotesoff as the patch opens, and the port is ready before you click.",
+        "type": ".text"
+      },
+      "object 34": {
+        "ID": 34,
+        "gui": {
+          "x": "640.0",
+          "y": "830.0",
+          "w": "300"
+        },
+        "parms": "4. mpeparse reads what arrives on input port 0, through midiin. Left to right: the note as pitch and velocity, the bend, the pressure, the slide, the channel, and its role: 1 for a member channel, 2 for the master, 0 outside the zone. On Linux, output 0 and input 0 are usually Midi Through, which sends back whatever it receives, so mpeparse reads what you play here. With an MPE controller, set midiin's argument to its port.",
+        "type": ".text"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "350.0"
+        },
+        "parms": "0",
+        "type": ".mpeconfig",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "410.0",
+          "w": "160"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "480.0"
+        },
+        "parms": "2",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 4,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "170.0",
+          "y": "480.0"
+        },
+        "parms": "3",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 4,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "540.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "280.0",
+          "y": "540.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

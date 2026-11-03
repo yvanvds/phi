@@ -1,0 +1,235 @@
+{
+  "title": "offer — one-time pairs",
+  "covers": [
+    ".offer"
+  ],
+  "summary": "Store x,y pairs of numbers, get each y back once by its x, store a pair from one list, list every stored y with a bang and delete them with clear.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# offer — one-time pairs\noffer stores pairs of ints, an x and a y, and gives each y back once. A y on the right inlet waits for an x, and the next x on the left inlet stores the pair. An x with no y waiting looks its pair up: offer sends the y and deletes the pair. A list <x> <y> stores a pair in one message.\nIt was made for notes that change on the way through a patch. Store each original pitch with the pitch that was played, and when the release arrives, its pitch looks up the one to release. It works as Max's offer does. Nothing is saved with the patch.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "250.0"
+        },
+        "parms": "60",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "490.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "170.0",
+          "y": "490.0"
+        },
+        "parms": "offer",
+        "type": ".print"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "640.0",
+          "y": "250.0",
+          "w": "300"
+        },
+        "parms": "1. Click 72, then 60: offer stores the pair 60,72 and sends nothing. Click 60: out comes 72, and the pair is deleted. Click 60 again: nothing comes out, because no pair is left.",
+        "type": ".text"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "640.0",
+          "y": "360.0",
+          "w": "300"
+        },
+        "parms": "2. Only one y waits at a time: click 72, then 79, then 67, and 67 is paired with 79. The button above pack 64 76 stores the pair 64,76 as one list.",
+        "type": ".text"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "640.0",
+          "y": "460.0",
+          "w": "300"
+        },
+        "parms": "3. The button above offer sends every stored y, oldest first, without deleting any: print writes them to the log (Ctrl+J). clear deletes every pair.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "250.0"
+        },
+        "parms": "67",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "300.0",
+          "y": "250.0"
+        },
+        "parms": "72",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "410.0",
+          "y": "250.0"
+        },
+        "parms": "79",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "320.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "120.0",
+          "y": "320.0"
+        },
+        "parms": "clear",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "300.0",
+          "y": "320.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "300.0",
+          "y": "370.0"
+        },
+        "parms": "64 76",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "430.0"
+        },
+        "parms": "",
+        "type": ".offer",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 2
+          }
+        }
+      }
+    }
+  }
+}

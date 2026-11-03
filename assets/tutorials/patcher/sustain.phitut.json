@@ -1,0 +1,315 @@
+{
+  "title": "sustain — a sustain pedal",
+  "covers": [
+    ".sustain"
+  ],
+  "summary": "Hold the releases of a keyboard's notes back with a pedal toggle so a saw on master keeps sounding, let them go lowest first when the pedal lifts, and send or forget them with flush and clear.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# sustain — a sustain pedal\nsustain holds note releases back while its pedal is down, as a piano's sustain pedal does. A pitch on the left inlet goes out with the velocity stored on the middle inlet. A note-on always passes. A release, velocity 0, passes with the pedal up and is held with the pedal down. The right inlet is the pedal: a number other than 0 presses it, and 0 lifts it and sends every held release, lowest pitch first. The messages sustain 1 and sustain 0 do the same on the left inlet.\nMax's sustain has a repeatmode attribute for a key played again while its release is held. Here the key sounds again and its held release still goes out when the pedal lifts, Max's default.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "260.0"
+        },
+        "parms": "",
+        "type": ".kslider",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 1,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "480.0"
+        },
+        "parms": "",
+        "type": ".mtof",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "170.0",
+          "y": "480.0"
+        },
+        "parms": "0 127 0 0.2",
+        "type": ".scale",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "540.0"
+        },
+        "parms": "",
+        "type": "~saw",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "600.0"
+        },
+        "parms": "2500",
+        "type": "~lp",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "660.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "60.0",
+          "y": "720.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "640.0",
+          "y": "260.0",
+          "w": "300"
+        },
+        "parms": "1. Press a key and let go. With the pedal up, the release passes: the velocity box shows 0 and the saw on the master bus stops.",
+        "type": ".text"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "640.0",
+          "y": "360.0",
+          "w": "300"
+        },
+        "parms": "2. Switch the toggle on to press the pedal. Press a key and let go: the release is held, and the saw keeps sounding. Press two more keys. Switch the pedal off: every held release goes out, lowest pitch first, and the saw stops. print writes each pitch and velocity to the log (Ctrl+J).",
+        "type": ".text"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "640.0",
+          "y": "520.0",
+          "w": "300"
+        },
+        "parms": "3. With the pedal down, flush sends the held releases now and leaves the pedal down. clear forgets them without sending: the saw keeps sounding until another release reaches it.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "380.0",
+          "y": "260.0"
+        },
+        "parms": "",
+        "type": ".t",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 2,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "430.0",
+          "y": "260.0"
+        },
+        "parms": "flush",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "540.0",
+          "y": "260.0"
+        },
+        "parms": "clear",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "360.0"
+        },
+        "parms": "",
+        "type": ".sustain",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "2": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 3
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 7
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 8
+            },
+            "2": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 3
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "170.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "400.0",
+          "y": "420.0"
+        },
+        "parms": "0 0",
+        "type": ".pack",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "400.0",
+          "y": "480.0"
+        },
+        "parms": "sustain",
+        "type": ".print"
+      }
+    }
+  }
+}
