@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/design/tokens/phi_colors.dart';
 import 'package:phi/domain/session/session_state.dart';
+import 'package:phi/domain/system_load/system_load.dart';
 import 'package:phi/engine/state/engine_telemetry.dart';
 import 'package:phi/shell/bottom_status/bottom_status.dart';
 import 'package:phi/shell/bottom_status/midi_activity_dot.dart';
 import 'package:phi/shell/bottom_status/panic_button.dart';
 import 'package:phi/shell/bottom_status/status_chip.dart';
+import 'package:phi/shell/bottom_status/system_load_chip.dart';
 
 import '../../engine/test_doubles/fake_yse_gateway.dart';
 
@@ -250,6 +252,34 @@ void main() {
       await tester.tap(find.byKey(PanicButton.buttonKey));
       await tester.pump();
       expect(panicked, 1);
+    });
+
+    testWidgets('the SYS chip sits right of CPU when a load is wired '
+        '(issue #24)', (tester) async {
+      await pump(tester);
+      expect(find.byType(SystemLoadChip), findsNothing);
+
+      final load = ValueNotifier(SystemLoad.pending);
+      addTearDown(load.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: BottomStatus.fromStreams(
+              telemetry: telemetry.stream,
+              midiActivity: midi.stream,
+              session: session,
+              systemLoad: load,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byType(SystemLoadChip), findsOneWidget);
+      final cpu = tester.getRect(find.text('CPU'));
+      final sys = tester.getRect(find.text('SYS'));
+      final buf = tester.getRect(find.text('BUF'));
+      expect(sys.left, greaterThan(cpu.right));
+      expect(sys.right, lessThan(buf.left));
     });
   });
 

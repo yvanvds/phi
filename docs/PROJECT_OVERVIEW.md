@@ -41,7 +41,9 @@ main + app          (orchestration)
 ├── engine          (PhiEngine façade + bridge over package:yse)
 ├── design          (tokens + reusable widgets — no domain knowledge)
 ├── domain          (pure-Dart models — session/ wired; more arrives later)
-├── platform        (windows-specific bits — empty for now)
+├── platform        (OS facilities outside the engine — per-thread CPU
+│                    sampling over procfs / kernel32, issue #24; pure Dart +
+│                    dart:ffi, no Flutter, no package:yse)
 └── core            (cross-cutting helpers — `Clock` wall-clock seam,
                      `PerUserFolders` settings/logs folder resolver)
 ```
@@ -2233,6 +2235,40 @@ main + app          (orchestration)
   `AudioDeviceChip` widget test (per-state look + click-through), and an end-to-end
   `audio_device_chip` integration test (the real app walks the four states via the
   fake gateway, each transition logs, and the chip clicks through to settings AUDIO).
+- **The status-bar `SYS` chip** (issue #24) — per-*thread* CPU of the whole
+  Phi process beside `CPU` (which stays the audio-callback budget). Threads,
+  not cores: the scheduler bounces threads across cores (more so on P/E-core
+  parts), so per-core figures show churn while a thread has a role. Three
+  layers: `lib/platform/thread_cpu/` holds the `ThreadCpuSampler` interface
+  (a `ThreadCpuSnapshot` of cumulative per-thread `ThreadCpuReading`s on the
+  sampler's own monotonic clock) and the OS implementations —
+  `LinuxThreadCpuSampler` reads `/proc/self/task/*/stat` (`utime + stime`,
+  parsed after the last `)`, ticks via `sysconf(_SC_CLK_TCK)`) and `comm`
+  through a `ProcTaskReader` seam; `WindowsThreadCpuSampler` goes through a
+  `Win32ThreadApi` seam whose FFI implementation `Kernel32ThreadApi` walks
+  `CreateToolhelp32Snapshot` / `Thread32First` / `Thread32Next`, reads
+  `GetThreadTimes` and `GetThreadDescription` (resolved lazily, Win10 1607+);
+  `HostThreadCpuSampler.create()` picks one (or `null` elsewhere). The pure
+  `SystemLoadTracker` (`lib/domain/system_load/`) diffs two snapshots into
+  `ThreadCpuUsage` rows (percent of *one* core, clamped; a thread born in the
+  window counts in full, a reused id restarts from zero) and a `SystemLoad`
+  whose `SystemLoadLevel` is the busiest thread's — ok < 60 % ≤ busy < 85 % ≤
+  saturated — plus the whole-process figure over all logical cores as context.
+  The shell's `SystemLoadMonitor` (`lib/shell/diagnostics/`) polls once a
+  second on its own timer (not the 16 ms telemetry tick) and goes
+  `unavailable` for good if the sampler throws. `SystemLoadChip` +
+  `SystemLoadPopover` (`lib/shell/bottom_status/`) show the dot and, on click,
+  the top eight threads opening upward. `PhiApp` wires the host sampler on the
+  production path; with an injected engine it stays off unless a test injects
+  one (`ScriptedThreadCpuSampler` in `test/platform/thread_cpu/test_doubles/`).
+  PortAudio's callback thread is unnamed (on Linux it inherits its creator's
+  `comm`, on Windows it reads `thread <id>`) until libYSE names its threads
+  (yvanvds/yse-soundengine#1259). Covered by unit
+  tests (stat parsing, Win32 conversion through a fake API, the tracker, the
+  monitor under fake time), widget tests (chip colours, tooltip, popover), and
+  the `system_load_chip` integration test (a scripted saturated thread turns
+  the dot red at a 7 % process average; the host sampler measures the test's
+  own threads).
 - **The report bundle + crash surfacing** (issue #272, epic #267, design
   `docs/design/diagnostics.md` §6) — closes the diagnostics epic. A pure-Dart
   `DiagnosticsBundle` (`lib/domain/log/`) renders one paste-ready, **stable-ordered**

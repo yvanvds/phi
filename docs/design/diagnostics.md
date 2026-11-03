@@ -69,6 +69,13 @@ command; `Ctrl+J`-style shortcut via the command registry):
   mid-set cannot tell which. The give-up notice names the attempt count and
   points at Settings › Audio; the DIAGNOSTICS row and the pasted bundle
   carry the same clause beside "no audio device open" (§6).
+- **`SYS` chip** (issue #24): beside `CPU` (the audio-callback budget), a
+  dot coloured by the **busiest thread** of the process — green below 60 %
+  of one core, amber from 60 %, red from 85 % — sampled once a second
+  (`/proc/self/task` on Linux, Toolhelp + `GetThreadTimes` +
+  `GetThreadDescription` on Windows). Per thread, not per core: threads
+  have roles, cores only churn. Click opens a popover with the top eight
+  threads by name and the whole-process figure over all logical cores.
 - The CPU / drops chips stay; the **log toggle badges** the count of
   error-level entries since the panel was last open; click opens the
   drawer filtered to errors.

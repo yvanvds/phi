@@ -76,9 +76,21 @@ The strip along the bottom shows, from the left:
   notes captured so far are kept), cancels a count-in, stops every clip, and
   sends all-notes-off to the MIDI output and to every synth voice. You can
   press it as often as you like.
-- **Engine readouts**: `CPU` load, `BUF` (buffer size), `LAT` (latency), and
-  `DROPS`, the number of times this session the audio device stalled long
-  enough to be heard.
+- **Engine readouts**: `CPU` load, `SYS` (below), `BUF` (buffer size), `LAT`
+  (latency), and `DROPS`, the number of times this session the audio device
+  stalled long enough to be heard. `CPU` is how much of each audio callback's time budget
+  the engine uses.
+- **`SYS`**: a dot showing how hard the busiest thread in Phi is working, as
+  a share of one processor core. Green means it has room. Amber means one
+  thread is at 60 % or more. Red means one thread is at 85 % or more and
+  close to falling behind. It is red even when the machine as a whole is mostly idle,
+  because a single overloaded thread is enough to cause trouble. Click it to
+  see the busiest threads by name with their share of a core, plus the whole
+  process's share of all cores. The list updates every second. Click anywhere
+  else to close it. The audio engine's own threads have no names yet. On
+  Linux they show under the name of the thread that started them, and on
+  Windows as `thread` followed by a number. On systems where Phi can't measure
+  threads, the dot stays grey.
 - **Audio chip**: `AUDIO` while a device is open, amber `RECONNECTING` while
   Phi tries to get a lost device back, red `NO AUDIO` once it has given up.
   Click it to open Settings › AUDIO.
