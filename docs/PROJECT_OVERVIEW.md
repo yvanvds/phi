@@ -342,6 +342,10 @@ main + app          (orchestration)
   runs the real renderer (headless under Xvfb on Linux): it reads the drawn
   pixels back to check each agent's colour sits where the pick math projects
   it, then clicks, grabs, orbits and zooms through the real pointer path.
+  `integration_test/native_windows/scene_audience_window_test.dart` (#297) does
+  the same draw check in a second native window, including the pixels that
+  window shows on the display; the result and the caveats for the projected
+  audience view are in [design/shell-layout.md](design/shell-layout.md) §5.6.
   Issue #90 adds a
   debug-only **pick demo** toggle on the Scene surface: the playback demo's
   notes are too short and clustered to click by hand, so flipping the toggle
@@ -3337,7 +3341,9 @@ main + app          (orchestration)
   (`test/surfaces/patcher/test_support/`) replaces the platform text input
   and enforces the Windows plugin's rule (a call naming a view must find it
   alive) against the binding's views. Any integration test that types into a
-  subpatch window needs it.
+  subpatch window needs it. Real native windows are possible in tests under
+  `integration_test/native_windows/` (see "Integration test driver"); moving
+  this test there is #557.
 - **Encapsulate / de-encapsulate** (issue #552) — Max's *Encapsulate*:
   `Ctrl+Shift+E` (or the node menu's `encapsulate`) moves the selection into a
   new unnamed `patcher` box at its top-left corner; `Ctrl+Shift+D` (or
@@ -3404,9 +3410,17 @@ main + app          (orchestration)
   `integration_test/` suite on windows-latest — nightly on `develop`, on every
   release PR into `main`, and on manual dispatch).
 - **Integration test driver:** `tool/run_integration_tests.ps1` — runs each
-  `integration_test/*.dart` as its own `flutter test` invocation (a single
-  folder-wide run under-reports on Windows), with `-Shard`/`-Of` sharding.
-  Used both locally and by `integration.yaml`.
+  `integration_test/*.dart` and `integration_test/native_windows/*_test.dart` as
+  its own `flutter test` invocation (a single folder-wide run under-reports on
+  Windows), with `-Shard`/`-Of` sharding. Used both locally and by
+  `integration.yaml`.
+- **Native windows in integration tests:** `integration_test/native_windows/`
+  has its own `flutter_test_config.dart`, which installs
+  `NativeWindowsTestBinding` before the entry point creates the stock binding.
+  A `WindowController` made there is a real window over the engine, not
+  flutter_test's stand-in (#297, flutter/flutter#195919).
+  `LinuxWindowPixels` reads back what such a window shows on the display. On
+  Linux X11, open windows only after the main window has painted (#556).
 - **SonarCloud:** project key `yvanvds_phi`, organization `yvanvds`
   (`sonar-project.properties`); the CI scan is off for now (issue #447).
 - **Issue templates:** `.github/ISSUE_TEMPLATE/`. Labels: see

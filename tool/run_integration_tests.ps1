@@ -1,6 +1,9 @@
 <#
 .SYNOPSIS
-    Drives every integration_test/*.dart file as its own `flutter test` run.
+    Drives every integration test file as its own `flutter test` run: each
+    integration_test/*.dart, and each integration_test/native_windows/*_test.dart
+    (tests that open real native windows, under that folder's own
+    flutter_test_config.dart; its other files are their support code).
 
 .DESCRIPTION
     On Windows a single `flutter test integration_test` invocation launches only
@@ -55,7 +58,11 @@ if (-not (Test-Path $testDir)) { throw "No integration_test/ folder at $testDir"
 $flutter = (Get-Command flutter -ErrorAction SilentlyContinue).Source
 if (-not $flutter) { throw 'flutter was not found on PATH.' }
 
-$all = Get-ChildItem -Path $testDir -Filter '*.dart' |
+$nativeWindowsDir = Join-Path $testDir 'native_windows'
+$all = @(
+    Get-ChildItem -Path $testDir -Filter '*.dart'
+    Get-ChildItem -Path $nativeWindowsDir -Filter '*_test.dart'
+) |
     Where-Object { $_.Name -like $Filter } |
     Sort-Object Name
 
@@ -77,7 +84,7 @@ New-Item -ItemType Directory -Force $logDir | Out-Null
 $index = 0
 foreach ($file in $mine) {
     $index++
-    $relative = "integration_test/$($file.Name)"
+    $relative = [System.IO.Path]::GetRelativePath($repoRoot, $file.FullName) -replace '\\', '/'
     Write-Host "[$index/$($mine.Count)] $relative" -NoNewline
 
     $log = Join-Path $logDir "$($file.BaseName).log"
