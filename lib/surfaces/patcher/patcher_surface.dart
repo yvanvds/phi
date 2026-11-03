@@ -777,6 +777,9 @@ class _PatcherViewportState extends State<_PatcherViewport> {
                   definitionFollowed:
                       definition != null &&
                       _library.canFollow(editor, definition),
+                  instanceNumber: definition == null
+                      ? null
+                      : editor.instanceNumberOf(id),
                 )
               : null,
           onOpenSubpatch: isBox

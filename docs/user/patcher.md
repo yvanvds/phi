@@ -260,9 +260,36 @@ their instances keep what they hold and keep sounding, but they can only be play
 and the reference panel marks the definition *not followed*. Detach one to edit it.
 Undo the delete, or make a new patch at that address, and they follow again.
 
+**Names of its own: `#0`.** Instances share a patch, so a plain name inside a
+definition is one name across all of them: an `s pitch` in one instance reaches
+the `r pitch` of another. Put `#0` in the name to give each instance its own.
+`s pitch#0` in the patch reads `s pitch#3` in instance 3, and `r pitch#0` reads
+`r pitch#3`, so they only reach each other. It works in any object's arguments,
+anywhere in a name, for anything that shares by name: `value`, `coll`, `table`,
+a `forward` target. It does not work where an argument has to be a number, and a
+note keeps its text as you wrote it.
+
+Select an instance to see its number in the reference panel, under *instance*.
+Each box in a patch has its own number, and keeps it: through a save, through
+edits to the patch, and through a detach. A duplicate or a paste gets a new one.
+Each patch counts for itself, so two patches can both have an instance 3.
+
+- The patch's own window shows and runs `pitch#0` as you typed it. An instance's
+  own window shows the name it really uses.
+- An ordinary subpatch inside the patch shares its instance's number. An instance
+  nested inside the patch has a number of its own.
+- To reach one instance from outside, use its number: `s pitch#3` in the parent,
+  or `patch.song.send('pitch#3', 67)` from the Code surface.
+- Detaching leaves the names as they are (`pitch#3`). *Make abstraction* on that
+  box turns them back into `pitch#0`. In an ordinary subpatch that never was an
+  instance, `#0` is only part of a name, until *make abstraction* makes it count.
+- Don't use `#` and a number for anything else in a patch you nest inside another:
+  it can be taken for an instance's number.
+
 **Limits.** What an object saves beyond its arguments, such as a `.preset`'s slots
-or a `.function`'s points, is not copied into a new instance. A `.s` and a `.r` with
-the same name reach each other across instances, as they do across subpatches.
+or a `.function`'s points, is not copied into a new instance. A name without `#0`
+still reaches across instances, as it does across subpatches. A shared name can be
+at most 63 characters long, and that counts the number in an instance.
 
 ## Selecting, moving and the grid
 

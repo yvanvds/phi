@@ -3393,6 +3393,13 @@ main + app          (orchestration)
   `patch_instance_materialiser_test.dart`, `patch_abstraction_sync_test.dart`,
   `patch_abstraction_engine_test.dart` (real engine), `subpatch_window_test.dart`
   and the `native_windows/patcher_abstraction_window` integration test.
+  `#0` in a definition reads as `#<number>` in each copy (issue #561, §13): the number
+  is a GUI property on the box (`PatchGuiProperty.instanceNumber`), unique per patch,
+  given by `PatcherController.numberInstances` at the start of the sync's pass;
+  `PatchInstanceMaterialiser` translates the source's arguments per window
+  (`PatchAbstraction.renumbered`) and compares the result, so a copy that reads right
+  gets no write. Covered by `patch_instance_number_test.dart` and the
+  `native_windows/patcher_instance_number_window` integration test.
 - Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
   switched off for now, issue #447)
 

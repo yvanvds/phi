@@ -1,5 +1,7 @@
+import '../../domain/patcher/patch_abstraction.dart';
 import '../../domain/patcher/patch_boundary.dart';
 import '../../domain/patcher/patch_cable.dart';
+import '../../domain/patcher/patch_gui_property.dart';
 import '../../domain/patcher/patch_node.dart';
 import '../../domain/patcher/patch_node_id.dart';
 import '../../domain/patcher/patch_port.dart';
@@ -33,6 +35,14 @@ import 'patcher_controller.dart';
 /// still accept each other; otherwise it is dropped, and [dropped] counts it so
 /// the canvas can say so.
 ///
+/// **`#0`** (issue #561). A copy's arguments spell its instance's number where
+/// the definition says `#0`. Nothing here ever reads a copy back to `#0`: the
+/// source's arguments are turned into what the target should hold, and that is
+/// what gets compared, so a copy that already reads right is not written to. Each
+/// window knows two numbers ([_Numbers]), and a nested instance starts its own
+/// pair, because its contents spell the number of the box they sit in. The box's
+/// own number is the one property not copied: it belongs to that box.
+///
 /// Everything here is a direct primitive, not a journaled command: this is the
 /// consequence of an edit that was journaled somewhere else, in the definition.
 class PatchInstanceMaterialiser {
@@ -55,6 +65,9 @@ class PatchInstanceMaterialiser {
   /// The window of [target] to bring in line.
   final PatchNodeId? targetScope;
 
+  /// The numbers each window of [source] and its copy spell, by source window.
+  final Map<PatchNodeId?, _Numbers> _numbers = {};
+
   /// Each object of [source] and the object of [target] that is its copy.
   final Map<PatchNodeId, PatchNodeId> _copyOf = {};
 
@@ -73,7 +86,10 @@ class PatchInstanceMaterialiser {
   /// Reconcile [targetScope] with [sourceScope]. Writes nothing when they
   /// already agree, so it is cheap to run after any edit.
   void run() {
-    _pair(sourceScope, targetScope);
+    _pair(sourceScope, targetScope, (
+      from: _numberOf(source, sourceScope),
+      to: _numberOf(target, targetScope),
+    ));
     final orphans = _unwireDoomed();
     _createMissing();
     final wanted = _wantedCables();
@@ -87,9 +103,35 @@ class PatchInstanceMaterialiser {
     _rewire(orphans);
   }
 
+  // ─── the number in the arguments ─────────────────────────────────────
+
+  /// What the top of a window spells: its box's number, whether the box is an
+  /// instance or a detached one being made an abstraction again.
+  static int _numberOf(PatcherController editor, PatchNodeId? box) =>
+      box == null
+      ? PatchAbstraction.unnumbered
+      : editor.instanceNumberOf(box) ?? PatchAbstraction.unnumbered;
+
+  /// The numbers inside the source box [box], held by [copy] on the target: a
+  /// new pair for a nested instance, the enclosing one for an ordinary subpatch.
+  _Numbers _numbersInside(PatchNodeId box, PatchNodeId copy, _Numbers around) =>
+      source.abstractionOf(box) == null
+      ? around
+      : (from: _numberOf(source, box), to: target.instanceNumberFor(copy));
+
+  /// What the [source] object [node] should read as in [target].
+  String _argsOnTarget(PatchNode node, _Numbers numbers) =>
+      PatchAbstraction.renumbered(
+        node.type,
+        source.argsOf(node.id),
+        from: numbers.from,
+        to: numbers.to,
+      );
+
   // ─── pairing ─────────────────────────────────────────────────────────
 
-  void _pair(PatchNodeId? from, PatchNodeId? into) {
+  void _pair(PatchNodeId? from, PatchNodeId? into, _Numbers numbers) {
+    _numbers[from] = numbers;
     final wants = source.nodesIn(from).toList();
     final has = target.nodesIn(into).toList();
     final pairs = <(PatchNode, PatchNode)>[];
@@ -108,7 +150,7 @@ class PatchInstanceMaterialiser {
 
     bool sameType(PatchNode a, PatchNode b) => a.type == b.type;
     bool sameArgs(PatchNode a, PatchNode b) =>
-        source.argsOf(a.id) == target.argsOf(b.id);
+        _argsOnTarget(a, numbers) == target.argsOf(b.id);
     bool samePlace(PatchNode a, PatchNode b) => a.position == b.position;
     pairWhere((a, b) => sameType(a, b) && sameArgs(a, b) && samePlace(a, b));
     pairWhere((a, b) => sameType(a, b) && sameArgs(a, b));
@@ -118,7 +160,9 @@ class PatchInstanceMaterialiser {
     _doomed.addAll(has.map((n) => n.id));
     for (final (want, have) in pairs) {
       _copyOf[want.id] = have.id;
-      if (PatchBoundary.isSubpatch(want.type)) _pair(want.id, have.id);
+      if (PatchBoundary.isSubpatch(want.type)) {
+        _pair(want.id, have.id, _numbersInside(want.id, have.id, numbers));
+      }
     }
   }
 
@@ -163,9 +207,22 @@ class PatchInstanceMaterialiser {
     for (final id in _missing) {
       final container = source.containerOf(id);
       final into = container == sourceScope ? targetScope : _copyOf[container];
-      _copyOf[id] = target.createNodePrimitive(
-        source.captureSpec(id).inContainer(into),
+      final numbers = _numbers[container]!;
+      final node = source.graph.nodeById(id)!;
+      final spec = source.captureSpec(id);
+      final args = _argsOnTarget(node, numbers);
+      final copy = target.createNodePrimitive(
+        spec.asCopy(
+          args: args,
+          gui: {...spec.gui}..remove(PatchGuiProperty.instanceNumber),
+          box: into,
+        ),
       );
+      if (args != spec.args) target.remeasureNode(copy);
+      _copyOf[id] = copy;
+      if (PatchBoundary.isSubpatch(node.type)) {
+        _numbers[id] = _numbersInside(id, copy, numbers);
+      }
       changed = true;
     }
   }
@@ -176,10 +233,14 @@ class PatchInstanceMaterialiser {
     _copyOf.forEach((from, to) {
       if (created.contains(from)) return;
       final want = source.captureSpec(from);
-      if (target.argsOf(to) != want.args) {
+      final args = _argsOnTarget(
+        source.graph.nodeById(from)!,
+        _numbers[want.container]!,
+      );
+      if (target.argsOf(to) != args) {
         // A cable a shrunken object lost is either the definition's, re-wired
         // below if it still stands, or the parent's, and that one is gone.
-        final lost = target.setNodeParams(to, want.args);
+        final lost = target.setNodeParams(to, args);
         dropped += lost.where(_isFromParent).length;
         changed = true;
       }
@@ -189,6 +250,7 @@ class PatchInstanceMaterialiser {
       }
       final have = target.captureSpec(to).gui;
       for (final key in {...want.gui.keys, ...have.keys}) {
+        if (key == PatchGuiProperty.instanceNumber) continue;
         final value = want.gui[key] ?? '';
         if ((have[key] ?? '') == value) continue;
         target.setGuiPropertyPrimitive(to, key, value);
@@ -274,6 +336,9 @@ class PatchInstanceMaterialiser {
     }
   }
 }
+
+/// The number a window of the source spells, and the one its copy should.
+typedef _Numbers = ({int from, int to});
 
 /// A cable the parent wired to a boundary object that is going away: the
 /// parent-facing [end] it was on, and the box [pin] that object claimed.

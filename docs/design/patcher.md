@@ -505,13 +505,76 @@ them are here to be reviewed and overturned.
    detached, and the panel says the definition is not followed. Undoing the delete,
    or making a patch at that address, picks them up again.
 
+### `#0`: names per instance (issue #561)
+
+An instance is a copy in the parent's flat graph, and a shared name is scoped to the
+native patcher, so a `.s` / `.r` pair in a definition used to talk across every instance
+in a patch. These were settled the same way, from the code.
+
+10. **The token is `#0`, as in Max, and it reads `#<number>` in a copy.** `.s ping#0` in
+    the definition is `.s ping#3` in instance 3. `$0` was the alternative (Pure Data's),
+    but `$` already means something to `expr`, `regexp` and sysex in the engine, where
+    `#` means nothing: the engine's tokenizer splits on whitespace only, a string
+    parameter keeps the token as it is, and the bus matches addresses exactly, with no
+    globbing. Unlike Max it keeps the `#` rather than becoming bare digits. *Because* a
+    `#` cannot run into a name somebody typed (`voice#0` as `voice1` would be the same
+    name as a `voice1` in the parent, and Max only avoids this by starting at a high
+    number), and because a window showing `ping#3` says where the name came from.
+    The token is meant for names. A numeric argument refuses it already, in the object
+    box (`~sine #0`: "must be a number"), so nothing depends on the copy reading as digits.
+    It is replaced anywhere in the arguments of any object except a note, whose text is
+    prose. `#01` and `#10` are not the token.
+11. **The number lives on the box, in its GUI properties** (`PatchGuiProperty.
+    instanceNumber`), not in its name. *Because* decision 2 makes the name the
+    reference, and it is what a person types: `patcher patch.gain #3` would be text to
+    keep out of the way of retyping, rename-following and `referenceIn`. A GUI property
+    is saved in the dump and carried by undo, duplicate and paste with no new machinery,
+    and it means nothing to the engine. The reference panel shows it, because that is
+    what a parent, or the Code surface, needs to reach one instance (`.s ping#3`,
+    `patch.song.send('ping#3', 1)`).
+12. **Unique per patch, not per project.** *Because* the engine scopes every shared name
+    to `patcher.<patch>.<name>`, so two patches cannot collide, and no project-wide
+    counter has to be saved or kept honest. `numberInstances` runs on each patch that
+    uses an abstraction at the start of the sync's pass over it. A box with no number
+    gets the next one; a box that arrived with a number another box already holds
+    (a duplicate, a paste, a redo) gets the next one and is respelled in place, and
+    the box that had the number first keeps it. A number is past every number in the
+    patch and every number given out this session, so one freed by a delete is still
+    free when an undo brings the box back. This pass needs no definition, so an instance
+    whose patch is gone is told apart from its duplicate too. Nested instances are
+    numbered like any other box in the patch.
+13. **Numbers do not move, so names do not move.** Nothing renumbers a box that has a
+    number. It survives a save and reload because it is in the dump, a reconcile because
+    the materialiser does not copy it from the definition, and a detach because the
+    contents still spell it. The comparison does not undo the expansion: the materialiser
+    only ever turns the *source's* arguments into what the target should hold, from a
+    pair of numbers per window (`#0` to the box's number at the top; for a nested
+    instance, the number of the definition's box to the number of the copy's box), and
+    compares that with what is there. A copy that reads right gets no native write, so
+    an edit elsewhere in a definition keeps a `.r` subscribed and every cable where it
+    was. The same translation makes *make abstraction* the inverse: a detached box's
+    number goes back to `#0` in the new definition.
+14. **Outside an instance `#0` is literal.** A definition's own window shows and runs
+    `ping#0`, which is already unique to it, since it is its own native patcher, and an
+    ordinary subpatch's `#0` is part of a name shared with its parent. An ordinary
+    subpatch inside a definition shares the number of the instance around it, as in Max;
+    a nested instance has its own. Only a box that is an instance, or that was one,
+    has a number. Expanding in a definition's own patcher too (as Pure Data does) would
+    mean showing one string and running another, in every editor path, for nothing.
+
 **Known limits.**
 
 - An object's **saved state** (`.preset` slots, a `.function`'s points) does not
   reach a new copy: a copy is made like a duplicate, from type, arguments and
   decoration, and the gateway has no per-object state write (`yvanvds/dart-yse#111`).
-- **`.s` / `.r` names are not per instance**, as in an inline subpatch: two instances
-  share them, and there is no Max `#0` yet (#561).
+- **A shared name can outgrow the engine's limit in a copy.** `.s`, `.r` and the
+  others refuse a name over 63 characters and log it, and a copy's number can be
+  longer than the `0` it replaces. A name that close to the limit stops working in
+  the instances with the longest numbers. The engine says so in the log; Phi does not.
+- **`#` and digits are reserved inside an abstraction that gets nested.** A literal
+  `ping#5` typed in a definition stays as it is in a top-level instance. In a nested
+  instance the copy is translated from the number of the definition's box, so if
+  that box happens to be 5, the literal is taken for the token (`#0`, decision 13).
 - A rename rewrites the boxes in the live patches at once and in the payloads at the
   next save. A crash in between replays the move but not the rewrite, so those boxes
   read as missing until retyped. An undo step recorded before a rename that restores a

@@ -35,6 +35,12 @@ abstract final class PatchGuiProperty {
   /// Absent, a press plays louder the lower down the key it lands.
   static const String keyVelocity = 'kv';
 
+  /// The number of an abstraction's instance box (issue #561): what `#0` in
+  /// the definition reads as inside this box. Unique in the patch, written once
+  /// and then kept, so names built on it do not move under a running patch.
+  /// Absent on a box that has never been an instance.
+  static const String instanceNumber = 'in';
+
   /// Every decoration key a reload reads back from the engine.
   static const List<String> decoration = [
     width,
@@ -42,5 +48,6 @@ abstract final class PatchGuiProperty {
     keyLow,
     keyHigh,
     keyVelocity,
+    instanceNumber,
   ];
 }

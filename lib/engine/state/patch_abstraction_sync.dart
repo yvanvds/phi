@@ -118,6 +118,7 @@ class PatchAbstractionSync {
       if (uses[patch]?.isEmpty ?? true) continue;
       final parent = _editorFor(patch);
       if (parent == null) continue;
+      parent.numberInstances();
       for (final box in parent.outermostInstances) {
         final definition = parent.abstractionOf(box);
         if (definition == null) continue;

@@ -191,4 +191,135 @@ void main() {
       '0.125',
     );
   });
+
+  group('#0 (issue #561)', () {
+    Future<void> flush() => Future<void>.delayed(Duration.zero);
+
+    /// `.s ping#0` beside `.r ping#0` → `.s pong#0`: a value sent to `ping`
+    /// comes out on `pong`, only if the `.r` hears that `.s`.
+    ///
+    /// Both `.s` are bus-only (their second argument), which delivers without a
+    /// rendered block: the in-patcher path drains on the audio thread, so it
+    /// would need a mounted patch, and a mounted patch here would have to be
+    /// disposed (#548). The integration test covers that path.
+    PatcherController echo() {
+      final editor = newPatch('echo');
+      make(editor, Obj.gSend, args: 'ping#0 1');
+      final r = make(editor, Obj.gReceive, args: 'ping#0');
+      final s = make(editor, Obj.gSend, args: 'pong#0 1');
+      editor.connectViaGesture(outlet(r), inlet(s));
+      return editor;
+    }
+
+    int sendTo(PatcherController parent, String name) => gateway
+        .enumerate(parent.instanceId)
+        .objects
+        .singleWhere((o) => o.type == Obj.gSend && o.args == name)
+        .handleId;
+
+    Future<List<BusValue>> heardAt(String address) async {
+      final heard = <BusValue>[];
+      final subscription = Bus.subscribe(address).listen((f) {
+        heard.add(f.value);
+      });
+      addTearDown(subscription.cancel);
+      await flush();
+      return heard;
+    }
+
+    test('the engine keeps two instances\' names apart', () async {
+      echo();
+      final parent = newPatch('song');
+      final one = make(parent, Obj.patcher, args: 'patch.echo');
+      final two = make(parent, Obj.patcher, args: 'patch.echo');
+      final a = parent.instanceNumberOf(one)!;
+      final b = parent.instanceNumberOf(two)!;
+      expect(a, isNot(b));
+
+      final atA = await heardAt('patcher.song.pong#$a');
+      final atB = await heardAt('patcher.song.pong#$b');
+
+      gateway.sendFloat(
+        parent.instanceId,
+        sendTo(parent, 'ping#$a 1'),
+        0,
+        0.25,
+      );
+      await flush();
+      expect(atA, [const BusFloat(0.25)], reason: 'its own .r heard it');
+      expect(atB, isEmpty, reason: 'the other instance did not');
+
+      gateway.sendFloat(parent.instanceId, sendTo(parent, 'ping#$b 1'), 0, 0.5);
+      await flush();
+      expect(atA, hasLength(1));
+      expect(atB, [const BusFloat(0.5)]);
+    });
+
+    test('a name stays where it is when the definition changes around it', () {
+      final definition = echo();
+      final parent = newPatch('song');
+      final box = make(parent, Obj.patcher, args: 'patch.echo');
+      final number = parent.instanceNumberOf(box)!;
+      final handle = sendTo(parent, 'pong#$number 1');
+      final cables = gateway.enumerate(parent.instanceId).connections;
+      expect(cables, hasLength(1));
+
+      make(definition, Obj.dSine, args: '440', at: const Offset(0, 200));
+
+      expect(sendTo(parent, 'pong#$number 1'), handle, reason: 'not recreated');
+      expect(gateway.enumerate(parent.instanceId).connections, hasLength(1));
+    });
+
+    test('a duplicate is spelled apart in the engine, wires intact', () async {
+      echo();
+      final parent = newPatch('song');
+      final box = make(parent, Obj.patcher, args: 'patch.echo');
+      parent.selectNodes({box});
+      parent.duplicateSelection();
+      final copy = parent.nodesIn(null).singleWhere((n) => n.id != box).id;
+      final a = parent.instanceNumberOf(box)!;
+      final b = parent.instanceNumberOf(copy)!;
+      expect(a, isNot(b));
+
+      final atA = await heardAt('patcher.song.pong#$a');
+      final atB = await heardAt('patcher.song.pong#$b');
+      gateway.sendFloat(
+        parent.instanceId,
+        sendTo(parent, 'ping#$b 1'),
+        0,
+        0.75,
+      );
+      await flush();
+
+      expect(atB, [const BusFloat(0.75)]);
+      expect(atA, isEmpty);
+    });
+
+    test('a saved number parses back, and the copies read the same', () {
+      echo();
+      final parent = newPatch('song');
+      final box = make(parent, Obj.patcher, args: 'patch.echo');
+      final number = parent.instanceNumberOf(box)!;
+      reconciler.flushToPayloads(registry, null);
+
+      final payload = PatchPayload.fromJson(
+        (registry.entityAt(patch('song'))!.payload as Map)
+            .cast<String, Object?>(),
+      );
+      final reloadedId = gateway.createInstance(name: 'reloaded');
+      gateway.parseJson(reloadedId, jsonEncode(payload.dump));
+      final reloaded = PatcherController.bound(gateway, instanceId: reloadedId)
+        ..rebuildFromInstance();
+      addTearDown(reloaded.dispose);
+
+      final again = reloaded
+          .nodesIn(null)
+          .singleWhere((n) => n.type == Obj.patcher);
+      expect(reloaded.instanceNumberOf(again.id), number);
+      expect(
+        reloaded.nodesIn(again.id).map((n) => reloaded.argsOf(n.id)),
+        containsAll(['ping#$number 1', 'ping#$number', 'pong#$number 1']),
+      );
+    });
+  });
 }

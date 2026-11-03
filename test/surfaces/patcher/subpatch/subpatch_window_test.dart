@@ -468,6 +468,12 @@ void main() {
               .data,
           '= patch.gain',
         );
+        expect(
+          tester
+              .widget<Text>(find.byKey(PatchReferencePanel.subpatchInstanceKey))
+              .data,
+          '= #${engine.patcher.instanceNumberOf(made.box)}',
+        );
         expect(find.byKey(PatchReferencePanel.detachKey), findsOneWidget);
         expect(
           find.byKey(PatchReferencePanel.makeAbstractionKey),

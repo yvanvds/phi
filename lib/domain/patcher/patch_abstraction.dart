@@ -1,5 +1,6 @@
 import '../project/entity_address.dart';
 import '../project/registry_kinds.dart';
+import 'patch_type_name.dart';
 
 /// The vocabulary of **abstractions** (issue #553): one `patch.` entity used as
 /// the definition of any number of subpatch boxes, in any number of patches.
@@ -11,8 +12,31 @@ import '../project/registry_kinds.dart';
 /// machinery of its own, and giving the box any other name makes it an ordinary
 /// subpatch again (design `docs/design/patcher.md` §13).
 ///
+/// **`#0` is unique per instance** (issue #561). Inside an instance, `#0` in an
+/// object's arguments reads as `#` and the box's number: `.s ping#0` in the
+/// definition is `.s ping#3` in instance 3. The `#` stays so a number cannot run
+/// into a name somebody typed, and so the copy still says where it came from.
+///
 /// Pure Dart: the rule about a string, for the editor, the sync and the tests.
 abstract final class PatchAbstraction {
+  /// The number `#0` itself stands for: a definition's own text, and any window
+  /// not inside an instance, where `#0` is a plain piece of a name.
+  static const int unnumbered = 0;
+
+  /// [args] of an object of [type] with the token for instance [from] replaced
+  /// by the one for instance [to]. A note's text is prose and stays as written.
+  ///
+  /// A longer run of digits is another token: `#10` is not `#1` and a stray `0`.
+  static String renumbered(
+    String type,
+    String args, {
+    required int from,
+    required int to,
+  }) {
+    if (from == to || PatchTypeName.isNote(type)) return args;
+    return args.replaceAll(RegExp('#$from(?!\\d)'), '#$to');
+  }
+
   /// The definition [args] name, or null when they are an ordinary name: not
   /// one word, not a well-formed address, or an address of another kind.
   static EntityAddress? referenceIn(String args) {

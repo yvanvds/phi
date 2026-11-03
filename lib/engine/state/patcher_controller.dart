@@ -478,6 +478,93 @@ class PatcherController {
         node.id,
   ];
 
+  /// The number of the instance box [box] (issue #561): what `#0` reads as
+  /// inside it. Null for a box that has never been numbered. A detached box
+  /// keeps its number, since what it holds still spells it.
+  int? instanceNumberOf(PatchNodeId box) =>
+      int.tryParse(_guiByNode[box]?[PatchGuiProperty.instanceNumber] ?? '');
+
+  /// [box]'s number, giving it a fresh one when it has none.
+  int instanceNumberFor(PatchNodeId box) {
+    final number = instanceNumberOf(box);
+    if (number != null) return number;
+    final fresh = _nextInstanceNumber();
+    setGuiPropertyPrimitive(box, PatchGuiProperty.instanceNumber, '$fresh');
+    return fresh;
+  }
+
+  /// See that every instance box in this patch has a number of its own: a new
+  /// box gets one, and so does a copy (a duplicate, a paste, a redo) of a box
+  /// that still holds the number it arrived with. The box that had it first
+  /// keeps it, so nothing moves in an instance that is already running.
+  ///
+  /// Unique within the patch and no further: `.s`, `.r` and every other shared
+  /// name is scoped to its native patcher (`patcher.<patch>.<name>`).
+  ///
+  /// Not journaled, like the rest of what follows from an edit, and needs no
+  /// definition: an instance whose patch is gone is told apart from its copy too.
+  void numberInstances() {
+    final taken = <int>{
+      for (final node in graph.nodes)
+        if (isSubpatch(node.id) && abstractionOf(node.id) == null)
+          ?instanceNumberOf(node.id),
+    };
+    for (final node in graph.nodes.toList()) {
+      if (abstractionOf(node.id) == null) continue;
+      final number = instanceNumberOf(node.id);
+      if (number != null && taken.add(number)) continue;
+      final fresh = _nextInstanceNumber();
+      taken.add(fresh);
+      setGuiPropertyPrimitive(
+        node.id,
+        PatchGuiProperty.instanceNumber,
+        '$fresh',
+      );
+      _renumberWindow(
+        node.id,
+        from: number ?? PatchAbstraction.unnumbered,
+        to: fresh,
+      );
+    }
+  }
+
+  /// Respell the token in what [scope] holds. A nested instance has a number of
+  /// its own, so this stops at its box; an ordinary subpatch is part of the same
+  /// instance, so this goes on through it.
+  void _renumberWindow(
+    PatchNodeId scope, {
+    required int from,
+    required int to,
+  }) {
+    for (final node in nodesIn(scope).toList()) {
+      final args = argsOf(node.id);
+      final next = PatchAbstraction.renumbered(
+        node.type,
+        args,
+        from: from,
+        to: to,
+      );
+      if (next != args) setNodeParams(node.id, next);
+      if (isSubpatch(node.id) && abstractionOf(node.id) == null) {
+        _renumberWindow(node.id, from: from, to: to);
+      }
+    }
+  }
+
+  /// Past every number in the patch and every number given out this session, so
+  /// a box brought back by an undo finds its own number still free.
+  int _nextInstanceNumber() {
+    for (final node in graph.nodes) {
+      final number = instanceNumberOf(node.id);
+      if (number != null && number > _lastInstanceNumber) {
+        _lastInstanceNumber = number;
+      }
+    }
+    return ++_lastInstanceNumber;
+  }
+
+  int _lastInstanceNumber = PatchAbstraction.unnumbered;
+
   /// Make the instance box [box] an ordinary subpatch that keeps what it holds,
   /// as one journaled step: it is renamed from the address to the definition's
   /// own name. A no-op for anything but an instance. Undoing it makes the box
@@ -1895,6 +1982,13 @@ class PatcherController {
     // A boundary object's argument is the box pin it claims (issue #481).
     if (node != null) _resyncBoxAfter(node.container, node.type);
     return dropped;
+  }
+
+  /// Measure [id] again for the text it holds now, for a node made from a spec
+  /// measured for other text.
+  void remeasureNode(PatchNodeId id) {
+    final native = _nativeByNode[id];
+    if (native != null) _resyncShape(id, native);
   }
 
   /// Re-read [id]'s port topology from the native object and reshape the node

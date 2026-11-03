@@ -7,6 +7,7 @@ class PatchSubpatchSummary {
     required this.outlets,
     this.definition,
     this.definitionFollowed = true,
+    this.instanceNumber,
   });
 
   /// The box's name — its arguments — or `''` for an unnamed one.
@@ -26,4 +27,8 @@ class PatchSubpatchSummary {
   /// Whether the box actually follows [definition]: false when that patch is
   /// gone, or when using it would make a patch contain itself.
   final bool definitionFollowed;
+
+  /// What `#0` reads as inside this instance (issue #561), or null for a box
+  /// that is not an instance or has not been numbered yet.
+  final int? instanceNumber;
 }

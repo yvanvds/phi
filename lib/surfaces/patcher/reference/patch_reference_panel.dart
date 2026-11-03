@@ -78,6 +78,11 @@ class PatchReferencePanel extends StatelessWidget {
     'PatchReferencePanel.subpatch.definition',
   );
 
+  /// Key on the subpatch section's instance-number readout.
+  static const Key subpatchInstanceKey = Key(
+    'PatchReferencePanel.subpatch.instance',
+  );
+
   /// Key on the subpatch section's make-abstraction button.
   static const Key makeAbstractionKey = Key(
     'PatchReferencePanel.subpatch.makeAbstraction',
@@ -309,6 +314,14 @@ class _Reference extends StatelessWidget {
                   meta: const [],
                   value: definition,
                   valueKey: PatchReferencePanel.subpatchDefinitionKey,
+                ),
+              if (box.instanceNumber case final number?)
+                _PortEntry(
+                  lead: 'instance',
+                  doc: '#0 reads as this inside it',
+                  meta: const [],
+                  value: '#$number',
+                  valueKey: PatchReferencePanel.subpatchInstanceKey,
                 ),
               _PortEntry(
                 lead: 'inlets',
