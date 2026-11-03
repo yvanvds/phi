@@ -3331,19 +3331,17 @@ main + app          (orchestration)
   counts). `PatchCreationArgs` passes a subpatch name through as free text.
   Covered by `patcher_controller_subpatch_test.dart`,
   `real_patcher_gateway_subpatch_engine_test.dart`,
-  `subpatch_window_test.dart` and the `patcher_subpatch_window` integration
-  test (real engine: built by keyboard and drag, heard through the box, undo
-  from the other window, save → reopen, a window closed under a half-typed
-  box). The second window there is flutter_test's **stand-in view**: the test
-  binding's windowing owner cannot make a native one (its platform dispatcher
-  reports a fake engine id, flutter/flutter#195919), and the engine never
-  hears of the stand-in, so `EmbedderTextInputCheck`
-  (`test/surfaces/patcher/test_support/`) replaces the platform text input
-  and enforces the Windows plugin's rule (a call naming a view must find it
-  alive) against the binding's views. Any integration test that types into a
-  subpatch window needs it. Real native windows are possible in tests under
-  `integration_test/native_windows/` (see "Integration test driver"); moving
-  this test there is #557.
+  `subpatch_window_test.dart` and the
+  `native_windows/patcher_subpatch_window` integration test (real engine: built
+  by keyboard and drag, heard through the box, undo from the other window, save
+  → reopen, a window closed under a half-typed box). The second window there is
+  a real native window (#557), and text input goes to the real plugin. On Linux
+  the keyboard is real as well (`LinuxXTestKeyboard`, through XTEST, X focus
+  moved with `gtk_window_present`, since Xvfb has no window manager); on Windows
+  `NativeKeyboard` delivers the editing state on the channel and simulates keys
+  (#558). `TextInputViewRuleCheck` forwards every call and enforces the Windows
+  plugin's rule (a call naming a view must find it alive) on any OS, because the
+  Linux plugin does not check.
 - **Encapsulate / de-encapsulate** (issue #552) — Max's *Encapsulate*:
   `Ctrl+Shift+E` (or the node menu's `encapsulate`) moves the selection into a
   new unnamed `patcher` box at its top-left corner; `Ctrl+Shift+D` (or
@@ -3419,8 +3417,9 @@ main + app          (orchestration)
   `NativeWindowsTestBinding` before the entry point creates the stock binding.
   A `WindowController` made there is a real window over the engine, not
   flutter_test's stand-in (#297, flutter/flutter#195919).
-  `LinuxWindowPixels` reads back what such a window shows on the display. On
-  Linux X11, open windows only after the main window has painted (#556).
+  `LinuxWindowPixels` reads back what such a window shows on the display, and
+  `NativeKeyboard` types into it (#557). On Linux X11, open windows only after
+  the main window has painted (#556), and expect their first frame at 1x1.
 - **SonarCloud:** project key `yvanvds_phi`, organization `yvanvds`
   (`sonar-project.properties`); the CI scan is off for now (issue #447).
 - **Issue templates:** `.github/ISSUE_TEMPLATE/`. Labels: see

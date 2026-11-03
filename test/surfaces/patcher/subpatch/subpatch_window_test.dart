@@ -94,6 +94,32 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('a window not sized yet draws nothing and overflows nothing, '
+      'then shows the subpatch', (tester) async {
+    final box = make(Obj.patcher, args: 'gain');
+    Widget sized(double size) => MaterialApp(
+      home: Center(
+        child: SizedBox.square(
+          dimension: size,
+          child: SubpatchWindowView(
+            editor: engine.patcher,
+            box: box,
+            objectTypes: const [],
+          ),
+        ),
+      ),
+    );
+
+    // Linux lays a new native window out at 1x1 first (#557).
+    await tester.pumpWidget(sized(1));
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(SubpatchWindowView.canvasKey), findsNothing);
+
+    await tester.pumpWidget(sized(400));
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(SubpatchWindowView.canvasKey), findsOneWidget);
+  });
+
   testWidgets('the node menu opens a subpatch in a window of its own, showing '
       'only what is inside it', (tester) async {
     await pumpSurface(tester);

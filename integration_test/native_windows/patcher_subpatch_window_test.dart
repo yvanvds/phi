@@ -3,7 +3,6 @@ import 'dart:ui';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:integration_test/integration_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:phi/app.dart';
 import 'package:phi/design/widgets/patcher/patch_object_box.dart';
@@ -29,28 +28,27 @@ import 'package:phi/surfaces/patcher/placement/patch_placement_bar.dart';
 import 'package:phi/surfaces/patcher/subpatch/subpatch_window_view.dart';
 import 'package:yse/yse.dart';
 
-import '../test/domain/project/test_doubles/fake_app_settings_store.dart';
-import '../test/domain/project/test_doubles/fake_journal_store.dart';
-import '../test/domain/project/test_doubles/fake_project_directory_picker.dart';
-import '../test/domain/project/test_doubles/fake_project_store.dart';
-import '../test/engine/test_doubles/fake_midi_gateway.dart';
-import '../test/engine/test_doubles/fake_yse_gateway.dart';
-import '../test/surfaces/patcher/test_support/embedder_text_input_check.dart';
-import '../test/surfaces/patcher/test_support/until_window_active.dart';
+import '../../test/domain/project/test_doubles/fake_app_settings_store.dart';
+import '../../test/domain/project/test_doubles/fake_journal_store.dart';
+import '../../test/domain/project/test_doubles/fake_project_directory_picker.dart';
+import '../../test/domain/project/test_doubles/fake_project_store.dart';
+import '../../test/engine/test_doubles/fake_midi_gateway.dart';
+import '../../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../../test/surfaces/patcher/test_support/until_window_active.dart';
+import 'native_keyboard.dart';
+import 'native_windows_test_binding.dart';
+import 'text_input_view_rule_check.dart';
 
 /// End-to-end proof of subpatches in their own window (issue #481), through
-/// the real [PhiApp] — rail navigation, fonts, layout, a second window from
-/// Flutter's windowing API — on the real patcher engine ([RealPatcherGateway]
-/// over an offline libyse session). Only the audio device, MIDI, the project
-/// store and text input are fakes.
+/// the real [PhiApp] — rail navigation, fonts, layout, a second **native**
+/// window from Flutter's windowing API ([NativeWindowsTestBinding], #557) — on
+/// the real patcher engine ([RealPatcherGateway] over an offline libyse
+/// session). Only the audio device, MIDI and the project store are fakes.
 ///
-/// The second window is flutter_test's **stand-in** for a native one: its
-/// binding installs a test windowing owner, and a native window cannot be
-/// made under it (its platform dispatcher reports a fake engine id, so the
-/// Linux windowing FFI dereferences it and crashes — flutter/flutter#195919).
-/// The stand-in view is drawn, hit-tested and focused like a real one, but
-/// the engine never hears of it, so the platform's text input plugin is
-/// replaced by [EmbedderTextInputCheck].
+/// Text input is the platform's: every call from a field goes to the real
+/// plugin, naming the real view, and [TextInputViewRuleCheck] watches them for
+/// the Windows plugin's rule. On Linux the keyboard is real too
+/// ([NativeKeyboard]).
 ///
 /// The performer types a `patcher gain` box into the patch, opens it from its
 /// menu, and builds `~inlet 0` → `~* 0.5` → `~outlet 0` in the window that
@@ -61,7 +59,7 @@ import '../test/surfaces/patcher/test_support/until_window_active.dart';
 /// `Ctrl+Y` takes it away again. Saved and reopened, the patch comes back with
 /// its contents and cables, opens again, and sounds again.
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  NativeWindowsTestBinding.ensureInitialized();
 
   Finder railFor(SurfaceId id) =>
       find.byWidgetPredicate((w) => w is RailButton && w.label == id.label);
@@ -73,13 +71,11 @@ void main() {
       ..requestedSampleRate = 48000
       ..initOffline();
     addTearDown(System.instance.close);
-    // Text input goes to a stand-in that checks the rule the Windows
-    // embedder enforces — a call naming a view must find it alive — instead of
-    // to the platform. Under flutter_test a subpatch window is a stand-in view
-    // the engine never hears of (see [EmbedderTextInputCheck]), so the real
-    // plugin cannot be asked about it.
-    final textInput = EmbedderTextInputCheck(tester);
+    final textInput = TextInputViewRuleCheck(
+      tester.binding.defaultBinaryMessenger,
+    );
     addTearDown(textInput.dispose);
+    final keyboard = NativeKeyboard(tester, textInput);
     await tester.binding.setSurfaceSize(const Size(1600, 1000));
 
     const dir = '/projects/subpatch.phi';
@@ -197,6 +193,7 @@ void main() {
         matching: find.byKey(PatchInlineObjectBox.fieldKey),
       );
       for (var attempt = 0; attempt < 3; attempt++) {
+        await keyboard.focus(view);
         await untilWindowActive(tester);
         if (field.evaluate().isEmpty) {
           await tester.tapAt(at, view: view);
@@ -205,11 +202,20 @@ void main() {
           await tester.pumpAndSettle();
         }
         expect(field, findsOneWidget, reason: 'inline box for "$line"');
-        tester.binding.focusedEditable = null;
-        await tester.enterText(field, line);
-        await tester.pumpAndSettle();
-        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-        await tester.pumpAndSettle();
+        expect(
+          textInput.viewId,
+          view.viewId,
+          reason: 'the field names its view',
+        );
+        await keyboard.type(field, line);
+        expect(
+          keyboard.textIn(field),
+          line,
+          reason: 'the keyboard reached the box',
+        );
+        await keyboard.enter(
+          until: () => editor().graph.nodes.length > before.length,
+        );
         if (editor().graph.nodes.length > before.length) break;
       }
       final made = editor().graph.nodes.where((n) => !before.contains(n.id));
@@ -239,14 +245,8 @@ void main() {
       expect(editor().graph.cables, hasLength(cables + 1));
     }
 
-    Future<void> chord(LogicalKeyboardKey key) async {
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyEvent(key);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pumpAndSettle();
-    }
-
-    // Opens [box] from its node menu in the main window.
+    // Opens [box] from its node menu in the main window, which has painted by
+    // now: on Linux X11 a window opened before that exits the app (#556).
     Future<void> openSubpatch(PatchNodeId box) async {
       final line = nodeView(mainCanvas(), box);
       final g = await tester.startGesture(
@@ -260,7 +260,17 @@ void main() {
       await tester.tap(find.byKey(PatcherSurface.openSubpatchItemKey));
       await tester.pumpAndSettle();
       expect(find.byType(SubpatchWindowView), findsOneWidget);
-      expect(tester.binding.platformDispatcher.views, hasLength(2));
+      // A view the engine itself made, not a test stand-in.
+      expect(PlatformDispatcher.instance.views, hasLength(2));
+      // The platform sizes a new window after its first frame.
+      for (var i = 0; i < 250 && windowCanvas().evaluate().isEmpty; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      expect(windowCanvas(), findsOneWidget);
     }
 
     // ── Launch 1 ─────────────────────────────────────────────────────────
@@ -370,29 +380,41 @@ void main() {
     expect(loudness(), greaterThan(0.05), reason: 'heard through the box');
 
     // Delete the gain stage inside: the path through the box is broken.
+    await keyboard.focus(viewOf(windowCanvas()));
     await tester.tap(nodeView(windowCanvas(), gain.id));
     await tester.pumpAndSettle();
-    await tester.sendKeyEvent(LogicalKeyboardKey.delete);
-    await tester.pumpAndSettle();
+    await keyboard.delete(
+      until: () => editor().graph.nodeById(gain.id) == null,
+    );
     expect(editor().graph.nodeById(gain.id), isNull);
     loudness(20);
     expect(loudness(), lessThan(1e-4), reason: 'nothing gets through');
 
     // Ctrl+Z in the *main* window undoes the edit made in the subpatch's.
+    await keyboard.focus(viewOf(mainCanvas()));
     await tester.tapAt(
       tester.getTopLeft(mainCanvas()) + const Offset(700, 500),
     );
     await tester.pumpAndSettle();
-    await chord(LogicalKeyboardKey.keyZ);
+    await keyboard.control(
+      LogicalKeyboardKey.keyZ,
+      until: () => editor().graph.nodeById(gain.id) != null,
+    );
     expect(editor().graph.nodeById(gain.id), isNotNull);
     expect(nodeView(windowCanvas(), gain.id), findsOneWidget);
     loudness(20);
     expect(loudness(), greaterThan(0.05), reason: 'back after undo');
-    await chord(LogicalKeyboardKey.keyY);
+    await keyboard.control(
+      LogicalKeyboardKey.keyY,
+      until: () => editor().graph.nodeById(gain.id) == null,
+    );
     expect(editor().graph.nodeById(gain.id), isNull);
     loudness(20);
     expect(loudness(), lessThan(1e-4), reason: 'gone again after redo');
-    await chord(LogicalKeyboardKey.keyZ);
+    await keyboard.control(
+      LogicalKeyboardKey.keyZ,
+      until: () => editor().graph.nodeById(gain.id) != null,
+    );
     expect(editor().graph.nodeById(gain.id), isNotNull);
 
     // Save through the File menu.
@@ -449,32 +471,45 @@ void main() {
     // A window that goes while one of its fields still holds the keyboard —
     // an object box half typed, then another patch opened — must let the
     // platform finish with that field before the window is destroyed. The
-    // Windows embedder fails every text input call for a view that is gone
-    // (CI on PR #555); the check above stands in for it here.
+    // Windows plugin fails every text input call for a view that is gone
+    // (CI on PR #555), and the check holds Linux to the same rule.
     final windowCanvas2 = windowCanvas();
+    final closingView = viewOf(windowCanvas2);
+    await keyboard.focus(closingView);
     final at = tester.getTopLeft(windowCanvas2) + const Offset(400, 400);
-    await tester.tapAt(at, view: viewOf(windowCanvas2));
+    await tester.tapAt(at, view: closingView);
     await tester.pump();
-    await tester.tapAt(at, view: viewOf(windowCanvas2));
+    await tester.tapAt(at, view: closingView);
     await tester.pumpAndSettle();
     final typing = find.descendant(
       of: windowCanvas2,
       matching: find.byKey(PatchInlineObjectBox.fieldKey),
     );
-    tester.binding.focusedEditable = null;
-    await tester.enterText(typing, '~sin');
-    await tester.pumpAndSettle();
+    await keyboard.type(typing, '~sin');
+    expect(keyboard.textIn(typing), '~sin');
+    expect(textInput.viewId, closingView.viewId);
+    expect(
+      textInput.clientId,
+      isNotNull,
+      reason: 'the field holds the keyboard',
+    );
     second.engine.patchLibrary.newPatch();
     await tester.pumpAndSettle();
     expect(find.byType(SubpatchWindowView), findsNothing);
-    await textInput.drain();
-    await tester.pumpAndSettle();
+    // The native window goes a platform round trip after its widgets.
+    for (var i = 0; i < 100; i++) {
+      if (PlatformDispatcher.instance.views.length == 1) break;
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+    expect(PlatformDispatcher.instance.views, hasLength(1));
     expect(tester.binding.platformDispatcher.views, hasLength(1));
     expect(textInput.errors, isEmpty);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pumpAndSettle();
-    await textInput.drain();
     expect(textInput.errors, isEmpty);
     await second.engine.dispose();
     second.project.dispose();

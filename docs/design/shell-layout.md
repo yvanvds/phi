@@ -343,6 +343,10 @@ real `WindowController` window mounts the same renderer's view.
    is the EGL context the engine leaves current for secondary views. No Phi code
    does this today, but restoring an audience view at boot would. Mechanism and
    evidence are in **#556**, which also tracks reporting it upstream.
+5. **Linux: a new window's first frame is 1x1.** The engine adds the view at
+   that size and GTK allocates the real one afterwards, so anything laid out in
+   a new window must survive a 1x1 layout without reporting an overflow.
+   `SubpatchWindowView` draws nothing until its bar fits (#557).
 
 **Testing native windows.** The stock integration binding cannot make one
 (flutter/flutter#195919: it installs a stand-in owner, and its dispatcher
@@ -350,7 +354,9 @@ reports a fake engine id, which the Linux owner dereferences). The binding can
 in fact be replaced: `flutter_test_config.dart` runs before the entry point
 creates its binding. Tests under `integration_test/native_windows/` get
 `NativeWindowsTestBinding`, which keeps the platform owner and reports the real
-id. Moving the subpatch window test onto it is **#557**.
+id. The subpatch window test runs there too (**#557**): text input goes to the
+real plugin, and on Linux real keys go through XTEST. Windows does not have real
+keys yet (**#558**), and neither test has run on Windows on native windows yet.
 
 ## 6. Out of scope
 

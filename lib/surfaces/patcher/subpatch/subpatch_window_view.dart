@@ -133,31 +133,40 @@ class _WindowBody extends StatelessWidget {
     final menu = view.onNodeContextMenu;
     return Material(
       color: PhiColors.bg0,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _WindowBar(view: view),
-          Expanded(
-            child: PatcherCanvas(
-              key: SubpatchWindowView.canvasKey,
-              controller: view.editor,
-              scope: view.box,
-              objectTypes: view.onCreateObject == null
-                  ? const []
-                  : view.objectTypes,
-              snapToGrid: view.snapToGrid,
-              mode: view.mode,
-              onToggleMode: view.onToggleMode,
-              onCreateObject: view.onCreateObject,
-              onNodeTap: view.onNodeTap,
-              onNodeContextMenu: menu == null
-                  ? null
-                  : (node, global) => menu(context, node, global),
-              onOpenSubpatch: view.onOpenSubpatch,
-              onTypeResolved: view.onTypeResolved,
-            ),
-          ),
-        ],
+      // A native window's first frame comes before the platform has sized it
+      // (1x1 on Linux, #557): show nothing until the bar fits.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxHeight < _WindowBar.height) {
+            return const SizedBox.shrink();
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _WindowBar(view: view),
+              Expanded(
+                child: PatcherCanvas(
+                  key: SubpatchWindowView.canvasKey,
+                  controller: view.editor,
+                  scope: view.box,
+                  objectTypes: view.onCreateObject == null
+                      ? const []
+                      : view.objectTypes,
+                  snapToGrid: view.snapToGrid,
+                  mode: view.mode,
+                  onToggleMode: view.onToggleMode,
+                  onCreateObject: view.onCreateObject,
+                  onNodeTap: view.onNodeTap,
+                  onNodeContextMenu: menu == null
+                      ? null
+                      : (node, global) => menu(context, node, global),
+                  onOpenSubpatch: view.onOpenSubpatch,
+                  onTypeResolved: view.onTypeResolved,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -168,6 +177,8 @@ class _WindowBody extends StatelessWidget {
 class _WindowBar extends StatelessWidget {
   const _WindowBar({required this.view});
 
+  static const double height = 32;
+
   final SubpatchWindowView view;
 
   @override
@@ -176,7 +187,7 @@ class _WindowBar extends StatelessWidget {
     final fg = run ? PhiColors.live : PhiColors.fg1;
     final toggle = view.onToggleMode;
     return Container(
-      height: 32,
+      height: height,
       padding: const EdgeInsets.symmetric(horizontal: PhiSpacing.s2),
       decoration: const BoxDecoration(
         color: PhiColors.bg1,
