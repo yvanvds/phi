@@ -51,7 +51,9 @@ maintainer-applied.
 Requires Windows or Linux (x64) and Flutter at the **pinned master revision**
 in `.fvmrc` (#478), for the experimental multi-window API. Stable does not
 resolve: `pubspec.yaml`'s `environment:` floors are that revision's versions.
-There is no 3D Scene renderer on any platform for now (#455). `yse` (^0.2.0)
+The 3D Scene view is drawn by `flutter_scene` on Flutter GPU (#455); both runners
+switch Flutter GPU on. `flutter test` has no Impeller, so there the view shows its
+"unavailable" notice and only integration tests see it draw. `yse` (^0.2.0)
 comes from pub.dev; its native-assets build hook downloads and bundles the
 engine (`libyse.dll` next to the executable, `libyse.so` in `bundle/lib/`), so
 no engine setup is needed.

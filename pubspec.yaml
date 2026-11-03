@@ -38,6 +38,13 @@ dependencies:
   # same library decoupled into flutter/packages. Import
   # `package:material_ui/material_ui.dart`, never the framework's material.
   material_ui: ^1.9.0
+  # The 3D Scene renderer (#455): a 3D engine on Flutter GPU (Impeller), so it
+  # renders through Flutter's own GPU API on Linux and Windows alike, with no
+  # native plugin of its own. Its build hook compiles the engine shaders with
+  # the SDK's impellerc. Flutter GPU is switched on per runner
+  # (`linux/runner/my_application.cc`, `windows/runner/main.cpp`). Pre-1.0:
+  # the caret holds it to 0.24.x, bump deliberately.
+  flutter_scene: ^0.24.3
 
 dev_dependencies:
   flutter_test:

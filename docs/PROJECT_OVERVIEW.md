@@ -9,7 +9,8 @@
 Phi is a flexible workstation for live electronic music performance — see
 [phi-vision.md](phi-vision.md) for the full vision. Personal years-long
 project, Windows and Linux (x64) desktop (`windows/`, `linux/` runners; Linux
-since issue #454). No 3D Scene renderer on any platform for now (#455).
+since issue #454). The 3D Scene view runs on Flutter GPU via `flutter_scene`
+(#455).
 
 ## Stack at a glance
 
@@ -19,7 +20,7 @@ since issue #454). No 3D Scene renderer on any platform for now (#455).
 | FFI bridge   | `dart-yse` — Dart wrapper, package name `yse`         |
 | UI shell     | Flutter, pinned master revision (`.fvmrc`, #478), Windows + Linux x64 desktop; Material widgets from `package:material_ui` |
 | Design       | Dart tokens derived from `design system/colors_and_type.css` |
-| 3D viewport  | none for now — `PlaceholderSceneRenderer` (macbear_3d removed in #456; return tracked in #455) |
+| 3D viewport  | `flutter_scene` on Flutter GPU (Impeller) — `FlutterSceneRenderer` (#455; macbear_3d removed in #456) |
 | Scripting    | Python with DSL (Phase ≥ 2 — not yet)                 |
 
 `yse` is consumed from pub.dev (`^0.2.0`, libYSE 3.1.0). Its native-assets
@@ -172,8 +173,7 @@ main + app          (orchestration)
   renders each pane's resident tab stack (active tab paints, others stay mounted
   offstage). Each surface is wrapped in a stable `GlobalKey` so a **dock move
   re-parents its element rather than rebuilding it** — its state survives the
-  move; Scene stays the exception (mounted only while it is the visible tab, GL
-  re-parenting verified by hand). Behaviour-neutral default: one pane, Mix open —
+  move; Scene stays the exception (mounted only while it is the visible tab). Behaviour-neutral default: one pane, Mix open —
   the app looks identical until the performer splits (drag-to-dock UI + tab
   strips are #252). `Workstation`/`PhiApp` accept an injected controller so a
   dock move is driveable end-to-end. Issue #253 persists the arrangement in the
@@ -299,32 +299,50 @@ main + app          (orchestration)
   move-with-impact, issue #212) and a **SENDS** area (aux sends to return buses);
   see the racks-epic and mix-epic entries below.
 - Scene surface: renderer-agnostic `SceneRenderer` bridge in
-  `lib/engine/bridge/`. **There is no 3D renderer for now** (issue #456): the
-  `macbear_3d` proof of concept (and with it `flutter_angle`, whose Linux plugin
-  does not build) was removed on every platform, and production wires
-  `PlaceholderSceneRenderer`, which accepts every renderer call and shows a
-  "3D view unavailable" notice. Bringing 3D back is issue #455. The history
-  below describes the removed renderer; the surface, pick seam, field and pure
-  `SceneUnproject` math are still in the tree.
-  Pointer picking + grab landed with issue #86 (surface half of #82): a
-  `PhiScenePickController` (`M3InputController`, removed in #456) unprojected the pointer into a
-  world `PickRay` via the pure `SceneUnproject` (screen→world math over the
-  live camera's view/projection matrices), asks `SceneField.pick` which agent
-  sits under it, and — on a hit — selects + grabs it (drag → `moveGrabTo` on a
-  camera-facing plane at the agent's depth → `releaseGrab`), delegating misses,
-  right-drag pan, scroll zoom, and keyboard nav to a fallback orbit controller.
-  The Scene surface implements the renderer-agnostic `ScenePickHandler` seam
-  (forwarding pick/grab to `EngineMidiController`, which owns the shared field,
-  so mouse and code grab the same agents) and owns selection: a bright
-  translucent halo (`PhiMacbearScene.setSelection`) tracks the picked agent's
-  live position, refreshed by the surface's own gated ticker. Field *motion*,
-  though, is stepped by the player's one frame ticker in all cases as of issue
-  #103 — a grab starts that ticker even on a stopped transport — so the surface
-  no longer owns a separate `stepFromSurface`, and the old play/stopped stepping
-  split is gone. The GL
-  viewport can't be exercised headless (no ANGLE context in CI), so the pure
-  math, the input controller, and the surface wiring are unit/widget-tested
-  behind fakes and the pointer path is verified manually. Issue #90 adds a
+  `lib/engine/bridge/`. Production wires `FlutterSceneRenderer` (issue #455):
+  [`flutter_scene`](https://pub.dev/packages/flutter_scene), a 3D engine on
+  Flutter GPU, so it draws through Impeller on Linux and Windows alike with no
+  native plugin (the `macbear_3d`/`flutter_angle` proof of concept was removed
+  in #456: its Linux plugin did not build). Both runners turn Flutter GPU on as
+  a project setting (`fl_dart_project_set_enable_flutter_gpu`,
+  `DartProject::set_enable_flutter_gpu`), so release builds keep it; the
+  engine's own build hook compiles its shaders with the SDK's `impellerc`.
+  The pieces, one per file: `FlutterSceneSpace` maps Phi's right-handed +Z-up
+  scene space onto the engine's left-handed +Y-up world by swapping Y and Z
+  (so the picture is not mirrored) and folds that swap into the view-projection
+  the pick ray uses; `FlutterSceneGraph` owns the engine `Scene` — pooled
+  unlit core + translucent halo spheres per agent in its voice colour, a
+  selection shell, a faint ground grid, linear tone mapping and a soft bloom;
+  `SceneOrbitCamera` (pure, Phi space) holds the orbit pose; and
+  `ScenePointerController` (pure) turns pointer events into picks, grabs,
+  orbit, pan and zoom. `FlutterSceneView` hosts the engine's `SceneView` with
+  `autoTick: false` and redraws on demand from the renderer's `changes`
+  notifier, so an idle Scene schedules no frames (and `pumpAndSettle` settles).
+  The engine resources load when the view first mounts, not at boot. Where
+  Flutter GPU is off — notably the `flutter test` runner, which has no
+  Impeller — the renderer reports `SceneViewStatus.unavailable` and the view
+  shows a "3D view unavailable" notice while the seam keeps accepting calls.
+  Pointer picking + grab (issue #86, surface half of #82): a left press
+  unprojects the pointer into a world `PickRay` via the pure `SceneUnproject`
+  (screen→world math over `FlutterSceneSpace.viewProjection`), asks
+  `SceneField.pick` which agent sits under it, and — on a hit — selects + grabs
+  it (drag → `moveGrabTo` on a camera-facing plane at the agent's depth →
+  `releaseGrab`); a miss clears the selection and orbits, right/middle-drag
+  pans, the wheel zooms. The Scene surface implements the renderer-agnostic
+  `ScenePickHandler` seam (forwarding pick/grab to `EngineMidiController`,
+  which owns the shared field, so mouse and code grab the same agents) and
+  owns selection: the selection shell (`FlutterSceneGraph.setSelection`)
+  tracks the picked agent's live position, refreshed by the surface's own
+  gated ticker. Field *motion*, though, is stepped by the player's one frame
+  ticker in all cases as of issue #103 — a grab starts that ticker even on a
+  stopped transport — so the surface no longer owns a separate
+  `stepFromSurface`, and the old play/stopped stepping split is gone. The pure
+  math, camera and pointer controller are unit-tested, the surface wiring is
+  widget-tested behind fakes, and `integration_test/scene_3d_view_test.dart`
+  runs the real renderer (headless under Xvfb on Linux): it reads the drawn
+  pixels back to check each agent's colour sits where the pick math projects
+  it, then clicks, grabs, orbits and zooms through the real pointer path.
+  Issue #90 adds a
   debug-only **pick demo** toggle on the Scene surface: the playback demo's
   notes are too short and clustered to click by hand, so flipping the toggle
   calls `EngineMidiController.loadSceneDemo` — seeding a handful of long-lived,
