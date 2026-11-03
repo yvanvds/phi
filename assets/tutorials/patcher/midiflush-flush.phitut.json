@@ -1,0 +1,483 @@
+{
+  "title": "flush and midiflush — a panic button for stuck notes",
+  "covers": [
+    ".flush",
+    ".midiflush"
+  ],
+  "summary": "Release every note a patch left sounding: flush for pitch and velocity pairs before they become MIDI, and midiflush for the messages on their way to midiout.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# flush and midiflush — a panic button for stuck notes\nA note that is switched on and never switched off keeps sounding: a stuck note. It happens when a patch stops in the middle of a phrase. flush and midiflush pass notes through and remember which are still sounding, and a bang releases exactly those.\nflush watches pitch and velocity pairs, before they become MIDI, and releases a note with velocity 0. midiflush watches the MIDI messages on their way to midiout, and sends a note-off for each note on the channel it was played on. When the patch closes, both release their notes first.\nmidiout's argument is the output port, counted from 0; the midiinfo tutorial lists them. You hear something only when a synthesizer listens on that port.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "230.0"
+        },
+        "parms": "100",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "160.0",
+          "y": "470.0"
+        },
+        "parms": "",
+        "type": ".i"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "530.0"
+        },
+        "parms": "0",
+        "type": ".noteon",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "300.0",
+          "y": "610.0"
+        },
+        "parms": "100",
+        "type": ".loadmess",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 15
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 16
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "610.0"
+        },
+        "parms": "72",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 15
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "170.0",
+          "y": "610.0"
+        },
+        "parms": "48",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "60.0",
+          "y": "670.0"
+        },
+        "parms": "0",
+        "type": ".noteon",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "170.0",
+          "y": "670.0"
+        },
+        "parms": "1",
+        "type": ".noteon",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "300.0",
+          "y": "670.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "60.0",
+          "y": "730.0"
+        },
+        "parms": "",
+        "type": ".midiflush",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "60.0",
+          "y": "850.0"
+        },
+        "parms": "0",
+        "type": ".midiout"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "230.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "640.0",
+          "y": "220.0",
+          "w": "300"
+        },
+        "parms": "1. Click 100, then 60, 64 and 67: a chord, through flush into noteon. Click 0, then 64, to release the E. Now click the button: flush releases the notes still sounding, 60 and 67, with velocity 0, from the lowest up. The boxes show the last pair, 67 0.",
+        "type": ".text"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "640.0",
+          "y": "390.0",
+          "w": "300"
+        },
+        "parms": "2. Click 100 and play a note again, then click clear: flush forgets its notes without releasing them, and a bang sends nothing. flush has no channel; noteon sets it.",
+        "type": ".text"
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "640.0",
+          "y": "530.0",
+          "w": "300"
+        },
+        "parms": "3. midiflush sits in the stream to midiout and passes every message on unchanged. Click 72 and 48: notes on channels 1 and 2, velocity 100 from loadmess. Click the button: midiflush sends 128 72 0 and 129 48 0, a note-off for each, on its own channel.",
+        "type": ".text"
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "300.0",
+          "y": "740.0"
+        },
+        "parms": "",
+        "type": ".loadbang",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 24
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "300.0",
+          "y": "790.0"
+        },
+        "parms": "allnotesoff",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "640.0",
+          "y": "680.0",
+          "w": "300"
+        },
+        "parms": "4. midiout opens its port when the first message arrives, and that first message is lost. So loadbang sends allnotesoff as the patch opens, and the port is ready before you click. allnotesoff is controller 123 on all 16 channels: it stops every note on a device that obeys it.",
+        "type": ".text"
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "60.0",
+          "y": "930.0"
+        },
+        "parms": "0",
+        "type": ".xmidiin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 27
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 28
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 27": {
+        "ID": 27,
+        "gui": {
+          "x": "60.0",
+          "y": "990.0",
+          "w": "160"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 28": {
+        "ID": 28,
+        "gui": {
+          "x": "300.0",
+          "y": "990.0"
+        },
+        "parms": "back",
+        "type": ".print"
+      },
+      "object 29": {
+        "ID": 29,
+        "gui": {
+          "x": "640.0",
+          "y": "830.0",
+          "w": "300"
+        },
+        "parms": "5. xmidiin 0 shows each message that arrives on input port 0 as numbers, one list per message, and print writes every one to the log (Ctrl+J). A bang can send several note-offs at once, so the box shows the last. On Linux, output 0 and input 0 are usually Midi Through, which sends back whatever it receives, so you see what you send. Elsewhere, set both arguments to a loopback port.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "60.0",
+          "y": "290.0"
+        },
+        "parms": "60",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "170.0",
+          "y": "290.0"
+        },
+        "parms": "64",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "280.0",
+          "y": "290.0"
+        },
+        "parms": "67",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "350.0"
+        },
+        "parms": "",
+        "type": ".b",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "170.0",
+          "y": "350.0"
+        },
+        "parms": "clear",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "410.0"
+        },
+        "parms": "",
+        "type": ".flush",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 2
+          },
+          "output 1": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "1": {
+              "Inlet": 1,
+              "Object": 11
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "470.0"
+        },
+        "parms": "",
+        "type": ".i"
+      }
+    }
+  }
+}

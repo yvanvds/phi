@@ -1,0 +1,539 @@
+{
+  "title": "midiout, midiformat and sxformat — raw MIDI out",
+  "covers": [
+    ".midiout",
+    ".midiformat",
+    ".sxformat"
+  ],
+  "summary": "Send byte lists straight to midiout, build messages you can read with midiformat, and assemble a SysEx message with placeholders and a checksum with sxformat.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# midiout, midiformat and sxformat — raw MIDI out\nmidiout sends MIDI messages to an output port. Each list it receives is one message, written as byte values: 144 60 100 is a note-on for middle C. It also takes the messages noteon and the other builders make. Its argument is the port, counted from 0; the midiinfo tutorial lists them.\nmidiformat builds messages as lists of numbers, so you can read them: the opposite of midiparse. sxformat builds a system-exclusive (SysEx) message, a device's own data, from a template.\nMax's midiout sends each number it receives as one byte. Here midiout sends whole messages: a list is one message, and a single number is not sent.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "230.0"
+        },
+        "parms": "144",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "500.0",
+          "y": "370.0"
+        },
+        "parms": "2",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 6,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "490.0"
+        },
+        "parms": "",
+        "type": ".midiformat",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "300.0",
+          "y": "490.0",
+          "w": "140"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "170.0",
+          "y": "570.0"
+        },
+        "parms": "64",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "570.0"
+        },
+        "parms": "1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "280.0",
+          "y": "570.0"
+        },
+        "parms": "-1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "390.0",
+          "y": "570.0"
+        },
+        "parms": "7",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "60.0",
+          "y": "630.0"
+        },
+        "parms": "240 125 $i1 $i2 247",
+        "type": ".sxformat",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 21
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "170.0",
+          "y": "710.0"
+        },
+        "parms": "32",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 20
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "60.0",
+          "y": "710.0"
+        },
+        "parms": "16",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 20
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "230.0"
+        },
+        "parms": "128",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 3
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "60.0",
+          "y": "770.0"
+        },
+        "parms": "240 125 sumstart $i1 $i2 sum 247",
+        "type": ".sxformat",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 21
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "60.0",
+          "y": "830.0",
+          "w": "200"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "60.0",
+          "y": "950.0"
+        },
+        "parms": "0",
+        "type": ".midiout"
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "640.0",
+          "y": "220.0",
+          "w": "300"
+        },
+        "parms": "1. A list made in the patch goes straight to midiout. Click 144: append puts 60 100 after it, and midiout sends 144 60 100 as one note-on. 128 makes its note-off. One list is one message, so give each message a list of its own.",
+        "type": ".text"
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "640.0",
+          "y": "360.0",
+          "w": "300"
+        },
+        "parms": "2. midiformat's inlets, left to right: note, key pressure, controller, program, channel pressure, pitch bend and channel. Click 60: append makes 60 100, and the list box shows 144 60 100. A bare number is sent with 0: 62 is a release, sent as a note-on with velocity 0, and 64 is controller 64, the sustain pedal, at 0. 6 is program 6, sent as 5: midiformat counts programs from 1. Click 2, and the messages after it go to channel 2.",
+        "type": ".text"
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "640.0",
+          "y": "560.0",
+          "w": "300"
+        },
+        "parms": "3. sxformat 240 125 $i1 $i2 247 fills its placeholders from its inlets, and the left one sends. Click 64, then 1: 240 125 1 64 247. A list on the left inlet fills $i1, $i2 and so on, then sends. Start a SysEx message with 240 and end it with 247; sxformat does not add them. 125 is the ID kept for non-commercial use, so no maker's device should act on these.",
+        "type": ".text"
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "640.0",
+          "y": "760.0",
+          "w": "300"
+        },
+        "parms": "4. A negative value leaves its byte out: click -1, then 7, for 240 125 7 247. sum is a checksum, as Roland devices want: the byte that makes everything after sumstart add up to a multiple of 128. Click 32, then 16: 16 + 32 + 80 = 128, so 240 125 16 32 80 247.",
+        "type": ".text"
+      },
+      "object 27": {
+        "ID": 27,
+        "gui": {
+          "x": "300.0",
+          "y": "890.0"
+        },
+        "parms": "",
+        "type": ".loadbang",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 28
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 28": {
+        "ID": 28,
+        "gui": {
+          "x": "300.0",
+          "y": "940.0"
+        },
+        "parms": "allnotesoff",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 29": {
+        "ID": 29,
+        "gui": {
+          "x": "640.0",
+          "y": "900.0",
+          "w": "300"
+        },
+        "parms": "5. midiout opens its port when the first message arrives, and that first message is lost. So loadbang sends allnotesoff as the patch opens, and the port is ready before you click. allnotesoff is controller 123 on all 16 channels: it stops every note on a device that obeys it.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "60.0",
+          "y": "290.0"
+        },
+        "parms": "60 100",
+        "type": ".append",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 30": {
+        "ID": 30,
+        "gui": {
+          "x": "60.0",
+          "y": "1030.0"
+        },
+        "parms": "0",
+        "type": ".xmidiin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 31
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 32
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 31": {
+        "ID": 31,
+        "gui": {
+          "x": "60.0",
+          "y": "1090.0",
+          "w": "200"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 32": {
+        "ID": 32,
+        "gui": {
+          "x": "300.0",
+          "y": "1090.0"
+        },
+        "parms": "back",
+        "type": ".print"
+      },
+      "object 33": {
+        "ID": 33,
+        "gui": {
+          "x": "640.0",
+          "y": "1010.0",
+          "w": "300"
+        },
+        "parms": "6. xmidiin 0 shows each message that arrives on input port 0 as numbers, one list per message, and print writes every one to the log (Ctrl+J). 144 60 100 comes back as it was sent. On Linux, output 0 and input 0 are usually Midi Through, which sends back whatever it receives, so you see what you send. Elsewhere, set both arguments to a loopback port.",
+        "type": ".text"
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "300.0",
+          "y": "290.0",
+          "w": "140"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "370.0"
+        },
+        "parms": "60",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "430.0"
+        },
+        "parms": "100",
+        "type": ".append",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "170.0",
+          "y": "370.0"
+        },
+        "parms": "62",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "280.0",
+          "y": "370.0"
+        },
+        "parms": "64",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 2,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "390.0",
+          "y": "370.0"
+        },
+        "parms": "6",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 3,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

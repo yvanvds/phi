@@ -1,0 +1,393 @@
+{
+  "title": "bendout, xbendout and xbendout2 — the pitch wheel out",
+  "covers": [
+    ".bendout",
+    ".xbendout",
+    ".xbendout2"
+  ],
+  "summary": "Bend notes on a MIDI port at 7 bits with bendout, at 14 bits from a dial with xbendout, and from the coarse and fine bytes with xbendout2.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# bendout, xbendout and xbendout2 — the pitch wheel out\nA pitch-bend message carries 14 bits, as a coarse and a fine byte. bendout takes 0-127 with 64 at rest and sends it as the coarse byte, with the fine byte 0: the resolution bendin and midiparse report. xbendout takes all 14 bits, 0-16383 with 8192 at rest. xbendout2 takes the two bytes apart, as xbendin2 reports them.\nEach builds a message for midiout, and the left inlet sends it. The argument is the channel, counted from 0. How far a full bend goes is set on the synthesizer, often 2 semitones. midiout's argument is the output port, counted from 0; the midiinfo tutorial lists them. You hear something only when a synthesizer listens on that port.\nMax's bendout sends to a port itself, with the channel 1-16. Here the channel is counted from 0, and midiout sends.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "250.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "590.0"
+        },
+        "parms": "0",
+        "type": ".xbendout",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "60.0",
+          "y": "670.0"
+        },
+        "parms": "100",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "170.0",
+          "y": "670.0"
+        },
+        "parms": "64",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "730.0"
+        },
+        "parms": "0",
+        "type": ".xbendout2",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "850.0"
+        },
+        "parms": "0",
+        "type": ".midiout"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "640.0",
+          "y": "240.0",
+          "w": "300"
+        },
+        "parms": "1. Click 127: bendout 0 bends up as far as the synthesizer allows, and 0 as far down. Click 64 to come back to rest. The message is 224 0 127: on the wire the fine byte comes first, and bendout leaves it at 0.",
+        "type": ".text"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "640.0",
+          "y": "380.0",
+          "w": "300"
+        },
+        "parms": "2. Drag the dial, or click 0, 0.5 or 1. It sends 0-16383, and xbendout sends every step, so a slow bend glides instead of moving in 128 steps. 0.5 is 8192, at rest: 224 0 64.",
+        "type": ".text"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "640.0",
+          "y": "520.0",
+          "w": "300"
+        },
+        "parms": "3. xbendout2 takes the coarse byte on the left and the fine byte on the right. Click 100, then 64: 224 100 64, the same message xbendout sends for 64 × 128 + 100 = 8292, a little above rest.",
+        "type": ".text"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "300.0",
+          "y": "790.0"
+        },
+        "parms": "",
+        "type": ".loadbang",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 19
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "300.0",
+          "y": "840.0"
+        },
+        "parms": "allnotesoff",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "250.0"
+        },
+        "parms": "64",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "640.0",
+          "y": "680.0",
+          "w": "300"
+        },
+        "parms": "4. midiout opens its port when the first message arrives, and that first message is lost. So loadbang sends allnotesoff as the patch opens, and the port is ready before you click. allnotesoff is controller 123 on all 16 channels: it stops every note on a device that obeys it.",
+        "type": ".text"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "60.0",
+          "y": "930.0"
+        },
+        "parms": "0",
+        "type": ".xmidiin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 23
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "60.0",
+          "y": "990.0",
+          "w": "200"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "300.0",
+          "y": "990.0"
+        },
+        "parms": "back",
+        "type": ".print"
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "640.0",
+          "y": "840.0",
+          "w": "300"
+        },
+        "parms": "5. xmidiin 0 shows each message that arrives on input port 0 as numbers, one list per message, and print writes every one to the log (Ctrl+J). 224 is pitch bend on channel 1, followed by the fine and the coarse byte. On Linux, output 0 and input 0 are usually Midi Through, which sends back whatever it receives, so you see what you send. Elsewhere, set both arguments to a loopback port.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "250.0"
+        },
+        "parms": "127",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "310.0"
+        },
+        "parms": "0",
+        "type": ".bendout",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "390.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "170.0",
+          "y": "390.0"
+        },
+        "parms": "0.5",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "280.0",
+          "y": "390.0"
+        },
+        "parms": "1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "450.0"
+        },
+        "parms": "0 16383 1 1",
+        "type": ".dial",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "530.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

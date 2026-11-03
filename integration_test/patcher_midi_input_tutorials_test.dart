@@ -482,7 +482,7 @@ void main() {
       for (final e in notices.log.entries)
         if (e.level == phi.LogLevel.error) e.text,
     ];
-    expect(errors.where((e) => !isMidiInDriverUnavailable(e)), isEmpty);
+    expect(errors.where((e) => !isMidiDriverUnavailable(e)), isEmpty);
     expect(
       find.byKey(LogPanelToggle.badgeKey),
       errors.isEmpty ? findsNothing : findsOneWidget,

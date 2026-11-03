@@ -1,0 +1,446 @@
+{
+  "title": "controlchange and xctlout — knobs to a MIDI port",
+  "covers": [
+    ".controlchange",
+    ".xctlout"
+  ],
+  "summary": "Send a dial as the modulation wheel at 7 bits with controlchange, switch the sustain pedal, and send a 14-bit controller as its coarse and fine halves with xctlout.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# controlchange and xctlout — knobs to a MIDI port\ncontrolchange builds a control-change message for midiout: each value 0-127 on its inlet sends one. Its arguments are the channel, counted from 0, and the controller number: controlchange 0 1 is the modulation wheel on channel 1. xctlout sends a value of 0-16383 as two messages, the coarse half on a controller 0-31 and the fine half on that number plus 32. midiout's argument is the output port, counted from 0; the midiinfo tutorial lists them. You hear something only when a synthesizer listens on that port.\nMax's ctlout takes the controller first and the channel, 1-16, second, and sends to a port itself. Here the channel comes first, counted from 0, and midiout sends.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "230.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "60.0",
+          "y": "510.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "170.0",
+          "y": "510.0"
+        },
+        "parms": "0.5",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "280.0",
+          "y": "510.0"
+        },
+        "parms": "1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "570.0"
+        },
+        "parms": "0 16383 1 1",
+        "type": ".dial",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "60.0",
+          "y": "650.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "280.0",
+          "y": "650.0"
+        },
+        "parms": "1",
+        "type": ".loadmess",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 16
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "60.0",
+          "y": "710.0"
+        },
+        "parms": "0",
+        "type": ".xctlout",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "60.0",
+          "y": "830.0"
+        },
+        "parms": "0",
+        "type": ".midiout"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "640.0",
+          "y": "220.0",
+          "w": "300"
+        },
+        "parms": "1. Drag the upper dial, or click 0, 0.5 or 1 to set it. It sends 0-127 in whole numbers, and controlchange 0 1 sends each one as the modulation wheel on channel 1. 0.5 is 64, the middle.",
+        "type": ".text"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "640.0",
+          "y": "360.0",
+          "w": "300"
+        },
+        "parms": "2. A switch such as the sustain pedal is a controller too, sending 127 for down and 0 for up. Click 127, then 0: controlchange 0 64 holds and lets go of the pedal.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "230.0"
+        },
+        "parms": "0.5",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "640.0",
+          "y": "500.0",
+          "w": "300"
+        },
+        "parms": "3. 128 steps can be heard on a slow sweep. The lower dial sends 0-16383, and xctlout splits each value into two messages: the coarse half on controller 1, then the fine half on controller 33. loadmess 1 chose controller 1 when the patch opened. A device that reads only controller 1 still follows, in steps of 128.",
+        "type": ".text"
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "300.0",
+          "y": "770.0"
+        },
+        "parms": "",
+        "type": ".loadbang",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "300.0",
+          "y": "820.0"
+        },
+        "parms": "allnotesoff",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "640.0",
+          "y": "680.0",
+          "w": "300"
+        },
+        "parms": "4. midiout opens its port when the first message arrives, and that first message is lost. So loadbang sends allnotesoff as the patch opens, and the port is ready before you click. allnotesoff is controller 123 on all 16 channels: it stops every note on a device that obeys it.",
+        "type": ".text"
+      },
+      "object 24": {
+        "ID": 24,
+        "gui": {
+          "x": "60.0",
+          "y": "910.0"
+        },
+        "parms": "0",
+        "type": ".xmidiin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 25
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 26
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 25": {
+        "ID": 25,
+        "gui": {
+          "x": "60.0",
+          "y": "970.0",
+          "w": "200"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 26": {
+        "ID": 26,
+        "gui": {
+          "x": "300.0",
+          "y": "970.0"
+        },
+        "parms": "back",
+        "type": ".print"
+      },
+      "object 27": {
+        "ID": 27,
+        "gui": {
+          "x": "640.0",
+          "y": "840.0",
+          "w": "300"
+        },
+        "parms": "5. xmidiin 0 shows each message that arrives on input port 0 as numbers, one list per message, and print writes every one to the log (Ctrl+J). 176 1 64 is controller 1 at 64 on channel 1. xctlout sends two messages per value, so the box shows the fine one, on controller 33. On Linux, output 0 and input 0 are usually Midi Through, which sends back whatever it receives, so you see what you send. Elsewhere, set both arguments to a loopback port.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "230.0"
+        },
+        "parms": "1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "290.0"
+        },
+        "parms": "0 127 1 1",
+        "type": ".dial",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "370.0"
+        },
+        "parms": "",
+        "type": ".i",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 6
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "430.0"
+        },
+        "parms": "0 1",
+        "type": ".controlchange",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "390.0",
+          "y": "370.0"
+        },
+        "parms": "127",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "500.0",
+          "y": "370.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "390.0",
+          "y": "430.0"
+        },
+        "parms": "0 64",
+        "type": ".controlchange",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}

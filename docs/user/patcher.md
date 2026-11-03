@@ -322,6 +322,36 @@ for:
   be open in only one place at a time, so untick it under Settings › MIDI
   for a patch to hear it. For now, at most eight MIDI input objects in all
   open patches can listen to one port, and a ninth stays silent.
+- **MIDI output:** notes on a channel, released with a velocity of 0 or with
+  a release velocity (`noteon`, `noteoff` and `xnoteout`), a dial as the
+  modulation wheel at 7 bits and at 14 (`controlchange` and `xctlout`),
+  program changes and pressure (`programchange`, `channelpressure` and
+  `polypressure`), the pitch wheel at 7 and 14 bits (`bendout`, `xbendout`
+  and `xbendout2`), the pitch-bend range and other parameters (`rpnout` and
+  `nrpnout`), byte lists, readable messages and SysEx with a checksum
+  (`midiout`, `midiformat` and `sxformat`), and releasing stuck notes
+  (`flush` and `midiflush`). Each group shares one tutorial. The builders
+  (`noteon` and the rest) take the channel counted from 0, so `noteon 0`
+  plays on channel 1, and `midiout` sends what they build to output port 0.
+  You hear the notes only when a synthesizer listens on that port. `midiout`
+  opens its port on the first message it receives, and that message is
+  lost, so each tutorial sends it `allnotesoff` as it opens. To see what is
+  sent, each tutorial shows what comes back on input port 0. On Linux, port
+  0 is usually `Midi Through` both ways, which sends back whatever it
+  receives. Elsewhere, set both ports to a loopback port. A message box
+  keeps only its first word for now, so these tutorials build their lists
+  with `append` and fill `sxformat`'s placeholders one inlet at a time.
+- **MIDI processing:** a metro line of notes that end by themselves
+  (`makenote`), counting only note-ons (`stripnote`), giving each note a
+  voice for a three-voice saw, with overflow and voice stealing (`poly`), a
+  sustain pedal (`sustain`), note statistics such as voices, durations and
+  the time between notes (`borax`), number pairs that are read once
+  (`offer`), and MPE: a zone, notes with their own pitch bend, pressure and
+  slide, and reading them back (`mpeconfig`, `mpeformat` and `mpeparse`,
+  which share one tutorial). These objects work on numbers, not on a port,
+  and the tutorials play them from keyboards and message boxes on a saw on
+  the master bus. The MPE tutorial sends to output port 0 and reads input
+  port 0, as the MIDI output tutorials do.
 
 Each tutorial is a small working patch, with numbered notes that walk you
 through it. Where Phi's object differs from the Max object of the same name,

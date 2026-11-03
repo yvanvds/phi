@@ -5,6 +5,7 @@ import '../../design/tokens/phi_colors.dart';
 import '../../design/tokens/phi_spacing.dart';
 import '../../design/tokens/phi_type.dart';
 import '../../domain/session/session_state.dart';
+import '../../domain/system_load/system_load.dart';
 import '../../engine/engine.dart';
 import '../../engine/state/engine_telemetry.dart';
 import '../diagnostics/audio_device_health.dart';
@@ -14,9 +15,11 @@ import 'audio_device_chip.dart';
 import 'midi_activity_dot.dart';
 import 'panic_button.dart';
 import 'status_chip.dart';
+import 'system_load_chip.dart';
 
 /// Bottom status strip — 24px. Shows live engine telemetry (CPU, buffer,
-/// latency, drops), a `LIVE` dot that lights up when projection mode is on, the
+/// latency, drops), the per-thread `SYS` chip beside `CPU` (issue #24), a
+/// `LIVE` dot that lights up when projection mode is on, the
 /// **panic** button right of the dot (issue #264), an **audio-device health
 /// chip** (issue #271), and a MIDI activity indicator that flashes on incoming
 /// MIDI.
@@ -31,6 +34,7 @@ class BottomStatus extends StatelessWidget {
     this.logPanel,
     this.audioHealth,
     this.onAudioSettings,
+    this.systemLoad,
     VoidCallback? onPanic,
     super.key,
   }) : telemetry = engine.telemetry,
@@ -48,6 +52,7 @@ class BottomStatus extends StatelessWidget {
     this.logPanel,
     this.audioHealth,
     this.onAudioSettings,
+    this.systemLoad,
     this.onPanic = _noPanic,
     super.key,
   });
@@ -69,6 +74,11 @@ class BottomStatus extends StatelessWidget {
   /// Opens the settings dialog's AUDIO section — the audio chip's click-through
   /// (design §5). `null` leaves the chip inert (no settings owner wired).
   final VoidCallback? onAudioSettings;
+
+  /// The per-thread CPU load the `SYS` chip shows (issue #24), published by
+  /// the shell's `SystemLoadMonitor`. `null` in the bare widget tests that don't
+  /// exercise it; the chip is then omitted.
+  final ValueListenable<SystemLoad>? systemLoad;
 
   /// The panic action the status-bar button runs (issue #264) — the shell wires
   /// this to `PhiEngine.panic`.
@@ -133,6 +143,9 @@ class BottomStatus extends StatelessWidget {
     mainAxisSize: MainAxisSize.min,
     children: [
       StatusChip(label: 'CPU', value: formatCpu(t.cpuLoad)),
+      // `CPU` is the audio callback's budget; `SYS` is the busiest thread of
+      // the whole process, with the per-thread breakdown one click away.
+      if (systemLoad != null) SystemLoadChip(load: systemLoad!),
       StatusChip(label: 'BUF', value: formatBuffer(t.bufferSize, t.sampleRate)),
       StatusChip(label: 'LAT', value: formatLatency(t.latencyMs)),
       // The cumulative *stall event* count, not the engine's raw

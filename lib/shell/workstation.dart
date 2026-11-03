@@ -29,6 +29,7 @@ import '../engine/state/code_library_controller.dart';
 import '../engine/state/patcher_controller.dart';
 import '../engine/state/rack_definitions_controller.dart';
 import '../engine/state/voice_audition_controller.dart';
+import '../platform/thread_cpu/thread_cpu_sampler.dart';
 import '../surfaces/code/code_surface.dart';
 import '../surfaces/midi/midi_file_io.dart';
 import '../surfaces/midi/midi_surface.dart';
@@ -50,6 +51,7 @@ import 'diagnostics/log_panel.dart';
 import 'diagnostics/log_panel_controller.dart';
 import 'diagnostics/notice_center.dart';
 import 'diagnostics/phi_toast_overlay.dart';
+import 'diagnostics/system_load_monitor.dart';
 import 'layout/shell_layout_controller.dart';
 import 'layout/split_tree_view.dart';
 import 'layout/splitter_resize.dart';
@@ -86,6 +88,7 @@ class Workstation extends StatefulWidget {
     this.sessionLog,
     this.crashReport,
     this.onExit,
+    this.threadCpuSampler,
     super.key,
   });
 
@@ -129,6 +132,12 @@ class Workstation extends StatefulWidget {
   /// build its own seeded controller (one pane, Mix open); tests inject one to
   /// drive dock moves and assert state survives a re-parent.
   final ShellLayoutController? layoutController;
+
+  /// Reads the process's per-thread CPU time for the status bar's `SYS` chip
+  /// (issue #24). `null` — the bare shell and most tests — leaves the chip
+  /// reading "not available" with no polling; the app passes the host OS's
+  /// sampler in production, and tests a scripted fake.
+  final ThreadCpuSampler? threadCpuSampler;
 
   /// The project lifecycle controller. When present (with [directoryPicker]),
   /// the toolbar shows the project menu + dirty indicator, Ctrl+S saves, and the
@@ -226,6 +235,10 @@ class _WorkstationState extends State<Workstation> {
   /// the engine's telemetry tick + `activeAudioState()` and device notices, and
   /// logs each health transition through the notice channel. Owned here.
   late final AudioHealthMonitor _audioHealth;
+
+  /// Polls [Workstation.threadCpuSampler] once a second for the `SYS` chip
+  /// (issue #24).
+  late final SystemLoadMonitor _systemLoad;
 
   late final CodeEvaluator _codeEvaluator;
   late final bool _ownsCodeEvaluator;
@@ -357,6 +370,9 @@ class _WorkstationState extends State<Workstation> {
       readRecovery: () => widget.engine.audioRecovery,
       notices: _noticeCenter,
     );
+    // The status-bar `SYS` chip (issue #24): per-thread CPU of the whole
+    // process, on its own once-a-second poll rather than the telemetry tick.
+    _systemLoad = SystemLoadMonitor(sampler: widget.threadCpuSampler);
     // Retrofit sweep (design §3, §8 decision 3): the shipped ad-hoc notice
     // sites — the audio device fallback and the state / patch degradation paths
     // — surface through the one channel instead of vanishing on an unread
@@ -790,6 +806,7 @@ class _WorkstationState extends State<Workstation> {
     // Stop the audio-health monitor (detaching its tick + notice listeners)
     // before the notice center it surfaces through goes away.
     _audioHealth.dispose();
+    _systemLoad.dispose();
     // Detach the panel's store listener before the notice center (maybe) drops
     // the store it listens to.
     _logPanel.dispose();
@@ -970,6 +987,7 @@ class _WorkstationState extends State<Workstation> {
                       session: widget.session,
                       logPanel: _logPanel,
                       audioHealth: _audioHealth.health,
+                      systemLoad: _systemLoad.load,
                       onAudioSettings: widget.projectController == null
                           ? null
                           : _openAudioSettings,

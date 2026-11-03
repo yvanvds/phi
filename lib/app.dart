@@ -21,6 +21,8 @@ import 'engine/bridge/code_evaluator.dart';
 import 'engine/bridge/code_evaluator_factory.dart';
 import 'engine/bridge/registry_mirror_factory.dart';
 import 'engine/engine.dart';
+import 'platform/thread_cpu/host_thread_cpu_sampler.dart';
+import 'platform/thread_cpu/thread_cpu_sampler.dart';
 import 'shell/commands/command_registry.dart';
 import 'shell/diagnostics/notice_center.dart';
 import 'shell/layout/shell_layout_controller.dart';
@@ -45,6 +47,7 @@ class PhiApp extends StatefulWidget {
     this.noticeCenter,
     this.sessionLog,
     this.crashReport,
+    this.threadCpuSampler,
   });
 
   /// Optional engine override — tests inject a fake-backed engine here so
@@ -111,6 +114,12 @@ class PhiApp extends StatefulWidget {
   /// inject a resolved future to drive the crash notice without touching disk.
   final Future<CrashReport?>? crashReport;
 
+  /// Optional per-thread CPU sampler for the status bar's `SYS` chip (issue
+  /// #24). `null` on the production path picks the host OS's sampler
+  /// (`/proc/self/task` on Linux, Toolhelp + `GetThreadTimes` on Windows); with
+  /// an injected engine (tests) it stays off unless a test injects a fake here.
+  final ThreadCpuSampler? threadCpuSampler;
+
   @override
   State<PhiApp> createState() => _PhiAppState();
 }
@@ -139,6 +148,10 @@ class _PhiAppState extends State<PhiApp> {
   /// via [PhiApp.crashReport].
   Future<CrashReport?>? _crashReport;
 
+  /// The `SYS` chip's sampler: the injected one, else the host OS's on the
+  /// production path, else none (an injected engine with no sampler).
+  ThreadCpuSampler? _threadCpuSampler;
+
   /// Set once [_shutdownForExit] has run, so it runs at most once.
   bool _exitShutdownDone = false;
 
@@ -163,11 +176,13 @@ class _PhiAppState extends State<PhiApp> {
     // GUI nodes as one-line object boxes. Idempotent, so the surface's own
     // call stays harmless.
     registerBuiltInPatcherNodes();
+    _threadCpuSampler = widget.threadCpuSampler;
     final injectedEngine = widget.engine;
     if (injectedEngine != null) {
       _engine = injectedEngine;
       _ownsEngine = false;
     } else {
+      _threadCpuSampler ??= HostThreadCpuSampler.create();
       // Composition root: build the shared Code evaluator *before* the engine
       // (issue #314). Real Python end-to-end when the engine build has CPython,
       // else the no-op — gated behind the bridge factory so this layer never
@@ -314,6 +329,7 @@ class _PhiAppState extends State<PhiApp> {
         sessionLog: _sessionLog,
         crashReport: widget.crashReport ?? _crashReport,
         onExit: _shutdownForExit,
+        threadCpuSampler: _threadCpuSampler,
       ),
     );
   }

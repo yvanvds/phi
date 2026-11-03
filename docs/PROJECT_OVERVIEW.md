@@ -41,7 +41,9 @@ main + app          (orchestration)
 ├── engine          (PhiEngine façade + bridge over package:yse)
 ├── design          (tokens + reusable widgets — no domain knowledge)
 ├── domain          (pure-Dart models — session/ wired; more arrives later)
-├── platform        (windows-specific bits — empty for now)
+├── platform        (OS facilities outside the engine — per-thread CPU
+│                    sampling over procfs / kernel32, issue #24; pure Dart +
+│                    dart:ffi, no Flutter, no package:yse)
 └── core            (cross-cutting helpers — `Clock` wall-clock seam,
                      `PerUserFolders` settings/logs folder resolver)
 ```
@@ -2233,6 +2235,40 @@ main + app          (orchestration)
   `AudioDeviceChip` widget test (per-state look + click-through), and an end-to-end
   `audio_device_chip` integration test (the real app walks the four states via the
   fake gateway, each transition logs, and the chip clicks through to settings AUDIO).
+- **The status-bar `SYS` chip** (issue #24) — per-*thread* CPU of the whole
+  Phi process beside `CPU` (which stays the audio-callback budget). Threads,
+  not cores: the scheduler bounces threads across cores (more so on P/E-core
+  parts), so per-core figures show churn while a thread has a role. Three
+  layers: `lib/platform/thread_cpu/` holds the `ThreadCpuSampler` interface
+  (a `ThreadCpuSnapshot` of cumulative per-thread `ThreadCpuReading`s on the
+  sampler's own monotonic clock) and the OS implementations —
+  `LinuxThreadCpuSampler` reads `/proc/self/task/*/stat` (`utime + stime`,
+  parsed after the last `)`, ticks via `sysconf(_SC_CLK_TCK)`) and `comm`
+  through a `ProcTaskReader` seam; `WindowsThreadCpuSampler` goes through a
+  `Win32ThreadApi` seam whose FFI implementation `Kernel32ThreadApi` walks
+  `CreateToolhelp32Snapshot` / `Thread32First` / `Thread32Next`, reads
+  `GetThreadTimes` and `GetThreadDescription` (resolved lazily, Win10 1607+);
+  `HostThreadCpuSampler.create()` picks one (or `null` elsewhere). The pure
+  `SystemLoadTracker` (`lib/domain/system_load/`) diffs two snapshots into
+  `ThreadCpuUsage` rows (percent of *one* core, clamped; a thread born in the
+  window counts in full, a reused id restarts from zero) and a `SystemLoad`
+  whose `SystemLoadLevel` is the busiest thread's — ok < 60 % ≤ busy < 85 % ≤
+  saturated — plus the whole-process figure over all logical cores as context.
+  The shell's `SystemLoadMonitor` (`lib/shell/diagnostics/`) polls once a
+  second on its own timer (not the 16 ms telemetry tick) and goes
+  `unavailable` for good if the sampler throws. `SystemLoadChip` +
+  `SystemLoadPopover` (`lib/shell/bottom_status/`) show the dot and, on click,
+  the top eight threads opening upward. `PhiApp` wires the host sampler on the
+  production path; with an injected engine it stays off unless a test injects
+  one (`ScriptedThreadCpuSampler` in `test/platform/thread_cpu/test_doubles/`).
+  PortAudio's callback thread is unnamed (on Linux it inherits its creator's
+  `comm`, on Windows it reads `thread <id>`) until libYSE names its threads
+  (yvanvds/yse-soundengine#1259). Covered by unit
+  tests (stat parsing, Win32 conversion through a fake API, the tracker, the
+  monitor under fake time), widget tests (chip colours, tooltip, popover), and
+  the `system_load_chip` integration test (a scripted saturated thread turns
+  the dot red at a 7 % process average; the host sampler measures the test's
+  own threads).
 - **The report bundle + crash surfacing** (issue #272, epic #267, design
   `docs/design/diagnostics.md` §6) — closes the diagnostics epic. A pure-Dart
   `DiagnosticsBundle` (`lib/domain/log/`) renders one paste-ready, **stable-ordered**
@@ -3062,7 +3098,27 @@ main + app          (orchestration)
   objects in all open patches can listen to one port, and a closed patch
   gives its slots back only once libYSE destroys it, a moment later
   (yse-soundengine#1246). So the integration test renders with real pauses
-  after closing each tutorial. `.preset` recalls on the timer thread).
+  after closing each tutorial. `.preset` recalls on the timer thread)
+  and MIDI output (#509: `noteon-noteoff`, `controlchange`,
+  `programchange-pressure`, `bendout`, `rpnout-nrpnout`,
+  `midiout-midiformat-sxformat`, `midiflush-flush`; each sends through one
+  `.midiout 0`, which a `.loadbang` -> `allnotesoff` opens as the tutorial
+  opens because `.midiout` drops the message that opens its port, and shows
+  what comes back on input port 0 with `.xmidiin 0` into a list box and a
+  `.print`. The tests point both at the loopback, and
+  `MidiLoopback.capture()` (`test/engine/test_support/midi_capture.dart`,
+  `MidiCapture`) reads every byte that reaches the wire. The builders' binary
+  messages never go into a `.l`: the wrapper's `guiValue` cannot decode them
+  (dart-yse#109). `test_support/midi_driver_unavailable.dart` sets RtMidi's
+  "no MIDI system" error apart for a tutorial holding a `.midiout` as well
+  as a MIDI input object)
+  and MIDI processing (#510: `makenote`, `stripnote`, `poly`, `sustain`,
+  `borax`, `offer`, `mpeconfig-mpeparse-mpeformat`; these objects need no
+  port, so the tutorials play them from `.kslider`s and message boxes on a
+  saw on master, and the tests press keys through `setGuiValueAt`, the
+  canvas's path. The MPE one alone sends through `.midiout 0`, opened by
+  the same `allnotesoff` loadbang, and reads input port 0 with `.midiin 0`
+  into `.mpeparse`; its byte lists are numeric, so they may go into a `.l`).
   The domain clock six reach a libYSE
   domain clock by name; their clocks advance with the audio blocks whether or
   not the patch is mounted, and are never destroyed by a patch object. A
@@ -3114,7 +3170,9 @@ main + app          (orchestration)
   `patcher_data_sequencer_tutorials`,
   `patcher_dictionary_tutorials`,
   `patcher_array_tutorials`,
-  `patcher_midi_input_tutorials`: each opens its tutorials
+  `patcher_midi_input_tutorials`,
+  `patcher_midi_output_tutorials`,
+  `patcher_midi_processing_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
   that no note or object overlaps another). Every one of them opens a
   tutorial through the shared `openTutorialBySearch(tester, type)` helper in

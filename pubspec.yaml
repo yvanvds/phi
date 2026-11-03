@@ -26,6 +26,10 @@ dependencies:
   # lib/domain/midi/smf/; these packages only own the file-IO shell.
   desktop_drop: ^0.7.1
   file_selector: ^1.1.0
+  # Native allocation for the per-thread CPU sampler's Win32 calls (#24,
+  # lib/platform/thread_cpu/kernel32_thread_api.dart). Already in the graph
+  # through yse; declared because Phi now imports it directly.
+  ffi: ^2.2.0
 
 dev_dependencies:
   flutter_test:
