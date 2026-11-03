@@ -1,37 +1,33 @@
 // ignore_for_file: invalid_use_of_internal_member, implementation_imports
-import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/services.dart';
 import 'package:flutter/src/widgets/_window.dart';
-import 'package:flutter/src/widgets/_window_linux.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'linux_x_test_keyboard.dart';
+import 'real_keyboard.dart';
 import 'text_input_view_rule_check.dart';
+import 'win32_send_input_keyboard.dart';
 
-/// The keyboard of a test on real native windows, as close to the platform as
-/// each OS allows.
-///
-/// - **Linux:** real key presses ([LinuxXTestKeyboard]). Text reaches a field
-///   only through the engine's keyboard manager and text input plugin, and goes
-///   to the window that holds the X focus.
-/// - **Elsewhere:** the plugin still hears every call from the field, but nothing
-///   types: the editing state it would report is delivered on the text input
-///   channel, and keys are simulated in the framework. Real Win32 input is #558.
+/// The keyboard of a test on real native windows: real key presses, from
+/// [LinuxXTestKeyboard] or [Win32SendInputKeyboard]. Text reaches a field only
+/// through the engine's keyboard manager and text input plugin, and goes to the
+/// window that holds the keyboard focus.
 class NativeKeyboard {
   NativeKeyboard(this._tester, this._textInput)
-    : _x = Platform.isLinux ? LinuxXTestKeyboard() : null;
+    : _keys = Platform.isWindows
+          ? Win32SendInputKeyboard()
+          : LinuxXTestKeyboard();
 
   /// How long, in real time, a key press may take to land.
   static const Duration _landing = Duration(seconds: 5);
 
   final WidgetTester _tester;
   final TextInputViewRuleCheck _textInput;
-  final LinuxXTestKeyboard? _x;
-  ffi.Pointer<ffi.Void>? _mainWindow;
+  final RealKeyboard _keys;
 
   /// Lets real time pass, so the platform loop runs, and pumps what it did.
   Future<void> _breathe() async {
@@ -46,24 +42,18 @@ class NativeKeyboard {
   Future<void> focus(FlutterView view) async {
     final isMain =
         view.viewId == PlatformDispatcher.instance.implicitView?.viewId;
-    final window = isMain ? null : _windowOf(view);
-    final x = _x;
-    if (x == null) {
-      window?.activate();
-      await _tester.pump();
-      return;
-    }
-    final handle = isMain
-        ? _mainWindow ??= x.onlyVisibleWindow()
-        : (window! as WindowControllerLinux).windowHandle;
+    final window = _keys.windowOf(view, isMain ? null : _windowOf(view));
     final waited = Stopwatch()..start();
-    x.present(handle);
-    while (!x.isActive(handle)) {
+    _keys.present(window);
+    while (!_keys.hasFocus(window)) {
       if (waited.elapsed > _landing) {
-        throw StateError('view ${view.viewId} never got the X focus');
+        throw StateError(
+          'view ${view.viewId} never got the keyboard focus: '
+          '${_keys.describeFocus(window)}',
+        );
       }
       await _breathe();
-      x.present(handle);
+      _keys.present(window);
     }
     await _breathe();
   }
@@ -91,28 +81,23 @@ class NativeKeyboard {
   Future<void> type(Finder field, String text) async {
     String shown() => textIn(field);
     await _until(() => _textInput.clientId != null);
-    final x = _x;
-    if (x == null) {
-      _textInput.deliver(text);
-    } else if (text.startsWith(shown())) {
-      text.substring(shown().length).codeUnits.forEach(x.typeCharacter);
+    if (text.startsWith(shown())) {
+      text.substring(shown().length).codeUnits.forEach(_keys.typeCharacter);
     }
     await _until(() => shown() == text);
   }
 
   /// Presses Enter, and waits for [until], or [_landing]: the caller checks.
-  Future<void> enter({required bool Function() until}) => _press(
-    LogicalKeyboardKey.enter,
-    keysym: LinuxXTestKeyboard.returnKey,
-    until: until,
-  );
+  Future<void> enter({required bool Function() until}) async {
+    _keys.enter();
+    await _until(until);
+  }
 
   /// Presses Delete, and waits for [until], or [_landing]: the caller checks.
-  Future<void> delete({required bool Function() until}) => _press(
-    LogicalKeyboardKey.delete,
-    keysym: LinuxXTestKeyboard.deleteKey,
-    until: until,
-  );
+  Future<void> delete({required bool Function() until}) async {
+    _keys.delete();
+    await _until(until);
+  }
 
   /// Presses Ctrl and the letter [key], and waits for [until], or [_landing]:
   /// the caller checks.
@@ -120,31 +105,7 @@ class NativeKeyboard {
     LogicalKeyboardKey key, {
     required bool Function() until,
   }) async {
-    final x = _x;
-    if (x == null) {
-      await _tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await _tester.sendKeyEvent(key);
-      await _tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    } else {
-      x.tap(
-        key.keyLabel.toLowerCase().codeUnitAt(0),
-        modifier: LinuxXTestKeyboard.controlLeft,
-      );
-    }
-    await _until(until);
-  }
-
-  Future<void> _press(
-    LogicalKeyboardKey key, {
-    required int keysym,
-    required bool Function() until,
-  }) async {
-    final x = _x;
-    if (x == null) {
-      await _tester.sendKeyEvent(key);
-    } else {
-      x.tap(keysym);
-    }
+    _keys.control(key.keyLabel);
     await _until(until);
   }
 

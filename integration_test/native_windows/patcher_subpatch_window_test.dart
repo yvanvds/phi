@@ -47,8 +47,7 @@ import 'text_input_view_rule_check.dart';
 ///
 /// Text input is the platform's: every call from a field goes to the real
 /// plugin, naming the real view, and [TextInputViewRuleCheck] watches them for
-/// the Windows plugin's rule. On Linux the keyboard is real too
-/// ([NativeKeyboard]).
+/// the Windows plugin's rule. The keyboard is real too ([NativeKeyboard]).
 ///
 /// The performer types a `patcher gain` box into the patch, opens it from its
 /// menu, and builds `~inlet 0` → `~* 0.5` → `~outlet 0` in the window that

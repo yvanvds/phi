@@ -284,7 +284,9 @@ The proof is kept as a regression guard for the audience view:
 `PhiApp` runs the workstation in the main window with the Scene open, and a
 real `WindowController` window mounts the same renderer's view.
 
-**Verified**, on Linux X11 under Xvfb (Mesa llvmpipe) at the pinned revision:
+**Verified**, on Linux X11 under Xvfb (Mesa llvmpipe) at the pinned revision, and
+on `windows-latest` except for the display readback, which is Linux only there
+(on Windows the checks stop at the Flutter layer):
 
 - The window is a view the engine made, and every agent draws in its voice
   colour where the pick math projects it. This is checked in the Flutter layer
@@ -347,6 +349,12 @@ real `WindowController` window mounts the same renderer's view.
    that size and GTK allocates the real one afterwards, so anything laid out in
    a new window must survive a 1x1 layout without reporting an overflow.
    `SubpatchWindowView` draws nothing until its bar fits (#557).
+6. **Windows: hold the Scene still while a window opens.** A new view leaves the
+   raster thread with no GL context until the next frame, and a Flutter GPU
+   submit landing in that gap aborts the app in Impeller. Nothing in Phi opens a
+   window with the Scene on screen today, but the audience view will. Until the
+   engine is fixed it must do what the test does: `setVisible(false)`, make the
+   window, let a plain frame draw, `setVisible(true)`. Mechanism in **#559**.
 
 **Testing native windows.** The stock integration binding cannot make one
 (flutter/flutter#195919: it installs a stand-in owner, and its dispatcher
@@ -355,8 +363,11 @@ in fact be replaced: `flutter_test_config.dart` runs before the entry point
 creates its binding. Tests under `integration_test/native_windows/` get
 `NativeWindowsTestBinding`, which keeps the platform owner and reports the real
 id. The subpatch window test runs there too (**#557**): text input goes to the
-real plugin, and on Linux real keys go through XTEST. Windows does not have real
-keys yet (**#558**), and neither test has run on Windows on native windows yet.
+real plugin, and the keys are real on both platforms, through XTEST on Linux and
+`SendInput` on Windows (**#558**). Both tests run on `windows-latest`, where the
+test can move the foreground between its windows with `SetForegroundWindow`, so
+`SendInput` reaches the window it means. The binding also drops real mouse events
+for a window whose widgets have gone, because flutter_test throws on them.
 
 ## 6. Out of scope
 

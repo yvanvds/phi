@@ -3335,12 +3335,14 @@ main + app          (orchestration)
   `native_windows/patcher_subpatch_window` integration test (real engine: built
   by keyboard and drag, heard through the box, undo from the other window, save
   → reopen, a window closed under a half-typed box). The second window there is
-  a real native window (#557), and text input goes to the real plugin. On Linux
-  the keyboard is real as well (`LinuxXTestKeyboard`, through XTEST, X focus
-  moved with `gtk_window_present`, since Xvfb has no window manager); on Windows
-  `NativeKeyboard` delivers the editing state on the channel and simulates keys
-  (#558). `TextInputViewRuleCheck` forwards every call and enforces the Windows
-  plugin's rule (a call naming a view must find it alive) on any OS, because the
+  a real native window (#557), and text input goes to the real plugin. The
+  keyboard is real on both platforms (`NativeKeyboard` over a `RealKeyboard`):
+  `LinuxXTestKeyboard` presses keys through XTEST and moves the X focus with
+  `gtk_window_present`, since Xvfb has no window manager, and
+  `Win32SendInputKeyboard` presses them through `SendInput` on the window
+  `SetForegroundWindow` brought forward (#558). `TextInputViewRuleCheck`
+  forwards every call and enforces the Windows plugin's rule (a call naming a
+  view must find it alive) on any OS, because the
   Linux plugin does not check.
 - **Encapsulate / de-encapsulate** (issue #552) — Max's *Encapsulate*:
   `Ctrl+Shift+E` (or the node menu's `encapsulate`) moves the selection into a
@@ -3418,8 +3420,12 @@ main + app          (orchestration)
   A `WindowController` made there is a real window over the engine, not
   flutter_test's stand-in (#297, flutter/flutter#195919).
   `LinuxWindowPixels` reads back what such a window shows on the display, and
-  `NativeKeyboard` types into it (#557). On Linux X11, open windows only after
-  the main window has painted (#556), and expect their first frame at 1x1.
+  `NativeKeyboard` types into it with real keys (#557, #558). On Linux X11, open
+  windows only after the main window has painted (#556), and expect their first
+  frame at 1x1. On Windows, hold the Scene still while a window opens (#559). If
+  a file there fails with `0 tests passed. No tests were found.`, the app died:
+  `flutter test` drops its stderr and exit code, so build the file with
+  `flutter build windows --debug -t <file>` and run `phi.exe` directly.
 - **SonarCloud:** project key `yvanvds_phi`, organization `yvanvds`
   (`sonar-project.properties`); the CI scan is off for now (issue #447).
 - **Issue templates:** `.github/ISSUE_TEMPLATE/`. Labels: see

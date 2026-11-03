@@ -1,5 +1,12 @@
+// ignore_for_file: invalid_use_of_internal_member, implementation_imports
 import 'dart:ffi' as ffi;
 import 'dart:io';
+import 'dart:ui';
+
+import 'package:flutter/src/widgets/_window.dart';
+import 'package:flutter/src/widgets/_window_linux.dart';
+
+import 'real_keyboard.dart';
 
 typedef _Pointer = ffi.Pointer<ffi.Void>;
 
@@ -10,7 +17,7 @@ typedef _Pointer = ffi.Pointer<ffi.Void>;
 ///
 /// Xvfb runs no window manager, so X focus does not follow anything: move it
 /// with [present] first.
-class LinuxXTestKeyboard {
+class LinuxXTestKeyboard implements RealKeyboard {
   LinuxXTestKeyboard() {
     if (Platform.environment['WAYLAND_DISPLAY'] != null) {
       throw StateError(
@@ -75,10 +82,10 @@ class LinuxXTestKeyboard {
   }
 
   /// X keysyms of the keys that are not characters.
-  static const int returnKey = 0xFF0D;
-  static const int deleteKey = 0xFFFF;
-  static const int controlLeft = 0xFFE3;
-  static const int shiftLeft = 0xFFE1;
+  static const int _returnKey = 0xFF0D;
+  static const int _deleteKey = 0xFFFF;
+  static const int _controlLeft = 0xFFE3;
+  static const int _shiftLeft = 0xFFE1;
 
   late final _Pointer _display;
   late final int Function(_Pointer, int) _keycodeOf;
@@ -90,6 +97,7 @@ class LinuxXTestKeyboard {
   late final int Function(_Pointer) _isActive;
   late final void Function(_Pointer) _present;
   late final void Function(ffi.Pointer<ffi.Pointer<ffi.Void>>) _freeList;
+  _Pointer? _mainWindow;
 
   int _keycode(int keysym) {
     final keycode = _keycodeOf(_display, keysym);
@@ -105,7 +113,7 @@ class LinuxXTestKeyboard {
 
   /// Presses and releases the key of [keysym], with [modifier] (a keysym) held
   /// around it.
-  void tap(int keysym, {int? modifier}) {
+  void _tap(int keysym, {int? modifier}) {
     final keycode = _keycode(keysym);
     final held = modifier == null ? null : _keycode(modifier);
     if (held != null) _send(held, down: true);
@@ -115,19 +123,35 @@ class LinuxXTestKeyboard {
     _flush(_display);
   }
 
-  /// Presses the keys that make the ASCII [character], with Shift when the
-  /// keyboard map has it on the shifted level. A printable ASCII character's
-  /// keysym is its code unit.
+  /// With Shift when the keyboard map has it on the shifted level. A printable
+  /// ASCII character's keysym is its code unit.
+  @override
   void typeCharacter(int character) {
     final keycode = _keycode(character);
     final shifted = _keysymAt(_display, keycode, 0, 0) != character;
-    tap(character, modifier: shifted ? shiftLeft : null);
+    _tap(character, modifier: shifted ? _shiftLeft : null);
   }
 
+  @override
+  void enter() => _tap(_returnKey);
+
+  @override
+  void delete() => _tap(_deleteKey);
+
+  @override
+  void control(String letter) =>
+      _tap(letter.toLowerCase().codeUnitAt(0), modifier: _controlLeft);
+
+  @override
+  ffi.Pointer<ffi.Void> windowOf(
+    FlutterView view,
+    WindowController? controller,
+  ) => controller == null
+      ? _mainWindow ??= _onlyVisibleWindow()
+      : (controller as WindowControllerLinux).windowHandle;
+
   /// The main window: the one toplevel showing while no other window is open.
-  /// Call after the main window's first frame (it shows then), and before
-  /// opening any other.
-  ffi.Pointer<ffi.Void> onlyVisibleWindow() {
+  _Pointer _onlyVisibleWindow() {
     final list = _listToplevels();
     final visible = <_Pointer>[];
     for (var node = list; node != ffi.nullptr; node = node[1].cast()) {
@@ -140,9 +164,13 @@ class LinuxXTestKeyboard {
     return visible.single;
   }
 
-  /// Raises [gtkWindow] and moves the X focus to it.
-  void present(ffi.Pointer<ffi.Void> gtkWindow) => _present(gtkWindow);
+  @override
+  void present(ffi.Pointer<ffi.Void> window) => _present(window);
 
-  /// Whether [gtkWindow] holds the X focus.
-  bool isActive(ffi.Pointer<ffi.Void> gtkWindow) => _isActive(gtkWindow) != 0;
+  @override
+  bool hasFocus(ffi.Pointer<ffi.Void> window) => _isActive(window) != 0;
+
+  @override
+  String describeFocus(ffi.Pointer<ffi.Void> window) =>
+      'GTK window ${window.address} is not active';
 }

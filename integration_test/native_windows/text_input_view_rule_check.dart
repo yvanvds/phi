@@ -69,24 +69,6 @@ class TextInputViewRuleCheck {
   bool _isAlive(int view) =>
       PlatformDispatcher.instance.views.any((v) => v.viewId == view);
 
-  /// Delivers [text] to the open client the way the platform plugin reports
-  /// typing: a whole new editing state.
-  void deliver(String text) {
-    _messenger.handlePlatformMessage(
-      _channel,
-      _codec.encodeMethodCall(
-        MethodCall('TextInputClient.updateEditingState', [
-          clientId,
-          TextEditingValue(
-            text: text,
-            selection: TextSelection.collapsed(offset: text.length),
-          ).toJSON(),
-        ]),
-      ),
-      (_) {},
-    );
-  }
-
   /// Takes this out of the channel again.
   void dispose() => _messenger.setMockMessageHandler(_channel, null);
 }
