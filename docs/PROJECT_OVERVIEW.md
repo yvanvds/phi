@@ -35,8 +35,9 @@ checkout at `d:\dart-yse` is only needed to work on the wrapper itself.
 Phi tracks a **pinned Flutter master revision**, not a stable release (#478):
 it builds on Flutter's experimental multi-window API, which is master-only and
 behind `flutter config --enable-windowing` (the #296 re-evaluation, fired
-early on purpose). The pin is the 40-char commit in `.fvmrc` at the repo root
-(`{"flutter": "<sha>"}`, the FVM format). Every "Set up Flutter" step in
+early on purpose). Returning to beta/stable once the API is public and on by
+default is tracked in #554. The pin is the 40-char commit in `.fvmrc` at the
+repo root (`{"flutter": "<sha>"}`, the FVM format). Every "Set up Flutter" step in
 `ci.yaml` (three jobs) and `integration.yaml` reads it via
 `flutter-version-file:` with `channel: master`, then runs
 `flutter config --enable-windowing`. On master the action `git clone`s
