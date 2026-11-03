@@ -755,6 +755,93 @@ void main() {
     expect(controller.graph.nodes, hasLength(2));
   });
 
+  group('encapsulate (issue #552)', () {
+    Future<void> ctrlShift(WidgetTester tester, LogicalKeyboardKey key) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(key);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+    }
+
+    PatchNode make(String type, Offset at, {String args = ''}) =>
+        controller.addObject(
+          desc: catalogue().firstWhere((d) => d.type == type),
+          position: at,
+          args: args,
+        );
+
+    testWidgets('Ctrl+Shift+E boxes the selection without flipping the mode; '
+        'Ctrl+Shift+D unpacks it instead of duplicating', (tester) async {
+      final a = make(Obj.dSine, const Offset(120, 120));
+      final b = make(Obj.dSine, const Offset(260, 120));
+      controller.connect(out(a, 0), inp(b, 0));
+      PatchNode? tapped;
+      await pumpCanvas(tester, onNodeTap: (n) => tapped = n);
+      await tester.tapAt(nodeCenter(tester, a));
+      await tester.pump();
+      controller.selectNodes({a.id, b.id});
+
+      await ctrlShift(tester, LogicalKeyboardKey.keyE);
+
+      expect(mode, PatchCanvasMode.edit, reason: 'not Ctrl+E');
+      final top = controller.nodesIn(null).toList();
+      expect(top.map((n) => n.type), [Obj.patcher]);
+      expect(controller.graph.selectedNodes, {top.single.id});
+      expect(tapped?.id, top.single.id, reason: 'the panel follows the box');
+      expect(find.byType(PatcherNodeView), findsOneWidget);
+
+      await ctrlShift(tester, LogicalKeyboardKey.keyD);
+
+      expect(controller.graph.nodes.map((n) => n.id).toSet(), {a.id, b.id});
+      expect(controller.nodesIn(null), hasLength(2));
+      expect(find.byType(PatcherNodeView), findsNWidgets(2));
+
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(controller.nodesIn(null).single.type, Obj.patcher);
+      await ctrl(tester, LogicalKeyboardKey.keyZ);
+      expect(controller.nodesIn(null), hasLength(2));
+      expect(controller.graph.cables.single.source, out(a, 0));
+    });
+
+    testWidgets('a selection holding an inlet object is refused out loud', (
+      tester,
+    ) async {
+      final pin = make(Obj.gInlet, const Offset(120, 120), args: '0');
+      await pumpCanvas(tester);
+      await tester.tapAt(nodeCenter(tester, pin));
+      await tester.pump();
+
+      await ctrlShift(tester, LogicalKeyboardKey.keyE);
+
+      expect(find.byKey(PatcherCanvas.encapsulateNoticeKey), findsOneWidget);
+      expect(
+        find.text(PatcherCanvas.encapsulateRefusedText.toUpperCase()),
+        findsOneWidget,
+      );
+      expect(controller.graph.nodes.single.id, pin.id);
+      expect(controller.undoScope.canUndo, isFalse);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.byKey(PatcherCanvas.encapsulateNoticeKey), findsNothing);
+    });
+
+    testWidgets('run mode declines Ctrl+Shift+E, and does not flip either', (
+      tester,
+    ) async {
+      final a = make(Obj.dSine, const Offset(120, 120));
+      await pumpCanvas(tester, initialMode: PatchCanvasMode.run);
+      await tester.tapAt(canvasTL(tester) + const Offset(600, 500));
+      await tester.pump();
+      controller.selectNodes({a.id});
+
+      await ctrlShift(tester, LogicalKeyboardKey.keyE);
+
+      expect(mode, PatchCanvasMode.run);
+      expect(controller.graph.nodes.single.id, a.id);
+    });
+  });
+
   testWidgets('run mode declines Ctrl+V — a played patch cannot be pasted '
       'into by a mistyped chord', (tester) async {
     final sine = controller.addNode(

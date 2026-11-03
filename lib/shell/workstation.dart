@@ -1055,9 +1055,8 @@ class _WorkstationState extends State<Workstation> {
   /// re-parents the element (its state survives) instead of rebuilding.
   ///
   /// Scene is the exception: it mounts only while it is its pane's [active]
-  /// (visible) tab. That was for the former `macbear_3d` view, which drove a
-  /// process-wide GL context (removed in issue #456); it is kept so a future
-  /// 3D renderer (#455) keeps GPU init off the boot path and can idle when
+  /// (visible) tab, so the Flutter GPU renderer (#455) loads its engine
+  /// resources on the first visit rather than at boot, and draws nothing while
   /// Scene is a background tab or closed.
   ///
   /// Patcher takes the milder version of the same treatment: it stays mounted

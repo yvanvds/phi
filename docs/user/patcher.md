@@ -109,7 +109,9 @@ patch is reopened or when you edit its text. In this version of Phi a message
 box typed with several words keeps only the first word, and shows only that
 word. A newer engine lifts that limit.
 
-**Right-click** an object for its context menu: *duplicate* and *delete*.
+**Right-click** an object for its context menu: *duplicate* and *delete*,
+*encapsulate*, and *open subpatch* and *de-encapsulate* on a subpatch (see
+below).
 
 ## Cables
 
@@ -133,6 +135,73 @@ word. A newer engine lifts that limit.
 - To **re-route** a cable, press just beside the port at one of its ends and
   drag. Drop it on another port to reconnect it there, or on empty canvas to
   delete it.
+
+## Subpatches
+
+A **subpatch** is a box that holds a patch of its own, like Max's `p`. Type
+`patcher` into the object box, optionally followed by a name: `patcher gain`.
+The name is shown on the box and in the window title.
+
+**Open a subpatch** in its own window:
+
+- in run mode, double-click the box;
+- in edit mode (where a double-click edits the box's text), right-click it and
+  pick *open subpatch*, or select it and press `OPEN SUBPATCH` in the
+  reference panel.
+
+Opening a subpatch that is already open brings its window to the front. The
+window shows the objects inside the box on a full canvas, with the same
+gestures as the main one: insert, connect, move, delete, copy and paste, in
+the same `EDIT` / `RUN` mode as the main canvas (the window's bar shows it and
+toggles it). A subpatch can hold subpatches of its own; the window title is
+the path from the top, for example `fx › gain`.
+
+**Inlets and outlets.** A subpatch has no pins of its own. Its inlets are the
+`.inlet` (messages) and `~inlet` (audio) objects inside it, and its outlets
+the `.outlet` and `~outlet` objects. Each takes one argument, the pin number,
+and messages and audio share one numbering: `~inlet 0` and `.inlet 1` give the
+box two inlets, the first for audio. Add, remove or renumber them and the box
+changes with them. Inside the subpatch an inlet object shows only its outlet
+(what comes in), and an outlet object only its inlet. A pin number that no
+object claims is drawn but cannot be connected. A message sent into a
+`~inlet` is dropped, so audio and messages need their own inlets.
+
+Cables from the parent connect to the box like to any object. They belong to
+the inlet or outlet object behind the pin: renumber that object and the cable
+moves with it, delete it and the cable goes too.
+
+**Editing.** Everything you do in a subpatch window is on the patch's one
+undo history: `Ctrl+Z` in either window undoes the last edit, wherever it was
+made. Deleting, duplicating, copying or pasting a subpatch box takes
+everything inside it along. A subpatch with objects inside cannot be retyped
+into another object (a banner says so). The contents are saved with the
+patch.
+
+**Encapsulate.** Select some objects and press `Ctrl+Shift+E` (or pick
+*encapsulate* from the context menu) to move them into a new, unnamed
+`patcher` box in their place. Cables between the selected objects stay as they
+are. Each cable that ran between a selected object and one outside the
+selection now goes through a new pin of the box: a `~inlet` or `~outlet` for
+audio, a `.inlet` or `.outlet` for messages. Cables leaving the same outlet
+share one pin. Pins are numbered left to right by where the outside end of
+their cables sits. Inside, the objects move to the top left of the window,
+with the inlets in a row above them and the outlets below. A selection that
+holds an inlet or outlet object cannot be encapsulated (a banner says so),
+because that object is a pin of the window it is in.
+
+**De-encapsulate** is the reverse. Select a subpatch box and press
+`Ctrl+Shift+D` (or pick *de-encapsulate*) to put the objects inside it back
+in the window, where the box was. The box and its inlet and outlet objects
+go, and every cable that ran through one of its pins now connects straight
+from where it came from to where it went. Both are one step on the undo
+history: `Ctrl+Z` puts everything back as it was.
+
+The `patcher` tutorial (see [Tutorials](#tutorials)) is a gain subpatch to
+play with and open.
+
+A subpatch window closes when its box is deleted, when you switch to another
+patch or open a tutorial, and when Phi closes. The reference panel shows a
+selected subpatch's name and how many inlets and outlets it has.
 
 ## Selecting, moving and the grid
 
@@ -176,14 +245,16 @@ inlet accepts, what each outlet sends, and its arguments with their defaults
 and ranges. For an object on the canvas it also shows the current value of
 each argument (`= 250`). When the object type has a tutorial, the panel shows
 an `OPEN TUTORIAL` button.
+For a subpatch it adds a SUBPATCH section with the name, the inlet and outlet
+counts, and an `OPEN SUBPATCH` button.
 
 ## Tutorials
 
 Tutorials are example patches that come with Phi, each demonstrating an
 object. Find them in the palette's TUTORIALS tab (grouped by category,
 searchable), through the reference panel's `OPEN TUTORIAL` button, or with
-the command palette's `Open Patcher Tutorial…`. So far there are tutorials
-for:
+the command palette's `Open Patcher Tutorial…`. Every object has one. They
+cover:
 
 - **GUI basics:** the button (`b`), the toggle (`t`), the slider (`slider`),
   the number boxes (`i` and `f`, which share one tutorial), the message box
@@ -262,8 +333,12 @@ for:
   (`print`). A name belongs to its patch. For now only one `r` of a name hears
   an `s` in the same patch. The `s` and `r` tutorial also shows how to reach
   an `r` from the Code surface: copy it to the project, then
-  `patch.tutorials.s_r.send('pitch', 67)`. A tutorial for subpatch inlets and
-  outlets follows once subpatches arrive.
+  `patch.tutorials.s_r.send('pitch', 67)`.
+- **Subpatches:** a gain subpatch (`patcher`, `.inlet`, `.outlet`, `~inlet`
+  and `~outlet`, which share one tutorial). The inlet and outlet objects
+  inside the box are its pins, numbered by their argument, with messages and
+  audio sharing one numbering. A message sent into a `~inlet` is dropped.
+  Double-click the box to open it, read-only, in its own window.
 - **Data stores and sequencers:** messages stored at addresses (`coll`), an
   array of ints read as steps or as weights (`table`), a function stored as
   points (`funbuff`), the notes held down (`bag`), a record of what went past

@@ -61,6 +61,8 @@ navigation keys and `Ctrl+E` answer. See [The patcher](patcher.md).
 | `Drag from the palette` | Create an object at the drop point | edit mode only |
 | `Delete`, `Backspace` | Delete the selection | edit mode only |
 | `Ctrl+D` | Duplicate the selection | edit mode only |
+| `Ctrl+Shift+E` | Encapsulate the selection into a new subpatch | edit mode only |
+| `Ctrl+Shift+D` | De-encapsulate the selected subpatch | edit mode only |
 | `Ctrl+C`, `Ctrl+V` | Copy / paste the selection | edit mode only |
 | `Ctrl+Z`, `Ctrl+Shift+Z`, `Ctrl+Y` | Undo / redo | edit mode only |
 | `Arrows`, `Shift+Arrows` | Nudge the selection one grid cell / one major cell | edit mode only |

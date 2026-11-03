@@ -9,7 +9,8 @@
 Phi is a flexible workstation for live electronic music performance — see
 [phi-vision.md](phi-vision.md) for the full vision. Personal years-long
 project, Windows and Linux (x64) desktop (`windows/`, `linux/` runners; Linux
-since issue #454). No 3D Scene renderer on any platform for now (#455).
+since issue #454). The 3D Scene view runs on Flutter GPU via `flutter_scene`
+(#455).
 
 ## Stack at a glance
 
@@ -19,7 +20,7 @@ since issue #454). No 3D Scene renderer on any platform for now (#455).
 | FFI bridge   | `dart-yse` — Dart wrapper, package name `yse`         |
 | UI shell     | Flutter, pinned master revision (`.fvmrc`, #478), Windows + Linux x64 desktop; Material widgets from `package:material_ui` |
 | Design       | Dart tokens derived from `design system/colors_and_type.css` |
-| 3D viewport  | none for now — `PlaceholderSceneRenderer` (macbear_3d removed in #456; return tracked in #455) |
+| 3D viewport  | `flutter_scene` on Flutter GPU (Impeller) — `FlutterSceneRenderer` (#455; macbear_3d removed in #456) |
 | Scripting    | Python with DSL (Phase ≥ 2 — not yet)                 |
 
 `yse` is consumed from pub.dev (`^0.2.0`, libYSE 3.1.0). Its native-assets
@@ -35,8 +36,9 @@ checkout at `d:\dart-yse` is only needed to work on the wrapper itself.
 Phi tracks a **pinned Flutter master revision**, not a stable release (#478):
 it builds on Flutter's experimental multi-window API, which is master-only and
 behind `flutter config --enable-windowing` (the #296 re-evaluation, fired
-early on purpose). The pin is the 40-char commit in `.fvmrc` at the repo root
-(`{"flutter": "<sha>"}`, the FVM format). Every "Set up Flutter" step in
+early on purpose). Returning to beta/stable once the API is public and on by
+default is tracked in #554. The pin is the 40-char commit in `.fvmrc` at the
+repo root (`{"flutter": "<sha>"}`, the FVM format). Every "Set up Flutter" step in
 `ci.yaml` (three jobs) and `integration.yaml` reads it via
 `flutter-version-file:` with `channel: master`, then runs
 `flutter config --enable-windowing`. On master the action `git clone`s
@@ -171,8 +173,7 @@ main + app          (orchestration)
   renders each pane's resident tab stack (active tab paints, others stay mounted
   offstage). Each surface is wrapped in a stable `GlobalKey` so a **dock move
   re-parents its element rather than rebuilding it** — its state survives the
-  move; Scene stays the exception (mounted only while it is the visible tab, GL
-  re-parenting verified by hand). Behaviour-neutral default: one pane, Mix open —
+  move; Scene stays the exception (mounted only while it is the visible tab). Behaviour-neutral default: one pane, Mix open —
   the app looks identical until the performer splits (drag-to-dock UI + tab
   strips are #252). `Workstation`/`PhiApp` accept an injected controller so a
   dock move is driveable end-to-end. Issue #253 persists the arrangement in the
@@ -298,32 +299,50 @@ main + app          (orchestration)
   move-with-impact, issue #212) and a **SENDS** area (aux sends to return buses);
   see the racks-epic and mix-epic entries below.
 - Scene surface: renderer-agnostic `SceneRenderer` bridge in
-  `lib/engine/bridge/`. **There is no 3D renderer for now** (issue #456): the
-  `macbear_3d` proof of concept (and with it `flutter_angle`, whose Linux plugin
-  does not build) was removed on every platform, and production wires
-  `PlaceholderSceneRenderer`, which accepts every renderer call and shows a
-  "3D view unavailable" notice. Bringing 3D back is issue #455. The history
-  below describes the removed renderer; the surface, pick seam, field and pure
-  `SceneUnproject` math are still in the tree.
-  Pointer picking + grab landed with issue #86 (surface half of #82): a
-  `PhiScenePickController` (`M3InputController`, removed in #456) unprojected the pointer into a
-  world `PickRay` via the pure `SceneUnproject` (screen→world math over the
-  live camera's view/projection matrices), asks `SceneField.pick` which agent
-  sits under it, and — on a hit — selects + grabs it (drag → `moveGrabTo` on a
-  camera-facing plane at the agent's depth → `releaseGrab`), delegating misses,
-  right-drag pan, scroll zoom, and keyboard nav to a fallback orbit controller.
-  The Scene surface implements the renderer-agnostic `ScenePickHandler` seam
-  (forwarding pick/grab to `EngineMidiController`, which owns the shared field,
-  so mouse and code grab the same agents) and owns selection: a bright
-  translucent halo (`PhiMacbearScene.setSelection`) tracks the picked agent's
-  live position, refreshed by the surface's own gated ticker. Field *motion*,
-  though, is stepped by the player's one frame ticker in all cases as of issue
-  #103 — a grab starts that ticker even on a stopped transport — so the surface
-  no longer owns a separate `stepFromSurface`, and the old play/stopped stepping
-  split is gone. The GL
-  viewport can't be exercised headless (no ANGLE context in CI), so the pure
-  math, the input controller, and the surface wiring are unit/widget-tested
-  behind fakes and the pointer path is verified manually. Issue #90 adds a
+  `lib/engine/bridge/`. Production wires `FlutterSceneRenderer` (issue #455):
+  [`flutter_scene`](https://pub.dev/packages/flutter_scene), a 3D engine on
+  Flutter GPU, so it draws through Impeller on Linux and Windows alike with no
+  native plugin (the `macbear_3d`/`flutter_angle` proof of concept was removed
+  in #456: its Linux plugin did not build). Both runners turn Flutter GPU on as
+  a project setting (`fl_dart_project_set_enable_flutter_gpu`,
+  `DartProject::set_enable_flutter_gpu`), so release builds keep it; the
+  engine's own build hook compiles its shaders with the SDK's `impellerc`.
+  The pieces, one per file: `FlutterSceneSpace` maps Phi's right-handed +Z-up
+  scene space onto the engine's left-handed +Y-up world by swapping Y and Z
+  (so the picture is not mirrored) and folds that swap into the view-projection
+  the pick ray uses; `FlutterSceneGraph` owns the engine `Scene` — pooled
+  unlit core + translucent halo spheres per agent in its voice colour, a
+  selection shell, a faint ground grid, linear tone mapping and a soft bloom;
+  `SceneOrbitCamera` (pure, Phi space) holds the orbit pose; and
+  `ScenePointerController` (pure) turns pointer events into picks, grabs,
+  orbit, pan and zoom. `FlutterSceneView` hosts the engine's `SceneView` with
+  `autoTick: false` and redraws on demand from the renderer's `changes`
+  notifier, so an idle Scene schedules no frames (and `pumpAndSettle` settles).
+  The engine resources load when the view first mounts, not at boot. Where
+  Flutter GPU is off — notably the `flutter test` runner, which has no
+  Impeller — the renderer reports `SceneViewStatus.unavailable` and the view
+  shows a "3D view unavailable" notice while the seam keeps accepting calls.
+  Pointer picking + grab (issue #86, surface half of #82): a left press
+  unprojects the pointer into a world `PickRay` via the pure `SceneUnproject`
+  (screen→world math over `FlutterSceneSpace.viewProjection`), asks
+  `SceneField.pick` which agent sits under it, and — on a hit — selects + grabs
+  it (drag → `moveGrabTo` on a camera-facing plane at the agent's depth →
+  `releaseGrab`); a miss clears the selection and orbits, right/middle-drag
+  pans, the wheel zooms. The Scene surface implements the renderer-agnostic
+  `ScenePickHandler` seam (forwarding pick/grab to `EngineMidiController`,
+  which owns the shared field, so mouse and code grab the same agents) and
+  owns selection: the selection shell (`FlutterSceneGraph.setSelection`)
+  tracks the picked agent's live position, refreshed by the surface's own
+  gated ticker. Field *motion*, though, is stepped by the player's one frame
+  ticker in all cases as of issue #103 — a grab starts that ticker even on a
+  stopped transport — so the surface no longer owns a separate
+  `stepFromSurface`, and the old play/stopped stepping split is gone. The pure
+  math, camera and pointer controller are unit-tested, the surface wiring is
+  widget-tested behind fakes, and `integration_test/scene_3d_view_test.dart`
+  runs the real renderer (headless under Xvfb on Linux): it reads the drawn
+  pixels back to check each agent's colour sits where the pick math projects
+  it, then clicks, grabs, orbits and zooms through the real pointer path.
+  Issue #90 adds a
   debug-only **pick demo** toggle on the Scene surface: the playback demo's
   notes are too short and clustered to click by hand, so flipping the toggle
   calls `EngineMidiController.loadSceneDemo` — seeding a handful of long-lived,
@@ -3138,7 +3157,11 @@ main + app          (orchestration)
   one `.r` per name because libYSE 3.1.0 delivers an `.s` to only one `.r` of
   a name in a patch, yse-soundengine#1239; the `s-r` copy is reached at
   `patcher.tutorials.s_r.<slot>`; `.print` lines reach the log panel through
-  `RealEngineLogSource`; the subpatch boundary objects wait for #481, #536)
+  `RealEngineLogSource`), the subpatch (#536: `subpatch`, after #481: a gain
+  `patcher` box whose `~inlet 0` / `.inlet 1` / `~outlet 0` / `.outlet 1` are
+  its pins; contained objects carry `"container"` in the dump, and the inside
+  has a note of its own for the subpatch window; a message box wired into the
+  `~inlet` shows a message being dropped)
   and data stores and sequencers (#505: `coll`, `table`, `funbuff`, `bag`,
   `capture`, `textfile`, `seq`, `qlist`, `mtr`; stored contents ship in each
   object's saved `state`; a `.l` drops a bare int, so stores that send one
@@ -3250,7 +3273,9 @@ main + app          (orchestration)
   `patcher_array_tutorials`,
   `patcher_midi_input_tutorials`,
   `patcher_midi_output_tutorials`,
-  `patcher_midi_processing_tutorials`: each opens its tutorials
+  `patcher_midi_processing_tutorials`,
+  `patcher_subpatch_tutorial` (also double-clicks the box open in its own
+  window): each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
   that no note or object overlaps another). Every one of them opens a
   tutorial through the shared `openTutorialBySearch(tester, type)` helper in
@@ -3266,6 +3291,75 @@ main + app          (orchestration)
   tutorial on master and read the offline session's master meter
   (`renderOffline` + `Channel.master.peakLinearPost`) to check what is
   heard.
+- **Subpatches in their own window** (issue #481, design `docs/design/patcher.md`
+  §10 decision 2 revisited) — the first use of Flutter's windowing API (#478).
+  A `patcher` box holds objects of the **same** native patcher marked as inside
+  it: `PatcherGateway.setContainer` (yse 0.2.0 `Patcher.setContainer`),
+  `PatcherObjectSnapshot.container` for the rebuild, and `inspect` of a box
+  answering the pins its `.inlet` / `~inlet` / `.outlet` / `~outlet` objects
+  claim (`subpatcherInlets`/`Outlets`, kinds per boundary type); the tree rides
+  inline in the one `dumpJson`. Vocabulary in `PatchBoundary`
+  (`lib/domain/patcher/`, pure Dart: `isSubpatch`, `boxSideOf`, `indexOf`,
+  `isParentFacing`). The editor mirror stays **one flat `PatchGraph` per
+  patch**: `PatchNode.container` / `PatchNodeSpec.container` say where a node
+  sits, and a cable the parent wires to a box pin is stored — exactly as the
+  engine records it — on the boundary object's parent-facing pin
+  (`PatcherController.resolvePin` box pin → boundary, `displayPort` back), so
+  renumbering, deleting or retyping a boundary object carries its cables with
+  no special case and the box only re-inspects (`_resyncBoxAfter`). Delete,
+  duplicate, copy/paste and undo work on `subtreeOf` (containers first;
+  `PatchClipboardData.containers`); a box with contents cannot be retyped
+  (`canRetype`). **One controller, many windows:** `PatcherCanvas.scope` shows
+  one box's contents (`nodesIn`), hides parent-facing pins, draws parent cables
+  at the box pin (`_cablePositions`), keeps a pan/zoom per scope
+  (`transformFor`) and keeps the editor's single selection in the focused
+  window (`focusScope`). `lib/surfaces/patcher/subpatch/`: `SubpatchWindows`
+  (registry: open or focus, close on box gone / patch switch / dispose, titles
+  from `scopeTitle`; a closing window is destroyed only after its widgets
+  have left the tree and a round trip on the text input channel, because the
+  Windows embedder fails text input calls for a view already destroyed, and
+  destroying is a synchronous FFI call that overtakes those queued messages),
+  `SubpatchWindowsHost` (a `ViewAnchor` of `Window`s under
+  the patcher surface, so the windows inherit theme and engine),
+  `SubpatchWindowView` (its own `Navigator` for menus, a path/mode bar, the
+  scoped canvas). Opened by a run-mode double-click, the node menu's
+  `open subpatch`, or the reference panel's SUBPATCH section (name, pin
+  counts). `PatchCreationArgs` passes a subpatch name through as free text.
+  Covered by `patcher_controller_subpatch_test.dart`,
+  `real_patcher_gateway_subpatch_engine_test.dart`,
+  `subpatch_window_test.dart` and the `patcher_subpatch_window` integration
+  test (real engine: built by keyboard and drag, heard through the box, undo
+  from the other window, save → reopen, a window closed under a half-typed
+  box). The second window there is flutter_test's **stand-in view**: the test
+  binding's windowing owner cannot make a native one (its platform dispatcher
+  reports a fake engine id, flutter/flutter#195919), and the engine never
+  hears of the stand-in, so `EmbedderTextInputCheck`
+  (`test/surfaces/patcher/test_support/`) replaces the platform text input
+  and enforces the Windows plugin's rule (a call naming a view must find it
+  alive) against the binding's views. Any integration test that types into a
+  subpatch window needs it.
+- **Encapsulate / de-encapsulate** (issue #552) — Max's *Encapsulate*:
+  `Ctrl+Shift+E` (or the node menu's `encapsulate`) moves the selection into a
+  new unnamed `patcher` box at its top-left corner; `Ctrl+Shift+D` (or
+  `de-encapsulate` on a box) is the reverse. Both are one journaled step:
+  `EncapsulatePatchSelectionCommand` and `DeencapsulatePatchSubpatchesCommand`
+  (`lib/engine/state/patcher_commands/`). Objects move between containers live
+  (`PatcherController.setContainerPrimitive` → `PatcherGateway.setContainer`,
+  mirrored by the now-mutable `PatchNode.container` / `moveInto`), keeping
+  their logical ids, handles and inner cables. Encapsulate classifies cables
+  by their **displayed** ends, routes each cut one through a new boundary
+  object (`~` for audio, `.` for control; one pin per real source pin, so a
+  fan-out shares a pin), numbers pins by the outside end's x, and lays the
+  contents out from the window's top left with inlet/outlet rows. A selection
+  with a boundary object is refused (`canEncapsulate`; canvas banner).
+  De-encapsulate follows every path through the box's pins (pin-to-pin
+  pass-throughs included) and wires source to target directly. The first
+  apply records the plan; redo replays it under the same ids. `Ctrl+E`
+  ignores Shift now so the chords don't collide. Covered by
+  `patcher_controller_encapsulate_test.dart`,
+  `patcher_controller_encapsulate_engine_test.dart` (real engine: dump →
+  parse → rebuild after each step, renders), `patcher_canvas_test.dart` and
+  the `patcher_encapsulate` integration test.
 - Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
   switched off for now, issue #447)
 

@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:yse/yse.dart';
 
+import '../../domain/patcher/patch_boundary.dart';
 import '../../domain/patcher/patch_port_kind.dart';
 import 'patch_clock.dart';
 import 'patch_object_descriptor.dart';
@@ -103,9 +104,44 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
   @override
   void deleteObject(int instanceId, int handleId) {
     final inst = _inst(instanceId);
-    final h = inst.handles.remove(handleId);
+    final h = inst.handles[handleId];
     if (h == null) return;
+    // Deleting a subpatch deletes its contents with it (yse 0.2.0), so their
+    // handles would dangle: drop them from the table first.
+    if (h.type == Obj.patcher) {
+      for (final id in _descendantsOf(inst, h)) {
+        inst.handles.remove(id);
+      }
+    }
+    inst.handles.remove(handleId);
     inst.patcher.deleteObject(h);
+  }
+
+  /// The handle ids of every object inside [box], at any depth.
+  List<int> _descendantsOf(_PatcherInstance inst, PHandle box) {
+    final out = <int>[];
+    for (final MapEntry(key: id, value: h) in inst.handles.entries) {
+      if (_isInside(h, box)) out.add(id);
+    }
+    return out;
+  }
+
+  static bool _isInside(PHandle h, PHandle box) {
+    for (var c = h.container; c != null; c = c.container) {
+      if (c == box) return true;
+    }
+    return false;
+  }
+
+  @override
+  void setContainer(int instanceId, int handleId, int? containerHandleId) {
+    final inst = _inst(instanceId);
+    final h = inst.handles[handleId];
+    if (h == null) return;
+    final box = containerHandleId == null
+        ? null
+        : inst.handles[containerHandleId];
+    inst.patcher.setContainer(h, box);
   }
 
   @override
@@ -139,12 +175,20 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
   }
 
   @override
-  PatcherNodeSnapshot inspect(int instanceId, int handleId) =>
-      _snapshotOf(_inst(instanceId).handles[handleId]!);
+  PatcherNodeSnapshot inspect(int instanceId, int handleId) {
+    final inst = _inst(instanceId);
+    return _snapshotOf(inst, inst.handles[handleId]!);
+  }
 
   /// Port topology of one native [PHandle] — shared by [inspect] and
-  /// [enumerate].
-  PatcherNodeSnapshot _snapshotOf(PHandle h) => PatcherNodeSnapshot(
+  /// [enumerate]. A subpatch has no pins of its own (`inputs` / `outputs`
+  /// answer 0), so its topology is read from its boundary objects.
+  PatcherNodeSnapshot _snapshotOf(_PatcherInstance inst, PHandle h) {
+    if (h.type == Obj.patcher) return _subpatchSnapshotOf(inst, h);
+    return _objectSnapshotOf(h);
+  }
+
+  PatcherNodeSnapshot _objectSnapshotOf(PHandle h) => PatcherNodeSnapshot(
     inputs: h.inputs,
     outputs: h.outputs,
     inputKinds: [
@@ -158,6 +202,35 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
             : PatchPortKind.control,
     ],
   );
+
+  /// A subpatch's pins: the counts the engine reports, and per pin the kind of
+  /// the boundary object claiming it — audio for a `~inlet` / `~outlet`,
+  /// control for a `.inlet` / `.outlet` and for an index nothing claims.
+  PatcherNodeSnapshot _subpatchSnapshotOf(_PatcherInstance inst, PHandle box) {
+    final inputs = box.subpatcherInlets;
+    final outputs = box.subpatcherOutlets;
+    final inputKinds = List.filled(inputs, PatchPortKind.control);
+    final outputKinds = List.filled(outputs, PatchPortKind.control);
+    for (final h in inst.handles.values) {
+      final type = h.type;
+      final isInlet = type == Obj.dInlet || type == Obj.gInlet;
+      final isOutlet = type == Obj.dOutlet || type == Obj.gOutlet;
+      if (!isInlet && !isOutlet) continue;
+      if (h.container != box) continue;
+      final index = PatchBoundary.indexOf(h.params);
+      final kind = type == Obj.dInlet || type == Obj.dOutlet
+          ? PatchPortKind.audio
+          : PatchPortKind.control;
+      if (isInlet && index < inputs) inputKinds[index] = kind;
+      if (isOutlet && index < outputs) outputKinds[index] = kind;
+    }
+    return PatcherNodeSnapshot(
+      inputs: inputs,
+      outputs: outputs,
+      inputKinds: inputKinds,
+      outputKinds: outputKinds,
+    );
+  }
 
   @override
   PatcherGraphSnapshot enumerate(int instanceId) {
@@ -173,7 +246,8 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
           type: h.type,
           args: h.params,
           position: _positionOf(h),
-          ports: _snapshotOf(h),
+          ports: _snapshotOf(inst, h),
+          container: h.container?.id,
         ),
       );
       // Read every connection leaving each outlet — the native side is the
@@ -389,10 +463,9 @@ class RealPatcherGateway implements PatcherGateway, PatcherInsertSource {
 
   @override
   List<PatchObjectDescriptor> objectTypes() => [
-    for (final t in PatcherRegistry.types())
-      // The subpatcher object is hidden from the palette in v1: no dive-in
-      // editing means showing it would be a trap (design §10 decision 2).
-      if (t.name != Obj.patcher) _descriptorFor(t),
+    // Every type, the subpatcher included: since issue #481 a subpatch opens
+    // in its own window, so it is no longer hidden (design §10 decision 2).
+    for (final t in PatcherRegistry.types()) _descriptorFor(t),
   ];
 
   PatchObjectDescriptor _descriptorFor(PatcherObjectType t) =>

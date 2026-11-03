@@ -13,16 +13,14 @@ import '../../engine/bridge/scene_renderer.dart';
 import '../../engine/engine.dart';
 import '../surface.dart';
 
-/// Phase 1 Scene surface — hosts the [SceneRenderer]'s view. There is no 3D
-/// renderer for now (issue #456): production wires `PlaceholderSceneRenderer`,
-/// which shows a notice, and bringing 3D back is issue #455.
+/// Phase 1 Scene surface — hosts the [SceneRenderer]'s view. Production wires
+/// `FlutterSceneRenderer` (`flutter_scene` on Flutter GPU, issue #455).
 ///
 /// Seeds the renderer with one placeholder agent at the origin and an
 /// initial orbit camera, then wires pointer picking + grab (issue #86): a
 /// left-click picks the live agent under the cursor (selecting + grabbing it),
-/// a drag pulls it, and a release throws or settles it — with misses, pan,
-/// zoom, and keyboard navigation left to the renderer's own orbit
-/// controller. The screen→world unprojection lives in the engine bridge with
+/// a drag pulls it, and a release throws or settles it — with misses (orbit),
+/// pan and zoom left to the renderer's own orbit camera. The screen→world unprojection lives in the engine bridge with
 /// the live camera; this surface owns the selection and tracks the halo on the
 /// moving agent from its own ticker. Field motion itself is stepped by the
 /// player's frame ticker in all cases (issue #103) — a grab starts it even on a

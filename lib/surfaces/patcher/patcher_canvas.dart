@@ -113,11 +113,26 @@ class PatcherCanvas extends StatefulWidget {
     this.onNodeTap,
     this.onNodeContextMenu,
     this.onTypeResolved,
+    this.onOpenSubpatch,
     this.focusNode,
+    this.scope,
     super.key,
   });
 
   final PatcherController controller;
+
+  /// Which part of the patch this canvas shows: the subpatch box whose window
+  /// it is, or null for the patch's top level (issue #481). Only the nodes
+  /// inside [scope] are drawn and hit, and a cable the window around wired to
+  /// a subpatch box is drawn on that box, at the pin its boundary object
+  /// claims. Every canvas of one editor shares its graph, its undo journal and
+  /// its one selection, which follows the window being worked in.
+  final PatchNodeId? scope;
+
+  /// Called with a subpatch box to open it in its own window — a
+  /// double-click on the box in run mode (issue #481). Null leaves the gesture
+  /// unanswered.
+  final void Function(PatchNode box)? onOpenSubpatch;
 
   /// The keyboard focus the canvas listens on, when its host wants to hand
   /// the keyboard back after a click elsewhere — the reference panel's note
@@ -214,6 +229,21 @@ class PatcherCanvas extends StatefulWidget {
 
   /// The empty-canvas hint's text (issue #487).
   static const String emptyHintText = 'double-click or N to add an object';
+
+  /// What the banner says when a retype would replace a subpatch that holds
+  /// objects (issue #481).
+  static const String subpatchRetypeText =
+      'a subpatch with objects inside keeps its type';
+
+  /// Key on the banner when `Ctrl+Shift+E` refuses a selection (issue #552).
+  static const Key encapsulateNoticeKey = Key(
+    'PatcherCanvas.encapsulateNotice',
+  );
+
+  /// What that banner says: an inlet or outlet object is a pin of the window
+  /// it sits in, so it cannot move into a new box.
+  static const String encapsulateRefusedText =
+      'inlets and outlets cannot be encapsulated';
 
   @override
   State<PatcherCanvas> createState() => _PatcherCanvasState();
@@ -355,6 +385,13 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
 
   PatcherController get _controller => widget.controller;
 
+  /// The nodes of this canvas's window ([PatcherCanvas.scope]).
+  Iterable<PatchNode> get _nodes => _controller.nodesIn(widget.scope);
+
+  /// This window's pan/zoom.
+  TransformationController get _transform =>
+      _controller.transformFor(widget.scope);
+
   @override
   void initState() {
     super.initState();
@@ -375,7 +412,13 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   }
 
   void _onFocusChanged() {
-    if (!_focus.hasFocus) _commitNudge();
+    if (!_focus.hasFocus) {
+      _commitNudge();
+    } else {
+      // The keyboard is now this window's: a selection made in another window
+      // of the same patch must not be what `Delete` reaches here (issue #481).
+      _controller.focusScope(widget.scope);
+    }
   }
 
   @override
@@ -426,11 +469,11 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
                 child: ClipRect(
                   child: ListenableBuilder(
                     listenable: Listenable.merge([
-                      _controller.transform,
+                      _transform,
                       _controller.graph,
                     ]),
                     builder: (context, _) => Transform(
-                      transform: _controller.transform.value,
+                      transform: _transform.value,
                       child: OverflowBox(
                         alignment: Alignment.topLeft,
                         minWidth: 0,
@@ -457,7 +500,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
                   child: IgnorePointer(
                     child: ListenableBuilder(
                       listenable: _controller.graph,
-                      builder: (context, _) => _controller.graph.nodes.isEmpty
+                      builder: (context, _) => _nodes.isEmpty
                           ? Center(
                               child: Text(
                                 PatcherCanvas.emptyHintText.toUpperCase(),
@@ -495,7 +538,10 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   Widget _buildScene() {
     final graph = _controller.graph;
     final positions = _portPositions;
+    final cableEnds = _cablePositions;
     final voiceForSource = <PatchPortId, int>{};
+    // Every node, not only this window's: a cable drawn on a subpatch box
+    // starts at a boundary object inside it.
     for (final n in graph.nodes) {
       for (var i = 0; i < n.outputs.length; i++) {
         voiceForSource[PatchPortId(
@@ -521,13 +567,13 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
         Positioned.fill(
           child: PatcherCableLayer(
             cables: graph.cables,
-            portPositions: positions,
+            portPositions: cableEnds,
             cableVoiceForSource: voiceForSource,
             selected: graph.selectedCable,
             version: graph.version,
           ),
         ),
-        for (final n in graph.nodes)
+        for (final n in _nodes)
           Positioned(
             left: n.position.dx,
             top: n.position.dy,
@@ -566,7 +612,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
         if (dragSource != null)
           Positioned.fill(
             child: PatcherGhostCable(
-              source: positions[dragSource] ?? Offset.zero,
+              source: cableEnds[dragSource] ?? Offset.zero,
               cursor: _cursor,
               color: patchOutletColor(_ghostTypeFor(dragSource)),
               glow: patchOutletGlow(_ghostTypeFor(dragSource)),
@@ -665,6 +711,12 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       // nothing (design §6): undo, redo and duplicate are all declined, so a
       // patch being played cannot be rearranged by a mistyped chord.
       if (widget.mode.isRun) return KeyEventResult.ignored;
+      // `Ctrl+Shift+E` encapsulates the selection (issue #552) — read by
+      // position like `Ctrl+E`, which [_isModeKey] leaves to it when Shift is
+      // held.
+      if (HardwareKeyboard.instance.isShiftPressed && _isEKey(event)) {
+        return _encapsulate();
+      }
       switch (key) {
         case LogicalKeyboardKey.keyZ:
           HardwareKeyboard.instance.isShiftPressed
@@ -675,7 +727,10 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
           _controller.redo();
           return KeyEventResult.handled;
         case LogicalKeyboardKey.keyD:
-          _controller.duplicateSelection();
+          // `Ctrl+Shift+D` unpacks the selected subpatches (issue #552).
+          HardwareKeyboard.instance.isShiftPressed
+              ? _controller.deencapsulateSelection()
+              : _controller.duplicateSelection();
           return KeyEventResult.handled;
         // Copy / paste (issue #435). Letters, so matched logically like
         // `Ctrl+Z/Y/D` above — `C` and `V` sit in the same positions on
@@ -687,7 +742,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
           _controller.copySelection();
           return KeyEventResult.handled;
         case LogicalKeyboardKey.keyV:
-          _controller.pasteClipboard();
+          _controller.pasteClipboard(container: widget.scope);
           return KeyEventResult.handled;
         default:
           return KeyEventResult.ignored;
@@ -913,9 +968,33 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   /// Matched on the key's **position** first, like `Ctrl+0` — the physical
   /// `E` key — with the logical key accepted as well so a layout that remaps
   /// the position still answers to the glyph the user sees on the cap.
+  ///
+  /// Not with Shift: `Ctrl+Shift+E` is encapsulate (issue #552).
   bool _isModeKey(KeyEvent event) =>
+      !HardwareKeyboard.instance.isShiftPressed && _isEKey(event);
+
+  /// Whether [event] is the key in the `E` position, or the `E` glyph.
+  static bool _isEKey(KeyEvent event) =>
       event.physicalKey == PhysicalKeyboardKey.keyE ||
       event.logicalKey == LogicalKeyboardKey.keyE;
+
+  /// `Ctrl+Shift+E`: move the selection into a new subpatch box (issue #552)
+  /// and point the reference panel at it. A selection holding an inlet or
+  /// outlet object is refused out loud; an empty one does nothing.
+  KeyEventResult _encapsulate() {
+    if (_controller.graph.selectedNodes.isEmpty) return KeyEventResult.handled;
+    final box = _controller.encapsulateSelection();
+    if (box == null) {
+      _flashNotice(
+        PatcherCanvas.encapsulateRefusedText,
+        PatcherCanvas.encapsulateNoticeKey,
+      );
+      return KeyEventResult.handled;
+    }
+    final node = _controller.graph.nodeById(box);
+    if (node != null) widget.onNodeTap?.call(node);
+    return KeyEventResult.handled;
+  }
 
   /// Ask the host for the other mode. Unhandled when no host is listening, so
   /// the chord can go on to mean something else somewhere else.
@@ -956,7 +1035,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     final bounds = _graphBounds();
     final viewport = (context.findRenderObject() as RenderBox?)?.size;
     if (bounds == null || viewport == null || viewport.isEmpty) {
-      _controller.transform.value = Matrix4.identity();
+      _transform.value = Matrix4.identity();
       return;
     }
     final padded = bounds.inflate(_fitPadding);
@@ -970,7 +1049,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
         )
         .clamp(_minScale, _maxScale)
         .toDouble();
-    _controller.transform.value = Matrix4.identity()
+    _transform.value = Matrix4.identity()
       ..translateByDouble(
         viewport.width / 2 - padded.center.dx * scale,
         viewport.height / 2 - padded.center.dy * scale,
@@ -984,7 +1063,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   /// is empty.
   Rect? _graphBounds() {
     Rect? bounds;
-    for (final n in _controller.graph.nodes) {
+    for (final n in _nodes) {
       final r = Rect.fromLTWH(
         n.position.dx,
         n.position.dy,
@@ -1037,6 +1116,9 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     if (_controller.graph.dragSourcePort != null) return;
 
     final scene = _toScene(event.localPosition);
+    // The pointer is in this window now; a selection left in another window of
+    // the same patch is dropped before this press can add to it (issue #481).
+    _controller.focusScope(widget.scope);
     // Run mode: the bodies own every press and the canvas owns none of them
     // (issue #378). Checked after the pan gestures, which are navigation and
     // therefore live in both modes, and before every scene hit-test below —
@@ -1050,7 +1132,9 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // did not (`_reclaimFocusIfBodyDeclined`, issue #433) — otherwise the
     // pane's own pointer-down grab strands `Ctrl+E` outside the canvas.
     if (widget.mode.isRun) {
-      _pressBelongsToWidget = _nodeAt(scene) != null;
+      final hit = _nodeAt(scene);
+      _pressBelongsToWidget = hit != null;
+      _pairRunPress(hit, event.timeStamp);
       return;
     }
 
@@ -1346,6 +1430,26 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     _lastTapAt = at;
   }
 
+  /// A press in run mode: two on the same subpatch box, inside the double-tap
+  /// window, open it (issue #481). The only double-click run mode has — an
+  /// object box has no live body for the presses to belong to.
+  void _pairRunPress(PatchNode? hit, Duration at) {
+    final open = widget.onOpenSubpatch;
+    if (hit == null || open == null || !_controller.isSubpatch(hit.id)) {
+      _invalidatePendingTap();
+      return;
+    }
+    final paired =
+        _lastTapNode == hit.id && at - _lastTapAt <= kDoubleTapTimeout;
+    _invalidatePendingTap();
+    if (paired) {
+      open(hit);
+      return;
+    }
+    _lastTapNode = hit.id;
+    _lastTapAt = at;
+  }
+
   /// Forget the press that was waiting to become the first half of a
   /// double-click — because it was completed, or because something happened
   /// that is not half of anything (a drag, a right-click, a cancel).
@@ -1450,6 +1554,16 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   /// silently drops two connections is discovered an hour later.
   void _commitInline(PatchObjectDescriptor desc, String args) {
     final id = _inlineEditNode;
+    if (id != null && !_controller.canRetype(id, desc.type)) {
+      // A subpatch holding objects keeps its type: the engine would take its
+      // contents down with it (issue #481). Said, not silently dropped.
+      _closeInline();
+      _flashNotice(
+        PatcherCanvas.subpatchRetypeText,
+        PatcherCanvas.retypeNoticeKey,
+      );
+      return;
+    }
     if (id != null) {
       final retyped = _controller.graph.nodeById(id)?.type != desc.type;
       final dropped = _controller.applyBoxEdit(id, desc: desc, args: args);
@@ -1713,7 +1827,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
 
   void _applyMarquee(Rect rect, {required bool additive}) {
     final hits = <PatchNodeId>{};
-    for (final n in _controller.graph.nodes) {
+    for (final n in _nodes) {
       final r = Rect.fromLTWH(
         n.position.dx,
         n.position.dy,
@@ -1738,10 +1852,11 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     final backwards = anchor.side == PatchPortSide.input;
     final side = backwards ? PatchPortSide.output : PatchPortSide.input;
     final out = <PatchPortId>[];
-    for (final n in _controller.graph.nodes) {
+    for (final n in _nodes) {
       final count = backwards ? n.outputs.length : n.inputs.length;
       for (var i = 0; i < count; i++) {
         final id = PatchPortId(nodeId: n.id, side: side, index: i);
+        if (!_controller.isPortVisible(id)) continue;
         final ok = backwards
             ? _controller.canConnect(id, anchor)
             : _controller.canConnect(anchor, id);
@@ -1761,7 +1876,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   /// canvas owns the presses.
   PatchNode? _resizeEdgeAt(Offset scene) {
     if (widget.mode.isRun) return null;
-    for (final n in _controller.graph.nodes.toList().reversed) {
+    for (final n in _nodes.toList().reversed) {
       if (!PatcherController.isWidthResizable(n.type)) {
         // A node drawn over a resizable one owns its pixels, edge or not.
         if (_rectOf(n).contains(scene)) return null;
@@ -1784,7 +1899,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   /// The node under [scene], topmost first: nodes paint in graph order, so a
   /// press on an overlap belongs to the last one drawn — the one the user sees.
   PatchNode? _nodeAt(Offset scene) {
-    for (final n in _controller.graph.nodes.toList().reversed) {
+    for (final n in _nodes.toList().reversed) {
       final r = Rect.fromLTWH(
         n.position.dx,
         n.position.dy,
@@ -1804,19 +1919,57 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   /// the churn a 120 Hz pointer turns into garbage. `graph.version` bumps on
   /// node moves too — the graph re-broadcasts them — so the cache can never
   /// hand out a stale position.
+  ///
+  /// Only this window's nodes, and only the pins it shows: a boundary object's
+  /// parent-facing pin is reached from the window around it, through the box
+  /// (issue #481).
   int _positionsVersion = -1;
   Map<PatchPortId, Offset> _positionsCache = const {};
+  Map<PatchPortId, Offset> _cablePositionsCache = const {};
   Map<PatchPortId, Offset> get _portPositions {
-    final graph = _controller.graph;
-    if (graph.version != _positionsVersion) {
-      final out = <PatchPortId, Offset>{};
-      for (final n in graph.nodes) {
-        out.addAll(portPositionsFor(n));
-      }
-      _positionsCache = out;
-      _positionsVersion = graph.version;
-    }
+    _refreshPositions();
     return _positionsCache;
+  }
+
+  /// Where each cable end this window draws sits: every port of
+  /// [_portPositions], plus — for each subpatch box here — the parent-facing
+  /// pin of every boundary object inside it, at the box pin it claims. The
+  /// engine records a cable wired to a box on that boundary object, so this is
+  /// what puts the cable on the box. Hit-testing for a *new* cable uses
+  /// [_portPositions] alone, where the box's own pin answers.
+  Map<PatchPortId, Offset> get _cablePositions {
+    _refreshPositions();
+    return _cablePositionsCache;
+  }
+
+  void _refreshPositions() {
+    final graph = _controller.graph;
+    if (graph.version == _positionsVersion) return;
+    final out = <PatchPortId, Offset>{};
+    final boxes = <PatchNodeId>{};
+    for (final n in _nodes) {
+      for (final MapEntry(:key, :value) in portPositionsFor(n).entries) {
+        if (_controller.isPortVisible(key)) out[key] = value;
+      }
+      if (_controller.isSubpatch(n.id)) boxes.add(n.id);
+    }
+    final ends = Map<PatchPortId, Offset>.of(out);
+    for (final n in graph.nodes) {
+      if (!boxes.contains(n.container)) continue;
+      for (final pin in [
+        for (var i = 0; i < n.inputs.length; i++)
+          PatchPortId(nodeId: n.id, side: PatchPortSide.input, index: i),
+        for (var i = 0; i < n.outputs.length; i++)
+          PatchPortId(nodeId: n.id, side: PatchPortSide.output, index: i),
+      ]) {
+        if (_controller.isPortVisible(pin)) continue;
+        final at = out[_controller.displayPort(pin)];
+        if (at != null) ends[pin] = at;
+      }
+    }
+    _positionsCache = out;
+    _cablePositionsCache = ends;
+    _positionsVersion = graph.version;
   }
 
   /// The port under a **press**, either side. Tight, so a press on the header
@@ -1854,7 +2007,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   _CableGrab? _cableEndAt(Offset scene) {
     final cable = _cableAt(scene);
     if (cable == null) return null;
-    final positions = _portPositions;
+    final positions = _cablePositions;
     final a = positions[cable.source];
     final b = positions[cable.target];
     if (a == null || b == null) return null;
@@ -1869,7 +2022,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   }
 
   PatchCable? _cableAt(Offset scene) {
-    final positions = _portPositions;
+    final positions = _cablePositions;
     PatchCable? best;
     var bestDistance = PatchCanvasConstants.cableHitThreshold;
     for (final c in _controller.graph.cables) {
@@ -1915,7 +2068,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
 
   // ─── transforms ──────────────────────────────────────────────────────────
 
-  Offset _toScene(Offset local) => _controller.transform.toScene(local);
+  Offset _toScene(Offset local) => _transform.toScene(local);
 
   /// Convert a global drop point to scene coordinates, undoing the viewport
   /// offset and the live pan/zoom transform.
@@ -1926,10 +2079,10 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   }
 
   void _panBy(Offset delta) {
-    final m = _controller.transform.value.clone();
+    final m = _transform.value.clone();
     m[12] += delta.dx;
     m[13] += delta.dy;
-    _controller.transform.value = m;
+    _transform.value = m;
   }
 
   void _onPointerSignal(PointerSignalEvent event) {
@@ -1953,7 +2106,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   /// the same range the [InteractiveViewer] would have enforced.
   void _zoomBy(double factor, Offset focal) {
     final scene = _toScene(focal);
-    final current = _controller.transform.value;
+    final current = _transform.value;
     final scale = _viewScale(current);
     if (scale == 0) return;
     final clamped = (scale * factor).clamp(_minScale, _maxScale);
@@ -1962,7 +2115,7 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // off unity from the rounding of the step that landed there, and an exact
     // test would let every further wheel-down rewrite the view for nothing.
     if ((applied - 1).abs() < 1e-9) return;
-    _controller.transform.value = current.clone()
+    _transform.value = current.clone()
       ..translateByDouble(scene.dx, scene.dy, 0, 1)
       ..scaleByDouble(applied, applied, 1, 1)
       ..translateByDouble(-scene.dx, -scene.dy, 0, 1);

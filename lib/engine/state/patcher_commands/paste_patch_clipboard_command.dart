@@ -25,11 +25,16 @@ class PastePatchClipboardCommand implements ProjectCommand {
     this.controller, {
     required this.data,
     required this.offset,
+    this.container,
   });
 
   final PatcherController controller;
   final PatchClipboardData data;
   final Offset offset;
+
+  /// The subpatch box whose window the paste lands in, or null for the top
+  /// level (issue #481).
+  final PatchNodeId? container;
 
   final List<PatchNodeId> _created = [];
   final List<PatchCable> _createdCables = [];
@@ -44,8 +49,19 @@ class PastePatchClipboardCommand implements ProjectCommand {
   void apply() {
     _created.clear();
     _createdCables.clear();
-    for (final spec in data.nodes) {
-      _created.add(controller.createNodePrimitive(spec.offsetBy(offset)));
+    final roots = <PatchNodeId>{};
+    for (var i = 0; i < data.nodes.length; i++) {
+      final spec = data.nodes[i];
+      final box = data.containers[i];
+      // A copied box's contents go back inside the pasted box, where they
+      // were; the copied selection itself lands in this window, a step on.
+      final id = controller.createNodePrimitive(
+        box == null
+            ? spec.offsetBy(offset).inContainer(container)
+            : spec.inContainer(_created[box]),
+      );
+      _created.add(id);
+      if (box == null) roots.add(id);
     }
     for (final cable in data.cables) {
       final copy = PatchCable(
@@ -64,7 +80,7 @@ class PastePatchClipboardCommand implements ProjectCommand {
       controller.addCablePrimitive(copy);
       _createdCables.add(copy);
     }
-    controller.selectNodes(_created.toSet());
+    controller.selectNodes(roots);
   }
 
   @override
@@ -72,7 +88,7 @@ class PastePatchClipboardCommand implements ProjectCommand {
     for (final cable in _createdCables) {
       controller.removeCablePrimitive(cable);
     }
-    for (final id in _created) {
+    for (final id in _created.reversed) {
       controller.deleteNodePrimitive(id);
     }
     _created.clear();

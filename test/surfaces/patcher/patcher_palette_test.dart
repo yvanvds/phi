@@ -8,8 +8,8 @@ import '../../engine/test_doubles/fake_patcher_gateway.dart';
 
 void main() {
   // A realistic catalogue straight off the gateway: ~sine (oscillator/dsp),
-  // .slider (gui/control), ~dac (i-o/dsp) — with the `patcher` subpatch type
-  // filtered out by objectTypes(), design §10 decision 2.
+  // .slider (gui/control), ~dac (i-o/dsp), and the `patcher` subpatch with
+  // its boundary objects (encapsulation), offered since issue #481.
   final catalogue = FakePatcherGateway().objectTypes();
 
   Future<PatchObjectDescriptor?> pumpPalette(
@@ -53,7 +53,7 @@ void main() {
     );
   });
 
-  testWidgets('lists every catalogue entry and never the subpatch type', (
+  testWidgets('lists every catalogue entry, the subpatch type included', (
     tester,
   ) async {
     await pumpPalette(tester);
@@ -61,7 +61,7 @@ void main() {
     expect(find.byKey(PatcherPalette.entryKey(Obj.dSine)), findsOneWidget);
     expect(find.byKey(PatcherPalette.entryKey(Obj.gSlider)), findsOneWidget);
     expect(find.byKey(PatcherPalette.entryKey(Obj.dDac)), findsOneWidget);
-    expect(find.byKey(PatcherPalette.entryKey(Obj.patcher)), findsNothing);
+    expect(find.byKey(PatcherPalette.entryKey(Obj.patcher)), findsOneWidget);
   });
 
   testWidgets('search filters on name and description', (tester) async {

@@ -18,11 +18,25 @@ dotted address, for example `clip.drums.intro`.
 
 ## Scene (`Ctrl+1`)
 
-The Scene surface is meant to show the spatial field, where played notes
-appear as agents in 3D space. **There is no 3D renderer for now (#455).** The
-surface shows a "3D view unavailable" notice. A MIDI clip whose
-transformation chain has a spawn transform still places agents in the field
-while it plays, but you cannot see them.
+The Scene surface shows the spatial field in 3D. A MIDI clip whose
+transformation chain has a spawn transform places agents in the field while it
+plays, and each agent draws as a glowing dot in its voice colour: a bright core
+inside a soft halo. A faint grid marks the ground plane, with the two axes
+through the origin a little brighter. Up is +Z.
+
+The view is driven with the mouse:
+
+| Action | What it does |
+|---|---|
+| Left-click an agent | Select it (a bright shell rings it) and grab it |
+| Drag a grabbed agent | Pull it across the screen at its own depth; release to let it go |
+| Left-drag empty space | Orbit the camera around its target, and clear the selection |
+| Right- or middle-drag | Pan the camera |
+| Scroll wheel | Zoom in and out |
+
+The 3D view draws through Flutter GPU. If it cannot start on your machine (for
+example, when the graphics driver has no Impeller support), the surface shows a
+"3D view unavailable" notice instead. The field keeps running either way.
 
 ## Patcher (`Ctrl+2`)
 

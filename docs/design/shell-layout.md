@@ -5,8 +5,9 @@
 > "shell layout" epic on `yvanvds/phi`.
 >
 > **Depends on:** nothing unimplemented — the shell, project manifest,
-> and settings are shipped code. The multi-window question ends in a
-> research spike, not a promise.
+> and settings are shipped code. The multi-window question ended in a
+> research spike (§5). Phi has since adopted the official windowing API on
+> a pinned Flutter master (#478, #481); see §5.5.
 
 ## 1. The problem
 
@@ -87,7 +88,9 @@ audience view) had a real technical question. This section records the
 **timeboxed research spike** (issue #256, `type:task`): the two routes
 evaluated against Phi's constraint set, what one window genuinely
 fails to serve, and the decision — **defer, with the official
-same-isolate windowing API as the strategic target**.
+same-isolate windowing API as the strategic target**. That deferral has
+since been lifted: Phi adopted the API on a pinned master revision in
+2026-11 (§5.5).
 
 ### 5.1 The constraint set (verified against the code)
 
@@ -166,7 +169,8 @@ not be shared, because its texture belongs to the first engine.
 The decisive point: this is a large amount of scaffolding we would
 **tear out** the moment Route A reaches stable. It buys a second
 window sooner at the price of building the exact thing the official
-API exists to make unnecessary.
+API exists to make unnecessary. Route B was never adopted, and Phi has no
+`desktop_multi_window` dependency.
 
 ### 5.4 Route C — wait: what one window actually fails to serve
 
@@ -210,7 +214,8 @@ Follow-ups filed:
   when the windowing API reaches **beta/stable**, or when a concrete
   scenario forces the projected audience view. When it fires, the
   secondary window is designed as just another `View`/`RegularWindow`
-  over the shared session — no new isolate.
+  over the shared session — no new isolate. *Closed by the 2026-11
+  adoption below.*
 - **#297** — timeboxed prototype (do-not-ship, main channel behind
   `--enable-windowing`): retire the single Route-A unknown by proving
   the ANGLE/macbear GL viewport renders into a second window's view,
@@ -218,6 +223,41 @@ Follow-ups filed:
 
 No implementation lands in this epic. The projected audience view
 (vision §4, §6) waits on #296/#297 by design.
+
+#### Adopted on a pinned master (2026-11)
+
+#296's trigger fired by decision, not by a Flutter release. Phi is far
+from a release, so the maintainer chose to track Flutter master and use
+Route A now, rather than wait for beta/stable:
+
+- **#478** pinned Phi to a Flutter master revision (`.fvmrc`, read by every
+  CI job) with `flutter config --enable-windowing` on. The pin, the API
+  names at that pin and how to bump it are under "Toolchain" in
+  `docs/PROJECT_OVERVIEW.md`.
+- **#481** is the first user: a subpatch opens in its own top-level window
+  (`WindowController` / `Window`, the renamed `RegularWindowController` /
+  `RegularWindow`). The `Window` views hang off a `ViewAnchor` /
+  `ViewCollection` in the main widget tree, in the main isolate, over the
+  same `PatcherController` and journal as the main window
+  (`lib/surfaces/patcher/subpatch/`). This is Route A exactly as §5.2
+  described it: no second isolate, no ports, no state mirroring.
+
+What remains provisional, and is tracked in **#554**:
+
+- The API is **`@internal`** and not exported from a public library. Phi
+  imports `package:flutter/src/widgets/_window.dart` (and
+  `src/foundation/_features.dart`) under
+  `ignore_for_file: invalid_use_of_internal_member, implementation_imports`,
+  so a pin bump can rename or reshape it.
+- It is still **master-only and behind `enable-windowing`**. Phi cannot
+  build on beta/stable until the API ships there, and CI enables the flag
+  in every job.
+
+When the API is public and on a channel release, #554 moves the imports to
+the public library, drops the flag step, and takes Phi off the master pin.
+The secondary-window GL question (#297) is unchanged: subpatch windows are
+plain Flutter UI, so they did not need it. It still gates the projected
+audience view.
 
 ## 6. Out of scope
 

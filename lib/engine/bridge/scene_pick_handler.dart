@@ -7,8 +7,8 @@ import '../../domain/scene/pick_ray.dart';
 /// Renderer-agnostic — pure `vector_math_64` and domain [PickRay], with no 3D
 /// engine types — so a renderer's input controller can call into it without
 /// knowing where the live agents come from, and the Scene surface can
-/// implement it without importing any 3D engine. (No renderer drives it while
-/// the 3D view is out, issue #456; bringing one back is #455.) The surface forwards the pick /
+/// implement it without importing any 3D engine. `ScenePointerController`
+/// drives it from the viewport's pointer. The surface forwards the pick /
 /// grab half to `EngineMidiController` (the same field code drives, so mouse
 /// and code share grab state) and keeps the selection itself.
 abstract interface class ScenePickHandler {

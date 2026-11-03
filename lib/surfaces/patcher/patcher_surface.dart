@@ -22,11 +22,16 @@ import 'patcher_canvas.dart';
 import 'patcher_node_types.dart';
 import 'placement/patch_placement_bar.dart';
 import 'reference/patch_reference_panel.dart';
+import 'reference/patch_subpatch_summary.dart';
+import 'subpatch/subpatch_window_entry.dart';
+import 'subpatch/subpatch_window_view.dart';
+import 'subpatch/subpatch_windows.dart';
+import 'subpatch/subpatch_windows_host.dart';
 import 'tutorial/patch_tutorial_bar.dart';
 
 /// A verb on the node context menu (issue #356). Every one of them already has
 /// a keyboard route; the menu is what makes them discoverable without one.
-enum _NodeAction { duplicate, delete }
+enum _NodeAction { openSubpatch, encapsulate, deencapsulate, duplicate, delete }
 
 /// Patcher surface — pan/zoom canvas of nodes and cables.
 ///
@@ -42,6 +47,15 @@ class PatcherSurface extends Surface {
   });
 
   final PhiEngine engine;
+
+  /// Key on the node menu's `open subpatch` item (issue #481).
+  static const Key openSubpatchItemKey = Key('PatcherSurface.openSubpatch');
+
+  /// Key on the node menu's `encapsulate` item (issue #552).
+  static const Key encapsulateItemKey = Key('PatcherSurface.encapsulate');
+
+  /// Key on the node menu's `de-encapsulate` item (issue #552).
+  static const Key deencapsulateItemKey = Key('PatcherSurface.deencapsulate');
 
   /// The shell's undo router (#512). The surface registers the open patch's
   /// [UndoScope] here under [PatcherController.undoScopeId], so the shell's
@@ -148,6 +162,10 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   /// or null when it has none registered.
   UndoScope? _registeredScope;
 
+  /// The subpatch windows open over this surface (issue #481). Owned here, so
+  /// they go when the surface does, and pruned to the open patch's editor.
+  final SubpatchWindows _subpatchWindows = SubpatchWindows();
+
   @override
   void initState() {
     super.initState();
@@ -155,9 +173,20 @@ class _PatcherViewportState extends State<_PatcherViewport> {
     _objectTypes = widget.engine.patcher.objectTypes();
     _library = widget.engine.patchLibrary;
     _library.addListener(_syncUndoScope);
+    _library.addListener(_closeForeignSubpatches);
     _library.tutorialBrowserRequests.addListener(_showTutorials);
     _syncUndoScope();
   }
+
+  /// A subpatch window never outlives the patch it was opened from being the
+  /// open one: a switch, a tutorial, a project swap or a session restart (a
+  /// fresh editor) closes them (issue #481).
+  void _closeForeignSubpatches() =>
+      _subpatchWindows.closeAllExcept(_library.openEditor);
+
+  /// Open [box] of [editor] in its own window, or focus it when it is open.
+  void _openSubpatch(PatcherController editor, PatchNode box) =>
+      _subpatchWindows.open(editor, box.id);
 
   void _showTutorials() =>
       setState(() => _paletteTab = PatcherPaletteTab.tutorials);
@@ -192,7 +221,9 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   @override
   void dispose() {
     _library.removeListener(_syncUndoScope);
+    _library.removeListener(_closeForeignSubpatches);
     _library.tutorialBrowserRequests.removeListener(_showTutorials);
+    _subpatchWindows.dispose();
     _withdrawUndoScope(widget.undoScopes);
     _canvasFocus.dispose();
     super.dispose();
@@ -270,10 +301,14 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   /// documented parameter — falling back to the bare type documentation when
   /// the node cannot be resolved. This is what makes a drop teach: the object
   /// lands, and its arguments are already on screen.
+  ///
+  /// [container] is the subpatch box whose window the gesture was made in, or
+  /// null for the main canvas (issue #481).
   void _createObject(
     PatchObjectDescriptor desc,
     Offset position, {
     String? args,
+    PatchNodeId? container,
   }) {
     if (_readOnly) return;
     final controller = widget.engine.patcher;
@@ -281,6 +316,7 @@ class _PatcherViewportState extends State<_PatcherViewport> {
       desc: desc,
       position: position,
       args: args,
+      container: container,
     );
     final node = id == null ? null : controller.graph.nodeById(id);
     node == null ? _select(desc) : _selectNode(node);
@@ -302,31 +338,68 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   ///
   /// The editor is resolved *after* the menu closes, since the open patch can
   /// change while it is up.
-  Future<void> _onNodeContextMenu(PatchNode node, Offset global) async {
-    final action = await _showNodeMenu(global);
-    if (action == null || !mounted) return;
+  ///
+  /// A subpatch box adds `open subpatch` on top (issue #481) — the way into
+  /// its window from edit mode, where a double-click edits the box's text —
+  /// and `de-encapsulate`; any selection that can move into a new box offers
+  /// `encapsulate` (issue #552).
+  /// [menuContext] is where the menu opens: the surface for the main canvas,
+  /// the subpatch window for its own.
+  Future<void> _onNodeContextMenu(
+    PatchNode node,
+    Offset global, {
+    BuildContext? menuContext,
+  }) async {
     final controller = widget.engine.patcherOrNull;
-    if (controller == null) return;
+    final isBox = controller?.isSubpatch(node.id) ?? false;
+    final action = await _showNodeMenu(
+      menuContext ?? context,
+      global,
+      subpatch: isBox,
+      encapsulate: controller?.canEncapsulate ?? false,
+    );
+    if (action == null || !mounted) return;
+    final editor = widget.engine.patcherOrNull;
+    if (editor == null) return;
     switch (action) {
+      case _NodeAction.openSubpatch:
+        _openSubpatch(editor, node);
+      case _NodeAction.encapsulate:
+        final box = editor.encapsulateSelection();
+        final boxNode = box == null ? null : editor.graph.nodeById(box);
+        if (boxNode != null) _selectNode(boxNode);
+      case _NodeAction.deencapsulate:
+        editor.deencapsulateSelection();
       case _NodeAction.duplicate:
-        controller.duplicateSelection();
+        editor.duplicateSelection();
       case _NodeAction.delete:
-        controller.deleteSelection();
+        editor.deleteSelection();
     }
   }
 
   /// The node context menu, anchored at the global pointer position — same
   /// styling as the state canvas's menus so the two surfaces feel of a piece.
-  Future<_NodeAction?> _showNodeMenu(Offset global) {
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+  Future<_NodeAction?> _showNodeMenu(
+    BuildContext menuContext,
+    Offset global, {
+    bool subpatch = false,
+    bool encapsulate = false,
+  }) {
+    final overlay =
+        Overlay.of(menuContext).context.findRenderObject() as RenderBox;
     return showMenu<_NodeAction>(
-      context: context,
+      context: menuContext,
       position: RelativeRect.fromRect(
         Rect.fromPoints(global, global),
         Offset.zero & overlay.size,
       ),
       color: PhiColors.bg2,
       items: [
+        if (subpatch) _menuItem('open subpatch', _NodeAction.openSubpatch),
+        if (encapsulate)
+          _menuItem('encapsulate · ctrl+shift+e', _NodeAction.encapsulate),
+        if (subpatch)
+          _menuItem('de-encapsulate · ctrl+shift+d', _NodeAction.deencapsulate),
         _menuItem('duplicate · ctrl+d', _NodeAction.duplicate),
         _menuItem('delete · del', _NodeAction.delete),
       ],
@@ -335,6 +408,12 @@ class _PatcherViewportState extends State<_PatcherViewport> {
 
   PopupMenuItem<_NodeAction> _menuItem(String label, _NodeAction action) {
     return PopupMenuItem<_NodeAction>(
+      key: switch (action) {
+        _NodeAction.openSubpatch => PatcherSurface.openSubpatchItemKey,
+        _NodeAction.encapsulate => PatcherSurface.encapsulateItemKey,
+        _NodeAction.deencapsulate => PatcherSurface.deencapsulateItemKey,
+        _ => null,
+      },
       value: action,
       height: 32,
       child: Text(
@@ -351,11 +430,43 @@ class _PatcherViewportState extends State<_PatcherViewport> {
     return null;
   }
 
+  /// One subpatch window's content (issue #481), configured from this
+  /// surface's state on every rebuild — the mode and the read-only rule are
+  /// the patch's, wherever it is shown.
+  Widget _subpatchWindow(BuildContext context, SubpatchWindowEntry entry) {
+    final readOnly = _readOnly;
+    return SubpatchWindowView(
+      editor: entry.editor,
+      box: entry.box,
+      objectTypes: _objectTypes,
+      mode: _effectiveMode,
+      snapToGrid: _snapToGrid,
+      onToggleMode: readOnly ? null : () => _setMode(_mode.flipped),
+      onCreateObject: readOnly
+          ? null
+          : (desc, position, {args}) =>
+                _createObject(desc, position, args: args, container: entry.box),
+      onNodeTap: _selectNode,
+      onNodeContextMenu: (menuContext, node, global) =>
+          _onNodeContextMenu(node, global, menuContext: menuContext),
+      onOpenSubpatch: (box) => _openSubpatch(entry.editor, box),
+      onTypeResolved: _select,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final library = widget.engine.patchLibrary;
+    return SubpatchWindowsHost(
+      windows: _subpatchWindows,
+      builder: _subpatchWindow,
+      child: _buildMain(library),
+    );
+  }
+
+  Widget _buildMain(PatchLibraryController library) {
     return ListenableBuilder(
-      listenable: library,
+      listenable: Listenable.merge([library, _subpatchWindows]),
       builder: (context, _) {
         final editor = library.openEditor;
         final tutorial = library.tutorial;
@@ -402,7 +513,12 @@ class _PatcherViewportState extends State<_PatcherViewport> {
                             // poller and canvas just as a patch switch does.
                             key: ObjectKey(editor),
                             controller: editor,
-                            active: widget.active,
+                            // A subpatch window is on screen by itself, so
+                            // its values keep moving while the patcher tab is
+                            // in the background (issue #481).
+                            active:
+                                widget.active ||
+                                _subpatchWindows.hasWindowsFor(editor),
                             child: PatcherCanvas(
                               // Re-key on the open address so switching patches
                               // rebuilds the canvas against the new editor.
@@ -426,6 +542,8 @@ class _PatcherViewportState extends State<_PatcherViewport> {
                                   : _createObject,
                               onNodeTap: _selectNode,
                               onNodeContextMenu: _onNodeContextMenu,
+                              onOpenSubpatch: (box) =>
+                                  _openSubpatch(editor, box),
                               // The panel switches the moment the inline box's
                               // typed name settles on a type, so the arguments
                               // are documented while they are being typed
@@ -507,6 +625,18 @@ class _PatcherViewportState extends State<_PatcherViewport> {
                   editor.setKeyboardVelocity(id, velocity);
                   _canvasFocus.requestFocus();
                 }
+              : null,
+          // A selected subpatch's name and pins (issue #481), live: adding a
+          // boundary object inside reshapes the box and wakes the graph.
+          subpatch: documented && editor.isSubpatch(id)
+              ? PatchSubpatchSummary(
+                  name: editor.subpatchNameOf(id),
+                  inlets: node.inputs.length,
+                  outlets: node.outputs.length,
+                )
+              : null,
+          onOpenSubpatch: documented && editor.isSubpatch(id)
+              ? () => _openSubpatch(editor, node)
               : null,
         );
       },

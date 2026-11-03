@@ -39,6 +39,11 @@ void main() {
     expect(PatchObjectTypes.gFunction, Obj.gFunction);
     expect(PatchObjectTypes.gNodes, Obj.gNodes);
     expect(PatchObjectTypes.gPreset, Obj.gPreset);
+    expect(PatchObjectTypes.patcher, Obj.patcher);
+    expect(PatchObjectTypes.gInlet, Obj.gInlet);
+    expect(PatchObjectTypes.dInlet, Obj.dInlet);
+    expect(PatchObjectTypes.gOutlet, Obj.gOutlet);
+    expect(PatchObjectTypes.dOutlet, Obj.dOutlet);
   });
 
   test('the list holds each id exactly once', () {

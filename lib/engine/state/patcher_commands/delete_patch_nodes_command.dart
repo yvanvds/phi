@@ -11,6 +11,9 @@ import '../patcher_controller.dart';
 /// then removes the nodes; [revert] restores every node under its original id
 /// and re-wires each captured cable, so the graph returns exactly as it was.
 ///
+/// A subpatch box is deleted with its whole contents, and an undo brings them
+/// back under their own ids, box first (issue #481).
+///
 /// The capture refreshes on every [apply] so a redo after further edits still
 /// restores the then-current state. Restoring under the same [PatchNodeId]
 /// keeps any lower undo commands that named those nodes valid.
@@ -21,6 +24,9 @@ class DeletePatchNodesCommand implements ProjectCommand {
   final PatcherController controller;
   final Set<PatchNodeId> ids;
 
+  /// The nodes actually removed: [ids] plus, for a subpatch box, everything
+  /// inside it (issue #481), containers before contents.
+  List<PatchNodeId> _order = const [];
   Map<PatchNodeId, PatchNodeSpec> _specs = const {};
   List<PatchCable> _cables = const [];
 
@@ -32,19 +38,20 @@ class DeletePatchNodesCommand implements ProjectCommand {
 
   @override
   void apply() {
-    _specs = {for (final id in ids) id: controller.captureSpec(id)};
-    _cables = controller.cablesTouching(ids);
+    _order = controller.subtreeOf(ids);
+    _specs = {for (final id in _order) id: controller.captureSpec(id)};
+    _cables = controller.cablesTouching(_order.toSet());
     for (final cable in _cables) {
       controller.removeCablePrimitive(cable);
     }
-    for (final id in ids) {
+    for (final id in _order.reversed) {
       controller.deleteNodePrimitive(id);
     }
   }
 
   @override
   void revert() {
-    for (final id in ids) {
+    for (final id in _order) {
       controller.restoreNodePrimitive(id, _specs[id]!);
     }
     for (final cable in _cables) {

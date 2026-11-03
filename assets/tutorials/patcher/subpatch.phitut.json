@@ -1,0 +1,310 @@
+{
+  "title": "patcher — a subpatch and its inlets and outlets",
+  "covers": [
+    "patcher",
+    ".inlet",
+    ".outlet",
+    "~inlet",
+    "~outlet"
+  ],
+  "summary": "A gain subpatch: the .inlet, .outlet, ~inlet and ~outlet objects inside a patcher box are its pins, numbered by their argument, and a message into a ~inlet is dropped.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# patcher — a subpatch and its inlets and outlets\nA patcher box holds a patch of its own, like Max's p. Its pins are the inlet and outlet objects inside it: .inlet and .outlet for messages, ~inlet and ~outlet for audio. Each takes one argument, its pin number. Unlike Max, where an inlet's place from left to right gives its number and one inlet object carries both, here the argument sets the number, and a ~inlet carries only audio. This subpatch, gain, turns a sine up and down.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "140.0",
+          "y": "160.0"
+        },
+        "parms": "220",
+        "type": "~sine",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "container": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "60.0"
+        },
+        "parms": "0",
+        "type": "~inlet",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "container": 7,
+        "gui": {
+          "x": "200.0",
+          "y": "60.0"
+        },
+        "parms": "1",
+        "type": ".inlet",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 12
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "container": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "140.0"
+        },
+        "parms": "0",
+        "type": "~*",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "container": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "220.0"
+        },
+        "parms": "0",
+        "type": "~outlet",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "container": 7,
+        "gui": {
+          "x": "200.0",
+          "y": "220.0"
+        },
+        "parms": "1",
+        "type": ".outlet",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "container": 7,
+        "gui": {
+          "x": "340.0",
+          "y": "40.0",
+          "w": "300"
+        },
+        "parms": "Inside gain: what reaches the box's left inlet comes out of ~inlet 0, and what reaches its right inlet comes out of .inlet 1. ~* multiplies the signal by the gain, and ~outlet 0 sends it out of the box's left outlet. .inlet 1 also goes to .outlet 1, the right outlet, so the parent sees the gain. An inlet object shows only its outlet here: its inlet is the box's pin, in the parent. An outlet object shows only its inlet.",
+        "type": ".text"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "560.0",
+          "y": "150.0",
+          "w": "300"
+        },
+        "parms": "1. Click 0.1 or 0.2, or type a gain into the f box. It goes into the right inlet of patcher gain, and the sine on the left inlet plays through it on master. 0. turns it off. The f box under the subpatch shows the gain coming back out of its right outlet.",
+        "type": ".text"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "560.0",
+          "y": "300.0",
+          "w": "300"
+        },
+        "parms": "2. Double-click patcher gain to open it in its own window. Inside, ~inlet 0 is the box's left inlet and .inlet 1 its right one, ~outlet 0 its left outlet and .outlet 1 its right one. ~* multiplies the sine by the gain.",
+        "type": ".text"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "560.0",
+          "y": "430.0",
+          "w": "300"
+        },
+        "parms": "3. Messages and audio share one numbering on each side, and the object inside sets the pin's kind. That is why there is no .inlet 0: ~inlet 0 already is inlet 0. Give every inlet and outlet its own number.",
+        "type": ".text"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "560.0",
+          "y": "550.0",
+          "w": "300"
+        },
+        "parms": "4. Turn the gain up, then click the 0. on the left. It goes into the left inlet, an audio inlet, and the sine plays on: a ~inlet carries only audio, and a message that reaches it is dropped. To send a number into a subpatch, give it a .inlet. A number box cannot even be wired to a ~inlet. A message box can, but what it sends is lost.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "240.0",
+          "y": "160.0"
+        },
+        "parms": "0.",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "350.0",
+          "y": "160.0"
+        },
+        "parms": "0.1",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "460.0",
+          "y": "160.0"
+        },
+        "parms": "0.2",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "240.0",
+          "y": "220.0"
+        },
+        "parms": "",
+        "type": ".f",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 11
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "240.0"
+        },
+        "parms": "0.",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 10
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "60.0",
+          "y": "340.0"
+        },
+        "parms": "gain",
+        "type": "patcher"
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": "~dac"
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "200.0",
+          "y": "420.0"
+        },
+        "parms": "",
+        "type": ".f"
+      }
+    }
+  }
+}

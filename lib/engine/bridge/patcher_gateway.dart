@@ -55,7 +55,24 @@ abstract interface class PatcherGateway {
   int createObject(int instanceId, String type, {String args = ''});
 
   /// Remove a previously-created object. No-op for an unknown id.
+  ///
+  /// Deleting a subpatch (a `patcher` object) deletes everything inside it
+  /// too, transitively — so delete the contents first when their handles are
+  /// still wanted afterwards.
   void deleteObject(int instanceId, int handleId);
+
+  // ─── subpatches (issue #481) ─────────────────────────────────────────
+
+  /// Put [handleId] inside the subpatch [containerHandleId] (a `patcher`
+  /// object of the same instance), or back at the top level when it is null.
+  ///
+  /// Containment is addressing, not storage: the object stays in the same flat
+  /// native graph, and no connection changes. A subpatch's pins are the
+  /// `.inlet` / `~inlet` / `.outlet` / `~outlet` objects directly inside it,
+  /// numbered by their argument, so moving a boundary object in or out
+  /// reshapes the box ([inspect] reports the new pin counts). Throws when the
+  /// engine refuses the move (not a container, or a cycle).
+  void setContainer(int instanceId, int handleId, int? containerHandleId);
 
   // ─── topology ────────────────────────────────────────────────────────
 
@@ -78,6 +95,11 @@ abstract interface class PatcherGateway {
   });
 
   /// Inspect a node's port topology (counts + audio/control kinds).
+  ///
+  /// For a subpatch (a `patcher` object) these are the pins its boundary
+  /// objects give it, not the object's own (it has none): one inlet past the
+  /// highest `.inlet` / `~inlet` index directly inside it, an audio kind where
+  /// a `~inlet` claims the pin, and likewise for the outlets.
   PatcherNodeSnapshot inspect(int instanceId, int handleId);
 
   /// Enumerate the whole live graph of [instanceId] — every object (its handle
@@ -240,8 +262,10 @@ abstract interface class PatcherGateway {
   // ─── metadata passthrough (process-wide registry) ────────────────────
 
   /// The engine's full object catalogue as FFI-free descriptors — the
-  /// palette and reference panel read only this. The `patcher` (subpatch)
-  /// type is filtered out (design §10 decision 2). Registry order.
+  /// palette and reference panel read only this, in registry order. The
+  /// `patcher` (subpatch) type is included since issue #481, which made a
+  /// subpatch something the editor can open (it was hidden before, design §10
+  /// decision 2).
   List<PatchObjectDescriptor> objectTypes();
 
   // ─── published clocks (issue #529) ───────────────────────────────────

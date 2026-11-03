@@ -6,6 +6,7 @@ import '../../design/widgets/patcher/patch_canvas_constants.dart';
 import '../../design/widgets/patcher/patch_gui_object.dart';
 import '../../design/widgets/patcher/patch_note_box.dart';
 import '../../design/widgets/patcher/patch_object_box.dart';
+import '../../domain/patcher/patch_boundary.dart';
 import '../../domain/patcher/patch_gui_property.dart';
 import '../../domain/patcher/patch_node.dart';
 import '../../domain/patcher/patch_node_id.dart';
@@ -82,10 +83,18 @@ class PatcherNodeView extends StatelessWidget {
     return ListenableBuilder(
       listenable: node,
       builder: (context, _) {
-        final inputXs = _portXs(node.inputs);
-        final outputXs = _portXs(node.outputs);
-        final inputVoices = [for (final p in node.inputs) p.voice];
-        final outputVoices = [for (final p in node.outputs) p.voice];
+        // A boundary object's parent-facing pin is drawn on the subpatch box
+        // in the window around, not here (issue #481).
+        final inputs = _shown(node.inputs);
+        final outputs = _shown(node.outputs);
+        final inputXs = [
+          for (final p in inputs) patchPortOffsetAlongEdge(p.index),
+        ];
+        final outputXs = [
+          for (final p in outputs) patchPortOffsetAlongEdge(p.index),
+        ];
+        final inputVoices = [for (final p in inputs) p.voice];
+        final outputVoices = [for (final p in outputs) p.voice];
         return Stack(
           clipBehavior: Clip.none,
           children: [
@@ -159,8 +168,9 @@ class PatcherNodeView extends StatelessWidget {
     );
   }
 
-  static List<double> _portXs(List<PatchPort> ports) => [
-    for (var i = 0; i < ports.length; i++) patchPortOffsetAlongEdge(i),
+  List<PatchPort> _shown(List<PatchPort> ports) => [
+    for (final p in ports)
+      if (!PatchBoundary.isParentFacing(node.type, p.side, p.index)) p,
   ];
 }
 

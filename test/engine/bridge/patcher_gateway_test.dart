@@ -141,9 +141,10 @@ void main() {
   });
 
   group('metadata passthrough', () {
-    test('objectTypes filters out the subpatcher type', () {
+    test('objectTypes offers the subpatcher and its boundary objects', () {
+      // Hidden until issue #481 made a subpatch something the editor opens.
       final types = gateway.objectTypes().map((d) => d.type);
-      expect(types, isNot(contains(Obj.patcher)));
+      expect(types, containsAll([Obj.patcher, Obj.gInlet, Obj.dOutlet]));
       expect(types, contains(Obj.dSine));
     });
 
@@ -167,7 +168,7 @@ void main() {
       },
     );
 
-    test('a custom catalogue is honoured, still minus the subpatcher', () {
+    test('a custom catalogue is honoured as given', () {
       gateway.objectTypesCatalogue = const [
         PatchObjectDescriptor(
           type: Obj.patcher,
@@ -190,7 +191,7 @@ void main() {
       ];
 
       final types = gateway.objectTypes().map((d) => d.type).toList();
-      expect(types, <String>[Obj.dSaw]);
+      expect(types, <String>[Obj.patcher, Obj.dSaw]);
     });
   });
 

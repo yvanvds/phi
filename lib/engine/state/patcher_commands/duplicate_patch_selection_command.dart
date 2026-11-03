@@ -41,13 +41,22 @@ class DuplicatePatchSelectionCommand implements ProjectCommand {
     _created.clear();
     _createdCables.clear();
     final idMap = <PatchNodeId, PatchNodeId>{};
-    for (final id in sourceIds) {
-      final spec = controller.captureSpec(id).offsetBy(offset);
-      final newId = controller.createNodePrimitive(spec);
+    final roots = <PatchNodeId>{};
+    // A subpatch box is copied with its contents (issue #481): they land
+    // inside the copy, where they were, and only the copied selection itself
+    // moves a step.
+    final order = controller.subtreeOf(sourceIds);
+    for (final id in order) {
+      final spec = controller.captureSpec(id);
+      final box = idMap[spec.container];
+      final newId = controller.createNodePrimitive(
+        box == null ? spec.offsetBy(offset) : spec.inContainer(box),
+      );
       idMap[id] = newId;
       _created.add(newId);
+      if (box == null) roots.add(newId);
     }
-    for (final cable in controller.cablesWithin(sourceIds)) {
+    for (final cable in controller.cablesWithin(order.toSet())) {
       final copy = PatchCable(
         source: _remap(cable.source, idMap),
         target: _remap(cable.target, idMap),
@@ -56,7 +65,7 @@ class DuplicatePatchSelectionCommand implements ProjectCommand {
       controller.addCablePrimitive(copy);
       _createdCables.add(copy);
     }
-    controller.selectNodes(_created.toSet());
+    controller.selectNodes(roots);
   }
 
   @override
@@ -64,7 +73,9 @@ class DuplicatePatchSelectionCommand implements ProjectCommand {
     for (final cable in _createdCables) {
       controller.removeCablePrimitive(cable);
     }
-    for (final id in _created) {
+    // Contents before their box, so no delete lands on a handle the box's
+    // own delete already took down.
+    for (final id in _created.reversed) {
       controller.deleteNodePrimitive(id);
     }
     _created.clear();

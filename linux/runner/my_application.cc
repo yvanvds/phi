@@ -57,6 +57,10 @@ static void my_application_activate(GApplication* application) {
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(
       project, self->dart_entrypoint_arguments);
+  // The 3D Scene renders through Flutter GPU (flutter_scene, issue #455),
+  // which is off unless the project turns it on. A project setting, not the
+  // --enable-flutter-gpu switch, so release builds keep it.
+  fl_dart_project_set_enable_flutter_gpu(project, TRUE);
 
   FlView* view = fl_view_new(project);
   GdkRGBA background_color;

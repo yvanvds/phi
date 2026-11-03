@@ -44,14 +44,14 @@ void main() {
     await tester.tap(railFor(SurfaceId.patcher));
     await tester.pumpAndSettle();
 
-    // Palette: category sections fed by the gateway metadata, with the subpatch
-    // type filtered out (design §10 decision 2).
+    // Palette: category sections fed by the gateway metadata, the subpatch type
+    // included since it opens in its own window (issue #481).
     expect(
       find.byKey(PatcherPalette.sectionKey(PatchObjectCategory.oscillator)),
       findsOneWidget,
     );
     expect(find.byKey(PatcherPalette.entryKey(Obj.dSine)), findsOneWidget);
-    expect(find.byKey(PatcherPalette.entryKey(Obj.patcher)), findsNothing);
+    expect(find.byKey(PatcherPalette.entryKey(Obj.patcher)), findsOneWidget);
 
     // Reference panel starts empty; tapping a palette entry renders the engine's
     // own documentation for it.

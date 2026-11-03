@@ -27,8 +27,9 @@ planned (Scene · Patcher · Code · State · MIDI · Mix); only Mix has a stub.
 - **Engine:** [yse-soundengine](https://github.com/yvanvds/yse-soundengine) (C++).
 - **FFI bridge:** [dart-yse](https://github.com/yvanvds/dart-yse) — package name `yse`.
 - **UI:** Flutter at a pinned master revision (`.fvmrc`, #478), Windows and
-  Linux (x64) desktop. There is no 3D Scene renderer on any platform for now
-  (#455).
+  Linux (x64) desktop. The 3D Scene view is drawn by
+  [`flutter_scene`](https://pub.dev/packages/flutter_scene) on Flutter GPU
+  (#455), switched on in both runners.
 - **Design system:** [`design system/`](design%20system/) — colors, type, motion,
   components. Source-of-truth for the Dart token files under `lib/design/tokens/`.
 

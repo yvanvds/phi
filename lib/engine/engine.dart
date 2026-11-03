@@ -47,6 +47,7 @@ import 'bridge/bus_tap.dart';
 import 'bridge/code_evaluator.dart';
 import 'bridge/control_plane_dispatcher.dart';
 import 'bridge/engine_log_source.dart';
+import 'bridge/flutter_scene_renderer.dart';
 import 'bridge/fx_gateway.dart';
 import 'bridge/materialised_synth.dart';
 import 'bridge/midi_gateway.dart';
@@ -54,7 +55,6 @@ import 'bridge/no_op_bus_tap.dart';
 import 'bridge/no_op_registry_mirror.dart';
 import 'bridge/patcher_gateway.dart';
 import 'bridge/patcher_insert_source.dart';
-import 'bridge/placeholder_scene_renderer.dart';
 import 'bridge/real_engine_log_source.dart';
 import 'bridge/real_fx_gateway.dart';
 import 'bridge/real_midi_gateway.dart';
@@ -139,9 +139,8 @@ class PhiEngine {
   }
 
   /// Production constructor — wires the real `package:yse` gateway and,
-  /// by default, the placeholder Scene renderer (no 3D renderer for now, issue
-  /// #456) + the real patcher and
-  /// MIDI-output gateways. Tests can inject alternates via the named
+  /// by default, the `flutter_scene` Scene renderer (Flutter GPU, issue #455)
+  /// + the real patcher and MIDI-output gateways. Tests can inject alternates via the named
   /// parameters.
   factory PhiEngine.production({
     SceneRenderer? sceneRenderer,
@@ -167,7 +166,7 @@ class PhiEngine {
         : null;
     return PhiEngine(
       yse,
-      sceneRenderer: sceneRenderer ?? PlaceholderSceneRenderer(),
+      sceneRenderer: sceneRenderer ?? FlutterSceneRenderer(),
       patcherGateway: patcher,
       midiGateway: midiGateway ?? RealMidiGateway(),
       engineLogSource: const RealEngineLogSource(),

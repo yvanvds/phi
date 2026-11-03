@@ -5,11 +5,11 @@ import '../../domain/scene/pick_ray.dart';
 /// Screen→world unprojection for the Scene surface's pointer picking.
 ///
 /// Pure math over `vector_math_64`, deliberately free of any 3D-engine types
-/// so it can be unit-tested headless. A 3D renderer's input controller reads
-/// the live camera's view/projection matrices, hands them here, and gets back a
-/// [PickRay] in scene space (the same ray `SceneField.pick` runs on) plus, for
-/// a drag, the world point under the pointer on a chosen plane. Kept, though
-/// unused, while there is no 3D renderer (issue #456), for its return (#455).
+/// so it can be unit-tested headless. The renderer reads the live camera's
+/// view/projection matrices (`FlutterSceneSpace.viewProjection`), hands them
+/// here, and gets back a [PickRay] in scene space (the same ray
+/// `SceneField.pick` runs on) plus, for a drag, the world point under the
+/// pointer on a chosen plane (`ScenePointerController`).
 ///
 /// The pointer coordinates are logical pixels with the origin at the widget's
 /// top-left and `y` growing downward (Flutter's `PointerEvent.localPosition`);

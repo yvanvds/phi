@@ -100,6 +100,22 @@ abstract final class PatchObjectTypes {
   /// settable control in the patch, stored and recalled (issue #477).
   static const String gPreset = '.preset';
 
+  /// `Obj.patcher` — a subpatcher: a box holding a patch of its own, whose
+  /// pins are the boundary objects inside it (issue #481).
+  static const String patcher = 'patcher';
+
+  /// `Obj.gInlet` — a message inlet of the enclosing subpatcher (issue #481).
+  static const String gInlet = '.inlet';
+
+  /// `Obj.dInlet` — a signal inlet of the enclosing subpatcher (issue #481).
+  static const String dInlet = '~inlet';
+
+  /// `Obj.gOutlet` — a message outlet of the enclosing subpatcher (issue #481).
+  static const String gOutlet = '.outlet';
+
+  /// `Obj.dOutlet` — a signal outlet of the enclosing subpatcher (issue #481).
+  static const String dOutlet = '~outlet';
+
   /// Every id above, for the drift guard.
   static const List<String> all = [
     dSine,
@@ -128,5 +144,10 @@ abstract final class PatchObjectTypes {
     gFunction,
     gNodes,
     gPreset,
+    patcher,
+    gInlet,
+    dInlet,
+    gOutlet,
+    dOutlet,
   ];
 }

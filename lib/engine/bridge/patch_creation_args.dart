@@ -1,4 +1,5 @@
 import '../../domain/patcher/patch_args.dart';
+import '../../domain/patcher/patch_boundary.dart';
 import '../../domain/patcher/patch_type_name.dart';
 import 'patch_object_descriptor.dart';
 
@@ -38,7 +39,12 @@ class PatchCreationArgs {
     // *functional* object the engine reads just the first token into a string
     // parameter, and waving extra words through would show content the object
     // does not actually hold.
-    if (PatchTypeName.isNote(desc.type)) {
+    //
+    // A subpatch's arguments are its **name** (issue #481), `patcher gain` the
+    // way Max reads `p gain`: the engine documents no parameter for it but
+    // keeps the whole string, so it is free text too.
+    if (PatchTypeName.isNote(desc.type) ||
+        PatchBoundary.isSubpatch(desc.type)) {
       return PatchCreationArgs._(typed.trim(), null);
     }
     final given = splitPatchArgs(typed);
