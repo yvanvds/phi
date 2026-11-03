@@ -148,6 +148,14 @@ jobs:
         with:
           path: phi
 
+      # Windows only (#478): a master pin makes flutter-action `git clone`
+      # flutter/flutter, whose tree has paths beyond Windows' 260-char
+      # MAX_PATH (engine/.../ios_scenario_app goldens). Without long-path
+      # support the checkout dies with "Filename too long" before Phi runs.
+      # Global config, because the action's clone runs as this user.
+      - name: Allow long paths in git (Flutter master clone)
+        run: git config --global core.longpaths true
+
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:

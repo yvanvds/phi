@@ -39,7 +39,9 @@ early on purpose). The pin is the 40-char commit in `.fvmrc` at the repo root
 (`{"flutter": "<sha>"}`, the FVM format). Every "Set up Flutter" step in
 `ci.yaml` (three jobs) and `integration.yaml` reads it via
 `flutter-version-file:` with `channel: master`, then runs
-`flutter config --enable-windowing`.
+`flutter config --enable-windowing`. On master the action `git clone`s
+flutter/flutter, which needs long paths on Windows, so the Windows jobs set
+`git config --global core.longpaths true` first.
 
 Current pin: `934720261be051307da25be7911628d61ccb8b72` (2026-11-03),
 `flutter --version` `3.50.0-1.0.pre-376`, Dart `3.15.0-101.0.dev`.
