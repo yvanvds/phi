@@ -3307,6 +3307,28 @@ main + app          (orchestration)
   `subpatch_window_test.dart` and the `patcher_subpatch_window` integration
   test (a second native window under Xvfb, real engine: built by keyboard and
   drag, heard through the box, undo from the other window, save → reopen).
+- **Encapsulate / de-encapsulate** (issue #552) — Max's *Encapsulate*:
+  `Ctrl+Shift+E` (or the node menu's `encapsulate`) moves the selection into a
+  new unnamed `patcher` box at its top-left corner; `Ctrl+Shift+D` (or
+  `de-encapsulate` on a box) is the reverse. Both are one journaled step:
+  `EncapsulatePatchSelectionCommand` and `DeencapsulatePatchSubpatchesCommand`
+  (`lib/engine/state/patcher_commands/`). Objects move between containers live
+  (`PatcherController.setContainerPrimitive` → `PatcherGateway.setContainer`,
+  mirrored by the now-mutable `PatchNode.container` / `moveInto`), keeping
+  their logical ids, handles and inner cables. Encapsulate classifies cables
+  by their **displayed** ends, routes each cut one through a new boundary
+  object (`~` for audio, `.` for control; one pin per real source pin, so a
+  fan-out shares a pin), numbers pins by the outside end's x, and lays the
+  contents out from the window's top left with inlet/outlet rows. A selection
+  with a boundary object is refused (`canEncapsulate`; canvas banner).
+  De-encapsulate follows every path through the box's pins (pin-to-pin
+  pass-throughs included) and wires source to target directly. The first
+  apply records the plan; redo replays it under the same ids. `Ctrl+E`
+  ignores Shift now so the chords don't collide. Covered by
+  `patcher_controller_encapsulate_test.dart`,
+  `patcher_controller_encapsulate_engine_test.dart` (real engine: dump →
+  parse → rebuild after each step, renders), `patcher_canvas_test.dart` and
+  the `patcher_encapsulate` integration test.
 - Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
   switched off for now, issue #447)
 

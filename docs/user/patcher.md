@@ -109,8 +109,9 @@ patch is reopened or when you edit its text. In this version of Phi a message
 box typed with several words keeps only the first word, and shows only that
 word. A newer engine lifts that limit.
 
-**Right-click** an object for its context menu: *duplicate* and *delete*
-(and *open subpatch* on a subpatch, see below).
+**Right-click** an object for its context menu: *duplicate* and *delete*,
+*encapsulate*, and *open subpatch* and *de-encapsulate* on a subpatch (see
+below).
 
 ## Cables
 
@@ -175,6 +176,25 @@ made. Deleting, duplicating, copying or pasting a subpatch box takes
 everything inside it along. A subpatch with objects inside cannot be retyped
 into another object (a banner says so). The contents are saved with the
 patch.
+
+**Encapsulate.** Select some objects and press `Ctrl+Shift+E` (or pick
+*encapsulate* from the context menu) to move them into a new, unnamed
+`patcher` box in their place. Cables between the selected objects stay as they
+are. Each cable that ran between a selected object and one outside the
+selection now goes through a new pin of the box: a `~inlet` or `~outlet` for
+audio, a `.inlet` or `.outlet` for messages. Cables leaving the same outlet
+share one pin. Pins are numbered left to right by where the outside end of
+their cables sits. Inside, the objects move to the top left of the window,
+with the inlets in a row above them and the outlets below. A selection that
+holds an inlet or outlet object cannot be encapsulated (a banner says so),
+because that object is a pin of the window it is in.
+
+**De-encapsulate** is the reverse. Select a subpatch box and press
+`Ctrl+Shift+D` (or pick *de-encapsulate*) to put the objects inside it back
+in the window, where the box was. The box and its inlet and outlet objects
+go, and every cable that ran through one of its pins now connects straight
+from where it came from to where it went. Both are one step on the undo
+history: `Ctrl+Z` puts everything back as it was.
 
 The `patcher` tutorial (see [Tutorials](#tutorials)) is a gain subpatch to
 play with and open.

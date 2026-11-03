@@ -47,6 +47,16 @@ abstract final class PatcherShortcutHints {
         note: _edit,
       ),
       ShortcutHint(
+        keys: ['Ctrl+Shift+E'],
+        action: 'Encapsulate the selection into a new subpatch',
+        note: _edit,
+      ),
+      ShortcutHint(
+        keys: ['Ctrl+Shift+D'],
+        action: 'De-encapsulate the selected subpatch',
+        note: _edit,
+      ),
+      ShortcutHint(
         keys: ['Ctrl+C', 'Ctrl+V'],
         action: 'Copy / paste the selection',
         note: _edit,

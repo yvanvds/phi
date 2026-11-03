@@ -235,6 +235,16 @@ class PatcherCanvas extends StatefulWidget {
   static const String subpatchRetypeText =
       'a subpatch with objects inside keeps its type';
 
+  /// Key on the banner when `Ctrl+Shift+E` refuses a selection (issue #552).
+  static const Key encapsulateNoticeKey = Key(
+    'PatcherCanvas.encapsulateNotice',
+  );
+
+  /// What that banner says: an inlet or outlet object is a pin of the window
+  /// it sits in, so it cannot move into a new box.
+  static const String encapsulateRefusedText =
+      'inlets and outlets cannot be encapsulated';
+
   @override
   State<PatcherCanvas> createState() => _PatcherCanvasState();
 }
@@ -701,6 +711,12 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
       // nothing (design §6): undo, redo and duplicate are all declined, so a
       // patch being played cannot be rearranged by a mistyped chord.
       if (widget.mode.isRun) return KeyEventResult.ignored;
+      // `Ctrl+Shift+E` encapsulates the selection (issue #552) — read by
+      // position like `Ctrl+E`, which [_isModeKey] leaves to it when Shift is
+      // held.
+      if (HardwareKeyboard.instance.isShiftPressed && _isEKey(event)) {
+        return _encapsulate();
+      }
       switch (key) {
         case LogicalKeyboardKey.keyZ:
           HardwareKeyboard.instance.isShiftPressed
@@ -711,7 +727,10 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
           _controller.redo();
           return KeyEventResult.handled;
         case LogicalKeyboardKey.keyD:
-          _controller.duplicateSelection();
+          // `Ctrl+Shift+D` unpacks the selected subpatches (issue #552).
+          HardwareKeyboard.instance.isShiftPressed
+              ? _controller.deencapsulateSelection()
+              : _controller.duplicateSelection();
           return KeyEventResult.handled;
         // Copy / paste (issue #435). Letters, so matched logically like
         // `Ctrl+Z/Y/D` above — `C` and `V` sit in the same positions on
@@ -949,9 +968,33 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   /// Matched on the key's **position** first, like `Ctrl+0` — the physical
   /// `E` key — with the logical key accepted as well so a layout that remaps
   /// the position still answers to the glyph the user sees on the cap.
+  ///
+  /// Not with Shift: `Ctrl+Shift+E` is encapsulate (issue #552).
   bool _isModeKey(KeyEvent event) =>
+      !HardwareKeyboard.instance.isShiftPressed && _isEKey(event);
+
+  /// Whether [event] is the key in the `E` position, or the `E` glyph.
+  static bool _isEKey(KeyEvent event) =>
       event.physicalKey == PhysicalKeyboardKey.keyE ||
       event.logicalKey == LogicalKeyboardKey.keyE;
+
+  /// `Ctrl+Shift+E`: move the selection into a new subpatch box (issue #552)
+  /// and point the reference panel at it. A selection holding an inlet or
+  /// outlet object is refused out loud; an empty one does nothing.
+  KeyEventResult _encapsulate() {
+    if (_controller.graph.selectedNodes.isEmpty) return KeyEventResult.handled;
+    final box = _controller.encapsulateSelection();
+    if (box == null) {
+      _flashNotice(
+        PatcherCanvas.encapsulateRefusedText,
+        PatcherCanvas.encapsulateNoticeKey,
+      );
+      return KeyEventResult.handled;
+    }
+    final node = _controller.graph.nodeById(box);
+    if (node != null) widget.onNodeTap?.call(node);
+    return KeyEventResult.handled;
+  }
 
   /// Ask the host for the other mode. Unhandled when no host is listening, so
   /// the chord can go on to mean something else somewhere else.

@@ -179,7 +179,9 @@ live-code control).
 - **Selection:** click node, shift-click extends, marquee over empty
   canvas; `Delete` removes selected nodes with their cables;
   `Ctrl+D` duplicates selection (objects + intra-selection cables,
-  offset a grid step).
+  offset a grid step); `Ctrl+Shift+E` encapsulates it into a new subpatch,
+  routing every cut cable through a new pin, and `Ctrl+Shift+D` unpacks a
+  selected subpatch again (issue #552) — one journaled step each.
 - **Arrow keys nudge** the selection one grid cell, `Shift+arrow` a
   major one. A held arrow moves on every auto-repeat but journals once,
   on release, so `Ctrl+Z` walks back the whole burst rather than one
@@ -322,8 +324,9 @@ live-code control).
 ## 9. Out of scope
 
 - ~~**Subpatcher dive-in editing**~~ — done in issue #481: a subpatch opens
-  in its own window (see §10 decision 2). Reusable abstraction files and
-  "encapsulate selection" remain out of scope.
+  in its own window (see §10 decision 2), and "encapsulate selection" (and
+  its reverse) in issue #552. Reusable abstraction files remain out of
+  scope.
 - **Clip-note dispatch into patchers** (§4) — future yse issue.
 - **Patcher-as-synth-definition** (a voice playing a patch) — follows
   clip-note dispatch; not designed here.

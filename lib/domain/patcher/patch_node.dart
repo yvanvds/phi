@@ -22,7 +22,7 @@ class PatchNode extends ChangeNotifier {
     required this._size,
     required this._inputs,
     required this._outputs,
-    this.container,
+    this._container,
   });
 
   /// Stable id mirroring the native `PHandle.id`.
@@ -40,9 +40,11 @@ class PatchNode extends ChangeNotifier {
   final int voice;
 
   /// The subpatch box this node sits inside, or null at the top level of its
-  /// patch (issue #481). Fixed for the node's life: the editor never moves an
-  /// object between subpatches, it deletes and recreates.
-  final PatchNodeId? container;
+  /// patch (issue #481). Only encapsulate and de-encapsulate (issue #552) move
+  /// a live object between boxes ([moveInto]); everything else keeps it where
+  /// it was made.
+  PatchNodeId? get container => _container;
+  PatchNodeId? _container;
 
   Offset _position;
   Size _size;
@@ -80,6 +82,15 @@ class PatchNode extends ChangeNotifier {
   void moveTo(Offset position) {
     if (_position == position) return;
     _position = position;
+    notifyListeners();
+  }
+
+  /// Put the node inside the subpatch box [box] (null: the top level) — what
+  /// the controller mirrors after the engine moved the object (issue #552).
+  /// Notifies, so the windows on either side re-read their contents.
+  void moveInto(PatchNodeId? box) {
+    if (_container == box) return;
+    _container = box;
     notifyListeners();
   }
 

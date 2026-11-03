@@ -31,7 +31,7 @@ import 'tutorial/patch_tutorial_bar.dart';
 
 /// A verb on the node context menu (issue #356). Every one of them already has
 /// a keyboard route; the menu is what makes them discoverable without one.
-enum _NodeAction { openSubpatch, duplicate, delete }
+enum _NodeAction { openSubpatch, encapsulate, deencapsulate, duplicate, delete }
 
 /// Patcher surface — pan/zoom canvas of nodes and cables.
 ///
@@ -50,6 +50,12 @@ class PatcherSurface extends Surface {
 
   /// Key on the node menu's `open subpatch` item (issue #481).
   static const Key openSubpatchItemKey = Key('PatcherSurface.openSubpatch');
+
+  /// Key on the node menu's `encapsulate` item (issue #552).
+  static const Key encapsulateItemKey = Key('PatcherSurface.encapsulate');
+
+  /// Key on the node menu's `de-encapsulate` item (issue #552).
+  static const Key deencapsulateItemKey = Key('PatcherSurface.deencapsulate');
 
   /// The shell's undo router (#512). The surface registers the open patch's
   /// [UndoScope] here under [PatcherController.undoScopeId], so the shell's
@@ -334,7 +340,9 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   /// change while it is up.
   ///
   /// A subpatch box adds `open subpatch` on top (issue #481) — the way into
-  /// its window from edit mode, where a double-click edits the box's text.
+  /// its window from edit mode, where a double-click edits the box's text —
+  /// and `de-encapsulate`; any selection that can move into a new box offers
+  /// `encapsulate` (issue #552).
   /// [menuContext] is where the menu opens: the surface for the main canvas,
   /// the subpatch window for its own.
   Future<void> _onNodeContextMenu(
@@ -348,6 +356,7 @@ class _PatcherViewportState extends State<_PatcherViewport> {
       menuContext ?? context,
       global,
       subpatch: isBox,
+      encapsulate: controller?.canEncapsulate ?? false,
     );
     if (action == null || !mounted) return;
     final editor = widget.engine.patcherOrNull;
@@ -355,6 +364,12 @@ class _PatcherViewportState extends State<_PatcherViewport> {
     switch (action) {
       case _NodeAction.openSubpatch:
         _openSubpatch(editor, node);
+      case _NodeAction.encapsulate:
+        final box = editor.encapsulateSelection();
+        final boxNode = box == null ? null : editor.graph.nodeById(box);
+        if (boxNode != null) _selectNode(boxNode);
+      case _NodeAction.deencapsulate:
+        editor.deencapsulateSelection();
       case _NodeAction.duplicate:
         editor.duplicateSelection();
       case _NodeAction.delete:
@@ -368,6 +383,7 @@ class _PatcherViewportState extends State<_PatcherViewport> {
     BuildContext menuContext,
     Offset global, {
     bool subpatch = false,
+    bool encapsulate = false,
   }) {
     final overlay =
         Overlay.of(menuContext).context.findRenderObject() as RenderBox;
@@ -380,6 +396,10 @@ class _PatcherViewportState extends State<_PatcherViewport> {
       color: PhiColors.bg2,
       items: [
         if (subpatch) _menuItem('open subpatch', _NodeAction.openSubpatch),
+        if (encapsulate)
+          _menuItem('encapsulate · ctrl+shift+e', _NodeAction.encapsulate),
+        if (subpatch)
+          _menuItem('de-encapsulate · ctrl+shift+d', _NodeAction.deencapsulate),
         _menuItem('duplicate · ctrl+d', _NodeAction.duplicate),
         _menuItem('delete · del', _NodeAction.delete),
       ],
@@ -388,9 +408,12 @@ class _PatcherViewportState extends State<_PatcherViewport> {
 
   PopupMenuItem<_NodeAction> _menuItem(String label, _NodeAction action) {
     return PopupMenuItem<_NodeAction>(
-      key: action == _NodeAction.openSubpatch
-          ? PatcherSurface.openSubpatchItemKey
-          : null,
+      key: switch (action) {
+        _NodeAction.openSubpatch => PatcherSurface.openSubpatchItemKey,
+        _NodeAction.encapsulate => PatcherSurface.encapsulateItemKey,
+        _NodeAction.deencapsulate => PatcherSurface.deencapsulateItemKey,
+        _ => null,
+      },
       value: action,
       height: 32,
       child: Text(

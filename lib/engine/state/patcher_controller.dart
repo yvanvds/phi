@@ -34,9 +34,11 @@ import 'patch_clipboard_data.dart';
 import 'patch_node_spec.dart';
 import 'patcher_commands/connect_cable_command.dart';
 import 'patcher_commands/create_patch_object_command.dart';
+import 'patcher_commands/deencapsulate_patch_subpatches_command.dart';
 import 'patcher_commands/delete_cable_command.dart';
 import 'patcher_commands/delete_patch_nodes_command.dart';
 import 'patcher_commands/duplicate_patch_selection_command.dart';
+import 'patcher_commands/encapsulate_patch_selection_command.dart';
 import 'patcher_commands/move_patch_nodes_command.dart';
 import 'patcher_commands/paste_patch_clipboard_command.dart';
 import 'patcher_commands/reroute_cable_command.dart';
@@ -349,6 +351,92 @@ class PatcherController {
     final native = _nativeByNode[box];
     if (native == null) return;
     _resyncShape(box, native);
+  }
+
+  /// Move the live object [id] into the subpatch box [box], or to the top
+  /// level for null — the primitive encapsulate and de-encapsulate are made of
+  /// (issue #552). The object keeps its logical id, its native handle and every
+  /// cable; a box moves with everything inside it. The pins of the box it left
+  /// and of the one it entered follow when it is a boundary object.
+  void setContainerPrimitive(PatchNodeId id, PatchNodeId? box) {
+    final node = graph.nodeById(id);
+    final native = _nativeByNode[id];
+    if (node == null || native == null) return;
+    final from = node.container;
+    if (from == box) return;
+    final boxNative = box == null ? null : _nativeByNode[box];
+    if (box != null && boxNative == null) return;
+    _gateway.setContainer(instanceId, native, boxNative);
+    node.moveInto(box);
+    _resyncBoxAfter(from, node.type);
+    _resyncBoxAfter(box, node.type);
+  }
+
+  /// Mint a fresh object of [type] with [args] at [position] inside
+  /// [container] — the direct (non-journaled) creation a compound command
+  /// such as encapsulate builds from. Author through [createObject] instead.
+  PatchNode createObjectPrimitive({
+    required String type,
+    required String args,
+    required Offset position,
+    PatchNodeId? container,
+  }) => _create(
+    type: type,
+    args: args,
+    voice: 1,
+    position: position,
+    container: container,
+  );
+
+  /// A cable from [source] to [target] (box pins resolved to the boundary
+  /// object behind them), its kind read off the source outlet — or null when
+  /// the ends are malformed. No typed-pin gate: a compound command rewiring
+  /// what was already wired builds through this.
+  PatchCable? cableBetween(PatchPortId source, PatchPortId target) =>
+      _cableFor(source, target);
+
+  /// Whether the selection can be moved into a new subpatch box (issue #552):
+  /// at least one node, and no inlet or outlet object among them — those are
+  /// the pins of the window they sit in, and moving one would take a pin off
+  /// the box around it.
+  bool get canEncapsulate {
+    final ids = graph.selectedNodes;
+    if (ids.isEmpty) return false;
+    final scope = containerOf(ids.first);
+    for (final id in ids) {
+      final node = graph.nodeById(id);
+      if (node == null || node.container != scope) return false;
+      if (PatchBoundary.isBoundary(node.type)) return false;
+    }
+    return true;
+  }
+
+  /// Move the selected nodes into a new `patcher` box at their place, as one
+  /// journaled step — Max's *Encapsulate* (`Ctrl+Shift+E`, issue #552). Every
+  /// cable the selection's edge cut is routed through a new inlet or outlet of
+  /// the box (`~` for audio, `.` for control). The box becomes the selection;
+  /// its id is returned, or null when [canEncapsulate] says no.
+  PatchNodeId? encapsulateSelection() {
+    if (!canEncapsulate) return null;
+    final command = EncapsulatePatchSelectionCommand(this, graph.selectedNodes);
+    undoScope.run(command);
+    return command.boxId;
+  }
+
+  /// The selected subpatch boxes — what [deencapsulateSelection] unpacks.
+  Set<PatchNodeId> get selectedSubpatches =>
+      graph.selectedNodes.where(isSubpatch).toSet();
+
+  /// Unpack every selected subpatch box into the window it sits in, as one
+  /// journaled step — *De-encapsulate* (`Ctrl+Shift+D`, issue #552), the
+  /// reverse of [encapsulateSelection]. Each box's contents land where the box
+  /// was; its inlet and outlet objects go, and every cable that ran through one
+  /// is wired straight from where it came from to where it went. The unpacked
+  /// objects become the selection. A no-op with no subpatch box selected.
+  void deencapsulateSelection() {
+    final boxes = selectedSubpatches;
+    if (boxes.isEmpty) return;
+    undoScope.run(DeencapsulatePatchSubpatchesCommand(this, boxes));
   }
 
   /// Whether [id] is a subpatch box.
