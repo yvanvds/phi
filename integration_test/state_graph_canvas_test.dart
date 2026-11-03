@@ -1,7 +1,7 @@
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:phi/app.dart';
 import 'package:phi/design/widgets/state_machine/state_node_frame.dart';
 import 'package:phi/domain/project/app_settings/app_settings_controller.dart';

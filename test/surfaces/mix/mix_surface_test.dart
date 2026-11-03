@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:phi/design/widgets/channel_strip/channel_strip.dart';
 import 'package:phi/design/widgets/dialog/delete_impact_dialog.dart';
 import 'package:phi/design/widgets/select/phi_select.dart';

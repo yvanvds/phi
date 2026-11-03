@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../design/tokens/phi_colors.dart';
 import '../../design/tokens/phi_motion.dart';

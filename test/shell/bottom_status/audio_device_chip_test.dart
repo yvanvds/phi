@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:phi/design/tokens/phi_colors.dart';
 import 'package:phi/shell/bottom_status/audio_device_chip.dart';
 import 'package:phi/shell/diagnostics/audio_device_health.dart';

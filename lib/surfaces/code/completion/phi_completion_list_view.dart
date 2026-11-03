@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:re_editor/re_editor.dart';
 
 import '../../../design/tokens/phi_colors.dart';
@@ -73,6 +73,13 @@ class _PhiCompletionListViewState extends State<PhiCompletionListView> {
   @override
   Widget build(BuildContext context) {
     final value = widget.notifier.value;
+    // re_editor hosts this popup in the root overlay under its own Material
+    // from `package:flutter/material.dart`, which `package:material_ui`'s
+    // InkWell does not recognise (#478). Bring a transparent one for the rows.
+    return Material(type: MaterialType.transparency, child: _buildList(value));
+  }
+
+  Widget _buildList(CodeAutocompleteEditingValue value) {
     return Container(
       constraints: BoxConstraints.loose(widget.preferredSize),
       decoration: BoxDecoration(

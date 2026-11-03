@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:phi/design/tokens/phi_colors.dart';
 import 'package:phi/domain/project/project_registry.dart';
 import 'package:phi/surfaces/code/code_editor_view.dart';
 import 'package:phi/surfaces/code/code_eval_flash.dart';
@@ -78,5 +79,19 @@ void main() {
     await pump(tester);
     expect(find.byType(CodeAutocomplete), findsNothing);
     expect(find.byType(CodeEditor), findsOneWidget);
+  });
+
+  // re_editor falls back to the legacy `package:flutter/material.dart` Theme
+  // for an unset highlight colour; since #478 Phi's theme comes from
+  // material_ui, so the colour is pinned to what that fallback used to give.
+  testWidgets('pins the highlight colour instead of reading a Theme', (
+    tester,
+  ) async {
+    await pump(tester);
+    final editor = tester.widget<CodeEditor>(find.byType(CodeEditor));
+    expect(
+      editor.style?.highlightColor,
+      PhiColors.voice1.withValues(alpha: 0.4),
+    );
   });
 }

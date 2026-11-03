@@ -16,9 +16,11 @@ start. Pair with [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md).
    tests.
 3. **One class per file.** Filename = `snake_case(ClassName)`. Folders are
    cheap; bundling classes is friction.
-4. **Layered structure.** `core/` → `domain/` → `design/` → `engine/` →
-   `shell/`+`surfaces/` → `app/main`. One-way dependencies. Update
-   `docs/PROJECT_OVERVIEW.md` after structural changes.
+4. **Layered structure.** `core/` → `platform/` → `domain/` → `design/` →
+   `engine/` → `shell/`+`surfaces/` → `app/main`. One-way dependencies.
+   `platform/` holds OS facilities outside the engine (pure Dart +
+   `dart:ffi`, no Flutter). Update `docs/PROJECT_OVERVIEW.md` after
+   structural changes.
 5. **Design tokens come from `design system/colors_and_type.css`.** Dart
    tokens under `lib/design/tokens/` are derivations — keep them in sync.
 6. **User docs follow behaviour.** A change users can see updates the
@@ -46,10 +48,13 @@ maintainer-applied.
 
 ## Running locally
 
-Requires Windows or Linux (x64) and Flutter ≥ 3.47.1. There is no 3D Scene
-renderer on any platform for now (#455). `yse` (^0.2.0) comes from pub.dev; its
-native-assets build hook downloads and bundles the engine (`libyse.dll` next to
-the executable, `libyse.so` in `bundle/lib/`), so no engine setup is needed.
+Requires Windows or Linux (x64) and Flutter at the **pinned master revision**
+in `.fvmrc` (#478), for the experimental multi-window API. Stable does not
+resolve: `pubspec.yaml`'s `environment:` floors are that revision's versions.
+There is no 3D Scene renderer on any platform for now (#455). `yse` (^0.2.0)
+comes from pub.dev; its native-assets build hook downloads and bundles the
+engine (`libyse.dll` next to the executable, `libyse.so` in `bundle/lib/`), so
+no engine setup is needed.
 `YSE_DLL_PATH` (a directory) still takes precedence, for testing against a
 local engine build. See [README.md](README.md).
 
@@ -59,6 +64,24 @@ flutter analyze
 flutter test
 flutter run -d windows
 ```
+
+### The Flutter SDK: pinned master
+
+On the Linux dev machine, `~/flutter` is stable and stays the default for
+every other project. `~/flutter-master` is a full clone of `flutter/flutter`,
+checked out (detached) at the commit in `.fvmrc`. `~/.local/bin/flutter` and
+`dart` are a shim that picks the SDK by the current directory from
+`~/.config/flutter-sdk/map` (the line `/home/phi/dev/phi
+/home/phi/flutter-master`); everything else falls back to `~/flutter`.
+`~/.local/bin` has to come before `~/flutter/bin` on `PATH`, or the shim never
+runs. Inside the repo, `flutter --version` must report the pinned revision
+(`channel [user-branch]` is expected on a detached checkout). The windowing
+flag is on: `flutter config --enable-windowing`, run once from inside the
+repo. It lands in the shared `~/.config/flutter/settings`; stable lists it as
+"(Unavailable)" and ignores it.
+
+To bump the pin, follow "Toolchain" in
+[docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md). A bump is its own PR.
 
 ### Integration tests on Linux: always headless
 

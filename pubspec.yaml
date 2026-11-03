@@ -3,9 +3,12 @@ description: "Phi — flexible workstation for live electronic music performance
 publish_to: 'none'
 version: 0.1.0+1
 
+# Floors = the pinned Flutter master revision in `.fvmrc` (#478): the CI pin,
+# these floors and `pubspec.lock`'s `sdks:` block are one contract, bumped
+# together (see the header of .github/workflows/ci.yaml).
 environment:
-  sdk: ^3.13.1
-  flutter: ">=3.47.1"
+  sdk: ^3.15.0-101.0.dev
+  flutter: ">=3.50.0-1.0.pre-376"
 
 dependencies:
   flutter:
@@ -30,6 +33,11 @@ dependencies:
   # lib/platform/thread_cpu/kernel32_thread_api.dart). Already in the graph
   # through yse; declared because Phi now imports it directly.
   ffi: ^2.2.0
+  # Material widgets (#478). Flutter master deprecates the in-tree
+  # `package:flutter/material.dart` in favour of this package, a copy of the
+  # same library decoupled into flutter/packages. Import
+  # `package:material_ui/material_ui.dart`, never the framework's material.
+  material_ui: ^1.9.0
 
 dev_dependencies:
   flutter_test:

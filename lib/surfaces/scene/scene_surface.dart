@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:vector_math/vector_math_64.dart';
 
 import '../../design/tokens/phi_colors.dart';

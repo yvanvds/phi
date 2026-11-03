@@ -17,7 +17,7 @@ since issue #454). No 3D Scene renderer on any platform for now (#455).
 |--------------|-------------------------------------------------------|
 | Audio engine | C++ (`yse-soundengine`)                               |
 | FFI bridge   | `dart-yse` — Dart wrapper, package name `yse`         |
-| UI shell     | Flutter ≥ 3.47.1, Windows + Linux x64 desktop          |
+| UI shell     | Flutter, pinned master revision (`.fvmrc`, #478), Windows + Linux x64 desktop; Material widgets from `package:material_ui` |
 | Design       | Dart tokens derived from `design system/colors_and_type.css` |
 | 3D viewport  | none for now — `PlaceholderSceneRenderer` (macbear_3d removed in #456; return tracked in #455) |
 | Scripting    | Python with DSL (Phase ≥ 2 — not yet)                 |
@@ -29,6 +29,84 @@ its runtime DLLs next to the executable on Windows (`libyse.so` into
 system), locally and in CI; `YSE_DLL_PATH`
 (a directory) overrides it for a local engine build. The `dart-yse` source
 checkout at `d:\dart-yse` is only needed to work on the wrapper itself.
+
+## Toolchain
+
+Phi tracks a **pinned Flutter master revision**, not a stable release (#478):
+it builds on Flutter's experimental multi-window API, which is master-only and
+behind `flutter config --enable-windowing` (the #296 re-evaluation, fired
+early on purpose). The pin is the 40-char commit in `.fvmrc` at the repo root
+(`{"flutter": "<sha>"}`, the FVM format). Every "Set up Flutter" step in
+`ci.yaml` (three jobs) and `integration.yaml` reads it via
+`flutter-version-file:` with `channel: master`, then runs
+`flutter config --enable-windowing`. On master the action `git clone`s
+flutter/flutter, which needs long paths on Windows, so the Windows jobs set
+`git config --global core.longpaths true` first.
+
+Current pin: `934720261be051307da25be7911628d61ccb8b72` (2026-11-03),
+`flutter --version` `3.50.0-1.0.pre-376`, Dart `3.15.0-101.0.dev`.
+
+Windowing API available at this pin. Import
+`package:flutter/src/widgets/_window.dart` (and
+`package:flutter/src/foundation/_features.dart` for `isWindowingEnabled`)
+under `// ignore_for_file: invalid_use_of_internal_member,
+implementation_imports`: every name is `@internal` and throws
+`UnsupportedError` while the flag is off.
+- `WindowController` (factory `WindowController({size, constraints, title,
+  delegate})` and `WindowController.shrinkWrap`) plus the `Window` widget.
+  These were `RegularWindowController` / `RegularWindow` in earlier builds.
+- `WindowControllerDelegate`, for lifecycle such as close requests.
+- `DialogWindowController` / `DialogWindow`, `PopupWindowController` /
+  `PopupWindow`, `TooltipWindowController` / `TooltipWindow`,
+  `SatelliteWindowController` / `SatelliteWindow`.
+- `WindowScope` (the controller from inside a window), `WindowingOwner`
+  (`WidgetsBinding.instance.windowingOwner`), `WindowRegistry` /
+  `WindowEntry` / `WindowManager`.
+- `runWidget` and `View` (public `package:flutter/widgets.dart`).
+
+The flutter-material split also landed on master:
+`package:flutter/material.dart` is deprecated, so Phi depends on
+`material_ui` (pub.dev) and imports `package:material_ui/material_ui.dart`
+everywhere. Its classes are copies, not re-exports, so a dependency still on
+the legacy library (`re_editor`) sees a different `Theme` and `Material`
+than Phi's. Don't rely on theme fallbacks inside such a package, and give
+Phi widgets their own `Material` when it hosts them (see
+`PhiCompletionListView`).
+
+**Linux engine caveat.** Every master build since the clang roll of
+2026-09-12 (flutter PR 192607) ships a `libflutter_linux_gtk.so` that exports
+LLVM libunwind's `_Unwind_*` / `unw_*` symbols. Those shadow libgcc_s for the
+whole process, so a `pthread_cancel` crashes: PipeWire cancels its loop thread
+whenever libYSE closes the audio device, which killed Phi on every engine
+restart and on exit.
+`linux/runner/CMakeLists.txt` therefore links `libgcc_s` first, ahead of the
+engine and the plugins. `integration_test/control_plane_real_bus_tap_test.dart`
+catches a regression when run on Linux. CI runs it on Windows only, so run it
+locally on each bump. Drop the workaround once
+`nm -D --defined-only libflutter_linux_gtk.so | grep _Unwind_` comes back
+empty.
+
+**Bumping the pin** (its own PR, labelled `ci:integration`):
+1. `git -C ~/flutter-master fetch origin` and
+   `git -C ~/flutter-master checkout <sha>`, detached at a recent master
+   commit. A full clone with tags is required, because the version comes
+   from `git describe`.
+2. From inside `~/dev/phi`, `flutter --version` must report `<sha>`. That
+   needs the shim map line `/home/phi/dev/phi /home/phi/flutter-master` in
+   `~/.config/flutter-sdk/map`; see CLAUDE.md "Running locally".
+3. Write `<sha>` into `.fvmrc`. Set `pubspec.yaml`'s `environment:` floors to
+   that revision: `flutter: ">=<framework version>"` and
+   `sdk: ^<Dart version>`.
+4. Run `flutter pub get` to regenerate `pubspec.lock`; CI enforces it with
+   `--enforce-lockfile`.
+5. Run the gates: `dart format`, `flutter analyze`, the full `flutter test`,
+   `flutter build linux`, and integration files headless (always including
+   `control_plane_real_bus_tap_test.dart`, see the Linux caveat above). Fix
+   new deprecations, and check that the windowing names above still exist.
+6. Update the "Current pin" line and the API list in this section.
+
+Machines without the shim can use any master clone at the pin, or
+`fvm use`, which reads `.fvmrc`.
 
 ## Layered folder structure under `lib/`
 
@@ -3225,6 +3303,7 @@ main + app          (orchestration)
 - **Design previews:** `design system/preview/*.html` and
   `design system/ui_kits/phi-workstation/*.jsx` — open these when sketching
   new surfaces in Flutter.
+- **Flutter pin:** `.fvmrc` (see "Toolchain" above).
 - **CI:** `.github/workflows/ci.yaml` (analyze + test + coverage; a Linux
   release build on every PR/push that asserts `libyse.so` in `bundle/lib/`; the
   Windows build is gated to `main`), `.github/workflows/integration.yaml` (the

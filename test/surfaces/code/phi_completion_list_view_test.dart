@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:phi/design/tokens/phi_colors.dart';
 import 'package:phi/design/tokens/phi_voices.dart';
 import 'package:phi/domain/code/completion/phi_completion_item.dart';
@@ -125,6 +125,34 @@ void main() {
 
     expect(selected, isNotNull);
     expect(selected!.word, 'phrase_a');
+  });
+
+  // re_editor inserts the popup into the root overlay under its own
+  // `package:flutter/material.dart` Material. Since #478 Phi's widgets come
+  // from `package:material_ui`, whose InkWell does not recognise that legacy
+  // Material, so the view has to bring its own.
+  testWidgets('renders and selects with no Material ancestor of its own', (
+    tester,
+  ) async {
+    final notifier = ValueNotifier(value());
+    addTearDown(notifier.dispose);
+    CodeAutocompleteResult? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: PhiCompletionListView(
+            notifier: notifier,
+            onSelected: (r) => selected = r,
+          ),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(PhiCompletionListView.rowKey('bells')));
+    await tester.pump();
+
+    expect(selected?.word, 'bells');
   });
 
   testWidgets('highlights the typed prefix on a narrowed row', (tester) async {
