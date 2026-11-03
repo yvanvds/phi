@@ -176,6 +176,9 @@ everything inside it along. A subpatch with objects inside cannot be retyped
 into another object (a banner says so). The contents are saved with the
 patch.
 
+The `patcher` tutorial (see [Tutorials](#tutorials)) is a gain subpatch to
+play with and open.
+
 A subpatch window closes when its box is deleted, when you switch to another
 patch or open a tutorial, and when Phi closes. The reference panel shows a
 selected subpatch's name and how many inlets and outlets it has.
@@ -230,8 +233,8 @@ counts, and an `OPEN SUBPATCH` button.
 Tutorials are example patches that come with Phi, each demonstrating an
 object. Find them in the palette's TUTORIALS tab (grouped by category,
 searchable), through the reference panel's `OPEN TUTORIAL` button, or with
-the command palette's `Open Patcher Tutorial…`. So far there are tutorials
-for:
+the command palette's `Open Patcher Tutorial…`. Every object has one. They
+cover:
 
 - **GUI basics:** the button (`b`), the toggle (`t`), the slider (`slider`),
   the number boxes (`i` and `f`, which share one tutorial), the message box
@@ -310,8 +313,12 @@ for:
   (`print`). A name belongs to its patch. For now only one `r` of a name hears
   an `s` in the same patch. The `s` and `r` tutorial also shows how to reach
   an `r` from the Code surface: copy it to the project, then
-  `patch.tutorials.s_r.send('pitch', 67)`. A tutorial for subpatch inlets and
-  outlets follows once subpatches arrive.
+  `patch.tutorials.s_r.send('pitch', 67)`.
+- **Subpatches:** a gain subpatch (`patcher`, `.inlet`, `.outlet`, `~inlet`
+  and `~outlet`, which share one tutorial). The inlet and outlet objects
+  inside the box are its pins, numbered by their argument, with messages and
+  audio sharing one numbering. A message sent into a `~inlet` is dropped.
+  Double-click the box to open it, read-only, in its own window.
 - **Data stores and sequencers:** messages stored at addresses (`coll`), an
   array of ints read as steps or as weights (`table`), a function stored as
   points (`funbuff`), the notes held down (`bag`), a record of what went past

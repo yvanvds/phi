@@ -4,10 +4,12 @@ import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phi/domain/log/log_level.dart' as phi;
+import 'package:phi/domain/patcher/patch_port_kind.dart';
 import 'package:phi/domain/patcher/patch_type_name.dart';
 import 'package:phi/domain/patcher/tutorial/patch_tutorial.dart';
 import 'package:phi/domain/patcher/tutorial/tutorial_catalog.dart';
 import 'package:phi/domain/patcher/tutorial/tutorial_slug.dart';
+import 'package:phi/engine/bridge/patch_pin_compatibility.dart';
 import 'package:phi/engine/bridge/patcher_graph_snapshot.dart';
 import 'package:phi/engine/bridge/real_patcher_gateway.dart';
 import 'package:phi/engine/state/tutorial/patch_tutorial_session.dart';
@@ -7523,10 +7525,183 @@ void main() {
     });
   });
 
+  test('the subpatch and its four boundary objects share one tutorial '
+      '(#536)', () {
+    for (final type in ['patcher', '.inlet', '.outlet', '~inlet', '~outlet']) {
+      expect(index.tutorialFor(type), 'subpatch', reason: type);
+    }
+  });
+
+  group('the subpatch tutorial (#536) does what its notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+
+    // Renders [blocks] blocks and returns the loudest master peak among them.
+    double loudness([int blocks = 60]) {
+      var peak = 0.0;
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+        final p = Channel.master.peakLinearPost();
+        if (p > peak) peak = p;
+      }
+      return peak;
+    }
+
+    // Opened the way the app opens a tutorial: one main output, mounted on
+    // master, measured once the sound is in the mix (#525).
+    setUp(() {
+      inst = gateway.createInstance(mainOutputs: 1);
+      gateway.parseJson(inst, jsonEncode(load('subpatch').payload.dump));
+      graph = gateway.enumerate(inst);
+      gateway.mountAsSource(inst);
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        loudness(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: 'mounted');
+    });
+
+    tearDown(() {
+      gateway.disposeInstance(inst);
+      loudness(20);
+    });
+
+    PatcherObjectSnapshot at(String type, double x, double y) =>
+        graph.objects.firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        );
+    int id(String type, double x, double y) => at(type, x, y).handleId;
+    PatcherObjectSnapshot box() =>
+        graph.objects.singleWhere((o) => o.type == 'patcher');
+    void click(int id) => gateway.sendBang(inst, id, 0);
+    // The level a mono sine reaches on master through [gain]: one channel,
+    // centred, so each side 3 dB down.
+    double through(double gain) => gain * math.sqrt1_2;
+
+    test('the box: named gain, its pins the boundary objects inside', () {
+      final gain = box();
+      expect(gain.args, 'gain');
+      expect(gain.container, isNull);
+      final inside = {
+        for (final o in graph.objects)
+          if (o.container == gain.handleId && !PatchTypeName.isNote(o.type))
+            '${o.type} ${o.args}',
+      };
+      expect(inside, {
+        '~inlet 0',
+        '.inlet 1',
+        '~* 0',
+        '~outlet 0',
+        '.outlet 1',
+      });
+      expect(
+        graph.objects.where(
+          (o) => o.container == gain.handleId && PatchTypeName.isNote(o.type),
+        ),
+        hasLength(1),
+        reason: 'a note inside, for the subpatch window',
+      );
+      // Notes 2 and 3: one numbering per side, the object sets the kind.
+      expect(gain.ports.inputs, 2);
+      expect(gain.ports.inputKinds, [
+        PatchPortKind.audio,
+        PatchPortKind.control,
+      ]);
+      expect(gain.ports.outputs, 2);
+      expect(gain.ports.outputKinds, [
+        PatchPortKind.audio,
+        PatchPortKind.control,
+      ]);
+      // The inside: ~inlet → ~* → ~outlet, .inlet 1 to the gain and out.
+      final ain = id('~inlet', 60, 60);
+      final cin = id('.inlet', 200, 60);
+      final mul = id('~*', 60, 140);
+      final aout = id('~outlet', 60, 220);
+      final cout = id('.outlet', 200, 220);
+      final cords = {
+        for (final c in graph.connections)
+          (c.fromHandleId, c.outlet, c.toHandleId, c.inlet),
+      };
+      expect(
+        cords,
+        containsAll([
+          (ain, 0, mul, 0),
+          (cin, 0, mul, 1),
+          (cin, 0, cout, 0),
+          (mul, 0, aout, 0),
+          // The parent's cords, recorded on the boundary objects.
+          (id('~sine', 140, 160), 0, ain, 0),
+          (id('.m', 60, 240), 0, ain, 0),
+          (id('.f', 240, 220), 0, cin, 0),
+          (aout, 0, id('~dac', 60, 420), 0),
+          (cout, 0, id('.f', 200, 420), 0),
+        ]),
+      );
+    });
+
+    test('note 1: silent on open, the gain sets the level, comes back out', () {
+      expect(loudness(), lessThan(1e-4), reason: '~* 0 inside');
+      final shown = id('.f', 200, 420);
+      click(id('.m', 350, 160)); // 0.1
+      expect(loudness(200), closeTo(through(0.1), 1e-3));
+      expect(double.parse(gateway.guiValue(inst, shown)), closeTo(0.1, 1e-6));
+      click(id('.m', 460, 160)); // 0.2
+      expect(loudness(200), closeTo(through(0.2), 1e-3));
+      expect(double.parse(gateway.guiValue(inst, shown)), closeTo(0.2, 1e-6));
+      // Typed into the f box.
+      gateway.sendFloat(inst, id('.f', 240, 220), 0, 0.15);
+      expect(loudness(200), closeTo(through(0.15), 1e-3));
+      expect(double.parse(gateway.guiValue(inst, shown)), closeTo(0.15, 1e-6));
+      click(id('.m', 240, 160)); // 0.
+      loudness(20);
+      expect(loudness(), lessThan(1e-4), reason: '0. turns it off');
+      expect(double.parse(gateway.guiValue(inst, shown)), 0);
+    });
+
+    test('note 4: a message into the ~inlet is dropped; a number box cannot '
+        'be wired there, a message box can', () {
+      click(id('.m', 460, 160)); // 0.2
+      final up = loudness(200);
+      expect(up, closeTo(through(0.2), 1e-3));
+      click(id('.m', 60, 240)); // 0. into the audio inlet
+      loudness(20);
+      expect(loudness(200), closeTo(up, 1e-4), reason: 'the sine plays on');
+      // Without the sine, the message alone puts nothing on the signal.
+      final sine = id('~sine', 140, 160);
+      final ain = id('~inlet', 60, 60);
+      gateway.disconnect(
+        inst,
+        fromHandleId: sine,
+        outlet: 0,
+        toHandleId: ain,
+        inlet: 0,
+      );
+      loudness(20);
+      click(id('.m', 60, 240));
+      expect(loudness(200), lessThan(1e-4), reason: 'dropped');
+      // The editor's drag-time check (PatcherController.canConnect).
+      final types = {for (final d in gateway.objectTypes()) d.type: d};
+      final accepts = types['~inlet']!.inlets.single.accepts;
+      expect(
+        patchPinsCompatible(types['.f']!.outlets.single.type, accepts),
+        isFalse,
+        reason: 'a number box',
+      );
+      expect(
+        patchPinsCompatible(types['.m']!.outlets.single.type, accepts),
+        isTrue,
+        reason: 'a message box',
+      );
+    });
+  });
+
   test('report: object types with no tutorial yet', () {
     final missing = [
       for (final t in engineTypes.toList()..sort())
-        if (!index.hasTutorial(t) && t != 'patcher') t,
+        if (!index.hasTutorial(t)) t,
     ];
     // ignore: avoid_print
     print(
