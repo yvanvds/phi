@@ -321,8 +321,9 @@ live-code control).
 
 ## 9. Out of scope
 
-- **Subpatcher dive-in editing** — the `patcher` object type exists in
-  the engine; v1 does not offer it (see open question 2).
+- ~~**Subpatcher dive-in editing**~~ — done in issue #481: a subpatch opens
+  in its own window (see §10 decision 2). Reusable abstraction files and
+  "encapsulate selection" remain out of scope.
 - **Clip-note dispatch into patchers** (§4) — future yse issue.
 - **Patcher-as-synth-definition** (a voice playing a patch) — follows
   clip-note dispatch; not designed here.
@@ -337,7 +338,14 @@ live-code control).
    control receivers; clip-note dispatch deferred behind a future yse
    issue.
 2. **The subpatcher object is hidden from the palette in v1** — no
-   dive-in editing means showing it would be a trap.
+   dive-in editing means showing it would be a trap. *Revisited in issue
+   #481:* a `patcher` box now opens in a native window of its own (Flutter's
+   windowing API, #478) over the same `PatcherController`, so it is in the
+   palette. Contents are ordinary objects of the same native patcher marked as
+   inside the box (`PatcherGateway.setContainer`), stored inline in the one
+   dump. The box's pins are its `.inlet` / `~inlet` / `.outlet` / `~outlet`
+   objects; a cable the parent wires to a pin is recorded on that boundary
+   object, by the engine and by the editor alike, and drawn on the box.
 3. **Live GUI bodies ship in v1** — the seam already exists and it is
    the Max feel.
 

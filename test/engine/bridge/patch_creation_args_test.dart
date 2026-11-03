@@ -191,4 +191,19 @@ void main() {
       expect(PatchCreationArgs.check(send, 'bells extra').problem, isNotNull);
     });
   });
+
+  group('a subpatch name is free text (issue #481)', () {
+    // The engine documents no parameter for `patcher`, but keeps the string.
+    final box = desc('patcher', []);
+
+    test('a name, even of several words, passes through', () {
+      final checked = PatchCreationArgs.check(box, ' gain stage ');
+      expect(checked.isValid, isTrue);
+      expect(checked.args, 'gain stage');
+    });
+
+    test('no name is an unnamed subpatch', () {
+      expect(PatchCreationArgs.check(box, '').args, isEmpty);
+    });
+  });
 }

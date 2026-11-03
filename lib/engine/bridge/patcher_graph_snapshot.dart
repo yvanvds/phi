@@ -18,6 +18,7 @@ class PatcherObjectSnapshot {
     required this.args,
     required this.position,
     required this.ports,
+    this.container,
   });
 
   /// The native handle id that keys every gateway op on this object.
@@ -35,6 +36,10 @@ class PatcherObjectSnapshot {
 
   /// The object's inlet / outlet topology (counts + audio/control kinds).
   final PatcherNodeSnapshot ports;
+
+  /// The handle id of the subpatch this object sits directly inside, or null
+  /// at the top level (issue #481).
+  final int? container;
 }
 
 /// One connection read back from a live patcher instance by

@@ -10,6 +10,7 @@ import '../../design/widgets/patcher/patch_note_metrics.dart';
 import '../../design/widgets/patcher/patch_object_box_metrics.dart';
 import '../../domain/midi/midi_pitch.dart';
 import '../../domain/patcher/keyboard_layout.dart';
+import '../../domain/patcher/patch_boundary.dart';
 import '../../domain/patcher/patch_cable.dart';
 import '../../domain/patcher/patch_graph.dart';
 import '../../domain/patcher/patch_gui_property.dart';
@@ -242,12 +243,14 @@ class PatcherController {
     required Offset position,
     String? args,
     int voice = 1,
+    PatchNodeId? container,
   }) {
     return _create(
       type: desc.type,
       args: args ?? _defaultArgsFor(desc),
       voice: voice,
       position: position,
+      container: container,
       // No size: _create measures the object box, or takes the tuned size a
       // registered GUI body declares.
     );
@@ -262,11 +265,15 @@ class PatcherController {
   /// checked against the type's documented parameters (`PatchCreationArgs`);
   /// null falls back to those documented defaults, which is what a palette drop
   /// wants. The new node becomes the selection.
+  ///
+  /// [container] is the subpatch box whose window the gesture happened in, or
+  /// null for the patch's own top level (issue #481).
   PatchNodeId? createObject({
     required PatchObjectDescriptor desc,
     required Offset position,
     String? args,
     int voice = 1,
+    PatchNodeId? container,
   }) {
     final command = CreatePatchObjectCommand(
       this,
@@ -274,6 +281,7 @@ class PatcherController {
       args: args ?? _defaultArgsFor(desc),
       position: position,
       voice: voice,
+      container: container,
     );
     undoScope.run(command);
     return command.createdId;
@@ -287,17 +295,20 @@ class PatcherController {
     required int voice,
     required Offset position,
     Size? size,
+    PatchNodeId? container,
   }) {
     final native = _gateway.createObject(instanceId, type, args: args);
     final id = _mintLogicalId(native);
     _nativeByNode[id] = native;
     _argsByNode[id] = args;
+    _placeInside(native, container);
     _gateway.setNodePosition(instanceId, native, position);
     final snapshot = _gateway.inspect(instanceId, native);
     final node = PatchNode(
       id: id,
       type: type,
       voice: voice,
+      container: container,
       position: position,
       size: _sizeFor(
         type: type,
@@ -310,7 +321,155 @@ class PatcherController {
       outputs: _portsFrom(snapshot, PatchPortSide.output, voice),
     );
     graph.addNode(node);
+    _resyncBoxAfter(container, type);
     return node;
+  }
+
+  // ─── subpatches (issue #481) ─────────────────────────────────────────
+
+  /// Put the fresh native object [native] inside the subpatch box [container]
+  /// (nothing for the top level).
+  void _placeInside(int native, PatchNodeId? container) {
+    if (container == null) return;
+    final box = _nativeByNode[container];
+    if (box != null) _gateway.setContainer(instanceId, native, box);
+  }
+
+  /// Re-read the pins of subpatch box [container] after a node of [type]
+  /// inside it appeared, went, or changed — only a boundary object moves them.
+  void _resyncBoxAfter(PatchNodeId? container, String type) {
+    if (container == null || !PatchBoundary.isBoundary(type)) return;
+    _resyncSubpatch(container);
+  }
+
+  /// Re-inspect the subpatch box [box] so its pins follow the boundary objects
+  /// inside it. No cable hangs off a box itself — the ones the parent wires to
+  /// it are recorded on the boundary objects — so this only ever re-shapes.
+  void _resyncSubpatch(PatchNodeId box) {
+    final native = _nativeByNode[box];
+    if (native == null) return;
+    _resyncShape(box, native);
+  }
+
+  /// Whether [id] is a subpatch box.
+  bool isSubpatch(PatchNodeId id) =>
+      PatchBoundary.isSubpatch(graph.nodeById(id)?.type ?? '');
+
+  /// The subpatch box [id] sits inside, or null at the top level.
+  PatchNodeId? containerOf(PatchNodeId id) => graph.nodeById(id)?.container;
+
+  /// The nodes shown in the window of [scope] — the subpatch box's contents,
+  /// or the top level of the patch for null.
+  Iterable<PatchNode> nodesIn(PatchNodeId? scope) =>
+      graph.nodes.where((n) => n.container == scope);
+
+  /// [roots] and everything inside them, at any depth, **containers before
+  /// their contents** — the order a restore needs (a box has to exist before
+  /// anything can be put in it). Delete in the reverse order.
+  List<PatchNodeId> subtreeOf(Iterable<PatchNodeId> roots) {
+    final children = <PatchNodeId, List<PatchNodeId>>{};
+    for (final n in graph.nodes) {
+      final c = n.container;
+      if (c != null) children.putIfAbsent(c, () => []).add(n.id);
+    }
+    final out = <PatchNodeId>[];
+    final seen = <PatchNodeId>{};
+    void visit(PatchNodeId id) {
+      if (!seen.add(id)) return;
+      out.add(id);
+      for (final child in children[id] ?? const <PatchNodeId>[]) {
+        visit(child);
+      }
+    }
+
+    roots.forEach(visit);
+    return out;
+  }
+
+  /// The name a subpatch box was given — its arguments, the way Max's
+  /// `p gain` reads — or `''` for an unnamed one.
+  String subpatchNameOf(PatchNodeId id) => argsOf(id).trim();
+
+  /// The path of [scope] as a window names it: every enclosing subpatch's name
+  /// from the top down, joined by ` › ` (`patcher` for an unnamed one). Empty
+  /// for the top level.
+  String scopeTitle(PatchNodeId? scope) {
+    final names = <String>[];
+    for (var at = scope; at != null; at = containerOf(at)) {
+      final name = subpatchNameOf(at);
+      names.insert(0, name.isEmpty ? PatchObjectTypes.patcher : name);
+    }
+    return names.join(' › ');
+  }
+
+  /// The pin [port] actually names in the engine: itself, unless it is a pin
+  /// of a subpatch box — then the parent-facing pin of the boundary object
+  /// inside that claims it (an inlet's input 0, an outlet's output 0), which is
+  /// where the engine records the cable. Null for a box pin no boundary object
+  /// claims: there is nothing to wire it to.
+  PatchPortId? resolvePin(PatchPortId port) {
+    final node = graph.nodeById(port.nodeId);
+    if (node == null || !PatchBoundary.isSubpatch(node.type)) return port;
+    for (final child in graph.nodes) {
+      if (child.container != node.id) continue;
+      if (PatchBoundary.boxSideOf(child.type) != port.side) continue;
+      if (PatchBoundary.indexOf(argsOf(child.id)) != port.index) continue;
+      return PatchPortId(nodeId: child.id, side: port.side, index: 0);
+    }
+    return null;
+  }
+
+  /// Where [port] is drawn: on the subpatch box, for the parent-facing pin of a
+  /// boundary object (the box's pin with that object's index), else on its own
+  /// node. The inverse of [resolvePin], for the canvas to draw a cable the
+  /// parent wired to a box at the box.
+  PatchPortId displayPort(PatchPortId port) {
+    final node = graph.nodeById(port.nodeId);
+    final box = node?.container;
+    if (node == null || box == null) return port;
+    if (!PatchBoundary.isParentFacing(node.type, port.side, port.index)) {
+      return port;
+    }
+    return PatchPortId(
+      nodeId: box,
+      side: port.side,
+      index: PatchBoundary.indexOf(argsOf(node.id)),
+    );
+  }
+
+  /// Whether [port] is drawn (and can be wired) on its own node. A boundary
+  /// object's parent-facing pin is not: it is reached through the box, from
+  /// the window around it.
+  bool isPortVisible(PatchPortId port) {
+    final node = graph.nodeById(port.nodeId);
+    if (node == null) return false;
+    return !PatchBoundary.isParentFacing(node.type, port.side, port.index);
+  }
+
+  /// The window [cable] is drawn in — the scope its (displayed) ends sit in.
+  PatchNodeId? _cableScope(PatchCable cable) =>
+      containerOf(displayPort(cable.source).nodeId);
+
+  /// The pan/zoom of the window showing [scope]: the patch's own [transform]
+  /// at the top level, and one per subpatch window otherwise, kept for the
+  /// editor's life so a reopened window comes back where it was left.
+  TransformationController transformFor(PatchNodeId? scope) {
+    if (scope == null) return transform;
+    return _scopeTransforms.putIfAbsent(scope, TransformationController.new);
+  }
+
+  final Map<PatchNodeId, TransformationController> _scopeTransforms = {};
+
+  /// Keyboard and pointer moved to the window of [scope]: drop a selection that
+  /// lives in another window, so `Delete` or `Ctrl+D` here can never act on
+  /// nodes the user is not looking at. One selection per editor, always in one
+  /// window.
+  void focusScope(PatchNodeId? scope) {
+    final cable = graph.selectedCable;
+    final foreign =
+        graph.selectedNodes.any((id) => containerOf(id) != scope) ||
+        (cable != null && _cableScope(cable) != scope);
+    if (foreign) graph.clearSelection();
   }
 
   /// Reify one side of a gateway [snapshot] into [PatchPort]s for a node of
@@ -497,11 +656,13 @@ class PatcherController {
       };
       if (gui.isNotEmpty) _guiByNode[id] = gui;
       final ports = obj.ports;
+      final container = obj.container;
       graph.addNode(
         PatchNode(
           id: id,
           type: obj.type,
           voice: 1,
+          container: container == null ? null : PatchNodeId(container),
           position: obj.position ?? Offset.zero,
           size: _sizeFor(
             type: obj.type,
@@ -594,7 +755,10 @@ class PatcherController {
 
   /// Structural validity + a built [PatchCable] (kind from the source outlet),
   /// or null when the endpoints are malformed. No typed-pin gate here.
-  PatchCable? _cableFor(PatchPortId source, PatchPortId target) {
+  PatchCable? _cableFor(PatchPortId boxSource, PatchPortId boxTarget) {
+    final source = resolvePin(boxSource);
+    final target = resolvePin(boxTarget);
+    if (source == null || target == null) return null;
     if (source.side != PatchPortSide.output) return null;
     if (target.side != PatchPortSide.input) return null;
     final srcNode = graph.nodeById(source.nodeId);
@@ -1048,7 +1212,9 @@ class PatcherController {
 
   /// The data type an outlet emits (`OutType`), read from the object catalogue
   /// and falling back to the reified port kind for uncatalogued types.
-  PatchOutletType outletTypeOf(PatchPortId source) {
+  PatchOutletType outletTypeOf(PatchPortId boxSource) {
+    final source = resolvePin(boxSource);
+    if (source == null) return PatchOutletType.invalid;
     final node = graph.nodeById(source.nodeId);
     if (node == null) return PatchOutletType.invalid;
     final desc = _catalogue[node.type];
@@ -1065,7 +1231,9 @@ class PatcherController {
 
   /// The message kinds an inlet accepts, from the catalogue (falling back to
   /// the reified port kind for uncatalogued types).
-  Set<PatchInletAccept> inletAcceptsOf(PatchPortId target) {
+  Set<PatchInletAccept> inletAcceptsOf(PatchPortId boxTarget) {
+    final target = resolvePin(boxTarget);
+    if (target == null) return const {};
     final node = graph.nodeById(target.nodeId);
     if (node == null) return const {};
     final desc = _catalogue[node.type];
@@ -1089,7 +1257,14 @@ class PatcherController {
   /// structurally sound, not a self-wire, not a duplicate, and typed-pin
   /// compatible ([patchPinsCompatible]). Drives inlet highlighting and drop
   /// acceptance — unlike [connect], which is deliberately permissive.
-  bool canConnect(PatchPortId source, PatchPortId target) {
+  ///
+  /// Either end may be a pin of a subpatch box (issue #481): it stands for the
+  /// boundary object claiming it ([resolvePin]), and a pin nothing claims
+  /// cannot be wired.
+  bool canConnect(PatchPortId boxSource, PatchPortId boxTarget) {
+    final source = resolvePin(boxSource);
+    final target = resolvePin(boxTarget);
+    if (source == null || target == null) return false;
     if (source.side != PatchPortSide.output) return false;
     if (target.side != PatchPortSide.input) return false;
     if (source.nodeId == target.nodeId) return false;
@@ -1109,8 +1284,18 @@ class PatcherController {
 
   /// Select a single node — or, with [additive] (shift-click), toggle its
   /// membership in the current selection.
-  void selectNode(PatchNodeId id, {bool additive = false}) =>
-      additive ? graph.toggleNode(id) : graph.selectNodes({id});
+  ///
+  /// A shift-click in another window than the selection's starts a fresh
+  /// selection there: one selection never spans two windows (issue #481).
+  void selectNode(PatchNodeId id, {bool additive = false}) {
+    final scope = containerOf(id);
+    if (!additive ||
+        graph.selectedNodes.any((other) => containerOf(other) != scope)) {
+      graph.selectNodes({id});
+      return;
+    }
+    graph.toggleNode(id);
+  }
 
   void selectNodes(Set<PatchNodeId> ids) => graph.selectNodes(ids);
 
@@ -1289,11 +1474,15 @@ class PatcherController {
   /// graph the gesture started from: `apply`/`revert` then describe the whole
   /// re-route on their own, and an undo of anything below it sees a consistent
   /// patch rather than one mid-gesture.
-  bool rerouteViaGesture(PatchPortId source, PatchPortId target) {
+  bool rerouteViaGesture(PatchPortId boxSource, PatchPortId boxTarget) {
     final old = _reroutingCable;
     _reroutingCable = null;
     if (old == null) return false;
     addCablePrimitive(old);
+    // A drop on a subpatch box is a drop on the boundary object behind the pin.
+    final source = resolvePin(boxSource);
+    final target = resolvePin(boxTarget);
+    if (source == null || target == null) return false;
     // Dropped back on the port it came from: nothing changed, so nothing is
     // journaled — and the duplicate check below would otherwise call the
     // cable's own home incompatible.
@@ -1352,13 +1541,21 @@ class PatcherController {
   /// different patch when the clipboard is shared. Copying is not an edit —
   /// nothing is journaled — and an empty selection is a no-op that leaves the
   /// previous copy intact.
+  ///
+  /// A subpatch box is copied **with its contents** (issue #481), every
+  /// object inside it recorded under the index of the box it sits in.
   void copySelection() {
-    final order = graph.selectedNodes.toList();
-    if (order.isEmpty) return;
+    final selected = graph.selectedNodes;
+    if (selected.isEmpty) return;
+    final order = subtreeOf(selected);
     final index = {for (var i = 0; i < order.length; i++) order[i]: i};
     clipboard.set(
       PatchClipboardData(
         nodes: [for (final id in order) captureSpec(id)],
+        containers: [
+          for (final id in order)
+            selected.contains(id) ? null : index[containerOf(id)],
+        ],
         cables: [
           for (final c in cablesWithin(index.keys.toSet()))
             PatchClipboardCable(
@@ -1378,12 +1575,20 @@ class PatcherController {
   /// paste of the same copy lands one grid step further down-right — the
   /// duplicate offset, per generation — so copies never stack on the same
   /// spot. A no-op while the clipboard is empty.
-  void pasteClipboard() {
+  ///
+  /// [container] is the window the paste lands in: a subpatch box, or null
+  /// for the top level (issue #481).
+  void pasteClipboard({PatchNodeId? container}) {
     final data = clipboard.data;
     if (data == null || data.isEmpty) return;
     final step = PatchCanvasConstants.gridCell * clipboard.takePasteStep();
     undoScope.run(
-      PastePatchClipboardCommand(this, data: data, offset: Offset(step, step)),
+      PastePatchClipboardCommand(
+        this,
+        data: data,
+        offset: Offset(step, step),
+        container: container,
+      ),
     );
   }
 
@@ -1426,6 +1631,7 @@ class PatcherController {
       applyParams(id, args);
       return 0;
     }
+    if (!canRetype(id, desc.type)) return 0;
     final command = RetypePatchObjectCommand(
       this,
       id: id,
@@ -1434,6 +1640,16 @@ class PatcherController {
     );
     undoScope.run(command);
     return command.droppedCount;
+  }
+
+  /// Whether the object at [id] may become a [type]. Not a subpatch that
+  /// holds anything: the engine would take its whole contents down with the
+  /// old object (issue #481).
+  bool canRetype(PatchNodeId id, String type) {
+    final node = graph.nodeById(id);
+    if (node == null) return false;
+    if (node.type == type || !PatchBoundary.isSubpatch(node.type)) return true;
+    return !graph.nodes.any((n) => n.container == id);
   }
 
   void undo() => undoScope.undo();
@@ -1509,7 +1725,10 @@ class PatcherController {
     // switch's mode), so the remembered read no longer stands.
     _guiValueStale.add(id);
     final dropped = _resyncShape(id, native);
-    graph.nodeById(id)?.markParamsChanged();
+    final node = graph.nodeById(id);
+    node?.markParamsChanged();
+    // A boundary object's argument is the box pin it claims (issue #481).
+    if (node != null) _resyncBoxAfter(node.container, node.type);
     return dropped;
   }
 
@@ -1654,6 +1873,7 @@ class PatcherController {
       inputs: n.inputs,
       outputs: n.outputs,
       gui: Map.unmodifiable(_guiByNode[id] ?? const <String, String>{}),
+      container: n.container,
     );
   }
 
@@ -1673,7 +1893,18 @@ class PatcherController {
 
   /// Delete the object at [id] from the native patcher and the graph, forgetting
   /// its id mapping. Any touching cables must already be gone.
+  ///
+  /// A subpatch box goes with everything inside it — innermost first, so no
+  /// native delete ever lands on a handle the engine already took down with
+  /// its box. Callers that want the contents back (an undo) capture them
+  /// first: [subtreeOf] names them.
   void deleteNodePrimitive(PatchNodeId id) {
+    final node = graph.nodeById(id);
+    if (node != null && PatchBoundary.isSubpatch(node.type)) {
+      for (final child in nodesIn(id).map((n) => n.id).toList()) {
+        deleteNodePrimitive(child);
+      }
+    }
     final native = _nativeByNode[id];
     if (native != null) _gateway.deleteObject(instanceId, native);
     graph.removeNode(id);
@@ -1684,6 +1915,8 @@ class PatcherController {
     _guiCellWindowByNode.remove(id);
     _guiValueStale.remove(id);
     _guiByNode.remove(id);
+    _scopeTransforms.remove(id)?.dispose();
+    if (node != null) _resyncBoxAfter(node.container, node.type);
   }
 
   /// Recreate a previously-deleted node under its **same** logical [id] from
@@ -1697,9 +1930,20 @@ class PatcherController {
     );
     _nativeByNode[id] = native;
     _argsByNode[id] = spec.args;
+    _placeInside(native, spec.container);
     _gateway.setNodePosition(instanceId, native, spec.position);
     _writeGui(id, native, spec.gui);
     graph.addNode(_nodeFromSpec(id, spec));
+    _afterSpecPlaced(id, spec);
+  }
+
+  /// Bring the pins in line with the engine once a node from [spec] is back:
+  /// the box it sits in (a boundary object is one of its pins) and, for a box,
+  /// its own — a box restored ahead of its contents has none yet, whatever the
+  /// spec remembers; each boundary object restored after it adds one.
+  void _afterSpecPlaced(PatchNodeId id, PatchNodeSpec spec) {
+    _resyncBoxAfter(spec.container, spec.type);
+    if (PatchBoundary.isSubpatch(spec.type)) _resyncSubpatch(id);
   }
 
   /// Replace the object at [id] with a fresh one of [type]/[args], under the
@@ -1736,6 +1980,8 @@ class PatcherController {
     final native = _gateway.createObject(instanceId, type, args: args);
     _nativeByNode[id] = native;
     _argsByNode[id] = args;
+    // The replacement sits where the old object sat — inside the same box.
+    _placeInside(native, node.container);
     // The new object has a display value of its own (or none at all); the one
     // the poll last read belonged to the object that just went.
     _guiValueByNode.remove(id);
@@ -1751,6 +1997,7 @@ class PatcherController {
         id: id,
         type: type,
         voice: node.voice,
+        container: node.container,
         position: node.position,
         size: _sizeFor(
           type: type,
@@ -1763,6 +2010,13 @@ class PatcherController {
         outputs: _portsFrom(snapshot, PatchPortSide.output, node.voice),
       ),
     );
+    // Either type may be a pin of the box around it (issue #481); re-read the
+    // box before the cables are carried, so one to a pin that moved lands.
+    if (PatchBoundary.isBoundary(node.type)) {
+      _resyncBoxAfter(node.container, node.type);
+    } else {
+      _resyncBoxAfter(node.container, type);
+    }
     final dropped = <PatchCable>[];
     for (final cable in touching) {
       // Rebuilt rather than re-added: the cable's kind is its *source outlet's*
@@ -1790,9 +2044,11 @@ class PatcherController {
     final id = _mintLogicalId(native);
     _nativeByNode[id] = native;
     _argsByNode[id] = spec.args;
+    _placeInside(native, spec.container);
     _gateway.setNodePosition(instanceId, native, spec.position);
     _writeGui(id, native, spec.gui);
     graph.addNode(_nodeFromSpec(id, spec));
+    _afterSpecPlaced(id, spec);
     return id;
   }
 
@@ -1800,6 +2056,7 @@ class PatcherController {
     id: id,
     type: spec.type,
     voice: spec.voice,
+    container: spec.container,
     position: spec.position,
     size: spec.size,
     inputs: spec.inputs,
@@ -1838,6 +2095,10 @@ class PatcherController {
     if (_ownsInstance) _gateway.disposeInstance(instanceId);
     undoScope.dispose();
     transform.dispose();
+    for (final t in _scopeTransforms.values) {
+      t.dispose();
+    }
+    _scopeTransforms.clear();
     graph.dispose();
   }
 }

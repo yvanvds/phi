@@ -12,10 +12,21 @@ class PatchClipboardData {
   PatchClipboardData({
     required List<PatchNodeSpec> nodes,
     required List<PatchClipboardCable> cables,
+    List<int?>? containers,
   }) : nodes = List.unmodifiable(nodes),
-       cables = List.unmodifiable(cables);
+       cables = List.unmodifiable(cables),
+       containers = List.unmodifiable(
+         containers ?? List<int?>.filled(nodes.length, null),
+       ),
+       assert(containers == null || containers.length == nodes.length);
 
   final List<PatchNodeSpec> nodes;
+
+  /// Per entry of [nodes], the index of the copied subpatch box it sits
+  /// inside, or null for an object of the copied selection itself — which a
+  /// paste puts in the window it lands in (issue #481). A box's contents
+  /// always come after the box.
+  final List<int?> containers;
   final List<PatchClipboardCable> cables;
 
   bool get isEmpty => nodes.isEmpty;

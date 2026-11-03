@@ -34,6 +34,7 @@ class CreatePatchObjectCommand implements ProjectCommand {
     required this.args,
     required this.position,
     this.voice = 1,
+    this.container,
   });
 
   final PatcherController controller;
@@ -49,6 +50,10 @@ class CreatePatchObjectCommand implements ProjectCommand {
   final Offset position;
 
   final int voice;
+
+  /// The subpatch box the object is made inside, or null for the top level
+  /// (issue #481).
+  final PatchNodeId? container;
 
   PatchNodeId? _id;
   PatchNodeSpec? _spec;
@@ -72,6 +77,7 @@ class CreatePatchObjectCommand implements ProjectCommand {
         position: position,
         args: args,
         voice: voice,
+        container: container,
       );
       _id = node.id;
       _spec = controller.captureSpec(node.id);

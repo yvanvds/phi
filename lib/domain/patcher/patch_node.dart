@@ -22,6 +22,7 @@ class PatchNode extends ChangeNotifier {
     required this._size,
     required this._inputs,
     required this._outputs,
+    this.container,
   });
 
   /// Stable id mirroring the native `PHandle.id`.
@@ -37,6 +38,11 @@ class PatchNode extends ChangeNotifier {
 
   /// Voice swatch index in `[1, 6]`.
   final int voice;
+
+  /// The subpatch box this node sits inside, or null at the top level of its
+  /// patch (issue #481). Fixed for the node's life: the editor never moves an
+  /// object between subpatches, it deletes and recreates.
+  final PatchNodeId? container;
 
   Offset _position;
   Size _size;

@@ -14,6 +14,7 @@ import '../../../domain/patcher/patch_type_name.dart';
 import '../../../engine/bridge/patch_object_descriptor.dart';
 import '../tutorial/patch_word_button.dart';
 import 'patch_keyboard_settings.dart';
+import 'patch_subpatch_summary.dart';
 
 /// The patcher's **reference panel** (design `docs/design/patcher.md` §5): the
 /// engine's own documentation for the selected object type (from the palette or
@@ -50,8 +51,33 @@ class PatchReferencePanel extends StatelessWidget {
     this.onKeyboardRange,
     this.onKeyboardVelocity,
     this.onOpenTutorial,
+    this.subpatch,
+    this.onOpenSubpatch,
     super.key,
   });
+
+  /// The selected subpatch box's name and pin counts (issue #481), or null for
+  /// anything else — a palette tap documents the type, not one box.
+  final PatchSubpatchSummary? subpatch;
+
+  /// Opens the selected subpatch in its window. Null hides the button.
+  final VoidCallback? onOpenSubpatch;
+
+  /// Key on the subpatch section's name readout.
+  static const Key subpatchNameKey = Key('PatchReferencePanel.subpatch.name');
+
+  /// Key on the subpatch section's inlet-count readout.
+  static const Key subpatchInletsKey = Key(
+    'PatchReferencePanel.subpatch.inlets',
+  );
+
+  /// Key on the subpatch section's outlet-count readout.
+  static const Key subpatchOutletsKey = Key(
+    'PatchReferencePanel.subpatch.outlets',
+  );
+
+  /// Key on the subpatch section's open button.
+  static const Key openSubpatchKey = Key('PatchReferencePanel.subpatch.open');
 
   /// The object type to document, or null for the empty state.
   final PatchObjectDescriptor? descriptor;
@@ -118,6 +144,8 @@ class PatchReferencePanel extends StatelessWidget {
               descriptor: d,
               args: args,
               onOpenTutorial: onOpenTutorial,
+              subpatch: subpatch,
+              onOpenSubpatch: onOpenSubpatch,
               noteColor: noteColor ?? '',
               onNoteColor: PatchTypeName.isNote(d.type) ? onNoteColor : null,
               keyboard: switch ((
@@ -164,8 +192,12 @@ class _Reference extends StatelessWidget {
     this.onNoteColor,
     this.keyboard,
     this.onOpenTutorial,
+    this.subpatch,
+    this.onOpenSubpatch,
   });
 
+  final PatchSubpatchSummary? subpatch;
+  final VoidCallback? onOpenSubpatch;
   final PatchObjectDescriptor descriptor;
   final String? args;
   final VoidCallback? onOpenTutorial;
@@ -229,6 +261,52 @@ class _Reference extends StatelessWidget {
                 onTap: onOpenTutorial!,
               ),
             ),
+          ),
+        if (subpatch case final box?)
+          _Section(
+            title: 'subpatch',
+            children: [
+              _PortEntry(
+                lead: 'name',
+                doc: '',
+                meta: const [],
+                value: box.name.isEmpty ? 'untitled' : box.name,
+                valueKey: PatchReferencePanel.subpatchNameKey,
+              ),
+              _PortEntry(
+                lead: 'inlets',
+                doc: '',
+                meta: const [],
+                value: '${box.inlets}',
+                valueKey: PatchReferencePanel.subpatchInletsKey,
+              ),
+              _PortEntry(
+                lead: 'outlets',
+                doc: '',
+                meta: const [],
+                value: '${box.outlets}',
+                valueKey: PatchReferencePanel.subpatchOutletsKey,
+              ),
+              if (onOpenSubpatch case final open?)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    PhiSpacing.s3,
+                    PhiSpacing.s1,
+                    PhiSpacing.s3,
+                    PhiSpacing.s1,
+                  ),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: PatchWordButton(
+                      key: PatchReferencePanel.openSubpatchKey,
+                      label: 'open subpatch',
+                      color: PhiColors.voice1,
+                      tooltip: 'open the subpatch in its own window',
+                      onTap: open,
+                    ),
+                  ),
+                ),
+            ],
           ),
         if (d.description.isNotEmpty)
           Padding(

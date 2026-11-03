@@ -54,9 +54,8 @@ class FakePatcherGateway implements PatcherGateway {
   /// the built-in defaults.
   PatcherNodeSnapshot? Function(String type, String args)? topologyResolver;
 
-  /// Override the metadata catalogue [objectTypes] filters. When null the
-  /// built-in [_defaultCatalogue] is used. The `patcher` type is always
-  /// filtered out regardless (design §10 decision 2).
+  /// Override the metadata catalogue [objectTypes] returns. When null the
+  /// built-in [_defaultCatalogue] is used.
   List<PatchObjectDescriptor>? objectTypesCatalogue;
 
   // ─── convenience aggregates (single-instance tests) ──────────────────
@@ -148,10 +147,52 @@ class FakePatcherGateway implements PatcherGateway {
   void deleteObject(int instanceId, int handleId) {
     calls.add('deleteObject:$handleId');
     final inst = _inst(instanceId);
-    inst.nodes.remove(handleId);
+    // A subpatch takes its contents with it, transitively, as libYSE does.
+    final doomed = {handleId, ...inst.descendantsOf(handleId)};
+    inst.nodes.removeWhere((id, _) => doomed.contains(id));
     inst.cables.removeWhere(
-      (c) => c.fromHandleId == handleId || c.toHandleId == handleId,
+      (c) => doomed.contains(c.fromHandleId) || doomed.contains(c.toHandleId),
     );
+  }
+
+  @override
+  void setContainer(int instanceId, int handleId, int? containerHandleId) {
+    calls.add('setContainer:$handleId:$containerHandleId');
+    final inst = _inst(instanceId);
+    final node = inst.nodes[handleId];
+    if (node == null) return;
+    if (containerHandleId != null) {
+      final box = inst.nodes[containerHandleId];
+      // The engine refuses a move into a non-container or into the object's
+      // own subtree.
+      if (box == null || box.type != Obj.patcher) {
+        throw StateError('setContainer: $containerHandleId is no subpatch');
+      }
+      if (containerHandleId == handleId ||
+          inst.descendantsOf(handleId).contains(containerHandleId)) {
+        throw StateError('setContainer: a subpatch cannot hold itself');
+      }
+    }
+    node.container = containerHandleId;
+  }
+
+  /// The boundary object inside subpatch [box] that claims pin [index] on the
+  /// inlet ([inlets]) or outlet side — what the engine resolves a connection
+  /// to a subpatch through. Null when none claims it.
+  int? _boundaryFor(
+    FakeInstance inst,
+    int box,
+    int index, {
+    required bool inlets,
+  }) {
+    for (final MapEntry(key: id, value: n) in inst.nodes.entries) {
+      if (n.container != box) continue;
+      final matches = inlets
+          ? (n.type == Obj.gInlet || n.type == Obj.dInlet)
+          : (n.type == Obj.gOutlet || n.type == Obj.dOutlet);
+      if (matches && FakeNode.boundaryIndex(n.args) == index) return id;
+    }
+    return null;
   }
 
   @override
@@ -163,7 +204,22 @@ class FakePatcherGateway implements PatcherGateway {
     required int inlet,
   }) {
     calls.add('connect:$fromHandleId:$outlet->$toHandleId:$inlet');
-    _inst(instanceId).cables.add(
+    final inst = _inst(instanceId);
+    // A subpatch end resolves to the boundary object claiming that pin, and
+    // the cable is recorded on it — the engine's own rule.
+    if (inst.nodes[fromHandleId]?.type == Obj.patcher) {
+      final b = _boundaryFor(inst, fromHandleId, outlet, inlets: false);
+      if (b == null) return;
+      fromHandleId = b;
+      outlet = 0;
+    }
+    if (inst.nodes[toHandleId]?.type == Obj.patcher) {
+      final b = _boundaryFor(inst, toHandleId, inlet, inlets: true);
+      if (b == null) return;
+      toHandleId = b;
+      inlet = 0;
+    }
+    inst.cables.add(
       FakeCable(
         fromHandleId: fromHandleId,
         outlet: outlet,
@@ -193,8 +249,10 @@ class FakePatcherGateway implements PatcherGateway {
 
   @override
   PatcherNodeSnapshot inspect(int instanceId, int handleId) {
-    final node = _inst(instanceId).nodes[handleId];
+    final inst = _inst(instanceId);
+    final node = inst.nodes[handleId];
     final type = node?.type ?? '';
+    if (type == Obj.patcher) return _subpatchTopology(inst, handleId);
     final resolved = topologyResolver?.call(type, node?.args ?? '');
     if (resolved != null) return resolved;
     final override = topologyOverrides[type];
@@ -214,6 +272,7 @@ class FakePatcherGateway implements PatcherGateway {
             args: entry.value.args,
             position: entry.value.position,
             ports: inspect(instanceId, entry.key),
+            container: entry.value.container,
           ),
       ],
       connections: [
@@ -900,6 +959,7 @@ class FakePatcherGateway implements PatcherGateway {
             if (entry.value.position != null) 'x': entry.value.position!.dx,
             if (entry.value.position != null) 'y': entry.value.position!.dy,
             if (entry.value.gui.isNotEmpty) 'gui': entry.value.gui,
+            'container': ?entry.value.container,
             // What the object holds beyond its arguments, under `state` as
             // libYSE nests it (`DumpState`): a `.function`'s points.
             'state': ?_stateOf(inst, entry.key),
@@ -942,6 +1002,8 @@ class FakePatcherGateway implements PatcherGateway {
       final type = raw['type'] as String? ?? '';
       final args = raw['args'] as String? ?? '';
       final node = FakeNode(type: type, args: args);
+      final container = raw['container'];
+      if (container is num) node.container = container.toInt();
       final x = raw['x'];
       final y = raw['y'];
       if (x is num && y is num) {
@@ -1009,14 +1071,61 @@ class FakePatcherGateway implements PatcherGateway {
 
   @override
   List<PatchObjectDescriptor> objectTypes() => [
-    for (final d in objectTypesCatalogue ?? _defaultCatalogue)
-      if (d.type != Obj.patcher) d,
+    ...(objectTypesCatalogue ?? _defaultCatalogue),
   ];
+
+  /// A subpatch's pins, from its boundary objects, as libYSE reports them: one
+  /// past the highest claimed index per side (`.` and `~` share it), audio
+  /// where a `~` boundary claims the pin.
+  PatcherNodeSnapshot _subpatchTopology(FakeInstance inst, int box) {
+    final ins = <int, PatchPortKind>{};
+    final outs = <int, PatchPortKind>{};
+    for (final n in inst.nodes.values) {
+      if (n.container != box) continue;
+      final index = FakeNode.boundaryIndex(n.args);
+      final kind = n.type.startsWith('~')
+          ? PatchPortKind.audio
+          : PatchPortKind.control;
+      if (n.type == Obj.gInlet || n.type == Obj.dInlet) ins[index] = kind;
+      if (n.type == Obj.gOutlet || n.type == Obj.dOutlet) outs[index] = kind;
+    }
+    int count(Map<int, PatchPortKind> m) =>
+        m.isEmpty ? 0 : m.keys.reduce((a, b) => a > b ? a : b) + 1;
+    final inputs = count(ins);
+    final outputs = count(outs);
+    return PatcherNodeSnapshot(
+      inputs: inputs,
+      outputs: outputs,
+      inputKinds: [
+        for (var i = 0; i < inputs; i++) ins[i] ?? PatchPortKind.control,
+      ],
+      outputKinds: [
+        for (var i = 0; i < outputs; i++) outs[i] ?? PatchPortKind.control,
+      ],
+    );
+  }
 
   /// Default topology for the node types the surface seeds — keeps tests
   /// realistic without stubbing on every call.
   PatcherNodeSnapshot _defaultTopologyFor(String type) {
     switch (type) {
+      // The boundary objects: one pin each side of the wall (issue #481).
+      case Obj.gInlet:
+      case Obj.gOutlet:
+        return const PatcherNodeSnapshot(
+          inputs: 1,
+          outputs: 1,
+          inputKinds: [PatchPortKind.control],
+          outputKinds: [PatchPortKind.control],
+        );
+      case Obj.dInlet:
+      case Obj.dOutlet:
+        return const PatcherNodeSnapshot(
+          inputs: 1,
+          outputs: 1,
+          inputKinds: [PatchPortKind.audio],
+          outputKinds: [PatchPortKind.audio],
+        );
       case Obj.dSine:
         return const PatcherNodeSnapshot(
           inputs: 1,
@@ -1140,18 +1249,61 @@ class FakePatcherGateway implements PatcherGateway {
   static List<PatchObjectDescriptor> get defaultCatalogue =>
       List.unmodifiable(_defaultCatalogue);
 
-  /// A small representative catalogue, including a `patcher` entry so tests
-  /// can assert [objectTypes] filters it out.
+  /// A small representative catalogue, the subpatch and its boundary objects
+  /// included (issue #481).
   static final List<PatchObjectDescriptor> _defaultCatalogue = [
     const PatchObjectDescriptor(
       type: Obj.patcher,
       description: 'subpatch',
-      category: PatchObjectCategory.generic,
+      category: PatchObjectCategory.encapsulation,
       isDsp: false,
       inlets: [],
       outlets: [],
       params: [],
     ),
+    for (final (type, isDsp, side) in const [
+      (Obj.gInlet, false, 'inlet'),
+      (Obj.dInlet, true, 'inlet'),
+      (Obj.gOutlet, false, 'outlet'),
+      (Obj.dOutlet, true, 'outlet'),
+    ])
+      PatchObjectDescriptor(
+        type: type,
+        description: 'a $side of the subpatch it is in',
+        category: PatchObjectCategory.encapsulation,
+        isDsp: isDsp,
+        inlets: [
+          PatchInletDescriptor(
+            label: 'in',
+            doc: '',
+            range: '',
+            accepts: isDsp
+                ? const {PatchInletAccept.buffer}
+                : const {
+                    PatchInletAccept.float,
+                    PatchInletAccept.integer,
+                    PatchInletAccept.bang,
+                    PatchInletAccept.list,
+                  },
+          ),
+        ],
+        outlets: [
+          PatchOutletDescriptor(
+            label: 'out',
+            doc: '',
+            range: '',
+            type: isDsp ? PatchOutletType.buffer : PatchOutletType.any,
+          ),
+        ],
+        params: const [
+          PatchParamDescriptor(
+            name: 'index',
+            doc: 'which pin of the subpatch',
+            defaultValue: '0',
+            range: '0+',
+          ),
+        ],
+      ),
     const PatchObjectDescriptor(
       type: Obj.dSine,
       description: 'sine oscillator',
@@ -1234,6 +1386,22 @@ class FakeInstance {
   final Map<int, FakeNode> nodes = {};
   final List<FakeCable> cables = [];
   final Set<String> receivers = {};
+
+  /// Every object inside subpatch [box], at any depth (issue #481).
+  Set<int> descendantsOf(int box) {
+    final out = <int>{};
+    var frontier = {box};
+    while (frontier.isNotEmpty) {
+      final next = <int>{
+        for (final MapEntry(key: id, value: n) in nodes.entries)
+          if (frontier.contains(n.container) && !out.contains(id)) id,
+      };
+      out.addAll(next);
+      frontier = next;
+    }
+    return out;
+  }
+
   bool mounted = false;
   int? mountedBus;
 }
@@ -1252,6 +1420,18 @@ class FakeNode {
     if (isPreset) reshapePreset();
   }
   final String type;
+
+  /// The handle id of the subpatch this object is directly inside, or null at
+  /// the top level (issue #481).
+  int? container;
+
+  /// The pin a boundary object made with [args] claims — its first argument,
+  /// 0 when it has none.
+  static int boundaryIndex(String args) {
+    final first = args.trim().split(RegExp(r'\s+')).first;
+    final n = int.tryParse(first);
+    return n == null || n < 0 ? 0 : n;
+  }
 
   /// Creation-argument string — mutable so [FakePatcherGateway.setParams] can
   /// reconfigure the object, mirroring yse's `setParams`.

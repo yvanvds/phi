@@ -3266,6 +3266,41 @@ main + app          (orchestration)
   tutorial on master and read the offline session's master meter
   (`renderOffline` + `Channel.master.peakLinearPost`) to check what is
   heard.
+- **Subpatches in their own window** (issue #481, design `docs/design/patcher.md`
+  §10 decision 2 revisited) — the first use of Flutter's windowing API (#478).
+  A `patcher` box holds objects of the **same** native patcher marked as inside
+  it: `PatcherGateway.setContainer` (yse 0.2.0 `Patcher.setContainer`),
+  `PatcherObjectSnapshot.container` for the rebuild, and `inspect` of a box
+  answering the pins its `.inlet` / `~inlet` / `.outlet` / `~outlet` objects
+  claim (`subpatcherInlets`/`Outlets`, kinds per boundary type); the tree rides
+  inline in the one `dumpJson`. Vocabulary in `PatchBoundary`
+  (`lib/domain/patcher/`, pure Dart: `isSubpatch`, `boxSideOf`, `indexOf`,
+  `isParentFacing`). The editor mirror stays **one flat `PatchGraph` per
+  patch**: `PatchNode.container` / `PatchNodeSpec.container` say where a node
+  sits, and a cable the parent wires to a box pin is stored — exactly as the
+  engine records it — on the boundary object's parent-facing pin
+  (`PatcherController.resolvePin` box pin → boundary, `displayPort` back), so
+  renumbering, deleting or retyping a boundary object carries its cables with
+  no special case and the box only re-inspects (`_resyncBoxAfter`). Delete,
+  duplicate, copy/paste and undo work on `subtreeOf` (containers first;
+  `PatchClipboardData.containers`); a box with contents cannot be retyped
+  (`canRetype`). **One controller, many windows:** `PatcherCanvas.scope` shows
+  one box's contents (`nodesIn`), hides parent-facing pins, draws parent cables
+  at the box pin (`_cablePositions`), keeps a pan/zoom per scope
+  (`transformFor`) and keeps the editor's single selection in the focused
+  window (`focusScope`). `lib/surfaces/patcher/subpatch/`: `SubpatchWindows`
+  (registry: open or focus, close on box gone / patch switch / dispose, titles
+  from `scopeTitle`), `SubpatchWindowsHost` (a `ViewAnchor` of `Window`s under
+  the patcher surface, so the windows inherit theme and engine),
+  `SubpatchWindowView` (its own `Navigator` for menus, a path/mode bar, the
+  scoped canvas). Opened by a run-mode double-click, the node menu's
+  `open subpatch`, or the reference panel's SUBPATCH section (name, pin
+  counts). `PatchCreationArgs` passes a subpatch name through as free text.
+  Covered by `patcher_controller_subpatch_test.dart`,
+  `real_patcher_gateway_subpatch_engine_test.dart`,
+  `subpatch_window_test.dart` and the `patcher_subpatch_window` integration
+  test (a second native window under Xvfb, real engine: built by keyboard and
+  drag, heard through the box, undo from the other window, save → reopen).
 - Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
   switched off for now, issue #447)
 

@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import '../../domain/patcher/patch_node_id.dart';
 import '../../domain/patcher/patch_port.dart';
 
 /// Everything needed to (re)create one canvas node — captured so a delete can
@@ -20,6 +21,7 @@ class PatchNodeSpec {
     required this.inputs,
     required this.outputs,
     this.gui = const {},
+    this.container,
   });
 
   /// One of `package:yse`'s `Obj.*` constants.
@@ -45,6 +47,25 @@ class PatchNodeSpec {
   /// an undo, a duplicate or a paste keeps them.
   final Map<String, String> gui;
 
+  /// The subpatch box the node sits inside, or null at the top level (issue
+  /// #481) — a logical id of the same editor, so an undo puts the node back
+  /// into the box it came out of. A duplicate or paste re-points it with
+  /// [inContainer].
+  final PatchNodeId? container;
+
+  /// A copy placed inside [box] (null: the top level).
+  PatchNodeSpec inContainer(PatchNodeId? box) => PatchNodeSpec(
+    type: type,
+    args: args,
+    voice: voice,
+    position: position,
+    size: size,
+    inputs: inputs,
+    outputs: outputs,
+    gui: gui,
+    container: box,
+  );
+
   /// A copy shifted by [delta] — the offset a duplicate lands at.
   PatchNodeSpec offsetBy(Offset delta) => PatchNodeSpec(
     type: type,
@@ -55,5 +76,6 @@ class PatchNodeSpec {
     inputs: inputs,
     outputs: outputs,
     gui: gui,
+    container: container,
   );
 }
