@@ -1,0 +1,302 @@
+{
+  "title": "rpnout and nrpnout — setting a synthesizer's parameters",
+  "covers": [
+    ".rpnout",
+    ".nrpnout"
+  ],
+  "summary": "Set the pitch-bend range with a registered parameter, sent as four control changes by rpnout, and write a device's own parameter with nrpnout.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# rpnout and nrpnout — setting a synthesizer's parameters\nA parameter message changes one of a synthesizer's settings with four control changes: two select a parameter number, then two write a 14-bit value, coarse byte first. rpnout writes registered parameters (RPN), which mean the same on every device: 0 is the pitch-bend range, 1 fine tuning and 2 coarse tuning. nrpnout writes non-registered parameters (NRPN), whose meaning is in the device's manual.\nThe parameter number is stored on the right inlet, and a value on the left sends all four messages. The argument is the channel, counted from 0. midiout's argument is the output port, counted from 0; the midiinfo tutorial lists them. You hear something only when a synthesizer listens on that port.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "230.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "640.0",
+          "y": "220.0",
+          "w": "300"
+        },
+        "parms": "1. Click 0 to choose parameter 0, the pitch-bend range, then 1536: rpnout 0 selects it with 176 101 0 and 176 100 0, then writes 176 6 12 and 176 38 0. The coarse byte is semitones and the fine byte cents, so 1536, 12 × 128, is 12 semitones: a full bend now moves an octave. Click 256 to go back to 2.",
+        "type": ".text"
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "640.0",
+          "y": "400.0",
+          "w": "300"
+        },
+        "parms": "2. The selection stays after the value and is sent again with every value. To leave no parameter selected, as some devices ask, click 16383, the null parameter, then a value: the device ignores it.",
+        "type": ".text"
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "640.0",
+          "y": "530.0",
+          "w": "300"
+        },
+        "parms": "3. nrpnout 1 writes on channel 2. Click 136, then 8192: parameter 136 is selected with 177 99 1 and 177 98 8, coarse and fine, then written with 64 and 0. Look up what a number does in the synthesizer's manual before you send it.",
+        "type": ".text"
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "300.0",
+          "y": "590.0"
+        },
+        "parms": "",
+        "type": ".loadbang",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 14
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "300.0",
+          "y": "640.0"
+        },
+        "parms": "allnotesoff",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "640.0",
+          "y": "660.0",
+          "w": "300"
+        },
+        "parms": "4. midiout opens its port when the first message arrives, and that first message is lost. So loadbang sends allnotesoff as the patch opens, and the port is ready before you click. allnotesoff is controller 123 on all 16 channels: it stops every note on a device that obeys it.",
+        "type": ".text"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "60.0",
+          "y": "730.0"
+        },
+        "parms": "0",
+        "type": ".xmidiin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 17
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "60.0",
+          "y": "790.0",
+          "w": "200"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "300.0",
+          "y": "790.0"
+        },
+        "parms": "back",
+        "type": ".print"
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "640.0",
+          "y": "790.0",
+          "w": "300"
+        },
+        "parms": "5. xmidiin 0 shows each message that arrives on input port 0 as numbers, one list per message, and print writes every one to the log (Ctrl+J). Each value is four control changes, so the box shows the last, on controller 38. On Linux, output 0 and input 0 are usually Midi Through, which sends back whatever it receives, so you see what you send. Elsewhere, set both arguments to a loopback port.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "230.0"
+        },
+        "parms": "1536",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "230.0"
+        },
+        "parms": "256",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "390.0",
+          "y": "230.0"
+        },
+        "parms": "16383",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 5
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "290.0"
+        },
+        "parms": "0",
+        "type": ".rpnout",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "60.0",
+          "y": "450.0"
+        },
+        "parms": "136",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "170.0",
+          "y": "450.0"
+        },
+        "parms": "8192",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "510.0"
+        },
+        "parms": "1",
+        "type": ".nrpnout",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 9
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "650.0"
+        },
+        "parms": "0",
+        "type": ".midiout"
+      }
+    }
+  }
+}

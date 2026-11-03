@@ -119,22 +119,22 @@ void main() {
     }
 
     // Error entries, each with the tutorial open (or just closed) when it
-    // arrived. On a host with no MIDI input system, a MIDI input object logs
-    // RtMidi's driver error when it opens: a fact about the machine, set apart
-    // only when it matches that message exactly and arrives while a tutorial
-    // holding a MIDI input object is open or just closed. Every other error
-    // fails the test.
+    // arrived. On a host with no MIDI system, a MIDI input object logs
+    // RtMidi's driver error when it opens, and a .midiout when it opens its
+    // port (#509): a fact about the machine, set apart only when it matches
+    // that message exactly and arrives while a tutorial holding a MIDI port
+    // object is open or just closed. Every other error fails the test.
     final errors = <String>[];
     final hostErrors = <String>[];
     var seen = 0;
-    var midiInWindow = false;
+    var midiWindow = false;
     void collect() {
       final entries = notices.log.entries;
       for (; seen < entries.length; seen++) {
         final e = entries[seen];
         if (e.level != phi.LogLevel.error) continue;
         final where = library.tutorial?.slug ?? '-';
-        if (midiInWindow && isMidiInDriverUnavailable(e.text)) {
+        if (midiWindow && isMidiDriverUnavailable(e.text)) {
           hostErrors.add('$where: ${e.text}');
         } else {
           errors.add('$where: ${e.text}');
@@ -155,13 +155,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(library.tutorial?.slug, slug, reason: type);
       expect(find.byKey(PatchTutorialBar.bannerKey), findsOneWidget);
-      final hasMidiIn = holdsMidiInput(library.tutorial!.tutorial.payload.dump);
+      final holdsPort = holdsMidiPort(library.tutorial!.tutorial.payload.dump);
       // A line from the tutorial before may still be on its way.
-      midiInWindow = midiInWindow || hasMidiIn;
+      midiWindow = midiWindow || holdsPort;
       await settle(5);
       collect();
       expect(errors, isEmpty, reason: 'opening the $slug tutorial');
-      midiInWindow = hasMidiIn;
+      midiWindow = holdsPort;
       expectListBoxesUncut(tester, where: slug);
       await tester.tap(find.byKey(PatchTutorialBar.closeKey));
       await tester.pumpAndSettle();
@@ -200,10 +200,10 @@ void main() {
         reason: 'no error badge on the log toggle',
       );
     } else {
-      // The host has no MIDI input system: that is worth an error, and the
-      // badge rightly shows it. Nothing else may be badged.
+      // The host has no MIDI system: that is worth an error, and the badge
+      // rightly shows it. Nothing else may be badged.
       // ignore: avoid_print
-      print('no MIDI input system on this host:\n  ${hostErrors.join('\n  ')}');
+      print('no MIDI system on this host:\n  ${hostErrors.join('\n  ')}');
       expect(find.byKey(LogPanelToggle.badgeKey), findsOneWidget);
     }
     await tester.tap(find.byKey(PatchTutorialBar.closeKey));

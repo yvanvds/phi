@@ -16,6 +16,7 @@ import 'package:yse/yse.dart';
 
 import '../surfaces/patcher/test_support/engine_file_dir.dart';
 
+import 'test_support/midi_capture.dart';
 import 'test_support/midi_driver_unavailable.dart';
 import 'test_support/midi_loopback.dart';
 
@@ -138,10 +139,12 @@ void main() {
   // instances with one main output too, the way the app does.)
   //
   // One exception, a fact about the host rather than the tutorial: on a
-  // machine with no MIDI input system (a CI runner without an ALSA
-  // sequencer), a MIDI input object logs RtMidi's driver error when it opens.
-  // That line is set apart only when it matches that message exactly and the
-  // tutorial holds a MIDI input object.
+  // machine with no MIDI system (a CI runner without an ALSA sequencer), a
+  // MIDI input object logs RtMidi's driver error when it opens, and so does a
+  // .midiout when it opens its port in the background (#509). That line is
+  // set apart only when it matches that message exactly and the tutorial, or
+  // the one just before it for a line that arrived late, holds a MIDI port
+  // object.
   test('every tutorial opens the way the app opens it without an engine '
       'error (#539)', () async {
     final lines = <String>[];
@@ -149,10 +152,13 @@ void main() {
     addTearDown(sub.cancel);
     final errors = <String>[];
     final hostErrors = <String>[];
+    var heldPortBefore = false;
     for (final slug in index.slugs) {
       lines.clear();
       final tutorial = load(slug);
-      final hasMidiIn = holdsMidiInput(tutorial.payload.dump);
+      final holdsPort = holdsMidiPort(tutorial.payload.dump);
+      final midiWindow = holdsPort || heldPortBefore;
+      heldPortBefore = holdsPort;
       final session = PatchTutorialSession.open(
         gateway,
         tutorial: tutorial,
@@ -176,7 +182,7 @@ void main() {
       for (final line in lines) {
         if (line.contains(marker)) continue;
         if (engineLogLevel(line) != phi.LogLevel.error) continue;
-        if (hasMidiIn && isMidiInDriverUnavailable(line)) {
+        if (midiWindow && isMidiDriverUnavailable(line)) {
           hostErrors.add('$slug: $line');
         } else {
           errors.add('$slug: $line');
@@ -186,7 +192,7 @@ void main() {
     expect(errors, isEmpty);
     if (hostErrors.isNotEmpty) {
       // ignore: avoid_print
-      print('no MIDI input system on this host:\n  ${hostErrors.join('\n  ')}');
+      print('no MIDI system on this host:\n  ${hostErrors.join('\n  ')}');
     }
   });
 
@@ -6517,6 +6523,456 @@ void main() {
       if (inputs > 0) {
         expect(value(last), lastOf(inputs, system.midiInDeviceName));
       }
+    });
+  });
+
+  test('every MIDI output type has a tutorial (#509)', () {
+    for (final type in midiOutputTypes) {
+      expect(engineTypes, contains(type), reason: type);
+      expect(index.hasTutorial(type), isTrue, reason: type);
+    }
+  });
+
+  // The MIDI output tutorials send through a .midiout on port 0 and watch what
+  // comes back on input port 0 with .xmidiin. Here both are pointed at the
+  // loopback (see MidiLoopback), and a MidiCapture on its input reads every
+  // byte the tutorial put on the wire. On a machine without one (Windows, CI
+  // runners) only what the patch shows without a port is checked.
+  group('MIDI output tutorials (#509) do what their notes say', () {
+    late int inst;
+    late PatcherGraphSnapshot graph;
+    MidiLoopback? loop;
+    MidiCapture? wire;
+
+    setUpAll(() {
+      loop = MidiLoopback.open();
+      wire = loop?.capture();
+    });
+    tearDownAll(() async {
+      await wire?.close();
+      loop?.close();
+    });
+
+    void render(int blocks) {
+      for (var i = 0; i < blocks; i++) {
+        System.instance
+          ..renderOffline(1)
+          ..update();
+      }
+    }
+
+    // Renders with real pauses: a .midiout opens its port on a background
+    // thread, a message reaches the wire from the sender thread, and what
+    // comes back is posted to this isolate's event loop.
+    Future<void> pause([int ms = 20]) async {
+      for (var i = 0; i < ms; i++) {
+        render(1);
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+    }
+
+    // Opens [slug] mounted, its .midiout and .xmidiin on the loopback, and
+    // waits for the port its loadbang asked for.
+    Future<void> open(String slug) async {
+      final dump = load(slug).payload.dump;
+      for (final o in dump.values.cast<Map<String, Object?>>()) {
+        if (o['type'] == '.midiout') o['parms'] = '${loop?.outputPort ?? 0}';
+        if (o['type'] == '.xmidiin') o['parms'] = '${loop?.inputPort ?? 0}';
+      }
+      inst = gateway.createInstance(mainOutputs: 1);
+      gateway.parseJson(inst, jsonEncode(dump));
+      graph = gateway.enumerate(inst);
+      gateway.mountAsSource(inst);
+      for (var i = 0; i < 5000 && !gateway.isSourceReady(inst); i++) {
+        render(1);
+        sleep(const Duration(milliseconds: 1));
+      }
+      expect(gateway.isSourceReady(inst), isTrue, reason: 'mounted');
+      await pause(100);
+      expect(wire?.messages ?? [], isEmpty, reason: 'allnotesoff is lost');
+    }
+
+    tearDown(() async {
+      gateway.disposeInstance(inst);
+      await pause();
+      wire?.clear();
+    });
+
+    int at(String type, double x, double y) => graph.objects
+        .firstWhere(
+          (o) => o.type == type && o.position == Offset(x, y),
+          orElse: () => throw StateError('no $type at ($x, $y)'),
+        )
+        .handleId;
+    String value(int id) {
+      render(3);
+      return gateway.guiValue(inst, id);
+    }
+
+    void click(String type, double x, double y) =>
+        gateway.sendBang(inst, at(type, x, y), 0);
+    void m(double x, double y) => click('.m', x, y);
+
+    // Waits for [expected] on the wire, checks it arrived exactly, and that
+    // the tutorial's own monitor (.xmidiin into the list box at [box]) shows
+    // the last message. Nothing is checked without a loopback.
+    Future<void> sent(
+      List<List<int>> expected, {
+      int? box,
+      bool ordered = true,
+    }) async {
+      final w = wire;
+      if (w == null) return;
+      for (var i = 0; i < 2000 && w.messages.length < expected.length; i++) {
+        await pause(1);
+      }
+      await pause(5);
+      expect(w.messages, ordered ? expected : unorderedEquals(expected));
+      if (box != null) expect(value(box), expected.last.join(' '));
+      w.clear();
+    }
+
+    test('noteon-noteoff: notes, a velocity of 0, channel 10, release '
+        'velocity', () async {
+      await open('noteon-noteoff');
+      final back = at('.l', 60, 960);
+      // Note 1.
+      m(60, 230);
+      expect(value(at('.i', 60, 290)), '100');
+      m(60, 350);
+      await sent([
+        [144, 60, 100],
+      ], box: back);
+      m(170, 350);
+      await sent([
+        [144, 64, 100],
+      ]);
+      m(170, 230);
+      m(60, 350);
+      m(170, 350);
+      await sent([
+        [144, 60, 0],
+        [144, 64, 0],
+      ], box: back);
+      // Note 2.
+      m(60, 230);
+      m(60, 490);
+      await sent([
+        [153, 36, 100],
+      ], box: back);
+      m(280, 490);
+      m(390, 490);
+      await sent([
+        [128, 60, 40],
+      ], box: back);
+      // Note 3.
+      m(60, 630);
+      m(390, 630);
+      await sent([
+        [144, 67, 90],
+      ]);
+      m(170, 630);
+      m(390, 630);
+      await sent([
+        [128, 67, 64],
+      ]);
+      m(280, 630);
+      m(390, 630);
+      await sent([
+        [128, 67, 20],
+      ], box: back);
+      // Note 4: the box loadbang fed sends again by hand.
+      m(300, 810);
+      await sent([
+        for (var ch = 0; ch < 16; ch++) [176 + ch, 123, 0],
+      ]);
+    });
+
+    test('controlchange: a dial at 7 bits, the pedal, 14 bits in two '
+        'messages', () async {
+      await open('controlchange');
+      final back = at('.l', 60, 970);
+      // Note 1.
+      m(170, 230);
+      expect(value(at('.i', 60, 370)), '64');
+      await sent([
+        [176, 1, 64],
+      ], box: back);
+      m(280, 230);
+      m(60, 230);
+      await sent([
+        [176, 1, 127],
+        [176, 1, 0],
+      ]);
+      // Note 2.
+      m(390, 370);
+      m(500, 370);
+      await sent([
+        [176, 64, 127],
+        [176, 64, 0],
+      ], box: back);
+      // Note 3.
+      m(170, 510);
+      expect(value(at('.i', 60, 650)), '8192');
+      await sent([
+        [176, 1, 64],
+        [176, 33, 0],
+      ], box: back);
+      m(280, 510);
+      await sent([
+        [176, 1, 127],
+        [176, 33, 127],
+      ]);
+    });
+
+    test('programchange-pressure: two-byte messages, a key pressure', () async {
+      await open('programchange-pressure');
+      final back = at('.l', 60, 850);
+      // Note 1.
+      m(170, 250);
+      await sent([
+        [192, 5],
+      ], box: back);
+      m(60, 250);
+      m(280, 250);
+      await sent([
+        [192, 0],
+        [192, 40],
+      ]);
+      // Note 2.
+      m(60, 390);
+      m(170, 390);
+      m(280, 390);
+      await sent([
+        [208, 30],
+        [208, 90],
+        [208, 0],
+      ], box: back);
+      // Note 3.
+      m(60, 530);
+      m(280, 530);
+      await sent([
+        [160, 60, 70],
+      ], box: back);
+      m(170, 530);
+      m(280, 530);
+      await sent([
+        [160, 60, 0],
+      ]);
+    });
+
+    test('bendout: 7 bits as the coarse byte, 14 from a dial, two '
+        'bytes', () async {
+      await open('bendout');
+      final back = at('.l', 60, 990);
+      // Note 1.
+      m(280, 250);
+      await sent([
+        [224, 0, 127],
+      ], box: back);
+      m(60, 250);
+      m(170, 250);
+      await sent([
+        [224, 0, 0],
+        [224, 0, 64],
+      ]);
+      // Note 2.
+      m(170, 390);
+      expect(value(at('.i', 60, 530)), '8192');
+      await sent([
+        [224, 0, 64],
+      ]);
+      m(280, 390);
+      m(60, 390);
+      await sent([
+        [224, 127, 127],
+        [224, 0, 0],
+      ]);
+      // Note 3.
+      m(60, 670);
+      m(170, 670);
+      await sent([
+        [224, 100, 64],
+      ], box: back);
+    });
+
+    test('rpnout-nrpnout: the bend range, the null parameter, an '
+        'NRPN', () async {
+      final lines = <String>[];
+      final sub = Log.instance.messages.listen(lines.add);
+      addTearDown(sub.cancel);
+      await open('rpnout-nrpnout');
+      final back = at('.l', 60, 790);
+      // Note 1.
+      m(60, 230);
+      m(170, 230);
+      final range = [
+        [176, 101, 0],
+        [176, 100, 0],
+        [176, 6, 12],
+        [176, 38, 0],
+      ];
+      await sent(range, box: back);
+      if (wire != null) {
+        // print back writes all four to the log.
+        await pause(50);
+        for (final b in range) {
+          expect(lines, contains(endsWith('back: ${b.join(' ')}')));
+        }
+      }
+      m(280, 230);
+      await sent([
+        [176, 101, 0],
+        [176, 100, 0],
+        [176, 6, 2],
+        [176, 38, 0],
+      ]);
+      // Note 2.
+      m(390, 230);
+      m(280, 230);
+      await sent([
+        [176, 101, 127],
+        [176, 100, 127],
+        [176, 6, 2],
+        [176, 38, 0],
+      ]);
+      // Note 3.
+      m(60, 450);
+      m(170, 450);
+      await sent([
+        [177, 99, 1],
+        [177, 98, 8],
+        [177, 6, 64],
+        [177, 38, 0],
+      ], box: back);
+    });
+
+    test('midiout-midiformat-sxformat: byte lists, readable messages, '
+        'SysEx', () async {
+      await open('midiout-midiformat-sxformat');
+      final back = at('.l', 60, 1090);
+      final raw = at('.l', 300, 290);
+      final formatted = at('.l', 300, 490);
+      final sysex = at('.l', 60, 830);
+      // Note 1.
+      m(60, 230);
+      expect(value(raw), '144 60 100');
+      m(170, 230);
+      expect(value(raw), '128 60 100');
+      await sent([
+        [144, 60, 100],
+        [128, 60, 100],
+      ], box: back);
+      // The title: a single number is not sent, a list is.
+      final out = at('.midiout', 60, 950);
+      gateway.sendInt(inst, out, 0, 248);
+      gateway.sendList(inst, out, 0, '144 61 1');
+      await sent([
+        [144, 61, 1],
+      ]);
+      // Note 2.
+      m(60, 370);
+      expect(value(formatted), '144 60 100');
+      m(170, 370);
+      expect(value(formatted), '144 62 0');
+      m(280, 370);
+      expect(value(formatted), '176 64 0');
+      m(390, 370);
+      expect(value(formatted), '192 5');
+      m(500, 370);
+      expect(value(formatted), '192 5', reason: 'the channel only stores');
+      m(60, 370);
+      expect(value(formatted), '145 60 100');
+      await sent([
+        [144, 60, 100],
+        [144, 62, 0],
+        [176, 64, 0],
+        [192, 5],
+        [145, 60, 100],
+      ], box: back);
+      // Note 3.
+      m(170, 570);
+      m(60, 570);
+      expect(value(sysex), '240 125 1 64 247');
+      gateway.sendList(inst, at('.sxformat', 60, 630), 0, '3 4');
+      expect(value(sysex), '240 125 3 4 247', reason: 'a list fills both');
+      // Note 4.
+      m(280, 570);
+      m(390, 570);
+      expect(value(sysex), '240 125 7 247');
+      m(170, 710);
+      m(60, 710);
+      expect(value(sysex), '240 125 16 32 80 247');
+      await sent([
+        [240, 125, 1, 64, 247],
+        [240, 125, 3, 4, 247],
+        [240, 125, 7, 247],
+        [240, 125, 16, 32, 80, 247],
+      ], box: back);
+    });
+
+    test('midiflush-flush: pairs released, clear, messages released per '
+        'channel', () async {
+      await open('midiflush-flush');
+      final back = at('.l', 60, 990);
+      final pitch = at('.i', 60, 470);
+      final velocity = at('.i', 160, 470);
+      // Note 1.
+      m(60, 230);
+      m(60, 290);
+      m(170, 290);
+      m(280, 290);
+      m(170, 230);
+      m(170, 290);
+      expect((value(pitch), value(velocity)), ('64', '0'));
+      await sent([
+        [144, 60, 100],
+        [144, 64, 100],
+        [144, 67, 100],
+        [144, 64, 0],
+      ]);
+      click('.b', 60, 350);
+      expect((value(pitch), value(velocity)), ('67', '0'));
+      await sent([
+        [144, 60, 0],
+        [144, 67, 0],
+      ], box: back);
+      // Note 2.
+      m(60, 230);
+      m(60, 290);
+      m(170, 350);
+      click('.b', 60, 350);
+      expect((value(pitch), value(velocity)), ('60', '100'));
+      await sent([
+        [144, 60, 100],
+      ], box: back);
+      // Note 3.
+      m(60, 610);
+      m(170, 610);
+      click('.b', 300, 670);
+      await sent([
+        [144, 72, 100],
+        [145, 48, 100],
+        [128, 72, 0],
+        [129, 48, 0],
+      ], box: back);
+      click('.b', 300, 670);
+      await sent([]);
+      // The title: closing the patch releases what is still sounding, flush
+      // with a velocity of 0 through noteon, midiflush with a note-off.
+      m(60, 230);
+      m(60, 290);
+      m(60, 610);
+      await sent([
+        [144, 60, 100],
+        [144, 72, 100],
+      ]);
+      gateway.disposeInstance(inst);
+      inst = gateway.createInstance(mainOutputs: 1);
+      await sent([
+        [144, 60, 0],
+        [128, 72, 0],
+      ], ordered: false);
     });
   });
 

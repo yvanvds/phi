@@ -3062,7 +3062,20 @@ main + app          (orchestration)
   objects in all open patches can listen to one port, and a closed patch
   gives its slots back only once libYSE destroys it, a moment later
   (yse-soundengine#1246). So the integration test renders with real pauses
-  after closing each tutorial. `.preset` recalls on the timer thread).
+  after closing each tutorial. `.preset` recalls on the timer thread)
+  and MIDI output (#509: `noteon-noteoff`, `controlchange`,
+  `programchange-pressure`, `bendout`, `rpnout-nrpnout`,
+  `midiout-midiformat-sxformat`, `midiflush-flush`; each sends through one
+  `.midiout 0`, which a `.loadbang` -> `allnotesoff` opens as the tutorial
+  opens because `.midiout` drops the message that opens its port, and shows
+  what comes back on input port 0 with `.xmidiin 0` into a list box and a
+  `.print`. The tests point both at the loopback, and
+  `MidiLoopback.capture()` (`test/engine/test_support/midi_capture.dart`,
+  `MidiCapture`) reads every byte that reaches the wire. The builders' binary
+  messages never go into a `.l`: the wrapper's `guiValue` cannot decode them
+  (dart-yse#109). `test_support/midi_driver_unavailable.dart` sets RtMidi's
+  "no MIDI system" error apart for a tutorial holding a `.midiout` as well
+  as a MIDI input object).
   The domain clock six reach a libYSE
   domain clock by name; their clocks advance with the audio blocks whether or
   not the patch is mounted, and are never destroyed by a patch object. A
@@ -3114,7 +3127,8 @@ main + app          (orchestration)
   `patcher_data_sequencer_tutorials`,
   `patcher_dictionary_tutorials`,
   `patcher_array_tutorials`,
-  `patcher_midi_input_tutorials`: each opens its tutorials
+  `patcher_midi_input_tutorials`,
+  `patcher_midi_output_tutorials`: each opens its tutorials
   from the Tutorials tab, plays their controls with real taps, and checks
   that no note or object overlaps another). Every one of them opens a
   tutorial through the shared `openTutorialBySearch(tester, type)` helper in

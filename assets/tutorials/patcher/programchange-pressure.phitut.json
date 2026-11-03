@@ -1,0 +1,375 @@
+{
+  "title": "programchange, channelpressure and polypressure — programs and pressure out",
+  "covers": [
+    ".programchange",
+    ".channelpressure",
+    ".polypressure"
+  ],
+  "summary": "Switch a synthesizer's program with programchange, and send pressure for a whole channel with channelpressure and for one key with polypressure.",
+  "payload": {
+    "dump": {
+      "object 0": {
+        "ID": 0,
+        "gui": {
+          "x": "40.0",
+          "y": "20.0",
+          "w": "640"
+        },
+        "parms": "# programchange, channelpressure and polypressure — programs and pressure out\nprogramchange tells a synthesizer to switch to another sound, its program. channelpressure sends aftertouch for a whole channel, and polypressure for one key. Each builds a message for midiout and sends it from the left inlet. Their argument is the channel, counted from 0. midiout's argument is the output port, counted from 0; the midiinfo tutorial lists them. You hear something only when a synthesizer listens on that port.\nProgram change and channel pressure have one data byte, so their message is two bytes long, such as 192 5. Before libYSE 3.0.1 a zero byte was added after it.\nMax's pgmout numbers programs 1-128. Here programchange takes the number as it goes on the wire, 0-127: a synthesizer that counts from 1 shows 6 for 5.",
+        "type": ".text"
+      },
+      "object 1": {
+        "ID": 1,
+        "gui": {
+          "x": "60.0",
+          "y": "250.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 10": {
+        "ID": 10,
+        "gui": {
+          "x": "170.0",
+          "y": "530.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 11": {
+        "ID": 11,
+        "gui": {
+          "x": "280.0",
+          "y": "530.0"
+        },
+        "parms": "60",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 12": {
+        "ID": 12,
+        "gui": {
+          "x": "60.0",
+          "y": "590.0"
+        },
+        "parms": "0",
+        "type": ".polypressure",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 13": {
+        "ID": 13,
+        "gui": {
+          "x": "60.0",
+          "y": "710.0"
+        },
+        "parms": "0",
+        "type": ".midiout"
+      },
+      "object 14": {
+        "ID": 14,
+        "gui": {
+          "x": "640.0",
+          "y": "240.0",
+          "w": "300"
+        },
+        "parms": "1. Click 5: programchange 0 sends 192 5, and a synthesizer on channel 1 switches to program 5. Click 0 for the first program, and 40: in General MIDI, that is the violin.",
+        "type": ".text"
+      },
+      "object 15": {
+        "ID": 15,
+        "gui": {
+          "x": "640.0",
+          "y": "380.0",
+          "w": "300"
+        },
+        "parms": "2. Channel pressure is how hard the keys are pressed after they go down, one value for the whole channel. Click 30, then 90, then 0 to let go. Many synthesizers map it to vibrato or loudness.",
+        "type": ".text"
+      },
+      "object 16": {
+        "ID": 16,
+        "gui": {
+          "x": "640.0",
+          "y": "520.0",
+          "w": "300"
+        },
+        "parms": "3. polypressure sends pressure for one key: the pressure is stored on the right inlet, and a pitch on the left sends. Click 70, then 60: key 60 is pressed at 70. Click 0, then 60 to let go. Few keyboards send it.",
+        "type": ".text"
+      },
+      "object 17": {
+        "ID": 17,
+        "gui": {
+          "x": "300.0",
+          "y": "650.0"
+        },
+        "parms": "",
+        "type": ".loadbang",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 18
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 18": {
+        "ID": 18,
+        "gui": {
+          "x": "300.0",
+          "y": "700.0"
+        },
+        "parms": "allnotesoff",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 19": {
+        "ID": 19,
+        "gui": {
+          "x": "640.0",
+          "y": "660.0",
+          "w": "300"
+        },
+        "parms": "4. midiout opens its port when the first message arrives, and that first message is lost. So loadbang sends allnotesoff as the patch opens, and the port is ready before you click. allnotesoff is controller 123 on all 16 channels: it stops every note on a device that obeys it.",
+        "type": ".text"
+      },
+      "object 2": {
+        "ID": 2,
+        "gui": {
+          "x": "170.0",
+          "y": "250.0"
+        },
+        "parms": "5",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 20": {
+        "ID": 20,
+        "gui": {
+          "x": "60.0",
+          "y": "790.0"
+        },
+        "parms": "0",
+        "type": ".xmidiin",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 21
+            },
+            "1": {
+              "Inlet": 0,
+              "Object": 22
+            },
+            "Count": 2
+          }
+        }
+      },
+      "object 21": {
+        "ID": 21,
+        "gui": {
+          "x": "60.0",
+          "y": "850.0",
+          "w": "200"
+        },
+        "parms": "",
+        "type": ".l"
+      },
+      "object 22": {
+        "ID": 22,
+        "gui": {
+          "x": "300.0",
+          "y": "850.0"
+        },
+        "parms": "back",
+        "type": ".print"
+      },
+      "object 23": {
+        "ID": 23,
+        "gui": {
+          "x": "640.0",
+          "y": "800.0",
+          "w": "300"
+        },
+        "parms": "5. xmidiin 0 shows each message that arrives on input port 0 as numbers, one list per message, and print writes every one to the log (Ctrl+J). 192 5 is a program change on channel 1, 208 a channel pressure and 160 60 70 the pressure of key 60. On Linux, output 0 and input 0 are usually Midi Through, which sends back whatever it receives, so you see what you send. Elsewhere, set both arguments to a loopback port.",
+        "type": ".text"
+      },
+      "object 3": {
+        "ID": 3,
+        "gui": {
+          "x": "280.0",
+          "y": "250.0"
+        },
+        "parms": "40",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 4
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 4": {
+        "ID": 4,
+        "gui": {
+          "x": "60.0",
+          "y": "310.0"
+        },
+        "parms": "0",
+        "type": ".programchange",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 5": {
+        "ID": 5,
+        "gui": {
+          "x": "60.0",
+          "y": "390.0"
+        },
+        "parms": "30",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 6": {
+        "ID": 6,
+        "gui": {
+          "x": "170.0",
+          "y": "390.0"
+        },
+        "parms": "90",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 7": {
+        "ID": 7,
+        "gui": {
+          "x": "280.0",
+          "y": "390.0"
+        },
+        "parms": "0",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 8
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 8": {
+        "ID": 8,
+        "gui": {
+          "x": "60.0",
+          "y": "450.0"
+        },
+        "parms": "0",
+        "type": ".channelpressure",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 0,
+              "Object": 13
+            },
+            "Count": 1
+          }
+        }
+      },
+      "object 9": {
+        "ID": 9,
+        "gui": {
+          "x": "60.0",
+          "y": "530.0"
+        },
+        "parms": "70",
+        "type": ".m",
+        "outputs": {
+          "output 0": {
+            "0": {
+              "Inlet": 1,
+              "Object": 12
+            },
+            "Count": 1
+          }
+        }
+      }
+    }
+  }
+}
