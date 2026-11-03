@@ -3315,7 +3315,11 @@ main + app          (orchestration)
   (`transformFor`) and keeps the editor's single selection in the focused
   window (`focusScope`). `lib/surfaces/patcher/subpatch/`: `SubpatchWindows`
   (registry: open or focus, close on box gone / patch switch / dispose, titles
-  from `scopeTitle`), `SubpatchWindowsHost` (a `ViewAnchor` of `Window`s under
+  from `scopeTitle`; a closing window is destroyed only after its widgets
+  have left the tree and a round trip on the text input channel, because the
+  Windows embedder fails text input calls for a view already destroyed, and
+  destroying is a synchronous FFI call that overtakes those queued messages),
+  `SubpatchWindowsHost` (a `ViewAnchor` of `Window`s under
   the patcher surface, so the windows inherit theme and engine),
   `SubpatchWindowView` (its own `Navigator` for menus, a path/mode bar, the
   scoped canvas). Opened by a run-mode double-click, the node menu's
@@ -3324,8 +3328,16 @@ main + app          (orchestration)
   Covered by `patcher_controller_subpatch_test.dart`,
   `real_patcher_gateway_subpatch_engine_test.dart`,
   `subpatch_window_test.dart` and the `patcher_subpatch_window` integration
-  test (a second native window under Xvfb, real engine: built by keyboard and
-  drag, heard through the box, undo from the other window, save → reopen).
+  test (real engine: built by keyboard and drag, heard through the box, undo
+  from the other window, save → reopen, a window closed under a half-typed
+  box). The second window there is flutter_test's **stand-in view**: the test
+  binding's windowing owner cannot make a native one (its platform dispatcher
+  reports a fake engine id, flutter/flutter#195919), and the engine never
+  hears of the stand-in, so `EmbedderTextInputCheck`
+  (`test/surfaces/patcher/test_support/`) replaces the platform text input
+  and enforces the Windows plugin's rule (a call naming a view must find it
+  alive) against the binding's views. Any integration test that types into a
+  subpatch window needs it.
 - **Encapsulate / de-encapsulate** (issue #552) — Max's *Encapsulate*:
   `Ctrl+Shift+E` (or the node menu's `encapsulate`) moves the selection into a
   new unnamed `patcher` box at its top-left corner; `Ctrl+Shift+D` (or

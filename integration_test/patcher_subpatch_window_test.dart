@@ -35,13 +35,22 @@ import '../test/domain/project/test_doubles/fake_project_directory_picker.dart';
 import '../test/domain/project/test_doubles/fake_project_store.dart';
 import '../test/engine/test_doubles/fake_midi_gateway.dart';
 import '../test/engine/test_doubles/fake_yse_gateway.dart';
+import '../test/surfaces/patcher/test_support/embedder_text_input_check.dart';
 import '../test/surfaces/patcher/test_support/until_window_active.dart';
 
 /// End-to-end proof of subpatches in their own window (issue #481), through
-/// the real [PhiApp] — rail navigation, fonts, layout, a **second native
-/// window** from Flutter's windowing API — on the real patcher engine
-/// ([RealPatcherGateway] over an offline libyse session). Only the audio
-/// device, MIDI and the project store are fakes.
+/// the real [PhiApp] — rail navigation, fonts, layout, a second window from
+/// Flutter's windowing API — on the real patcher engine ([RealPatcherGateway]
+/// over an offline libyse session). Only the audio device, MIDI, the project
+/// store and text input are fakes.
+///
+/// The second window is flutter_test's **stand-in** for a native one: its
+/// binding installs a test windowing owner, and a native window cannot be
+/// made under it (its platform dispatcher reports a fake engine id, so the
+/// Linux windowing FFI dereferences it and crashes — flutter/flutter#195919).
+/// The stand-in view is drawn, hit-tested and focused like a real one, but
+/// the engine never hears of it, so the platform's text input plugin is
+/// replaced by [EmbedderTextInputCheck].
 ///
 /// The performer types a `patcher gain` box into the patch, opens it from its
 /// menu, and builds `~inlet 0` → `~* 0.5` → `~outlet 0` in the window that
@@ -64,6 +73,13 @@ void main() {
       ..requestedSampleRate = 48000
       ..initOffline();
     addTearDown(System.instance.close);
+    // Text input goes to a stand-in that checks the rule the Windows
+    // embedder enforces — a call naming a view must find it alive — instead of
+    // to the platform. Under flutter_test a subpatch window is a stand-in view
+    // the engine never hears of (see [EmbedderTextInputCheck]), so the real
+    // plugin cannot be asked about it.
+    final textInput = EmbedderTextInputCheck(tester);
+    addTearDown(textInput.dispose);
     await tester.binding.setSurfaceSize(const Size(1600, 1000));
 
     const dir = '/projects/subpatch.phi';
@@ -262,7 +278,7 @@ void main() {
     expect(editor().subpatchNameOf(box.id), 'gain');
     expect(box.inputs, isEmpty, reason: 'nothing inside yet');
 
-    // Open it: a second native window, showing the (empty) inside.
+    // Open it: a second window, showing the (empty) inside.
     await openSubpatch(box.id);
     expect(
       tester.widget<Text>(find.byKey(SubpatchWindowView.titleKey)).data,
@@ -430,8 +446,36 @@ void main() {
     await untilMounted();
     expect(loudness(), greaterThan(0.05), reason: 'heard after reopening');
 
+    // A window that goes while one of its fields still holds the keyboard —
+    // an object box half typed, then another patch opened — must let the
+    // platform finish with that field before the window is destroyed. The
+    // Windows embedder fails every text input call for a view that is gone
+    // (CI on PR #555); the check above stands in for it here.
+    final windowCanvas2 = windowCanvas();
+    final at = tester.getTopLeft(windowCanvas2) + const Offset(400, 400);
+    await tester.tapAt(at, view: viewOf(windowCanvas2));
+    await tester.pump();
+    await tester.tapAt(at, view: viewOf(windowCanvas2));
+    await tester.pumpAndSettle();
+    final typing = find.descendant(
+      of: windowCanvas2,
+      matching: find.byKey(PatchInlineObjectBox.fieldKey),
+    );
+    tester.binding.focusedEditable = null;
+    await tester.enterText(typing, '~sin');
+    await tester.pumpAndSettle();
+    second.engine.patchLibrary.newPatch();
+    await tester.pumpAndSettle();
+    expect(find.byType(SubpatchWindowView), findsNothing);
+    await textInput.drain();
+    await tester.pumpAndSettle();
+    expect(tester.binding.platformDispatcher.views, hasLength(1));
+    expect(textInput.errors, isEmpty);
+
     await tester.pumpWidget(const SizedBox());
     await tester.pumpAndSettle();
+    await textInput.drain();
+    expect(textInput.errors, isEmpty);
     await second.engine.dispose();
     second.project.dispose();
     second.settings.dispose();
