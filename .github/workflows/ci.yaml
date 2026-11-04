@@ -60,6 +60,9 @@ jobs:
   analyze-test-scan:
     name: analyze + test + SonarCloud
     runs-on: ubuntu-latest
+    # A native hang (#548) never trips flutter_test's own timeout, so bound the
+    # job here. Recent runs take 11 to 16 minutes (#563).
+    timeout-minutes: 30
     steps:
       - name: Checkout phi
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
