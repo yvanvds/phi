@@ -342,6 +342,10 @@ main + app          (orchestration)
   runs the real renderer (headless under Xvfb on Linux): it reads the drawn
   pixels back to check each agent's colour sits where the pick math projects
   it, then clicks, grabs, orbits and zooms through the real pointer path.
+  `integration_test/native_windows/scene_audience_window_test.dart` (#297) does
+  the same draw check in a second native window, including the pixels that
+  window shows on the display; the result and the caveats for the projected
+  audience view are in [design/shell-layout.md](design/shell-layout.md) §5.6.
   Issue #90 adds a
   debug-only **pick demo** toggle on the Scene surface: the playback demo's
   notes are too short and clustered to click by hand, so flipping the toggle
@@ -3327,17 +3331,19 @@ main + app          (orchestration)
   counts). `PatchCreationArgs` passes a subpatch name through as free text.
   Covered by `patcher_controller_subpatch_test.dart`,
   `real_patcher_gateway_subpatch_engine_test.dart`,
-  `subpatch_window_test.dart` and the `patcher_subpatch_window` integration
-  test (real engine: built by keyboard and drag, heard through the box, undo
-  from the other window, save → reopen, a window closed under a half-typed
-  box). The second window there is flutter_test's **stand-in view**: the test
-  binding's windowing owner cannot make a native one (its platform dispatcher
-  reports a fake engine id, flutter/flutter#195919), and the engine never
-  hears of the stand-in, so `EmbedderTextInputCheck`
-  (`test/surfaces/patcher/test_support/`) replaces the platform text input
-  and enforces the Windows plugin's rule (a call naming a view must find it
-  alive) against the binding's views. Any integration test that types into a
-  subpatch window needs it.
+  `subpatch_window_test.dart` and the
+  `native_windows/patcher_subpatch_window` integration test (real engine: built
+  by keyboard and drag, heard through the box, undo from the other window, save
+  → reopen, a window closed under a half-typed box). The second window there is
+  a real native window (#557), and text input goes to the real plugin. The
+  keyboard is real on both platforms (`NativeKeyboard` over a `RealKeyboard`):
+  `LinuxXTestKeyboard` presses keys through XTEST and moves the X focus with
+  `gtk_window_present`, since Xvfb has no window manager, and
+  `Win32SendInputKeyboard` presses them through `SendInput` on the window
+  `SetForegroundWindow` brought forward (#558). `TextInputViewRuleCheck`
+  forwards every call and enforces the Windows plugin's rule (a call naming a
+  view must find it alive) on any OS, because the
+  Linux plugin does not check.
 - **Encapsulate / de-encapsulate** (issue #552) — Max's *Encapsulate*:
   `Ctrl+Shift+E` (or the node menu's `encapsulate`) moves the selection into a
   new unnamed `patcher` box at its top-left corner; `Ctrl+Shift+D` (or
@@ -3360,6 +3366,40 @@ main + app          (orchestration)
   `patcher_controller_encapsulate_engine_test.dart` (real engine: dump →
   parse → rebuild after each step, renders), `patcher_canvas_test.dart` and
   the `patcher_encapsulate` integration test.
+- **Abstractions** (issue #553, design `docs/design/patcher.md` §13) — one
+  `patch.` entity used as the definition of any number of subpatch boxes, in any
+  number of patches. A box is an **instance** when its name is that entity's
+  address, `patcher patch.gain` (`PatchAbstraction`, `lib/domain/patcher/`, pure
+  Dart; `PatcherController.abstractionOf`, `isWithinInstance`,
+  `outermostInstances`). Its contents are a copy in the parent's flat graph and
+  dump. `PatchInstanceMaterialiser` (`lib/engine/state/`) reconciles one window
+  of a patch with another through direct primitives: objects pair up by type,
+  arguments and position so an edit keeps state and logical ids, cables are
+  compared afterwards, and the parent's cables on a boundary object that goes are
+  re-wired to whatever now claims the pin or counted as dropped.
+  `PatchAbstractionSync` (`lib/engine/state/`, owned by `PatchLibraryController`)
+  runs it over the whole project, definitions before their users, off every
+  editor's undo scope and off registry changes; it also publishes each patch's
+  registry references (so delete-impact lists users), refuses loops with a canvas
+  notice (`PatcherController.notice` → `PatcherCanvas.patchNoticeKey`), and
+  rewrites box names when a definition moves. The library binds an editor to any
+  patch involved (`editorFor`), offers definitions as extra catalogue entries
+  (`abstractionTypes`; `PatcherController` turns such a type id into a `patcher`
+  box) and creates them from a box (`makeAbstraction`). `SubpatchWindows` entries
+  now have an `owner` and may show a whole patch (`box` null, `root` naming it):
+  *open definition* edits the patch in its own window over its own editor, while
+  an instance's own window is held in run mode. `detachInstance` renames the box.
+  Covered by `patch_abstraction_test.dart`,
+  `patch_instance_materialiser_test.dart`, `patch_abstraction_sync_test.dart`,
+  `patch_abstraction_engine_test.dart` (real engine), `subpatch_window_test.dart`
+  and the `native_windows/patcher_abstraction_window` integration test.
+  `#0` in a definition reads as `#<number>` in each copy (issue #561, §13): the number
+  is a GUI property on the box (`PatchGuiProperty.instanceNumber`), unique per patch,
+  given by `PatcherController.numberInstances` at the start of the sync's pass;
+  `PatchInstanceMaterialiser` translates the source's arguments per window
+  (`PatchAbstraction.renumbered`) and compares the result, so a copy that reads right
+  gets no write. Covered by `patch_instance_number_test.dart` and the
+  `native_windows/patcher_instance_number_window` integration test.
 - Unit + widget + integration tests; CI on GitHub Actions (SonarCloud scan
   switched off for now, issue #447)
 
@@ -3404,9 +3444,22 @@ main + app          (orchestration)
   `integration_test/` suite on windows-latest — nightly on `develop`, on every
   release PR into `main`, and on manual dispatch).
 - **Integration test driver:** `tool/run_integration_tests.ps1` — runs each
-  `integration_test/*.dart` as its own `flutter test` invocation (a single
-  folder-wide run under-reports on Windows), with `-Shard`/`-Of` sharding.
-  Used both locally and by `integration.yaml`.
+  `integration_test/*.dart` and `integration_test/native_windows/*_test.dart` as
+  its own `flutter test` invocation (a single folder-wide run under-reports on
+  Windows), with `-Shard`/`-Of` sharding. Used both locally and by
+  `integration.yaml`.
+- **Native windows in integration tests:** `integration_test/native_windows/`
+  has its own `flutter_test_config.dart`, which installs
+  `NativeWindowsTestBinding` before the entry point creates the stock binding.
+  A `WindowController` made there is a real window over the engine, not
+  flutter_test's stand-in (#297, flutter/flutter#195919).
+  `LinuxWindowPixels` reads back what such a window shows on the display, and
+  `NativeKeyboard` types into it with real keys (#557, #558). On Linux X11, open
+  windows only after the main window has painted (#556), and expect their first
+  frame at 1x1. On Windows, hold the Scene still while a window opens (#559). If
+  a file there fails with `0 tests passed. No tests were found.`, the app died:
+  `flutter test` drops its stderr and exit code, so build the file with
+  `flutter build windows --debug -t <file>` and run `phi.exe` directly.
 - **SonarCloud:** project key `yvanvds_phi`, organization `yvanvds`
   (`sonar-project.properties`); the CI scan is off for now (issue #447).
 - **Issue templates:** `.github/ISSUE_TEMPLATE/`. Labels: see

@@ -15,9 +15,11 @@ import '../project/entity_address.dart';
 /// a `Sound` when it runs, or `null` when it is not placed as a source. Placement
 /// persists; whether the source is *currently* running does not (a loaded project
 /// starts silent, consistent with clips). The placement is a **soft** pointer,
-/// not a tracked registry reference — a patch still references no entity through
-/// the back-reference index — so a stale bus degrades gracefully at reconcile
-/// time rather than blocking a delete (issue #220).
+/// not a tracked registry reference, so a stale bus degrades gracefully at
+/// reconcile time rather than blocking a delete (issue #220). What a patch does
+/// reference through the back-reference index is the abstractions it uses (issue
+/// #553), which live in the dump as box names and are declared on the entity by
+/// the `PatchAbstractionSync`.
 ///
 /// Immutable and compared by value — the whole opaque dump structurally, plus the
 /// placement — so a round-trip through the codec and store asserts identity.

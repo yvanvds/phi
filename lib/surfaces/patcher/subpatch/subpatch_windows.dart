@@ -43,7 +43,7 @@ class SubpatchWindows extends ChangeNotifier {
   List<SubpatchWindowEntry> get entries => List.unmodifiable(_entries);
 
   /// The window showing [box] of [editor], or null when it is not open.
-  SubpatchWindowEntry? entryFor(PatcherController editor, PatchNodeId box) {
+  SubpatchWindowEntry? entryFor(PatcherController editor, PatchNodeId? box) {
     for (final e in _entries) {
       if (identical(e.editor, editor) && e.box == box) return e;
     }
@@ -58,11 +58,20 @@ class SubpatchWindows extends ChangeNotifier {
   /// Open [box] of [editor] in its own window, or bring its window to the front
   /// when it is already open. A no-op for anything that is not a subpatch box.
   ///
+  /// A null [box] shows the whole of [editor]'s patch: the definition of an
+  /// abstraction (issue #553). [owner] is the patch in the main window when that
+  /// is not [editor]'s, and [root] what the window's path starts with then.
+  ///
   /// Needs Flutter's windowing feature (`flutter config --enable-windowing`,
   /// on the pinned master, #478); without it nothing opens and the reason is
   /// logged rather than thrown into a menu callback.
-  void open(PatcherController editor, PatchNodeId box) {
-    if (_disposed || !editor.isSubpatch(box)) return;
+  void open(
+    PatcherController editor,
+    PatchNodeId? box, {
+    PatcherController? owner,
+    String? root,
+  }) {
+    if (_disposed || (box != null && !editor.isSubpatch(box))) return;
     if (!isWindowingEnabled) {
       debugPrint('subpatch window: windowing is not enabled in this build');
       return;
@@ -72,10 +81,15 @@ class SubpatchWindows extends ChangeNotifier {
       existing.window.activate();
       return;
     }
-    final title = _titleFor(editor, box);
+    final title = editor.scopeTitle(box, root: root);
     final window = _nativeWindow(title);
-    final entry = SubpatchWindowEntry(editor: editor, box: box, window: window)
-      ..title = title;
+    final entry = SubpatchWindowEntry(
+      editor: editor,
+      box: box,
+      window: window,
+      owner: owner,
+      root: root,
+    )..title = title;
     _entries.add(entry);
     _watch(editor);
     notifyListeners();
@@ -146,7 +160,16 @@ class SubpatchWindows extends ChangeNotifier {
   /// project swap), and a subpatch never outlives its patch on screen.
   void closeAllExcept(PatcherController? editor) {
     for (final e in _entries.toList()) {
-      if (!identical(e.editor, editor)) close(e);
+      if (!identical(e.owner, editor)) close(e);
+    }
+  }
+
+  /// Close every window whose editor [isLive] no longer vouches for: the patch
+  /// it showed was renamed, deleted or swapped away (issue #553), so that editor
+  /// is gone even though the patch in the main window is still open.
+  void closeUnless(bool Function(PatcherController editor) isLive) {
+    for (final e in _entries.toList()) {
+      if (!isLive(e.editor)) close(e);
     }
   }
 
@@ -203,21 +226,18 @@ class SubpatchWindows extends ChangeNotifier {
   /// settle it synchronously.
   void prune() {
     for (final e in _entries.toList()) {
-      if (!e.editor.isSubpatch(e.box)) {
+      final box = e.box;
+      if (box != null && !e.editor.isSubpatch(box)) {
         close(e);
         continue;
       }
-      final title = _titleFor(e.editor, e.box);
+      final title = e.editor.scopeTitle(box, root: e.root);
       if (title != e.title) {
         e.title = title;
         e.window.setTitle(title);
       }
     }
   }
-
-  /// The window title: the subpatch's path from the top of its patch.
-  static String _titleFor(PatcherController editor, PatchNodeId box) =>
-      editor.scopeTitle(box);
 
   @override
   void dispose() {

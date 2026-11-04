@@ -31,7 +31,16 @@ import 'tutorial/patch_tutorial_bar.dart';
 
 /// A verb on the node context menu (issue #356). Every one of them already has
 /// a keyboard route; the menu is what makes them discoverable without one.
-enum _NodeAction { openSubpatch, encapsulate, deencapsulate, duplicate, delete }
+enum _NodeAction {
+  openDefinition,
+  openSubpatch,
+  makeAbstraction,
+  detach,
+  encapsulate,
+  deencapsulate,
+  duplicate,
+  delete,
+}
 
 /// Patcher surface — pan/zoom canvas of nodes and cables.
 ///
@@ -50,6 +59,17 @@ class PatcherSurface extends Surface {
 
   /// Key on the node menu's `open subpatch` item (issue #481).
   static const Key openSubpatchItemKey = Key('PatcherSurface.openSubpatch');
+
+  /// Key on the node menu's `open definition` item (issue #553).
+  static const Key openDefinitionItemKey = Key('PatcherSurface.openDefinition');
+
+  /// Key on the node menu's `make abstraction` item (issue #553).
+  static const Key makeAbstractionItemKey = Key(
+    'PatcherSurface.makeAbstraction',
+  );
+
+  /// Key on the node menu's `detach` item (issue #553).
+  static const Key detachItemKey = Key('PatcherSurface.detach');
 
   /// Key on the node menu's `encapsulate` item (issue #552).
   static const Key encapsulateItemKey = Key('PatcherSurface.encapsulate');
@@ -126,6 +146,11 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   /// (issue #356). Null for a palette tap, which documents a type.
   PatchNodeId? _selectedNodeId;
 
+  /// The editor [_selectedNodeId] belongs to: the open patch's, or the
+  /// definition's when the node was tapped in a definition's window (issue
+  /// #553). Null means the open patch's.
+  PatcherController? _selectedEditor;
+
   /// The canvas's keyboard focus, held here so a pick in the reference panel
   /// can hand the keyboard straight back to the canvas (issue #511): the pane
   /// takes focus on any press inside it. Undo no longer depends on it — the
@@ -180,13 +205,59 @@ class _PatcherViewportState extends State<_PatcherViewport> {
 
   /// A subpatch window never outlives the patch it was opened from being the
   /// open one: a switch, a tutorial, a project swap or a session restart (a
-  /// fresh editor) closes them (issue #481).
-  void _closeForeignSubpatches() =>
-      _subpatchWindows.closeAllExcept(_library.openEditor);
+  /// fresh editor) closes them (issue #481). Nor does a definition's window
+  /// outlive the definition's editor, which a rename or delete disposes (#553).
+  void _closeForeignSubpatches() {
+    _subpatchWindows
+      ..closeAllExcept(_library.openEditor)
+      ..closeUnless(_library.isLive);
+  }
 
   /// Open [box] of [editor] in its own window, or focus it when it is open.
-  void _openSubpatch(PatcherController editor, PatchNode box) =>
-      _subpatchWindows.open(editor, box.id);
+  ///
+  /// An instance of an abstraction (issue #553) opens like any box and shows
+  /// that instance's own objects, to be played: [_subpatchWindow] holds such a
+  /// window in run mode. Editing happens in [_openDefinition].
+  void _openSubpatch(PatcherController editor, PatchNode box) {
+    final open = _library.openEditor;
+    _subpatchWindows.open(
+      editor,
+      box.id,
+      owner: open,
+      root: identical(editor, open) ? null : _rootOf(editor),
+    );
+  }
+
+  /// What a window showing part of [editor]'s patch calls that patch.
+  String? _rootOf(PatcherController editor) =>
+      _library.addressOf(editor)?.format();
+
+  /// Open the patch the instance [box] follows in its own window, where editing
+  /// it changes every instance (issue #553). A box whose definition is gone or
+  /// is not followed has only its own contents to show.
+  void _openDefinition(PatcherController editor, PatchNode box) {
+    final definition = editor.abstractionOf(box.id);
+    final target = definition != null && _library.canFollow(editor, definition)
+        ? _library.editorFor(definition)
+        : null;
+    if (definition == null || target == null) {
+      _openSubpatch(editor, box);
+      return;
+    }
+    _subpatchWindows.open(
+      target,
+      null,
+      owner: _library.openEditor,
+      root: definition.format(),
+    );
+  }
+
+  /// Every object [editor]'s patch can make: the engine's, and an instance of
+  /// each patch it can use (issue #553).
+  List<PatchObjectDescriptor> _typesFor(PatcherController editor) => [
+    ..._objectTypes,
+    ..._library.abstractionTypes(editor),
+  ];
 
   void _showTutorials() =>
       setState(() => _paletteTab = PatcherPaletteTab.tutorials);
@@ -279,14 +350,16 @@ class _PatcherViewportState extends State<_PatcherViewport> {
     // A palette entry documents a type — there is no instance to read values
     // from, so any previously-selected node's values are dropped.
     _selectedNodeId = null;
+    _selectedEditor = null;
   });
 
-  void _selectNode(PatchNode node) {
+  void _selectNode(PatchNode node, {PatcherController? editor}) {
     final desc = _descriptorForType(node.type);
     if (desc == null) return;
     setState(() {
       _selected = desc;
       _selectedNodeId = node.id;
+      _selectedEditor = editor;
     });
   }
 
@@ -303,15 +376,17 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   /// lands, and its arguments are already on screen.
   ///
   /// [container] is the subpatch box whose window the gesture was made in, or
-  /// null for the main canvas (issue #481).
+  /// null for the main canvas (issue #481). [editor] is the patch it was made
+  /// in, when that is not the open one: a definition's window (issue #553).
   void _createObject(
     PatchObjectDescriptor desc,
     Offset position, {
     String? args,
     PatchNodeId? container,
+    PatcherController? editor,
   }) {
     if (_readOnly) return;
-    final controller = widget.engine.patcher;
+    final controller = editor ?? widget.engine.patcher;
     final id = controller.createObject(
       desc: desc,
       position: position,
@@ -319,7 +394,7 @@ class _PatcherViewportState extends State<_PatcherViewport> {
       container: container,
     );
     final node = id == null ? null : controller.graph.nodeById(id);
-    node == null ? _select(desc) : _selectNode(node);
+    node == null ? _select(desc) : _selectNode(node, editor: editor);
   }
 
   /// Right-click on a node: the standard affordances, named (issue #356).
@@ -342,38 +417,52 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   /// A subpatch box adds `open subpatch` on top (issue #481) — the way into
   /// its window from edit mode, where a double-click edits the box's text —
   /// and `de-encapsulate`; any selection that can move into a new box offers
-  /// `encapsulate` (issue #552).
+  /// `encapsulate` (issue #552). An ordinary subpatch offers `make abstraction`,
+  /// and an instance `open definition` and `detach` (issue #553).
   /// [menuContext] is where the menu opens: the surface for the main canvas,
-  /// the subpatch window for its own.
+  /// the subpatch window for its own. [editor] is the patch the node is in, when
+  /// that is not the open one: a definition's window.
   Future<void> _onNodeContextMenu(
     PatchNode node,
     Offset global, {
     BuildContext? menuContext,
+    PatcherController? editor,
   }) async {
-    final controller = widget.engine.patcherOrNull;
+    PatcherController? current() => editor ?? widget.engine.patcherOrNull;
+    final controller = current();
     final isBox = controller?.isSubpatch(node.id) ?? false;
+    final isInstance = controller?.abstractionOf(node.id) != null;
     final action = await _showNodeMenu(
       menuContext ?? context,
       global,
       subpatch: isBox,
+      instance: isInstance,
+      // A patch only a tutorial holds has no place to put a definition.
+      canAbstract: controller != null && _library.addressOf(controller) != null,
       encapsulate: controller?.canEncapsulate ?? false,
     );
     if (action == null || !mounted) return;
-    final editor = widget.engine.patcherOrNull;
-    if (editor == null) return;
+    final target = current();
+    if (target == null || !_library.isLive(target)) return;
     switch (action) {
+      case _NodeAction.openDefinition:
+        _openDefinition(target, node);
       case _NodeAction.openSubpatch:
-        _openSubpatch(editor, node);
+        _openSubpatch(target, node);
+      case _NodeAction.makeAbstraction:
+        _library.makeAbstraction(target, node.id);
+      case _NodeAction.detach:
+        target.detachInstance(node.id);
       case _NodeAction.encapsulate:
-        final box = editor.encapsulateSelection();
-        final boxNode = box == null ? null : editor.graph.nodeById(box);
-        if (boxNode != null) _selectNode(boxNode);
+        final box = target.encapsulateSelection();
+        final boxNode = box == null ? null : target.graph.nodeById(box);
+        if (boxNode != null) _selectNode(boxNode, editor: editor);
       case _NodeAction.deencapsulate:
-        editor.deencapsulateSelection();
+        target.deencapsulateSelection();
       case _NodeAction.duplicate:
-        editor.duplicateSelection();
+        target.duplicateSelection();
       case _NodeAction.delete:
-        editor.deleteSelection();
+        target.deleteSelection();
     }
   }
 
@@ -383,6 +472,8 @@ class _PatcherViewportState extends State<_PatcherViewport> {
     BuildContext menuContext,
     Offset global, {
     bool subpatch = false,
+    bool instance = false,
+    bool canAbstract = false,
     bool encapsulate = false,
   }) {
     final overlay =
@@ -395,7 +486,15 @@ class _PatcherViewportState extends State<_PatcherViewport> {
       ),
       color: PhiColors.bg2,
       items: [
-        if (subpatch) _menuItem('open subpatch', _NodeAction.openSubpatch),
+        if (instance) _menuItem('open definition', _NodeAction.openDefinition),
+        if (subpatch)
+          _menuItem(
+            instance ? 'open instance' : 'open subpatch',
+            _NodeAction.openSubpatch,
+          ),
+        if (subpatch && !instance && canAbstract)
+          _menuItem('make abstraction', _NodeAction.makeAbstraction),
+        if (instance) _menuItem('detach', _NodeAction.detach),
         if (encapsulate)
           _menuItem('encapsulate · ctrl+shift+e', _NodeAction.encapsulate),
         if (subpatch)
@@ -409,6 +508,9 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   PopupMenuItem<_NodeAction> _menuItem(String label, _NodeAction action) {
     return PopupMenuItem<_NodeAction>(
       key: switch (action) {
+        _NodeAction.openDefinition => PatcherSurface.openDefinitionItemKey,
+        _NodeAction.makeAbstraction => PatcherSurface.makeAbstractionItemKey,
+        _NodeAction.detach => PatcherSurface.detachItemKey,
         _NodeAction.openSubpatch => PatcherSurface.openSubpatchItemKey,
         _NodeAction.encapsulate => PatcherSurface.encapsulateItemKey,
         _NodeAction.deencapsulate => PatcherSurface.deencapsulateItemKey,
@@ -433,25 +535,53 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   /// One subpatch window's content (issue #481), configured from this
   /// surface's state on every rebuild — the mode and the read-only rule are
   /// the patch's, wherever it is shown.
+  ///
+  /// A window onto an instance of an abstraction (issue #553) is played, not
+  /// edited: what is in there comes from the definition, so it stays in run
+  /// mode with no gesture to change it. A window onto a patch other than the
+  /// open one brings a value poll of its own, since the surface's follows only
+  /// the open patch.
   Widget _subpatchWindow(BuildContext context, SubpatchWindowEntry entry) {
-    final readOnly = _readOnly;
-    return SubpatchWindowView(
-      editor: entry.editor,
-      box: entry.box,
-      objectTypes: _objectTypes,
-      mode: _effectiveMode,
+    final editor = entry.editor;
+    final box = entry.box;
+    final foreign = !identical(editor, _library.openEditor);
+    final frozen = box != null && editor.isWithinInstance(box);
+    final readOnly = _readOnly || frozen;
+    final view = SubpatchWindowView(
+      editor: editor,
+      box: box,
+      root: entry.root,
+      objectTypes: _typesFor(editor),
+      mode: frozen ? PatchCanvasMode.run : _effectiveMode,
       snapToGrid: _snapToGrid,
       onToggleMode: readOnly ? null : () => _setMode(_mode.flipped),
       onCreateObject: readOnly
           ? null
-          : (desc, position, {args}) =>
-                _createObject(desc, position, args: args, container: entry.box),
-      onNodeTap: _selectNode,
-      onNodeContextMenu: (menuContext, node, global) =>
-          _onNodeContextMenu(node, global, menuContext: menuContext),
-      onOpenSubpatch: (box) => _openSubpatch(entry.editor, box),
+          : (desc, position, {args}) => _createObject(
+              desc,
+              position,
+              args: args,
+              container: box,
+              editor: foreign ? editor : null,
+            ),
+      onNodeTap: (node) => _selectNode(node, editor: foreign ? editor : null),
+      onNodeContextMenu: frozen
+          ? null
+          : (menuContext, node, global) => _onNodeContextMenu(
+              node,
+              global,
+              menuContext: menuContext,
+              editor: foreign ? editor : null,
+            ),
+      onOpenSubpatch: (node) => _openSubpatch(editor, node),
       onTypeResolved: _select,
     );
+    final firstOfEditor = identical(
+      _subpatchWindows.entries.firstWhere((e) => identical(e.editor, editor)),
+      entry,
+    );
+    if (!foreign || !firstOfEditor) return view;
+    return PatchGuiPoller(controller: editor, active: true, child: view);
   }
 
   @override
@@ -475,7 +605,7 @@ class _PatcherViewportState extends State<_PatcherViewport> {
           children: [
             PatchEntityStrip(controller: library),
             PatcherPalette(
-              objectTypes: _objectTypes,
+              objectTypes: editor == null ? _objectTypes : _typesFor(editor),
               selected: _selected,
               onSelect: _select,
               tab: _paletteTab,
@@ -529,7 +659,7 @@ class _PatcherViewportState extends State<_PatcherViewport> {
                                 tutorial ?? library.openAddress,
                               ),
                               controller: editor,
-                              objectTypes: _objectTypes,
+                              objectTypes: _typesFor(editor),
                               snapToGrid: _snapToGrid,
                               mode: mode,
                               // Read-only: no way into edit mode, and no
@@ -576,7 +706,7 @@ class _PatcherViewportState extends State<_PatcherViewport> {
   /// resolve to an unrelated object and print its arguments against the wrong
   /// parameter list. Failing that check leaves the type documentation standing
   /// on its own, which is exactly what a palette tap shows.
-  Widget _reference(PatcherController? editor) {
+  Widget _reference(PatcherController? openEditor) {
     final id = _selectedNodeId;
     final type = _selected?.type;
     // "Open tutorial" under the heading whenever the documented type has one
@@ -584,6 +714,12 @@ class _PatcherViewportState extends State<_PatcherViewport> {
     final onOpenTutorial = type != null && _library.hasTutorial(type)
         ? () => unawaited(_openTutorial(type))
         : null;
+    // A node tapped in a definition's window is read through that patch's
+    // editor (issue #553), for as long as it is still there.
+    final selectedIn = _selectedEditor;
+    final editor = selectedIn != null && _library.isLive(selectedIn)
+        ? selectedIn
+        : openEditor;
     if (editor == null || id == null) {
       return PatchReferencePanel(
         descriptor: _selected,
@@ -595,8 +731,12 @@ class _PatcherViewportState extends State<_PatcherViewport> {
       builder: (context, _) {
         final node = editor.graph.nodeById(id);
         final documented = node != null && node.type == _selected?.type;
-        // Nothing in a read-only tutorial is edited from the panel either.
-        final editable = documented && !_readOnly;
+        final isBox = documented && editor.isSubpatch(id);
+        final definition = isBox ? editor.abstractionOf(id) : null;
+        // Nothing in a read-only tutorial is edited from the panel either, nor
+        // anything an instance got from its definition (issue #553).
+        final editable =
+            documented && !_readOnly && !_withinInstance(editor, node);
         return PatchReferencePanel(
           descriptor: _selected,
           onOpenTutorial: onOpenTutorial,
@@ -628,19 +768,45 @@ class _PatcherViewportState extends State<_PatcherViewport> {
               : null,
           // A selected subpatch's name and pins (issue #481), live: adding a
           // boundary object inside reshapes the box and wakes the graph.
-          subpatch: documented && editor.isSubpatch(id)
+          subpatch: isBox
               ? PatchSubpatchSummary(
                   name: editor.subpatchNameOf(id),
                   inlets: node.inputs.length,
                   outlets: node.outputs.length,
+                  definition: definition?.format(),
+                  definitionFollowed:
+                      definition != null &&
+                      _library.canFollow(editor, definition),
+                  instanceNumber: definition == null
+                      ? null
+                      : editor.instanceNumberOf(id),
                 )
               : null,
-          onOpenSubpatch: documented && editor.isSubpatch(id)
-              ? () => _openSubpatch(editor, node)
+          onOpenSubpatch: isBox
+              ? () => definition == null
+                    ? _openSubpatch(editor, node)
+                    : _openDefinition(editor, node)
+              : null,
+          onMakeAbstraction:
+              isBox &&
+                  definition == null &&
+                  !_readOnly &&
+                  _library.addressOf(editor) != null
+              ? () => _library.makeAbstraction(editor, id)
+              : null,
+          onDetach: definition != null && !_readOnly
+              ? () => editor.detachInstance(id)
               : null,
         );
       },
     );
+  }
+
+  /// Whether [node] came from a definition. An instance box itself did not:
+  /// its name and its place are the parent's.
+  bool _withinInstance(PatcherController editor, PatchNode node) {
+    final container = node.container;
+    return container != null && editor.isWithinInstance(container);
   }
 }
 

@@ -7,7 +7,8 @@
 > **Depends on:** nothing unimplemented — the shell, project manifest,
 > and settings are shipped code. The multi-window question ended in a
 > research spike (§5). Phi has since adopted the official windowing API on
-> a pinned Flutter master (#478, #481); see §5.5.
+> a pinned Flutter master (#478, #481); see §5.5. The Scene is proven to
+> draw in a second native window (#297); see §5.6.
 
 ## 1. The problem
 
@@ -43,7 +44,9 @@ VS-Code-style **panes in a split tree, tabs in each pane**:
 - **Scene caveat:** the GL viewport re-parents when its tab moves;
   texture-backed platform views survive re-parenting, but this is the
   one interaction to verify by hand early (not CI-testable, like all
-  GL paths).
+  GL paths). *Since #455 the Scene is an ordinary widget on Flutter GPU,
+  with no platform view or external texture, and integration tests see
+  it draw.*
 
 ## 3. Layout persistence
 
@@ -115,6 +118,10 @@ singleton without a hand-built mirroring protocol — and the GL
 viewport, whose external `Texture` registration is *engine-scoped*,
 could not be reached at all from a second engine.
 
+> **Update (#455, 2026-11).** macbear and its `M3AppEngine` are gone. The
+> Scene is drawn by `flutter_scene` on Flutter GPU, with no external
+> `Texture`. The conclusion holds: all app state still lives in one isolate.
+
 ### 5.2 Route A — official same-isolate multi-view / windowing
 
 Flutter's first-party windowing API (`WindowingOwner` /
@@ -148,7 +155,8 @@ One residual unknown even on Route A: whether the ANGLE/macbear GL
 texture actually renders into a *second window's* `FlutterView`.
 Flutter's multi-view umbrella (flutter/flutter#142845) still lists
 open secondary-view texture/platform-view work, so this must be
-proven by hand, not assumed — filed as **#297**.
+proven by hand, not assumed — filed as **#297**. *Answered in §5.6, for
+the Flutter GPU renderer that replaced the GL texture.*
 
 ### 5.3 Route B — `desktop_multi_window` (separate isolate)
 
@@ -188,7 +196,8 @@ Enumerating the concrete scenarios (not a hypothetical want):
    audience-facing view (the Scene, without performer chrome) on a
    projector while the operator screen keeps the workstation. It needs
    a genuinely separate window on a second display, and it is
-   GL-texture-bound, which is why #297 is its gating risk.
+   GL-texture-bound, which is why #297 is its gating risk. *No longer
+   texture-bound since #455, and the risk is retired (§5.6).*
 3. **Everything else** (side-by-side mix + clip while performing,
    panel arrangements) is already the split shell's job (§2), not a
    multi-window need.
@@ -219,7 +228,8 @@ Follow-ups filed:
 - **#297** — timeboxed prototype (do-not-ship, main channel behind
   `--enable-windowing`): retire the single Route-A unknown by proving
   the ANGLE/macbear GL viewport renders into a second window's view,
-  or record the fallback.
+  or record the fallback. *Answered in §5.6, with a kept test instead of
+  a discarded prototype.*
 
 No implementation lands in this epic. The projected audience view
 (vision §4, §6) waits on #296/#297 by design.
@@ -255,9 +265,109 @@ What remains provisional, and is tracked in **#554**:
 
 When the API is public and on a channel release, #554 moves the imports to
 the public library, drops the flag step, and takes Phi off the master pin.
-The secondary-window GL question (#297) is unchanged: subpatch windows are
-plain Flutter UI, so they did not need it. It still gates the projected
-audience view.
+Subpatch windows are plain Flutter UI, so they did not need the
+secondary-window rendering answer. §5.6 gives it.
+
+### 5.6 The Scene in a second window — result (#297, 2026-11)
+
+**It works.** The Scene view draws in a second native top-level window over
+the one engine and isolate, with no fallback needed. The question changed
+shape on the way: #455 replaced the external GL texture with `flutter_scene`
+on Flutter GPU, so nothing is registered per engine or per view any more.
+Flutter GPU has one process-wide context (`gpu.gpuContext`). A `SceneView`
+renders into offscreen textures and draws them onto its canvas through
+`Texture.asImage`, so to the window it is ordinary Flutter content. The
+fallbacks #297 listed (a second `Texture` sink, a non-GL projection) are moot.
+
+The proof is kept as a regression guard for the audience view:
+`integration_test/native_windows/scene_audience_window_test.dart`. The real
+`PhiApp` runs the workstation in the main window with the Scene open, and a
+real `WindowController` window mounts the same renderer's view.
+
+**Verified**, on Linux X11 under Xvfb (Mesa llvmpipe) at the pinned revision, and
+on `windows-latest` except for the display readback, which is Linux only there
+(on Windows the checks stop at the Flutter layer):
+
+- The window is a view the engine made, and every agent draws in its voice
+  colour where the pick math projects it. This is checked in the Flutter layer
+  and in the pixels the window shows on the display, read back from the window
+  system (`LinuxWindowPixels`). Layer readback alone would pass on a window
+  that never presents.
+- Both windows draw the one graph at once, each at its own size.
+- A drag in the window orbits the camera and the window redraws. The drag is
+  flutter_test's pointer events addressed to the window's view.
+- `setSize` resizes the native window and the Scene in it.
+- The window keeps showing the Scene when the main window moves to Mix.
+- Closing it returns the app to one view.
+- Pixel ratio: the `SceneView` reads the ratio of its hosting view. One manual
+  run with `GDK_SCALE=2` gave ratio 2.0 and passed the same checks at twice the
+  pixels.
+
+**Not verified:**
+
+- **Windows.** The test joins the integration sweep through
+  `tool/run_integration_tests.ps1`, so CI runs it there, but it has not run
+  there yet. Its display readback is Linux only, so on Windows it checks the
+  layer and not what the window presents.
+- A real X11 session, Wayland, and a real GPU.
+- OS pointer input reaching the window, a second physical display, and two
+  displays with different pixel ratios.
+
+**Caveats for the audience view's design:**
+
+1. **Visibility belongs to the renderer, not the view.**
+   `FlutterSceneRenderer.setVisible(false)` stops all redraws, and the shell
+   calls it when the Scene tab goes offstage. Measured: with the main window on
+   Mix, an orbit in the audience window moved the camera while the window kept
+   its old frame, until `setVisible(true)` flushed it. Agent updates go through
+   the same gate (`_markDirty`), so as things stand the audience view would
+   freeze whenever the performer leaves the Scene tab. The renderer has to stay
+   live while any view of it is on screen. The test does not pin the current
+   behaviour.
+2. **One camera, one pointer controller.** Orbiting in either window moves both
+   (the test asserts this as today's shape). From the source, not measured:
+   disposing either view calls `pointer.cancelAll()`, so closing the audience
+   window cancels a grab in the main window. An audience view probably wants
+   its own camera and no input.
+3. **Two views of one `fs.Scene` share its render targets.** From the
+   `flutter_scene` 0.24.3 source, not measured: each `SceneView` renders as
+   view 0 of the scene's `Surface`, which keeps targets per output size, two
+   sizes at most, with a ring of two swapchain textures per size. Two views at
+   different sizes get separate rings, as in the test. At the same size they
+   take turns on one ring and use it up every frame, so a texture from the
+   previous frame can be overwritten while the compositor still reads it. A
+   third size would evict and reallocate every frame. Before showing the graph
+   in more than one place at equal sizes, give the audience view its own scene
+   or use `renderViews`.
+4. **Linux X11: open windows after the first paint.** A window made before the
+   main window's first GTK paint exits the app with a GLX `BadAccess`. This has
+   nothing to do with the Scene: a plain coloured box triggers it, and the cause
+   is the EGL context the engine leaves current for secondary views. No Phi code
+   does this today, but restoring an audience view at boot would. Mechanism and
+   evidence are in **#556**, which also tracks reporting it upstream.
+5. **Linux: a new window's first frame is 1x1.** The engine adds the view at
+   that size and GTK allocates the real one afterwards, so anything laid out in
+   a new window must survive a 1x1 layout without reporting an overflow.
+   `SubpatchWindowView` draws nothing until its bar fits (#557).
+6. **Windows: hold the Scene still while a window opens.** A new view leaves the
+   raster thread with no GL context until the next frame, and a Flutter GPU
+   submit landing in that gap aborts the app in Impeller. Nothing in Phi opens a
+   window with the Scene on screen today, but the audience view will. Until the
+   engine is fixed it must do what the test does: `setVisible(false)`, make the
+   window, let a plain frame draw, `setVisible(true)`. Mechanism in **#559**.
+
+**Testing native windows.** The stock integration binding cannot make one
+(flutter/flutter#195919: it installs a stand-in owner, and its dispatcher
+reports a fake engine id, which the Linux owner dereferences). The binding can
+in fact be replaced: `flutter_test_config.dart` runs before the entry point
+creates its binding. Tests under `integration_test/native_windows/` get
+`NativeWindowsTestBinding`, which keeps the platform owner and reports the real
+id. The subpatch window test runs there too (**#557**): text input goes to the
+real plugin, and the keys are real on both platforms, through XTEST on Linux and
+`SendInput` on Windows (**#558**). Both tests run on `windows-latest`, where the
+test can move the foreground between its windows with `SetForegroundWindow`, so
+`SendInput` reaches the window it means. The binding also drops real mouse events
+for a window whose widgets have gone, because flutter_test throws on them.
 
 ## 6. Out of scope
 

@@ -110,8 +110,9 @@ box typed with several words keeps only the first word, and shows only that
 word. A newer engine lifts that limit.
 
 **Right-click** an object for its context menu: *duplicate* and *delete*,
-*encapsulate*, and *open subpatch* and *de-encapsulate* on a subpatch (see
-below).
+*encapsulate*, *open subpatch*, *make abstraction* and *de-encapsulate* on a
+subpatch, and *open definition*, *open instance* and *detach* on an instance of
+an abstraction (see below).
 
 ## Cables
 
@@ -202,6 +203,93 @@ play with and open.
 A subpatch window closes when its box is deleted, when you switch to another
 patch or open a tutorial, and when Phi closes. The reference panel shows a
 selected subpatch's name and how many inlets and outlets it has.
+
+## Abstractions
+
+An **abstraction** is a patch you use inside other patches, as many times as you
+like. Each use is an **instance**: a subpatch box that holds a copy of the patch
+and changes when the patch changes. Any patch can be used this way. Its `.inlet`,
+`~inlet`, `.outlet` and `~outlet` objects become the pins of every instance.
+
+**Make an instance** in any of three ways:
+
+- type the patch's address into the object box: `patch.gain`, or
+  `patcher patch.gain`. The completion list offers it;
+- drag it from the *subpatchers* section of the palette;
+- right-click an ordinary subpatch and pick *make abstraction* (or press
+  `MAKE ABSTRACTION` in the reference panel). This makes a new patch named after
+  the box, holding a copy of what it holds, and the box becomes its first
+  instance. Its objects and cables stay as they were. `Ctrl+Z` makes the box
+  ordinary again and leaves the new patch in the strip.
+
+The box's name is what makes it an instance: `patcher patch.gain` follows
+`patch.gain`. Retype the name to follow another patch.
+
+**Edit the patch, not the box.** Right-click an instance and pick *open
+definition* (or press `OPEN DEFINITION` in the reference panel). The patch opens
+in its own window, titled with its address, with its own undo history. As soon as
+you make an edit, every instance in every patch of the project follows, and so
+does anything nested in them. `Ctrl+Z` in that window undoes the edit everywhere.
+Objects that did not change keep their sound and their values: changing one
+argument does not restart the others.
+
+Cables from the parent stay connected through an edit. A cable moves to a new
+inlet or outlet object when that object takes the same pin number and can carry
+the same signal. If not, the cable goes and a banner on the parent's canvas says
+how many went.
+
+**Play one instance.** Each instance has its own objects, so a slider inside one
+is not the slider inside another. In run mode, double-click an instance to open
+its own window (or pick *open instance*). That window plays the instance and
+stays in run mode, because its contents come from the patch. The patch's own
+window plays the patch's objects, which are not the ones you hear unless that
+patch is placed on a bus itself.
+
+**Detach.** Right-click an instance and pick *detach* (or press `DETACH`) to keep
+what the box holds and stop following. It becomes an ordinary subpatch named after
+the patch. `Ctrl+Z` makes it an instance again, and it catches up with any change
+it missed.
+
+**A patch cannot contain itself.** The object box and the palette do not offer a
+patch that would, directly or through another patch. If you type one anyway, the
+box stays as it is and a banner says why.
+
+**Renaming and deleting.** Renaming or moving a patch updates every instance.
+Before deleting a patch that is in use, Phi lists the patches using it. Afterwards
+their instances keep what they hold and keep sounding, but they can only be played,
+and the reference panel marks the definition *not followed*. Detach one to edit it.
+Undo the delete, or make a new patch at that address, and they follow again.
+
+**Names of its own: `#0`.** Instances share a patch, so a plain name inside a
+definition is one name across all of them: an `s pitch` in one instance reaches
+the `r pitch` of another. Put `#0` in the name to give each instance its own.
+`s pitch#0` in the patch reads `s pitch#3` in instance 3, and `r pitch#0` reads
+`r pitch#3`, so they only reach each other. It works in any object's arguments,
+anywhere in a name, for anything that shares by name: `value`, `coll`, `table`,
+a `forward` target. It does not work where an argument has to be a number, and a
+note keeps its text as you wrote it.
+
+Select an instance to see its number in the reference panel, under *instance*.
+Each box in a patch has its own number, and keeps it: through a save, through
+edits to the patch, and through a detach. A duplicate or a paste gets a new one.
+Each patch counts for itself, so two patches can both have an instance 3.
+
+- The patch's own window shows and runs `pitch#0` as you typed it. An instance's
+  own window shows the name it really uses.
+- An ordinary subpatch inside the patch shares its instance's number. An instance
+  nested inside the patch has a number of its own.
+- To reach one instance from outside, use its number: `s pitch#3` in the parent,
+  or `patch.song.send('pitch#3', 67)` from the Code surface.
+- Detaching leaves the names as they are (`pitch#3`). *Make abstraction* on that
+  box turns them back into `pitch#0`. In an ordinary subpatch that never was an
+  instance, `#0` is only part of a name, until *make abstraction* makes it count.
+- Don't use `#` and a number for anything else in a patch you nest inside another:
+  it can be taken for an instance's number.
+
+**Limits.** What an object saves beyond its arguments, such as a `.preset`'s slots
+or a `.function`'s points, is not copied into a new instance. A name without `#0`
+still reaches across instances, as it does across subpatches. A shared name can be
+at most 63 characters long, and that counts the number in an instance.
 
 ## Selecting, moving and the grid
 

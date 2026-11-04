@@ -66,6 +66,24 @@ class PatchNodeSpec {
     container: box,
   );
 
+  /// A copy of this object for another patch's graph: [args] and [gui] as they
+  /// read over there, inside [box].
+  PatchNodeSpec asCopy({
+    required String args,
+    required Map<String, String> gui,
+    required PatchNodeId? box,
+  }) => PatchNodeSpec(
+    type: type,
+    args: args,
+    voice: voice,
+    position: position,
+    size: size,
+    inputs: inputs,
+    outputs: outputs,
+    gui: gui,
+    container: box,
+  );
+
   /// A copy shifted by [delta] — the offset a duplicate lands at.
   PatchNodeSpec offsetBy(Offset delta) => PatchNodeSpec(
     type: type,

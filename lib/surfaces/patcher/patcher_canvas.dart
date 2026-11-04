@@ -235,6 +235,11 @@ class PatcherCanvas extends StatefulWidget {
   static const String subpatchRetypeText =
       'a subpatch with objects inside keeps its type';
 
+  /// Key on the banner when the patch has news of its own: what a change to an
+  /// abstraction's definition cost it, or a patch that would contain itself
+  /// (issue #553).
+  static const Key patchNoticeKey = Key('PatcherCanvas.patchNotice');
+
   /// Key on the banner when `Ctrl+Shift+E` refuses a selection (issue #552).
   static const Key encapsulateNoticeKey = Key(
     'PatcherCanvas.encapsulateNotice',
@@ -401,12 +406,21 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
     // stack instead of stranding it as an unjournaled edit; the same listener
     // disarms a held space for the same reason (issue #369).
     _focus.addListener(_onFocusChanged);
+    _controller.notice.addListener(_onPatchNotice);
+  }
+
+  /// The patch has something to say that no gesture here caused (issue #553).
+  void _onPatchNotice() {
+    final message = _controller.notice.value;
+    if (message != null) _flashNotice(message, PatcherCanvas.patchNoticeKey);
   }
 
   @override
   void dispose() {
     _rejectTimer?.cancel();
     _focus.removeListener(_onFocusChanged);
+    // The editor may have gone before its canvas (a rename disposes it).
+    widget.controller.notice.removeListener(_onPatchNotice);
     if (widget.focusNode == null) _ownFocus.dispose();
     super.dispose();
   }
@@ -424,6 +438,10 @@ class _PatcherCanvasState extends State<PatcherCanvas> {
   @override
   void didUpdateWidget(PatcherCanvas oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.controller, widget.controller)) {
+      oldWidget.controller.notice.removeListener(_onPatchNotice);
+      widget.controller.notice.addListener(_onPatchNotice);
+    }
     // The cursor is a preview of what a press would do, so it has to tell the
     // truth about the *mode* it is previewing (design §6, issue #378) — and a
     // mode flipped from the placement bar moves no pointer that would ask.
